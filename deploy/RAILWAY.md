@@ -27,7 +27,7 @@ the other branch.
 
 ## Good to know
 
-- **Every push to a branch redeploys that service.** Push to `skill-list` → the list version updates.
+- **Every push to a branch redeploys that service.** Push to `phase1-combat-character` → the grid version updates.
 - Without a volume the game still works. Opponents' saved builds and replay links just reset on each deploy;
   players' own runs are saved in their browser either way.
 - One server process holds all data in memory. Keep the service at **1 replica** (don't scale out), or
