@@ -177,7 +177,11 @@ function keepGridInView() {
   let dy = 0;
   if (b.bottom > bottom - 8) dy = b.bottom - (bottom - 8);
   if (b.top - dy < 8) dy = b.top - 8;
-  if (Math.abs(dy) > 1) window.scrollBy({ top: dy, behavior: 'auto' });
+  if (Math.abs(dy) > 1) {
+    const section = g.closest<HTMLElement>('.gs-build');
+    if (section && section.scrollHeight > section.clientHeight) section.scrollBy({ top: dy, behavior: 'auto' });
+    else window.scrollBy({ top: dy, behavior: 'auto' });
+  }
 }
 
 function stopTouchScroll(e: TouchEvent) {
@@ -291,8 +295,17 @@ function tick() {
   let v = 0;
   if (d.y < EDGE_PX) v = -Math.ceil((EDGE_PX - d.y) / 6);
   else if (d.y > bottom - EDGE_PX / 2) v = Math.min(14, Math.ceil((d.y - (bottom - EDGE_PX / 2)) / 6));
-  if ((v < 0 && window.scrollY <= 0) || (v > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1)) v = 0;
-  if (v) window.scrollBy(0, v);
+  const section = gridEl()?.closest<HTMLElement>('.gs-build');
+  if (section && section.scrollHeight > section.clientHeight) {
+    const b = section.getBoundingClientRect();
+    v = d.y < b.top + EDGE_PX ? -10 : d.y > b.bottom - EDGE_PX ? 10 : 0;
+    const before = section.scrollTop;
+    if (v) section.scrollBy(0, v);
+    if (before === section.scrollTop) v = 0;
+  } else {
+    if ((v < 0 && window.scrollY <= 0) || (v > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1)) v = 0;
+    if (v) window.scrollBy(0, v);
+  }
   updateDrag();
   if (v) d.raf = requestAnimationFrame(tick);
 }

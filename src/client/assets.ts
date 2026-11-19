@@ -23,8 +23,14 @@ export const IMAGES = {
   /** 1200x630 share image with logo (webp + jpg for og:image scrapers) */
   og: `${BASE}img/og.webp`,
   ogJpg: `${BASE}img/og.jpg`,
+  bgHomeWide: `${BASE}img/bg-home-wide.webp`,
+  bgGameWide: `${BASE}img/bg-game-wide.webp`,
+  bgPanel: `${BASE}img/bg-panel.webp`,
+  rotatePhone: `${BASE}img/rotate-phone.webp`,
 } as const;
 export type ImageKey = keyof typeof IMAGES;
+export const skillIcon = (id: string) => `${BASE}img/skills/${id}.webp`;
+export const archIcon = (id: string) => `${BASE}img/arch/${id}.webp`;
 
 export const SFX_NAMES = [
   'click', 'hover', 'buy', 'sell', 'reroll', 'lock', 'unlock', 'pickup', 'drop', 'wish',

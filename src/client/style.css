@@ -845,3 +845,28 @@ html.gs-lock { overflow: hidden; overscroll-behavior: none; }
   header .logo { font-size: 1rem; white-space: nowrap; }
 }
 @media (max-width: 420px) { .help-txt { display: none; } }
+.skill-icon { width: 42px; height: 42px; object-fit: contain; vertical-align: middle; }
+.grid.live .blk.synergy-preview { filter: drop-shadow(0 0 4px #ffed9c) drop-shadow(0 0 10px #ffca72); }
+.grid.live .blk.synergy-preview .edge { stroke: #fff0aa; stroke-width: 3.6; }
+.synergy-icon { width: 22px; height: 22px; object-fit: contain; vertical-align: middle; }
+body { background: #17102f url('/assets/img/bg-home-wide.webp') center / cover fixed; }
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+  .rotate-hint { display: flex; align-items: center; gap: 8px; color: #ffdf9f; font-size: 13px; }
+  .rotate-hint img { width: 48px; height: 48px; object-fit: contain; }
+}
+@media (min-width: 1100px) and (min-height: 550px) {
+  body:has(.gs), body:has(.mm-versus), body:has(.mm-result) { height: 100dvh; overflow: hidden; background-image: url('/assets/img/bg-game-wide.webp'); }
+  body:has(.gs) header, body:has(.mm-versus) header, body:has(.mm-result) header { height: 46px; max-width: none; }
+  body:has(.gs) #stage { position: absolute; left: 1%; top: 58px; width: 20%; max-width: none; }
+  body:has(.gs) #panel { max-width: none; margin: 0 0 0 22%; height: calc(100dvh - 46px); padding: 4px 10px 10px 0; }
+  .gs { height: 100%; display: grid; grid-template-columns: minmax(230px, .8fr) minmax(350px, 1.3fr) minmax(220px, .8fr); grid-template-rows: auto auto minmax(0,1fr) auto; gap: 8px; background: transparent; padding: 0; }
+  .gs > .gs-top, .gs > .gs-sub, .gs > .gs-bar { grid-column: 1 / -1; margin: 0; }
+  .gs > .gs-sec, .gs > .gs-info { min-height: 0; overflow: auto; margin: 0; }
+  .gs > .gs-sec { padding: 10px; border-radius: 18px; background: linear-gradient(#211b40ed,#17102fed),url('/assets/img/bg-panel.webp'); }
+  .gs .gs-cards { grid-template-columns: minmax(0,1fr); }
+  .gs .gs-info { display: flex; flex-direction: column; }
+  .gs .gs-bar { position: static; }
+  body:has(.mm-versus) #stage, body:has(.mm-result) #stage { position: absolute; left: 1%; top: 58px; width: 47%; max-width: none; }
+  body:has(.mm-versus) #panel, body:has(.mm-result) #panel { margin: 0 1% 0 50%; max-width: none; height: calc(100dvh - 56px); overflow: auto; border-radius: 18px; background: #20183eea; padding: 12px 18px; }
+}

@@ -45,7 +45,7 @@ export function linkChips(bonus: Bonus[], lv: number, state: (bi: number) => Chi
             ? `<div class="muted small">${L('คุณมีบล็อกที่เปิดโบนัสนี้ได้ วางให้ติดกัน', 'You own a block that switches this on: make them touch')}</div>`
             : `<div class="muted small">${L('ยังไม่ทำงาน: วางให้ติดกับบล็อกที่ตรงเงื่อนไข (ด้านไหนก็ได้)', 'Not active yet: make it touch a matching block (any side)')}</div>`;
       const tip = `<div class="tt-h"><b>🔗 ${L('โบนัสติดกัน', 'Connect bonus')}</b></div><div class="desc">${bonusText(b, lv)}</div>${note}`;
-      return `<span class="gs-link ${st} lk-${b.e}" data-ttxt="${esc(tip)}">${BONUS_ICON[b.e]} ${esc(targetName(b.t))}</span>`;
+      return `<span class="gs-link ${st} lk-${b.e}" data-ttxt="${esc(tip)}">${BONUS_ICON[b.e]} <img class="synergy-icon" src="${b.t.startsWith('arch:') ? archIcon(b.t.slice(5)) : skillIcon(b.t)}" alt=""> ${esc(targetName(b.t))}</span>`;
     })
     .join('')}</span>`;
 }
@@ -115,3 +115,4 @@ export function bonusPanelHTML(skills: SkillInstance[], w: number, h: number) {
     ${chains ? `<div class="bp-sub">⚡ ${L('เชนและเครื่องยนต์', 'Chains and engines')}</div><ul class="bp-chains">${chains}</ul>` : ''}
     ${act.length && off > 0 ? `<p class="muted small">${L(`อีก ${off} โบนัสยังไม่ทำงาน`, `${off} more bonuses are not on yet`)}</p>` : ''}`;
 }
+import { archIcon, skillIcon } from '../assets';

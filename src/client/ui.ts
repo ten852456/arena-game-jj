@@ -8,7 +8,7 @@ import { hashSeed } from '../sim/rng';
 import * as M from './views/meta';
 import * as P from './views/pages';
 import { music, sfx, voice } from './audio';
-import { IMAGES } from './assets';
+import { IMAGES, skillIcon } from './assets';
 import * as R from '../sim/run';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Build, CombatEvent, CombatResult, Rot, SkillInstance } from '../sim/types';
@@ -466,7 +466,7 @@ function offerCard(r: R.RunState, o: Offer, i: number) {
   } else if (up) spot = `<div class="gs-spot up">⬆ ${L('ที่เดิม · +1 🔗 ใหม่', 'Same place · +1 new 🔗')}</div>`;
   return `<div class="card offer gs-card arch-${d.arch}${o.v ? ' upgrade' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}" data-card="${i}">
     <div class="gs-ctop">${lockBtn}<span class="gs-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-    <div class="offer-name">${node.name}</div>
+    <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="">${node.name}</div>
     <div class="offer-art">${pieceHTML(look, { tip: `s:${i}` })}</div>
     <div class="offer-meta">${o.v ? `<span class="up">⬆ ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="gs-arch">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}</div>
     <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${links}</div>
@@ -486,6 +486,18 @@ function previewLayout(skills: SkillInstance[] | null) {
   const bp = document.getElementById('gs-bonus');
   if (bp) bp.innerHTML = bonusPanelHTML(list, w, h);
   document.querySelector('.gs-info')?.classList.toggle('previewing', !!skills);
+  const linked = new Set<number>();
+  const lifted = document.querySelector<HTMLElement>('.gs-lifted[data-blk]');
+  const moving = lifted ? Number(lifted.dataset.blk) : sel;
+  if (skills && moving !== null) {
+    for (const link of activeBonuses(skills, w, h)) {
+      if (link.from === moving) link.to.forEach((i) => linked.add(i));
+      else if (link.to.includes(moving)) linked.add(link.from);
+    }
+  }
+  document.querySelectorAll<HTMLElement>('.grid.live .blk[data-blk]').forEach((el) => {
+    el.classList.toggle('synergy-preview', linked.has(Number(el.dataset.blk)));
+  });
 }
 
 function renderShop() {
@@ -501,7 +513,7 @@ function renderShop() {
     .map((k, i) =>
       k.x < 0
         ? `<div class="gs-bagitem${sel === i ? ' sel' : ''} arch-${SKILLS[k.id].arch}">${pieceHTML(k, { idx: i, tip: `g:${i}`, selected: sel === i })}
-          <div class="gs-bi-name">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small></div>${linkChips(k.bonus, lvOf(k.v), ownedStates(r.skills, i, act))}</div>`
+          <div class="gs-bi-name"><img class="skill-icon" src="${skillIcon(k.id)}" alt="">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small></div>${linkChips(k.bonus, lvOf(k.v), ownedStates(r.skills, i, act))}</div>`
         : '',
     )
     .join('');
@@ -533,7 +545,7 @@ function renderShop() {
         <button class="primary gs-fight" data-a="fight" ${busy || !placed ? 'disabled' : ''}>⚔ ${L(`สู้วันที่ ${r.day}`, `Fight day ${r.day}`)} <small>${L(`แพ้เสียเลือด ${R.damageFor(r.day)}`, `a loss costs ${R.damageFor(r.day)} HP`)}</small></button>
         <button class="ghost gs-home" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
       </div>`;
-  return `<div class="gs${k ? ' has-pick' : ''}">
+  return `<div class="gs${k ? ' has-pick' : ''}"><div class="rotate-hint"><img src="${IMAGES.rotatePhone}" alt=""><span>${L('หมุนโทรศัพท์แนวนอนเพื่อมองเห็นสนามได้กว้างขึ้น', 'Rotate your phone for a wider view')}</span></div>
   <div class="gs-top">
     <span class="gs-pill"><small>${L('วันที่', 'Day')}</small> <b>${r.day}</b></span>
     <span class="gs-pill hp"><small>${L('เลือด', 'HP')}</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'Half-ghost')}</span>` : ''}</span>
