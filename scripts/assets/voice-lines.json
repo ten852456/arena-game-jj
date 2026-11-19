@@ -1,0 +1,21 @@
+{
+  "voices": { "th": "Zephyr", "en": "Zephyr" },
+  "lines": [
+    { "key": "welcome", "th": "ยินดีต้อนรับสู่โมจิมูน!", "en": "Welcome to Mochi Moon!" },
+    { "key": "choose_hero", "th": "เลือกฮีโร่ของคุณเลย!", "en": "Choose your hero!" },
+    { "key": "shop_open", "th": "ร้านค้าเปิดแล้วจ้า!", "en": "The shop is open!" },
+    { "key": "fight", "th": "เริ่มสู้กันเลย!", "en": "Fight!" },
+    { "key": "victory", "th": "ชนะแล้ว!", "en": "Victory!" },
+    { "key": "defeat", "th": "แพ้ซะแล้ว ไม่เป็นไรนะ", "en": "Defeat... you'll get them next time." },
+    { "key": "close_fight", "th": "สูสีมาก!", "en": "What a close fight!" },
+    { "key": "ko", "th": "น็อกเอาต์!", "en": "Knockout!", "asr_ok": ["น็อคเอาท์"] },
+    { "key": "combo", "th": "คอมโบ!", "en": "Combo!" },
+    { "key": "critical", "th": "คริติคอล!", "en": "Critical hit!" },
+    { "key": "frozen", "th": "แช่แข็ง!", "en": "Frozen!" },
+    { "key": "last_chance", "th": "โอกาสสุดท้าย!", "en": "Last chance!" },
+    { "key": "champion", "th": "ชนะครบแปดครั้ง! แชมป์แห่งดวงจันทร์!", "en": "Eight wins! Champion of the moon!" },
+    { "key": "perfect", "th": "เพอร์เฟกต์! ไม่แพ้เลยสักครั้ง!", "en": "Perfect run!", "asr_ok": ["Perfect ไม่แพ้เลยสักครั้ง"] },
+    { "key": "stardust", "th": "ได้รับผงดาวแล้ว!", "en": "Stardust earned!" },
+    { "key": "new_day", "th": "วันใหม่มาแล้ว!", "en": "A new day begins!" }
+  ]
+}
