@@ -710,8 +710,7 @@ export class CombatScene extends Phaser.Scene {
         label = L('ไม่ได้ใช้ skill เลย', 'No skill fired');
         bg = '#4a1f3acc';
       } else if (frozen && !this.dead[s]) {
-        const left = Math.max(0, this.frozenUntil[s] - this.clock) / 10;
-        label = `❄ ${L('โดนแช่แข็ง', 'Frozen')}${left > 0.05 ? ` ${left.toFixed(1)}` : ''}`;
+        // the ice cube on the fighter and the "Frozen 1.1" chip under the HP bar already say it
       } else if (this.clock < this.delayUntil[s] && !this.dead[s]) {
         label = L('⏪ คูลดาวน์ถอยหลัง', '⏪ Cooldowns pushed back');
         bg = '#33275ccc';
