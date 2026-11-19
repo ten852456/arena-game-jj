@@ -43,11 +43,8 @@ export function tierFor(day: number, rating: number, streak: number): BotTier {
   return 'normal';
 }
 
-// TODO(bot tier): src/sim/bot.ts is getting an optional last param `tier` (+ `export type BotTier`).
-// Until that lands, call through a looser signature so this still compiles; afterwards replace with
-// `import { randomAiBuild, type BotTier } from '../sim/bot'` and call `randomAiBuild(day, seed, tier)` directly.
-const randomAiBuildTiered = randomAiBuild as (day: number, seed: number, tier?: BotTier) => Build;
-export const aiBuildFor = (day: number, seed: number, tier: BotTier): Build => randomAiBuildTiered(day, seed, tier);
+/** AI opponent build of the chosen difficulty (bot tiers live in src/sim/bot.ts). */
+export const aiBuildFor = (day: number, seed: number, tier: BotTier): Build => randomAiBuild(day, seed, tier);
 
 export interface MatchQuery {
   day: number;
