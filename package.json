@@ -16,6 +16,7 @@
     "security": "tsx scripts/security-check.ts",
     "runs": "tsx scripts/runs.ts",
     "sim": "tsx scripts/sim.ts",
+    "exploit": "tsx scripts/exploit.ts",
     "explain": "tsx scripts/explain-check.ts"
   },
   "dependencies": {
