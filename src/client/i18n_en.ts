@@ -162,21 +162,22 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
     body: [
       'On day 1 the shop sells 5 skills that suit your hero (the same every run). You have <b>7</b> gold, enough for 2 · From day 2 the shop is random; press <b>Reroll</b> for 1 gold',
       'Skills have a <b>tree</b>: Lv1 → pick 1 of 2 branches (Lv2) → each splits into 2 more (Lv3) · The shop offers upgrade cards (dashed border); an upgrade keeps the block’s place and adds 1 new bonus · Press <b>ⓘ</b> to see the whole tree',
-      'The shop also sells <b>more grid space</b> (+1 column or row)',
+      'Press <b>🔓</b> to <b>lock a card</b> (free): it stays through rerolls and comes back tomorrow · The shop also sells <b>more grid space</b> (+1 column or row) and the <b>🌙 Moon Wish</b> (spare gold? a random skill gets upgraded)',
     ],
   },
   {
     title: 'Skills are blocks on a grid',
     body: [
-      'Each skill is a <b>block with its own shape</b>. Drag it onto your grid (it starts at 5×3 and grows over the days)',
-      '<b>Rotate</b>: right-click, press R or use the rotate button · Blocks not on the grid wait in your <b>bag</b> (6 slots) and do not fight',
-      'Drag a block to the sell box to sell it · On mobile: tap a block, then tap an empty cell · Feeling lazy? Press <b>✨ Auto-arrange</b> to let the game find the spots with the most bonuses',
+      'Each skill is a <b>block with its own shape</b>, with its name and main number written on it. A block you buy goes to the best free spot (placed blocks never move)',
+      '<b>Drag</b>: the cell you grab stays under your finger; <b>green</b> cells = it fits, <b>red</b> = it does not · <b>Tap</b>: tap a block (the page stops scrolling), then tap the cell to put it in; ✕ Done cancels',
+      '<b>Gold cells</b> = the spots that switch on the most bonuses · <b>Rotate</b>: ⟳ button, R, right-click or a two-finger tap · Blocks in your <b>bag</b> (6 slots) do not fight · drag to the sell box to sell',
     ],
   },
   {
     title: 'Skills work on their own, all at once',
     body: [
       'Every block on the grid counts its <b>cooldown at the same time</b> and works by itself when ready. You press nothing during a fight',
+      'The shop shows a <b>⏱ timeline of the first 12 s</b>, run by the real fight engine: which block fires when (⚡ = fired by a bonus or an engine). It updates live while you drag',
       'In the replay you can see each block’s cooldown ring turning, and blocks flash when they work',
     ],
   },
@@ -184,7 +185,7 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
     title: 'Touching blocks = bonuses',
     body: [
       'Each block has 1–2 <b>connect bonuses</b>, like "touching Heavy Smash: damage +" or "touching a Control skill: ⚡ makes it work right away" (any side counts)',
-      'Blocks with an active bonus <b>glow</b> · Hover a block to see what its bonus wants to touch (those blocks light up)',
+      'The <b>🔗</b> chips on cards and in the bag say what each bonus wants to touch · tap a shop card to see the cells where it switches a bonus on · active bonuses <b>glow</b> and show in the <b>active bonus list</b>',
       '<b>Chains ⚡</b>: A fires B fires C in a row. The longer the chain, the stronger',
     ],
   },

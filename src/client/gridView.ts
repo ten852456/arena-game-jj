@@ -1,12 +1,12 @@
 import { activeBonuses, bonusValue, cellsOf, footprint, type ActiveBonus } from '../sim/grid';
-import { ARCH_NAME, SKILLS, lvOf } from '../sim/skills';
+import { ARCH_NAME, SKILLS, chipsOf, lvOf, nodeOf } from '../sim/skills';
 import type { Archetype, Bonus, Rot, SkillInstance } from '../sim/types';
 import { L } from '../i18n';
 
 /**
  * Skill blocks drawn as one SVG shape each, filled with the skill's own pattern.
- * No text on the blocks: details are in the hover tooltip (tipHTML).
- * Sizes use the CSS var --c (one grid cell).
+ * Blocks on the build grid carry a short label (name + main icon/number) so they read on a phone without hover;
+ * full details are in the tooltip / selected panel. Sizes use the CSS var --c (one grid cell).
  */
 
 const U = 20; // SVG units per cell
@@ -74,6 +74,53 @@ interface BlockOpts {
   at?: [number, number];
   selected?: boolean;
   buffed?: boolean;
+  /** draw the short name + main chip on the block (build grid, drag ghost) */
+  label?: boolean;
+}
+
+/** Visible width of a string in "em" (Thai combining marks take no room, emoji about 1.1em). */
+function textEm(s: string) {
+  let n = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0)!;
+    if ((c >= 0x0e31 && c <= 0x0e3a && c !== 0x0e32 && c !== 0x0e33) || (c >= 0x0e47 && c <= 0x0e4e) || c === 0xfe0f) continue;
+    n += c > 0x2000 && (c < 0x0e00 || c > 0x0e7f) ? 1.1 : c < 128 ? 0.56 : 0.62;
+  }
+  return n;
+}
+/** Cut a label to fit `em` wide, with an ellipsis. */
+function fitText(s: string, em: number) {
+  if (textEm(s) <= em) return s;
+  let out = '';
+  for (const ch of s) {
+    if (textEm(out + ch + '…') > em) break;
+    out += ch;
+  }
+  return out.trimEnd() + '…';
+}
+const escXml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** Short label inside the block: on the widest row of the shape (top-most on ties). */
+function labelSVG(k: Piece, cells: [number, number][]) {
+  const has = (x: number, y: number) => cells.some((p) => p[0] === x && p[1] === y);
+  let best = { x: 0, y: 0, run: 0 };
+  for (const [x, y] of cells) {
+    if (has(x - 1, y)) continue;
+    let run = 1;
+    while (has(x + run, y)) run++;
+    if (run > best.run || (run === best.run && y < best.y)) best = { x, y, run };
+  }
+  const node = nodeOf(k);
+  const chip = chipsOf(node)[0]?.text ?? '';
+  const FS = 5.6; // font size in SVG units (one cell = 20)
+  const room = (best.run * U - 3) / FS;
+  const name = fitText(node.name, room);
+  const main = fitText(chip, room);
+  const cx = best.x * U + (best.run * U) / 2;
+  const y0 = best.y * U;
+  return `<g class="blabel" aria-hidden="true"><text x="${cx}" y="${y0 + 11}" font-size="${FS}">${escXml(name)}</text>${
+    main ? `<text class="bl-chip" x="${cx}" y="${y0 + 17.6}" font-size="${FS - 0.4}">${escXml(main)}</text>` : ''
+  }</g>`;
 }
 
 /** One block as a single SVG: pattern-filled cells, outline only on the outside edges, level pips. */
@@ -103,17 +150,23 @@ function blockSVG(k: Piece, o: BlockOpts) {
   const lv = lvOf(k.v);
   for (let l = 0; l < lv; l++) pips += `<circle cx="${px * U + 4 + l * 3.4}" cy="${py * U + 4}" r="1.35" fill="${lv >= 3 ? '#ffe066' : '#fff'}" stroke="#000" stroke-width=".5"/>`;
   if (k.mark) pips += `<path d="M${px * U + 4} ${py * U + 7} l2.5 2.5 l-2.5 2.5 l-2.5 -2.5 Z" fill="#c9a0ff" stroke="#000" stroke-width=".6"/>`;
+  const label = o.label ? labelSVG(k, cells) : '';
   const [ox, oy] = o.at ?? [0, 0];
   const cls = `blk arch-${arch}${o.selected ? ' sel' : ''}${o.buffed ? ' buffed' : ''}`;
   const data = `${o.idx !== undefined ? ` data-blk="${o.idx}"` : ''}${o.tip ? ` data-tip="${o.tip}"` : ''}`;
-  return `<svg class="${cls}"${data} viewBox="0 0 ${bw * U} ${bh * U}" style="left:calc(var(--c)*${ox});top:calc(var(--c)*${oy});width:calc(var(--c)*${bw});height:calc(var(--c)*${bh})">${body}<path class="edge" d="${edges}" fill="none"/>${pips}</svg>`;
+  return `<svg class="${cls}"${data} viewBox="0 0 ${bw * U} ${bh * U}" style="left:calc(var(--c)*${ox});top:calc(var(--c)*${oy});width:calc(var(--c)*${bw});height:calc(var(--c)*${bh})">${body}<path class="edge" d="${edges}" fill="none"/>${label}${pips}</svg>`;
 }
 
 /** Blocks that have at least one connect bonus switched on. */
 export const buffedSet = (act: ActiveBonus[]) => new Set(act.map((a) => a.from));
 
 /** The packing grid. interactive = cells and blocks carry data attributes for drag/tap/hover. */
-export function gridHTML(skills: SkillInstance[], w: number, h: number, opts: { interactive?: boolean; selected?: number; small?: boolean } = {}) {
+export function gridHTML(
+  skills: SkillInstance[],
+  w: number,
+  h: number,
+  opts: { interactive?: boolean; selected?: number; small?: boolean; labels?: boolean } = {},
+) {
   const buffed = buffedSet(activeBonuses(skills, w, h));
   let cells = '';
   for (let y = 0; y < h; y++)
@@ -129,14 +182,17 @@ export function gridHTML(skills: SkillInstance[], w: number, h: number, opts: { 
             at: [k.x, k.y],
             selected: opts.selected === i,
             buffed: buffed.has(i),
+            label: opts.labels,
           }),
     )
     .join('');
-  return `<div class="grid${opts.small ? ' small' : ''}${opts.interactive ? ' live' : ''}" style="width:calc(var(--c)*${w});height:calc(var(--c)*${h})">${cells}${blocks}</div>`;
+  // the live grid sizes its cells from its column count (--gw) so it never gets wider than a phone
+  const fit = opts.interactive ? `--gw:${w};` : '';
+  return `<div class="grid${opts.small ? ' small' : ''}${opts.interactive ? ' live' : ''}" style="${fit}width:calc(var(--c)*${w});height:calc(var(--c)*${h})">${cells}${blocks}</div>`;
 }
 
 /** A single block preview (shop offer, bag item, drag ghost). */
-export function pieceHTML(k: Piece, opts: { idx?: number; tip?: string; selected?: boolean } = {}) {
+export function pieceHTML(k: Piece, opts: { idx?: number; tip?: string; selected?: boolean; label?: boolean } = {}) {
   const cells = cellsOf(k.shape, (k.rot ?? 0) as Rot);
   const bw = Math.max(...cells.map((c) => c[0])) + 1;
   const bh = Math.max(...cells.map((c) => c[1])) + 1;
