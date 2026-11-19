@@ -1,5 +1,6 @@
 """Turn the Codex-generated PNGs into the shipped webp files.
-Usage: python scripts/assets/images.py [raw_dir]   (default scripts/assets/.cache/raw)
+Usage: python scripts/assets/images.py [raw_dir] [--wide]   (default scripts/assets/.cache/raw)
+--wide only rebuilds set 2 (wide backgrounds, panel texture, rotate hint, skill icons, archetype emblems).
 raw_dir must hold the source PNGs named as in SOURCES below (see docs/ASSETS.md for the prompts).
 Magenta (#ff00ff) backgrounds are keyed out to alpha with spill removal."""
 import sys
@@ -9,7 +10,8 @@ import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[2]
-RAW = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "scripts/assets/.cache/raw"
+ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
+RAW = Path(ARGS[0]) if ARGS else ROOT / "scripts/assets/.cache/raw"
 OUT = ROOT / "src/client/public/assets/img"
 
 # out name: (source png, keyed?, max width, crop box as fractions (l, t, r, b) or None, webp quality)
@@ -82,6 +84,93 @@ def main():
     og.save(OUT / "og.jpg", "JPEG", quality=85, optimize=True, progressive=True)
     print(f"{'og.jpg':20s} {(OUT / 'og.jpg').stat().st_size // 1024} KB")
 
+    if (RAW / "bg-home-wide.png").exists():
+        wide_set()
+
+
+# ---- set 2 (landscape UI): wide backgrounds, panel texture, rotate hint, skill icons, archetype emblems ----
+
+SKILL_IDS = [
+    "strike", "jab", "heavy", "charge", "shield", "thorns", "stoneskin", "cleanse", "train", "ignite", "feast",
+    "amplify", "frost", "chill", "dispel", "ironwill", "gear", "overclock", "bulwark", "spikewall", "execute",
+    "flurry", "rampage", "inferno", "shatter", "timewarp",
+]
+ARCHES = ["tank", "burst", "scaling", "control", "none"]
+
+
+def wide(img, w=1920, h=1080):
+    """Centre-crop to 16:9 and scale to w x h."""
+    img = img.convert("RGB")
+    tw = min(img.width, round(img.height * w / h))
+    th = round(tw * h / w)
+    l, t = (img.width - tw) // 2, (img.height - th) // 2
+    return img.crop((l, t, l + tw, t + th)).resize((w, h), Image.LANCZOS)
+
+
+def save_max(img, name, max_kb, q=86, out=None):
+    """Save webp, lowering quality until the file is <= max_kb."""
+    out = out or OUT
+    out.mkdir(parents=True, exist_ok=True)
+    p = out / f"{name}.webp"
+    while True:
+        img.save(p, "WEBP", quality=q, method=6)
+        if p.stat().st_size <= max_kb * 1024 or q <= 40:
+            break
+        q -= 4
+    print(f"{name:20s} {img.width}x{img.height}  q{q}  {p.stat().st_size // 1024} KB")
+
+
+def seamless(img):
+    """Blend the image with a half-offset copy of itself so it tiles with no visible seam."""
+    a = np.asarray(img.convert("RGB")).astype(np.float32)
+    h, w = a.shape[:2]
+    rolled = np.roll(a, (h // 2, w // 2), axis=(0, 1))
+    wy = np.sin(np.pi * (np.arange(h) + 0.5) / h)[:, None]
+    wx = np.sin(np.pi * (np.arange(w) + 0.5) / w)[None, :]
+    m = (wy * wx)[..., None] ** 0.7
+    return Image.fromarray(np.clip(a * m + rolled * (1 - m), 0, 255).astype(np.uint8), "RGB")
+
+
+def badge(src, size=128):
+    """Key the magenta, crop to the badge and scale to a square icon."""
+    img = key_magenta(Image.open(src))
+    al = np.asarray(img.getchannel("A"))
+    bb = Image.fromarray(((al > 128) * 255).astype(np.uint8)).getbbox()
+    cx, cy = (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2
+    r = max(bb[2] - bb[0], bb[3] - bb[1]) / 2 + 6
+    img = img.crop((round(cx - r), round(cy - r), round(cx + r), round(cy + r)))
+    return img.resize((size, size), Image.LANCZOS)
+
+
+def wide_set():
+    from PIL import ImageEnhance, ImageFilter
+
+    save_max(wide(Image.open(RAW / "bg-home-wide.png")), "bg-home-wide", 450)
+
+    game = wide(Image.open(RAW / "bg-game-wide.png"))
+    # keep it calm behind the panels: soften, mute and darken a little
+    game = game.filter(ImageFilter.GaussianBlur(1.5))
+    game = ImageEnhance.Color(game).enhance(0.85)
+    game = ImageEnhance.Brightness(game).enhance(0.82)
+    save_max(game, "bg-game-wide", 450, q=80)
+
+    panel = Image.open(RAW / "bg-panel.png").convert("RGB").resize((512, 512), Image.LANCZOS)
+    save_max(seamless(panel), "bg-panel", 120, q=82)
+
+    rot = key_magenta(Image.open(RAW / "rotate-phone.png"))
+    bb = rot.getchannel("A").point(lambda v: 255 if v > 8 else 0).getbbox()
+    rot = rot.crop((max(0, bb[0] - 8), max(0, bb[1] - 8), min(rot.width, bb[2] + 8), min(rot.height, bb[3] + 8)))
+    rot.thumbnail((512, 512), Image.LANCZOS)
+    save_max(rot, "rotate-phone", 80, q=86)
+
+    for sid in SKILL_IDS:
+        save_max(badge(RAW / "skills" / f"{sid}.png"), sid, 16, q=88, out=OUT / "skills")
+    for a in ARCHES:
+        save_max(badge(RAW / "arch" / f"{a}.png"), a, 16, q=88, out=OUT / "arch")
+
 
 if __name__ == "__main__":
-    main()
+    if "--wide" in sys.argv:
+        wide_set()
+    else:
+        main()

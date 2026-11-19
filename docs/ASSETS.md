@@ -37,6 +37,38 @@ python scripts/assets/images.py            # key, crop, resize, webp (+ og.jpg w
 
 Needs Python 3 with numpy and Pillow. The raw PNGs (~15 MB) are not committed (`scripts/assets/.cache/` is ignored).
 
+### Set 2: landscape UI art (wide backgrounds, panel texture, skill icons, archetype emblems)
+
+| File | Size | What | Notes |
+|---|---|---|---|
+| `bg-home-wide.webp` | 1920×1080, 176 KB | Home / title: moon mochi festival, Moon Rabbit pounding mochi (right), lanterns, cherry blossoms, earth in the sky | centre-left is calm sky + moon ground for the logo and buttons. `IMAGES.bgHomeWide` |
+| `bg-game-wide.webp` | 1920×1080, 21 KB | In-run backdrop: blurred stone arena, lanterns, moon, blossoms in the top corners | soft, muted lavender-indigo with a darker vignette, so panels on top stay readable; use `background-size: cover`. `IMAGES.bgGameWide` |
+| `bg-panel.webp` | 512×512, 2 KB | Seamless indigo night-sky paper with faint stars | tile with `background-repeat` (made seamless in code); put a translucent tint over it if a panel needs to be darker. `IMAGES.bgPanel` |
+| `rotate-phone.webp` | 512×468, alpha | Mochi turning a phone from portrait to landscape (with arrow) | "rotate your phone" hint. `IMAGES.rotatePhone` |
+| `skills/<id>.webp` | 128×128, alpha, 26 files | One round badge per skill: archetype-colour ring + bold symbol on a dark indigo disc; hero-unique skills have a small gold star on the ring | `skillIcon(id)`; readable down to ~32 px on dark and light backgrounds |
+| `arch/<arch>.webp` | 128×128, alpha, 5 files | Archetype emblems in the same badge: tank shield, burst sword + claw, scaling sprout + arrow, control snowflake-clock, none crescent moon | `archIcon(arch)`; ring colours are exported as `ARCH_COLORS` |
+
+Ring colours: tank `#9ccbff`, burst `#ffa6ba`, scaling `#ffd98f`, control `#9df0df`, none `#c6c1e8`.
+
+Prompts: `scripts/assets/prompts/batch4-wide-bgs.txt` (the four wide/UI images) and `icons-*.txt`, which are
+written by `python scripts/assets/icon_prompts.py` from the skill table in that script (one shared badge style,
+one line per icon: ring colour + symbol; edit the table there and re-run to change an icon). Each prompt file
+was one Codex run (all seven ran in parallel). `icons-redo.txt` is the second pass after review: thorns
+(first try was an ornate chestplate, spikes not readable), ignite (came out as a birthday-cake candle, too
+close to feast), bulwark (looked like the plain shield) and the tank emblem (had a hot-spring sign on it).
+
+Raw PNG names in `scripts/assets/.cache/raw/`: `bg-home-wide.png`, `bg-game-wide.png`, `bg-panel.png`,
+`rotate-phone.png`, `skills/<id>.png`, `arch/<arch>.png`. Then:
+
+```bash
+python scripts/assets/images.py --wide        # only set 2 (set 1 is also rebuilt by a plain run)
+python scripts/assets/contact_sheet.py out.png  # review sheet: every icon at 128/64/40/32 px on dark + light
+```
+
+Processing: wide backgrounds are centre-cropped to 16:9 and scaled to 1920×1080 (webp quality lowered until
+≤ 450 KB); the game backdrop also gets a light blur, −15 % saturation and −18 % brightness; the panel texture is
+blended with a half-offset copy so it tiles; badges are keyed, cropped square around the badge and scaled to 128 px.
+
 ## Sound effects (`assets/sfx/<name>.ogg` + `.mp3`, mono)
 
 | Name | Use |
@@ -133,11 +165,12 @@ back in Latin letters ("Perfect"), which `asr_ok` in the JSON accepts.
 
 | Folder | Files | Size (ogg + mp3) | ogg only (what browsers with Vorbis download) |
 |---|---|---|---|
-| `img/` | 10 | 828 KB | – |
+| `img/` (set 1) | 10 | 828 KB | – |
+| `img/` (set 2: wide bgs, panel, rotate hint, `skills/`, `arch/`) | 35 | 524 KB | – |
 | `sfx/` | 23 × 2 | 440 KB | 226 KB |
 | `music/` | 4 × 2 | 2.6 MB | 1.3 MB |
 | `voice/` | 32 × 2 | 764 KB | 434 KB |
-| **total** | | **4.5 MB** | |
+| **total** | | **5.0 MB** | |
 
 Nothing is loaded up front: images when the UI shows them, SFX after the first gesture (≈ 226 KB), a music
 loop when its screen opens, voice lines on first use.

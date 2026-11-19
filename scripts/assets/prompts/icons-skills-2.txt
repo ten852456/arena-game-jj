@@ -1,0 +1,13 @@
+Generate 6 images. Shared art direction for EVERY image (they form one icon set for the cute mobile game "Mochi Moon"):
+- Square 1024x1024, plain flat pure #ff00ff magenta background (it is keyed out later). Nothing else on the background: no shadow, no gradient, no sparkles outside the badge.
+- A centred round badge filling about 88% of the canvas: outermost thick dark plum outline (#3a2b33, never pure black), then a thick glossy coloured RING in the colour given for that icon, then a thin plum line, then an inner disc of deep indigo night (#2b2455) with a soft lighter glow behind the symbol and 2-3 tiny faint stars.
+- In the middle ONE big simple bold symbol filling about 60% of the inner disc: chunky rounded kawaii shapes, thick dark plum outlines, flat bright pastel colours with light cel shading, strong contrast against the dark disc. It must stay readable when shrunk to 40 px, so no small details and no busy backgrounds.
+- No text, letters or numbers (unless stated), no faces unless stated, no watermark. Avoid colours close to #ff00ff in the badge itself.
+- Same badge construction, line weight, lighting and angle for every icon so they look like one set.
+Use your image generation tool once per image (one badge per image); do not download anything from the internet. Generate them in the listed order. After generating, just reply with a one-line list of what you made, in order.
+1. Ring colour soft sky blue #9ccbff. Symbol: a rounded grey-blue boulder with a stone-plated arm flexing in front of it, crack lines, very solid.
+2. Ring colour soft sky blue #9ccbff. Symbol: a sparkling water droplet with a big four-point twinkle star and small bubbles, purifying sparkles.
+3. Ring colour warm pastel gold #ffd98f. Symbol: a chunky dumbbell with a bold upward green arrow rising behind it.
+4. Ring colour warm pastel gold #ffd98f. Symbol: one single cute teardrop-shaped orange and yellow flame floating on its own (NO candle, NO cake, nothing under it), warm glow.
+5. Ring colour warm pastel gold #ffd98f. Symbol: a bowl with three round white mochi dango balls on a stick, a small heart floating above.
+6. Ring colour warm pastel gold #ffd98f. Symbol: a round magnifying glass with a bold cream 'x2' inside the lens (the only text allowed: x2).
