@@ -15,28 +15,30 @@ const bad = (error: string): Res => ({ status: 400, json: { error } });
 
 const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
 
-function trackOf(runId: string, playerId: string | undefined, name: string): RunTrack {
+function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
   t.name = name;
-  if (playerId && !t.playerId) t.playerId = playerId; // the first player to fight a run owns it
+  t.playerId ??= playerId; // the run belongs to the player who started it
   t.t = Date.now();
   return t;
 }
 
 export function handleFight(body: any): Res {
   const runId = cleanId(body?.runId);
-  const playerId = body?.playerId == null || body.playerId === '' ? undefined : cleanId(body.playerId);
+  // a fight always belongs to a player: runs are bound to the playerId that started them
+  const playerId = cleanId(body?.playerId);
   const day = intIn(body?.day, 1, MAX_DAY);
-  if (!runId || day === null || playerId === null) return bad('bad request');
+  if (!runId || day === null || !playerId) return bad('bad request');
   const build = validateBuild(body?.build, day);
   if (typeof build === 'string') return bad(build);
   const name = cleanName(body?.name, playerId ?? runId);
-  const rating = cleanRating(body?.rating);
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // matchmaking and AI difficulty use the server's own rating for this run, never the client's
+  const rating = prev?.rating ?? 1000;
   // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
   // (otherwise a client could retry a lost day until it wins and inflate the run-end reward).
   // runIds are public (leaderboard, replays): only the run's owner may fight its days
-  if (prev?.playerId && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
+  if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
   if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
   if (prev && Object.hasOwn(prev.days, day)) return { status: 409, json: { error: 'day already fought' } };
   const streak = streakOf(prev);
@@ -67,6 +69,7 @@ export function handleFight(body: any): Res {
 
   // What this run has met and how each day went (no repeats, streak for the AI tier, verified wins at run end).
   const track = trackOf(runId, playerId, name);
+  track.rating = newRating;
   track.days[day] = won ? 1 : 0;
   if (opp.snap) {
     track.snaps.push(opp.snap.id);

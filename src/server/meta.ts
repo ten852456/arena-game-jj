@@ -58,16 +58,19 @@ export function handleFinish(body: any): Res {
     const p = db.players[playerId] ?? newPlayer(playerId, done.name);
     return { status: 200, json: { already: true, reward: { stardust: done.stardust, wins: done.wins, capped: !!done.capped }, run: runRow(done), player: publicPlayer(p) } };
   }
-  const track = db.tracks[runId];
-  if (track?.playerId && track.playerId !== playerId) return bad('run belongs to another player', 403);
-  if (track?.finished) return bad('run already finished', 409);
+  const track = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  if (!track) return bad('unknown run', 404);
+  if (track.playerId !== playerId) return bad('run belongs to another player', 403);
+  if (track.finished) return bad('run already finished', 409);
 
   // Only fights the server ran count: a client can't claim wins it never fought.
-  const days = Object.values(track?.days ?? {});
+  const days = Object.values(track.days);
   const seenWins = days.filter((d) => d === 1).length;
   const seenLosses = days.length - seenWins;
-  const countedWins = Math.min(wins, seenWins);
-  const countedLosses = Math.max(losses, seenLosses);
+  // the claim must match the fights the server ran; the reward always uses the server's own counts
+  if (wins + losses !== days.length) return bad('result does not match the fights on record', 409);
+  const countedWins = seenWins;
+  const countedLosses = seenLosses;
   const capped = countedWins < wins;
   const reward = rewardFor(countedWins, countedLosses);
 
