@@ -185,6 +185,54 @@ export function sfx(name: SfxName, opts: { volume?: number; rate?: number; force
   });
 }
 
+/**
+ * Synthesized "link" chime for a new chain in the skill list: two soft bell notes going up (plus a third for
+ * several links at once) with a quiet sparkle on top. Short (~0.6 s), on the sfx channel, silent when muted.
+ */
+export function linkChime(links = 1) {
+  if (!unlocked || !ctx || !gains || settings.muted) return;
+  const now = performance.now();
+  if (now - (lastPlayed.get('link') ?? -1e9) < 120) return;
+  lastPlayed.set('link', now);
+  const c = ctx;
+  const out = c.createGain();
+  out.gain.value = 0.32;
+  out.connect(gains.sfx);
+  const t0 = c.currentTime + 0.01;
+  // E6, B6 (+ E7): a bright perfect fifth, like two moon bells clicking together
+  const notes = links > 1 ? [1318.5, 1975.5, 2637] : [1318.5, 1975.5];
+  notes.forEach((f, i) => {
+    const t = t0 + i * 0.075;
+    for (const [mul, type, vol] of [[1, 'sine', 0.9], [2, 'triangle', 0.18], [3.01, 'sine', 0.08]] as const) {
+      const o = c.createOscillator();
+      const g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f * mul, t);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + 0.42);
+      o.connect(g).connect(out);
+      o.start(t);
+      o.stop(t + 0.45);
+    }
+  });
+  // sparkle: a few very quiet high blips
+  for (let k = 0; k < 4; k++) {
+    const t = t0 + 0.12 + k * 0.045;
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(3200 + k * 420, t);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.05, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.09);
+    o.connect(g).connect(out);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+  setTimeout(() => out.disconnect(), 900);
+}
+
 // ---------- voice ----------
 let currentVoice: AudioBufferSourceNode | null = null;
 /** Announcer line in the current language; a new line cuts the previous one. */

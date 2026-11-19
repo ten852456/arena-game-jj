@@ -7,6 +7,7 @@ import { hashSeed } from '../sim/rng';
 import { CHIBI_ORIGIN_Y, chibiScale, ensureChibi } from './chibi';
 import { drawArenaBackdrop } from './townArt';
 import { L } from '../i18n';
+import { chainPopup } from './fightChain';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -68,6 +69,8 @@ export class CombatScene extends Phaser.Scene {
   private builds: Build[] = [];
   /** block idx → clock tick until which it glows */
   private glow: Map<number, number>[] = [new Map(), new Map()];
+  /** chain links flashing in each fighter's skill queue: rows a and b, until clock tick */
+  private chainFlash: { a: number; b: number; until: number }[][] = [[], []];
   private maxHp: [number, number] = [40, 40];
   private hp: [number, number] = [40, 40];
   private sh: [number, number] = [0, 0];
@@ -195,6 +198,7 @@ export class CombatScene extends Phaser.Scene {
     this.fx = [...data.result.init.fx];
     this.fxT = [0, 0];
     this.glow = [new Map(), new Map()];
+    this.chainFlash = [[], []];
     this.frozenUntil = [0, 0];
     this.evs = data.result.events;
     this.trace = data.result.trace;
@@ -299,6 +303,7 @@ export class CombatScene extends Phaser.Scene {
           this.skillText.setText(label).setColor(SIDE_COLOR[e.side]).setAlpha(1).setScale(1);
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, delay: this.dur(500), duration: this.dur(400) });
+          if (e.from !== undefined) this.chain(e.side, e.from, e.idx, e.t);
         }
         break;
       }
@@ -366,6 +371,16 @@ export class CombatScene extends Phaser.Scene {
     this.drawBars();
     if (!this.quiet) combatSfx(e, 0);
     this.onEvent?.(e);
+  }
+
+  /** A chain fired (cast set off by neighbour `from`): "Chain!" popup over the fighter + flash the link in the queue. */
+  private chain(side: Side, from: number, idx: number, t: number) {
+    const sk = this.builds[side]?.skills;
+    const a = sk?.[from]?.id;
+    const b = sk?.[idx]?.id;
+    if (!a || !b || !SKILLS[a] || !SKILLS[b]) return;
+    this.chainFlash[side] = [...this.chainFlash[side].filter((f) => f.until > t), { a: from, b: idx, until: t + 8 }];
+    chainPopup(side, a, b, POS[side] / W, (GROUND - HERO_H + 2) / H, this.dur(1300));
   }
 
   /** Frozen / pushed-back label over a fighter, and "no skill fired" once the fight is over. */
@@ -486,6 +501,18 @@ export class CombatScene extends Phaser.Scene {
         }
       });
       if (frozen) g.lineStyle(2, 0x8fd8ff, 0.9).strokeRect(ox - 2, oy - 2, w + 4, n * rowH + 2);
+      // chain links that just fired: a gold bracket joining the two rows, fading out
+      for (const f of this.chainFlash[s]) {
+        const left = f.until - this.clock;
+        if (left <= 0 || !b.skills[f.a] || !b.skills[f.b]) continue;
+        const k = Math.min(1, left / 8);
+        const [y1, y2] = [oy + Math.min(f.a, f.b) * rowH + 5, oy + Math.max(f.a, f.b) * rowH + 5];
+        const bx = s === 0 ? ox - 7 : ox + w + 7;
+        const d = s === 0 ? 5 : -5;
+        g.lineStyle(6, 0xffb86b, 0.4 * k).lineBetween(bx, y1, bx, y2);
+        g.lineStyle(2.5, 0xffe2a0, k).lineBetween(bx + d, y1, bx, y1).lineBetween(bx, y1, bx, y2).lineBetween(bx, y2, bx + d, y2);
+        g.lineStyle(1.5, 0xffe2a0, k).strokeRect(ox - 1, oy + f.a * rowH - 1, 12, 12).strokeRect(ox - 1, oy + f.b * rowH - 1, 12, 12);
+      }
     }
   }
 }
