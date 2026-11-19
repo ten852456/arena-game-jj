@@ -32,7 +32,11 @@ export function handleFight(body: any): Res {
   if (typeof build === 'string') return bad(build);
   const name = cleanName(body?.name, playerId ?? runId);
   const rating = cleanRating(body?.rating);
-  const prev = db.tracks[runId];
+  const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
+  // (otherwise a client could retry a lost day until it wins and inflate the run-end reward).
+  if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
+  if (prev && Object.hasOwn(prev.days, day)) return { status: 409, json: { error: 'day already fought' } };
   const streak = streakOf(prev);
 
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.

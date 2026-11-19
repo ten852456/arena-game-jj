@@ -108,9 +108,10 @@ function loadDb(): Db {
     // builds from an older combat version have another format: they can't fight or replay any more
     snapshots: (Array.isArray(d.snapshots) ? d.snapshots : []).filter((x) => x?.v === SIM_VERSION),
     fights: (Array.isArray(d.fights) ? d.fights : []).filter((x) => x?.v === SIM_VERSION),
-    tracks: isObj(d.tracks) ? d.tracks : {},
+    // prototype-less maps: a key like "__proto__" can never reach Object.prototype
+    tracks: Object.assign(Object.create(null), isObj(d.tracks) ? d.tracks : {}),
     runs: Array.isArray(d.runs) ? d.runs : [],
-    players: isObj(d.players) ? d.players : {},
+    players: Object.assign(Object.create(null), isObj(d.players) ? d.players : {}),
   };
 }
 

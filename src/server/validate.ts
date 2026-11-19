@@ -37,6 +37,8 @@ export function validateBuild(x: unknown, day: number): Build | string {
 /** Run ids and player ids: 1–64 chars of letters, digits, `-` and `_`. */
 export function cleanId(x: unknown): string | null {
   const s = typeof x === 'string' ? x : typeof x === 'number' ? String(x) : '';
+  // ids become object keys (db.tracks / db.players): never allow keys that reach Object.prototype
+  if (s === '__proto__' || s === 'constructor' || s === 'prototype') return null;
   return /^[\w-]{1,64}$/.test(s) ? s : null;
 }
 
