@@ -8,6 +8,7 @@ import { L } from '../../i18n';
 import { TPS, simulate } from '../../sim/combat';
 import { SKILLS, nodeOf } from '../../sim/skills';
 import type { Build, SkillInstance } from '../../sim/types';
+import { skillIcon } from '../assets';
 
 export const TIMELINE_SECS = 12;
 /** a hero id with no passive, and a late day so the dummy's HP lasts well past the preview */
@@ -58,10 +59,11 @@ export function timelineHTML(skills: SkillInstance[], hero: string): string {
         })
         .join('');
       const n = mine.filter((f) => !f.echo).length;
+      const trig = mine.filter((f) => f.from !== undefined).length;
       return `<div class="tl-lane arch-${SKILLS[k.id].arch}">
-        <span class="tl-name"><span class="tl-no">${i + 1}</span>${esc(name(i))}</span>
+        <span class="tl-name"><span class="tl-no">${i + 1}</span><img class="tl-ico" src="${skillIcon(k.id)}" alt="">${esc(name(i))}</span>
         <div class="tl-track">${dots}</div>
-        <span class="tl-n" title="${L(`ทำงานกี่ครั้งใน ${TIMELINE_SECS} วิแรก`, `Fires in the first ${TIMELINE_SECS}s`)}">×${n}</span>
+        <span class="tl-n" title="${L(`ทำงานกี่ครั้งใน ${TIMELINE_SECS} วิแรก`, `Fires in the first ${TIMELINE_SECS}s`)}">×${n}${trig ? `<small>⚡${trig}</small>` : ''}</span>
       </div>`;
     })
     .join('');
