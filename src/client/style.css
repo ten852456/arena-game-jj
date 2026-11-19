@@ -839,3 +839,9 @@ html.gs-lock { overflow: hidden; overscroll-behavior: none; }
 @media (prefers-reduced-motion: reduce) { .gs .gs-card { transition: none; } #gs-flash { transition: none; } }
 .gs-ghost .piece { --c: inherit; margin: 0; }
 .gs-bagslot { min-height: 52px; }
+
+/* phone header: keep the title on one line next to help / language / sound */
+@media (max-width: 420px) {
+  header .logo { font-size: 1rem; white-space: nowrap; }
+}
+@media (max-width: 420px) { .help-txt { display: none; } }

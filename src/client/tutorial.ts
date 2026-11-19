@@ -106,7 +106,10 @@ export function initTutorial() {
   if (header && !header.querySelector('.tut-open')) {
     const b = document.createElement('button');
     b.className = 'tut-open small ghost';
-    const label = () => (b.textContent = `? ${L('วิธีเล่น', 'How to play')}`);
+    const label = () => {
+      b.innerHTML = `? <span class="help-txt">${L('วิธีเล่น', 'How to play')}</span>`;
+      b.setAttribute('aria-label', L('วิธีเล่น', 'How to play'));
+    };
     label();
     onLang(label);
     b.addEventListener('click', showTutorial);

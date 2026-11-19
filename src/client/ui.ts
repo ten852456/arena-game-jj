@@ -47,8 +47,10 @@ let lbPeriod: M.Period = 'season';
 let lbData: M.Leaderboard | null = null;
 let lbLoading = false;
 /** Opponent label: real name, or name · AI (tier). Never "You" (that is the player). */
-function oppLabel(o: { name: string; ai: boolean; tier?: unknown }) {
-  const nm = o.name && o.name !== 'คุณ' && o.name !== 'You' ? o.name : L('คู่ต่อสู้', 'Opponent');
+function oppLabel(o: { name: string; ai: boolean; tier?: unknown; build?: { hero: string } }) {
+  // AI names come from the (Thai) server: rebuild them from the hero so they follow the game language
+  const aiHero = o.ai && o.build ? HEROES_BY_ID[o.build.hero]?.name : undefined;
+  const nm = aiHero ? `AI · ${aiHero}` : o.name && o.name !== 'คุณ' && o.name !== 'You' ? o.name : L('คู่ต่อสู้', 'Opponent');
   if (!o.ai) return nm;
   const tier = M.tierLabel(o.tier);
   const base = /\bAI\b/.test(nm) ? nm : `${nm} · AI`;
@@ -842,7 +844,7 @@ function renderOver() {
 function replayNames(f: ReplayRecord): [string, string] {
   const mine = !!run?.log.some((l) => l.fightId === f.id) || M.localHistory().some((h) => h.bestFightId === f.id) || replayIsMine(f.id);
   const a = mine ? youName() : f.a.name || L('ผู้เล่น', 'Player');
-  const b = oppLabel({ name: f.b.name, ai: f.b.ai, tier: (f.b as { tier?: unknown }).tier });
+  const b = oppLabel({ name: f.b.name, ai: f.b.ai, tier: (f.b as { tier?: unknown }).tier, build: f.b.build });
   return b === a ? [`${a} (${L('ซ้าย', 'left')})`, `${b} (${L('ขวา', 'right')})`] : [a, b];
 }
 /** fight ids of this browser's own fights (any run), remembered so old replays still say "You" */
