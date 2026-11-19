@@ -2,6 +2,7 @@
  * HTML for the fight summary extras, the end-of-run results page, profile, leaderboard and the scouting chip.
  * Pure string builders; ui.ts owns state, events and rendering.
  */
+import { IMAGES } from '../assets';
 import type { Explanation, Lock } from '../../sim/explain';
 import { HEROES_BY_ID } from '../../sim/heroes';
 import { ARCH_NAME } from '../../sim/skills';
@@ -70,9 +71,9 @@ export function runOverPage(d: OverData) {
       : 'ดวงจันทร์ยังรออยู่ ลองแนว build ใหม่ดูนะ';
   const reward =
     d.reward === undefined
-      ? `<div class="mm-reward pending"><span class="mm-dust" aria-hidden="true">✦</span><span>กำลังนับผงดาว…</span></div>`
+      ? `<div class="mm-reward pending"><img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true"><span>กำลังนับผงดาว…</span></div>`
       : d.reward
-        ? `<div class="mm-reward"><span class="mm-dust" aria-hidden="true">✦</span><div><div class="mm-reward-n">+${d.reward.stardust} <small>ผงดาว</small></div>${
+        ? `<div class="mm-reward"><img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true"><div><div class="mm-reward-n">+${d.reward.stardust} <small>ผงดาว</small></div>${
             d.reward.total !== undefined ? `<div class="mm-reward-t">รวมทั้งหมด ${d.reward.total} ผงดาว</div>` : ''
           }</div></div>`
         : '';
@@ -84,8 +85,8 @@ export function runOverPage(d: OverData) {
   const pips = Array.from({ length: d.winTarget }, (_, i) => `<i class="${i < d.wins ? 'on' : ''}"></i>`).join('');
   return `<section class="mm-over ${d.won ? 'won' : 'lost'}">
     ${sky()}
+    <div class="mm-banner" style="background-image:url('${d.won ? IMAGES.bannerVictory : IMAGES.bannerDefeat}')"><h2 class="mm-over-title">${title}</h2></div>
     <div class="mm-over-hero">${d.heroArt}</div>
-    <h2 class="mm-over-title">${title}</h2>
     <p class="mm-over-sub">${sub}</p>
     <div class="mm-pips" aria-label="ชนะ ${d.wins} จาก ${d.winTarget}">${pips}</div>
     <div class="mm-statgrid">
@@ -177,7 +178,8 @@ export function leaderboardPage(period: Period, lb: Leaderboard | null, loading:
         : ''
     }`;
   }
-  return `<div class="actions"><button class="ghost" data-a="town">← กลับเมือง</button><button class="ghost" data-a="profile">โปรไฟล์ของฉัน</button></div>
+  return `
+  <img class="mm-lbhead" src="${IMAGES.headerLeaderboard}" alt="" aria-hidden="true"><div class="actions"><button class="ghost" data-a="town">← กลับเมือง</button><button class="ghost" data-a="profile">โปรไฟล์ของฉัน</button></div>
   <section class="mm-card">${sky()}<h2>🏆 กระดานผู้นำ</h2>
     <p class="muted small">${lb?.scoreLabel ? esc(lb.scoreLabel) : 'จัดอันดับนักสู้โมจิบนดวงจันทร์'}</p>
     <div class="mm-tabs" role="group" aria-label="ช่วงเวลา">${tabs}</div>

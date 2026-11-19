@@ -1,3 +1,4 @@
+import { combatSfx } from './audio';
 import Phaser from 'phaser';
 import { ZOOM } from './view';
 import { SKILLS, lvOf, nodeOf } from '../sim/skills';
@@ -345,6 +346,7 @@ export class CombatScene extends Phaser.Scene {
       }
     }
     this.drawBars();
+    if (!this.quiet) combatSfx(e, 0);
     this.onEvent?.(e);
   }
 

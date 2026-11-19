@@ -18,6 +18,8 @@ import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
 import { resetHints, showHints } from './shop/hints';
 import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
+import { music, sfx, voice } from './audio';
+import { IMAGES } from './assets';
 
 export interface Stage {
   town: TownScene;
@@ -65,6 +67,43 @@ let lastBuild: Build | null = null;
 let replayResult: CombatResult | null = null;
 let replay: ReplayRecord | null = null;
 let busy = false;
+// ---------- audio cues (music per screen, one-shot voice/sfx when a screen is entered) ----------
+let shownView: View | null = null;
+let lastShopDay = 0;
+let welcomed = false;
+let heroPrompted = false;
+function onEnterView(v: View) {
+  if (v === 'town' || v === 'profile' || v === 'leaderboard') {
+    music('town');
+    if (!welcomed) {
+      welcomed = true;
+      voice('welcome');
+    }
+  } else if (v === 'title') {
+    music('town');
+    if (!runActive() && !heroPrompted) {
+      heroPrompted = true;
+      voice('choose_hero');
+    }
+  } else if (v === 'shop') {
+    music('shop');
+    if (run && run.day !== lastShopDay) {
+      voice(lastShopDay ? 'new_day' : 'shop_open');
+      lastShopDay = run.day;
+    }
+  } else if (v === 'result') {
+    if (last?.won) music('victory');
+  } else if (v === 'lastchance') {
+    sfx('last_chance');
+    voice('last_chance');
+  } else if (v === 'over') {
+    if (run?.phase === 'won') {
+      music('victory');
+      sfx('champion');
+      voice(run.losses === 0 ? 'perfect' : 'champion');
+    } else music('town');
+  }
+}
 let toast = '';
 let names: [string, string] = ['', ''];
 let confirmConcede = false;
@@ -281,6 +320,10 @@ function streakText(s: number) {
 const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'lastchance' || run.phase === 'mark');
 
 function render() {
+  if (view !== shownView) {
+    shownView = view;
+    onEnterView(view);
+  }
   stage.show(view === 'town' || view === 'profile' || view === 'leaderboard' ? 'town' : 'combat');
   const html = {
     profile: renderProfile,
@@ -351,6 +394,7 @@ function renderTitle() {
     : '';
   return `
   <div class="actions"><button class="ghost" data-a="town">← กลับเมือง</button></div>
+  <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120">
   <h2>เลือกฮีโร่</h2>
   <p class="muted">ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือดเท่ากับเลขวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน</p>
   <label class="name">ชื่อของคุณ <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="ผู้เล่น"></label>
@@ -686,6 +730,10 @@ function claimReward(r: R.RunState) {
   }).then((res) => {
     pendingClaim.delete(r.id);
     if (res) {
+      if (res.stardust > 0) {
+        sfx('stardust');
+        voice('stardust');
+      }
       M.rememberClaim(r.id, res);
       M.saveLocalRun({ ...summary, stardust: res.stardust });
     }
@@ -931,6 +979,9 @@ async function doFight() {
   names = ['คุณ', oppLabel(res.opponent as FightResponse['opponent'] & { tier?: unknown })];
   noteFight(r, res, explain(res.result, [build, res.opponent.build], 0, names, { drawIsLoss: true }), lastDay);
   view = 'fighting';
+  sfx('fight_start');
+  voice('fight');
+  music('battle');
   render();
   playLast();
 }
@@ -1136,6 +1187,8 @@ function onClick(ev: Event) {
       return;
   }
   if (err) toast = err;
+  else if (a === 'buy' || a === 'reroll' || a === 'sell' || a === 'wish') sfx(a);
+  else if (a === 'lock') sfx('lock');
   saveRun();
   render();
 }

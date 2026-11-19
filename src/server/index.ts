@@ -44,6 +44,7 @@ function readBody(req: IncomingMessage): Promise<unknown> {
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json',
+  '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
 };
 function serveStatic(url: string, res: ServerResponse) {
   if (!existsSync(DIST)) return send(res, 404, { error: 'not found (run `npm run build` or use `npm run dev`)' });

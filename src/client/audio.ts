@@ -292,6 +292,7 @@ export function combatSfx(e: CombatEvent, me: Side = 0) {
 
 // ---------- page wiring ----------
 let started = false;
+const OWN_SOUND = new Set(['buy', 'sell', 'reroll', 'lock', 'wish', 'fight']);
 /**
  * Call once at boot. Waits for the first gesture, pauses audio while the tab is hidden and, with uiSounds,
  * plays the click sound for every enabled <button> (skip one with data-sfx="none") and a soft hover tick.
@@ -311,7 +312,8 @@ export function initAudio(opts: { uiSounds?: boolean } = {}) {
       'click',
       (ev) => {
         const b = (ev.target as Element | null)?.closest?.('button') as HTMLButtonElement | null;
-        if (b && !b.disabled && b.dataset.sfx !== 'none') sfx('click');
+        // actions with their own sound (buy, sell, reroll, lock, wish, fight) skip the generic click
+        if (b && !b.disabled && b.dataset.sfx !== 'none' && !OWN_SOUND.has(b.dataset.a ?? '')) sfx('click');
       },
       true,
     );

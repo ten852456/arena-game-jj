@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { initAudio, music } from './audio';
+import { getAudioSettings, initAudio, music, toggleMuted } from './audio';
 import { CombatScene, H, W, sceneReady } from './combatScene';
 import { TownScene, townReady } from './townScene';
 import { initTutorial } from './tutorial';
@@ -10,6 +10,21 @@ import './style.css';
 async function boot() {
   initAudio({ uiSounds: true }); // sound starts after the first tap/click (autoplay rules)
   music('town');
+  // floating mute toggle (works on every screen, phone-sized touch target)
+  const mute = document.createElement('button');
+  mute.className = 'mute-btn';
+  mute.dataset.sfx = 'none';
+  const paint = () => {
+    const off = getAudioSettings().muted;
+    mute.textContent = off ? '🔇' : '🔊';
+    mute.setAttribute('aria-label', off ? 'เปิดเสียง / Sound on' : 'ปิดเสียง / Sound off');
+  };
+  mute.addEventListener('click', () => {
+    toggleMuted();
+    paint();
+  });
+  paint();
+  document.body.appendChild(mute);
   // Make sure the Thai font is ready before Phaser draws canvas text.
   try {
     await Promise.race([document.fonts.load('20px Kanit'), new Promise((r) => setTimeout(r, 1500))]);
