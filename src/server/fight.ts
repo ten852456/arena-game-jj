@@ -24,6 +24,33 @@ function trackOf(runId: string, playerId: string, name: string): RunTrack {
   return t;
 }
 
+/**
+ * Tracks saved before the server mirrored the run (no `hp` yet): replay the recorded days with the same rules
+ * to rebuild HP / last chance / over. A track whose days are not exactly 1..n can't be trusted and is closed.
+ */
+function syncLegacy(t: RunTrack) {
+  if (t.hp !== undefined) return;
+  const days = Object.keys(t.days).map(Number).sort((a, b) => a - b);
+  if (days.some((d, i) => d !== i + 1)) {
+    t.over = true;
+    return;
+  }
+  let hp = START_HP;
+  let ghost = false;
+  let wins = 0;
+  for (const d of days) {
+    if (t.days[d] === 1) wins++;
+    else hp -= damageFor(d);
+    if (wins >= WIN_TARGET) return void Object.assign(t, { hp, ghost, over: true });
+    if (hp <= 0) {
+      if (ghost) return void Object.assign(t, { hp, ghost, over: true });
+      ghost = true;
+      hp = 1;
+    }
+  }
+  Object.assign(t, { hp, ghost });
+}
+
 export function handleFight(body: any): Res {
   const runId = cleanId(body?.runId);
   // a fight always belongs to a player: runs are bound to the playerId that started them
@@ -41,10 +68,11 @@ export function handleFight(body: any): Res {
   // runIds are public (leaderboard, replays): only the run's owner may fight its days
   if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
   if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
+  if (prev) syncLegacy(prev);
   if (prev?.over) return { status: 409, json: { error: 'run is over' } };
   // days are fought one by one in order: no skipping ahead, no repeating a day
   const fought = prev ? Object.keys(prev.days).length : 0;
-  if (day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
+  if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   const streak = streakOf(prev);
 
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
