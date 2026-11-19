@@ -161,7 +161,8 @@ export const validTarget = (t: string, hero: string) =>
 export function rollBonus(rng: Rng, id: string, hero: string, existing: Bonus[]): Bonus | null {
   for (let tries = 0; tries < 10; tries++) {
     const r = rng.next();
-    const e: BonusKind = r < 0.3 ? 'dmg' : r < 0.45 ? 'shield' : r < 0.6 ? 'haste' : r < 0.75 ? 'power' : 'trigger';
+    // trigger is the rarest (18%): every trigger bonus adds chains, and many of them made fights a wall of chains
+    const e: BonusKind = r < 0.32 ? 'dmg' : r < 0.48 ? 'shield' : r < 0.64 ? 'haste' : r < 0.82 ? 'power' : 'trigger';
     if (e === 'dmg' && !canHit(id)) continue; // skills that don't hit roll another effect
     const t = rng.next() < 0.6 ? rng.pick(targetsFor(id, hero)) : 'arch:' + rng.pick(ARCHES);
     if (!existing.some((b) => b.t === t && b.e === e)) return { t, e };
