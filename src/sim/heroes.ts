@@ -1,4 +1,15 @@
+import { T } from './tuning';
 import type { Archetype, StatusKind } from './types';
+
+/** HP multiplier of a hero (tuning.ts) */
+const hpOf = (id: string) => (hp: number) => Math.round(hp * T[`hp.${id}` as keyof typeof T]);
+/** +N% text from a multiplier or share */
+const pc = (x: number) => Math.round(x * 100);
+/** 'เลือดสูงสุด ±N% · ' for heroes whose base passive has no HP part (empty at ×1) */
+const hpTxt = (id: string) => {
+  const m = T[`hp.${id}` as keyof typeof T];
+  return m === 1 ? '' : `เลือดสูงสุด ${m > 1 ? '+' : '−'}${Math.abs(pc(m - 1))}% · `;
+};
 
 /** What a hook can see and do to its own fighter. Implemented by combat.ts. */
 export interface HookFighter {
@@ -62,43 +73,45 @@ export const HEROES: HeroDef[] = [
   // ---------------- tank ----------------
   {
     id: 'knight', day1: ['bulwark', 'shield', 'strike', 'stoneskin', 'jab'], name: 'อัศวิน', arch: 'tank', unique: 'bulwark',
-    passive: 'เลือดสูงสุด +30% และเริ่มสู้พร้อมโล่ 12% ของเลือด',
+    passive: `เลือดสูงสุด +${pc(T['hp.knight'] - 1)}% และเริ่มสู้พร้อมโล่ ${pc(T['knight.shield'])}% ของเลือด`,
     style: 'กำแพงโล่: สะสมโล่ให้หนา แล้วใช้โล่กระแทกตีกลับแรงตามโล่ที่มี',
-    hooks: { maxHp: (hp) => Math.round(hp * 1.3), startShield: (n, max) => n + Math.round(max * 0.12) },
+    hooks: { maxHp: hpOf('knight'), startShield: (n, max) => n + Math.round(max * T['knight.shield']) },
   },
   {
     id: 'thornguard', day1: ['spikewall', 'thorns', 'strike', 'shield', 'heavy'], name: 'นักรบหนาม', arch: 'tank', unique: 'spikewall',
-    passive: 'เลือดสูงสุด +20% · หนามของคุณอยู่นาน 13 วิ (ปกติ 10) และสลายเวทลบได้แค่ครึ่งกอง · เริ่มสู้พร้อมหนาม 1 ที่ไม่หายไป',
+    passive: `เลือดสูงสุด +${pc(T['hp.thornguard'] - 1)}% · หนามของคุณอยู่นาน 13 วิ (ปกติ 10) และสลายเวทลบได้แค่ครึ่งกอง · เริ่มสู้พร้อมหนาม 1 ที่ไม่หายไป`,
     style: 'ยิ่งโดนตียิ่งเจ็บ: สะสมหนาม ให้ศัตรูที่ตีถี่ๆ ทำร้ายตัวเอง แล้วปิดด้วยป้อมหนาม',
     hooks: {
       onStart(me) {
         me.thorns(1, true);
       },
       thornsSecs: 13,
-      maxHp: (hp) => Math.round(hp * 1.2),
+      maxHp: hpOf('thornguard'),
     },
     botWant: ['thorns', 'spikewall', 'shield'],
   },
   // ---------------- burst ----------------
   {
     id: 'assassin', day1: ['execute', 'strike', 'jab', 'charge', 'heavy'], name: 'นักฆ่า', arch: 'burst', unique: 'execute',
-    passive: 'การตีครั้งแรกของการสู้แรง ×1.6',
+    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้แรง ×${T['assassin.first']}`,
     style: 'ตีทีเดียวจบ: รวมพลังแล้วปล่อยการโจมตีหนักๆ ปลิดชีพตอนศัตรูเลือดต่ำ',
     hooks: {
+      maxHp: hpOf('assassin'),
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
-        return me.flags.hits === 1 ? dmg * 1.6 : dmg;
+        return me.flags.hits === 1 ? dmg * T['assassin.first'] : dmg;
       },
     },
   },
   {
     id: 'duelist', day1: ['flurry', 'jab', 'strike', 'charge', 'train'], name: 'นักดาบคู่', arch: 'burst', unique: 'flurry',
-    passive: 'การตีทุกครั้งที่ 3 ของคุณแรงขึ้น 30% (อย่างน้อย +1)',
+    passive: `${hpTxt('duelist')}การตีทุกครั้งที่ 3 ของคุณแรงขึ้น ${pc(T['duelist.third'])}% (อย่างน้อย +1)`,
     style: 'ตีรัวไม่หยุด: skill คูลดาวน์สั้นและตีหลายครั้ง ยิ่งตีถี่ยิ่งได้ครั้งที่ 3 บ่อย',
     hooks: {
+      maxHp: hpOf('duelist'),
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
-        return me.flags.hits % 3 === 0 ? dmg + Math.max(1, Math.round(dmg * 0.3)) : dmg;
+        return me.flags.hits % 3 === 0 ? dmg + Math.max(1, Math.round(dmg * T['duelist.third'])) : dmg;
       },
     },
     botWant: ['jab', 'flurry', 'strike'],
@@ -106,14 +119,14 @@ export const HEROES: HeroDef[] = [
   // ---------------- scaling ----------------
   {
     id: 'berserker', day1: ['rampage', 'train', 'strike', 'feast', 'ignite'], name: 'นักรบคลั่ง', arch: 'scaling', unique: 'rampage',
-    passive: 'เลือดสูงสุด +10% · โดนตีครบทุก 5 ครั้ง ได้พลังโจมตี +1 · ครั้งแรกที่เลือดต่ำกว่าครึ่ง ได้พลังโจมตีอีก +2 (ทุกการโจมตีของทุก skill จนจบการสู้)',
+    passive: `เลือดสูงสุด +${pc(T['hp.berserker'] - 1)}% · โดนตีครบทุก ${T['berserker.hits']} ครั้ง ได้พลังโจมตี +1 · ครั้งแรกที่เลือดต่ำกว่าครึ่ง ได้พลังโจมตีอีก +2 (ทุกการโจมตีของทุก skill จนจบการสู้)`,
     style: 'โตไม่หยุด: สะสมพลังโจมตีทีละนิด ยิ่งสู้นานและยิ่งโดนตี ยิ่งตีแรง',
     hooks: {
-      maxHp: (hp) => Math.round(hp * 1.1),
+      maxHp: hpOf('berserker'),
       onDamaged(me, _n, src) {
         if (src !== 'burn' && src !== 'fatigue' && src !== 'thorns' && me.hp > 0) {
           me.flags.hitsTaken = (me.flags.hitsTaken ?? 0) + 1;
-          if (me.flags.hitsTaken % 5 === 0) me.grow(1);
+          if (me.flags.hitsTaken % T['berserker.hits'] === 0) me.grow(1);
         }
         if (!me.flags.raged && me.hp > 0 && me.hp < me.maxHp / 2) {
           me.flags.raged = 1;
@@ -125,24 +138,24 @@ export const HEROES: HeroDef[] = [
   },
   {
     id: 'pyro', day1: ['inferno', 'ignite', 'train', 'jab', 'chill'], name: 'นักเวทเพลิง', arch: 'scaling', unique: 'inferno',
-    passive: 'ไฟที่คุณจุดติดนานขึ้น 30%',
+    passive: `${hpTxt('pyro')}ไฟที่คุณจุดติดนานขึ้น ${pc(T['pyro.burn'] - 1)}%`,
     style: 'ไฟซ้อนไฟ: จุดไฟหลายกองให้ซ้อนกัน แล้วระเบิดเพลิงตามไฟที่ยังเหลือ (ไม่สนโล่)',
-    hooks: { burnSecs: (s) => Math.round(s * 1.3) },
+    hooks: { maxHp: hpOf('pyro'), burnSecs: (s) => Math.round(s * T['pyro.burn']) },
     botWant: ['ignite', 'inferno', 'amplify'],
   },
   // ---------------- control ----------------
   {
     id: 'witch', day1: ['shatter', 'frost', 'strike', 'chill', 'jab'], name: 'แม่มดน้ำแข็ง', arch: 'control', unique: 'shatter',
-    passive: 'เลือดสูงสุด +16% · การแช่แข็งที่คุณใส่ศัตรูนานขึ้น 0.3 วิ',
+    passive: `เลือดสูงสุด +${pc(T['hp.witch'] - 1)}% · การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ`,
     style: 'หยุดเวลา: แช่แข็งศัตรูแล้วทุบน้ำแข็งแรง x3 ระหว่างที่ศัตรูขยับไม่ได้',
-    hooks: { maxHp: (hp) => Math.round(hp * 1.16), freezeTicks: (t) => t + 3 },
+    hooks: { maxHp: hpOf('witch'), freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10) },
   },
   {
     id: 'chrono', day1: ['timewarp', 'chill', 'frost', 'strike', 'dispel'], name: 'จอมเวทเวลา', arch: 'control', unique: 'timewarp',
-    passive: 'เลือดสูงสุด +16% · ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%',
+    passive: `เลือดสูงสุด +${pc(T['hp.chrono'] - 1)}% · ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%`,
     style: 'ถ่วงเวลา: ทำให้ศัตรูช้าและดึงคูลดาวน์ถอยหลัง skill ศัตรูแทบไม่ได้ออก',
     hooks: {
-      maxHp: (hp) => Math.round(hp * 1.16),
+      maxHp: hpOf('chrono'),
       slow: (p, s) => [p + 0.1, s + 1],
       onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? dmg * 1.1 : dmg),
     },

@@ -1,6 +1,7 @@
 import { HEROES_BY_ID, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
+import { T } from './tuning';
 import { SKILLS, execNode, lvOf, nodeOf, reacts, type Ctx, type FighterView } from './skills';
 import type {
   BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
@@ -27,7 +28,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 10;
+export const SIM_VERSION = 11;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -35,9 +36,14 @@ export const MAX_TICKS = 90 * TPS;
  * 15–22s on days 4–7 and 23–30s on day 8+ (bot damage per second grows about linearly with the day).
  */
 const HP_BY_DAY = [16, 18, 21, 39, 50, 61, 72, 127, 135, 156, 176, 198, 220];
+/** HP added per day after the table */
+const HP_LATE_STEP = 60;
+/** tuning.ts multiplier of the base HP on a day */
+const hpScale = (d: number) => (d <= 3 ? T['hp.early'] : d <= 7 ? T['hp.mid'] : T['hp.late']);
 export const hpFor = (day: number) => {
   const d = Math.max(1, Math.floor(day));
-  return d <= HP_BY_DAY.length ? HP_BY_DAY[d - 1] : HP_BY_DAY[HP_BY_DAY.length - 1] + 60 * (d - HP_BY_DAY.length);
+  const base = d <= HP_BY_DAY.length ? HP_BY_DAY[d - 1] : HP_BY_DAY[HP_BY_DAY.length - 1] + HP_LATE_STEP * (d - HP_BY_DAY.length);
+  return Math.round(base * hpScale(d));
 };
 /** Fatigue: after this many ticks both sides take growing damage (a backstop that ends stalled fights). */
 export const fatigueStart = (day: number) => Math.round(Math.min(30, day <= 3 ? 14 : 9 + 2 * day) * TPS);
@@ -58,8 +64,8 @@ const MAX_CHAIN = 8;
  */
 export const TRIGGER_GAP = 2 * TPS;
 export const TRIGGER_GAP_MAX = 4 * TPS;
-/** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … */
-export const CHAIN_DECAY = 0.75;
+/** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
+export const CHAIN_DECAY = T.chainDecay;
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
 export const CTL_IMMUNE = 1.5 * TPS;
 /** The control cap also grows with the fight: at tick t at most CTL_BASE + CTL_SHARE × t ticks can have been spent. */
@@ -558,7 +564,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1, 3, blk.idx);
 
     // trigger bonuses fire at the same power, but deeper chain steps get weaker
-    const tm = q.depth >= 1 ? q.mult * CHAIN_DECAY : q.mult;
+    const tm = q.depth >= 1 ? q.mult * T.chainDecay : q.mult;
     const next: Fire[] = blk.triggers.map((bi) => ({ bi, depth: q.depth + 1, from: q.bi, mult: tm }));
     const en = nodeOf(inst).engine;
     // engine power: the engine's own power bonus counts, but a chain never fires above the engine's power

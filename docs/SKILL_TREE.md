@@ -205,3 +205,54 @@ Burst wins the early/mid days (burst vs tank 66% on day 6, vs scaling 67% on day
 นักดาบคู่ "every 3rd hit +30%", นักรบคลั่ง "+10% HP, +1 พลัง per 5 hits taken, +2 at half HP",
 นักเวทเพลิง "burns +30% longer", แม่มด "+16% HP, freezes +0.3s", จอมเวทเวลา "+16% HP, hits on a slowed/frozen enemy +10%",
 อัศวิน "+30% HP, start shield 12%", นักรบหนาม "+20% HP, thorns last 13s".
+
+## Sim v11 update (19 Nov 2026): auto-tuner pass + exploit fixes
+
+Numbers now live in `src/sim/tuning.ts` (multipliers and values) on top of the base literals in `src/sim/skills.ts`;
+see docs/TUNING.md. The intended curves above (early / mid / late per hero) are now target bands in
+`scripts/tune/curves.ts`, searched by `npm run tune`. The v10 curve table above is history; the live one is below.
+
+### What changed
+
+| knob | v10 | v11 | why |
+|---|---|---|---|
+| `run.startHp` (START_HP) | 20 | 17 | reach-10 rates were 33–65% (target 15–45%) |
+| `hp.early` / `hp.mid` / `hp.late` (base HP days 1–3 / 4–7 / 8+) | 1 | 1.06 / 1.04 / 1.06 | days 5 and 8–10 fights were below their length target |
+| `control` (freeze / slow / delay seconds) | 1 | 1.05 | |
+| `cd.pyro` (ระเบิดเพลิง tree cooldown) | 6 s | 4.8 s | pyro was dead on day 3 (12%): its 6 s unique barely fired in an 8 s fight |
+| `uniq.pyro.lv3`, `hp.pyro` | 1, +0% | 1.2, +14% | pyro's curve |
+| `cd.witch` (ทุบน้ำแข็ง), `uniq.witch.lv3` | 4.5 s, 1 | 4.1 s, 0.95 | |
+| `hp.witch` / `hp.chrono` | +16% / +16% | +20% / +18% | |
+| `cd.chrono` (บิดเวลา) | 5 s | 5.5 s | chrono was too strong on days 3–6 for a mid–late hero |
+| `cd.knight` / `cd.berserker` | 1 | 1.05 | |
+| `uniq.assassin.lv1` / `lv3` | 1 / 1 | 1.1 / 1.2 | assassin fell to 29% on day 15 |
+| `uniq.berserker.lv3`, `berserker.hits` | 1, 5 | 0.9, 6 | berserker 63% on day 3 and 72% on day 15 |
+| `hp.thornguard` / `hp.duelist` | +20% / +0% | +18% / +6% | |
+| `knight.shield` | 12% | 10% | |
+| เร่งเครื่อง power a / a1 / a2 / b / b1 | 1.3 / 1.6 / 1.3 / 1.1 / 1.25 | 1.0 / 1.15 / 1.0 / 0.9 / 1.0 | exploit report #1: overclock in 88% of top builds, one-shots on day 9 |
+| ระเบิดลุกลาม burn share (base) | 0.75 | 0.4 (live 0.48 every 4.8 s) | exploit report #4: 100% on day 12 |
+| ฟันพายุ / แทงทะลุ hit | 6 ×4 / 12 | 4 ×4 / 10 | exploit report #2: Lv3 rush on day 3 |
+| เฟืองพายุ cooldown, เฟืองไว power | 2 s, 0.5 | 2.4 s, 0.4 | exploit report #5 |
+| POWER_BONUS (links.ts) | 0.25 | 0.15 | connect-bonus luck decided early fights (no measurable effect on bot fights) |
+
+### Achieved curves (`npm run sim -- all --n 200 --days 3,6,9,12,15`, tier normal, seed 1)
+
+Win rate vs the field; v10 in brackets. Targets: curve bands in `scripts/tune/curves.ts` (center ±5).
+
+| Hero | Curve | d3 | d6 | d9 | d12 | d15 | reach 10 |
+|---|---|---|---|---|---|---|---|
+| นักดาบคู่ duelist | early | 43 (49) | 59 (58) | 49 (49) | 44 (47) | 40 (38) | 37% (41) |
+| แม่มดน้ำแข็ง witch | early | 67 (60) | 53 (46) | 49 (41) | 50 (40) | 39 (34) | 41% (36) |
+| นักฆ่า assassin | early–mid | 57 (54) | 58 (57) | 48 (49) | 40 (41) | 27 (29) | 42% (45) |
+| จอมเวทเวลา chrono | mid–late | 57 (60) | 48 (54) | 45 (51) | 51 (57) | 43 (47) | 43% (50) |
+| นักรบหนาม thornguard | mid–late | 51 (58) | 51 (55) | 56 (57) | 54 (55) | 60 (62) | 54% (65) |
+| อัศวิน knight | steady, best late | 39 (44) | 48 (51) | 54 (60) | 52 (57) | 54 (61) | 43% (54) |
+| นักรบคลั่ง berserker | late | 49 (63) | 41 (49) | 50 (56) | 52 (57) | 71 (72) | 47% (62) |
+| นักเวทเพลิง pyro | late | 36 (12) | 42 (31) | 47 (37) | 57 (46) | 66 (58) | 39% (33) |
+
+Sim targets: 7 of 28 missed (v10: 12). Fixed: day-6 hero pairs (76 → 69%), fight length on every day, reach 10 of
+knight and chrono (berserker 62 → 47%, thornguard 65 → 54%: still just over 45%), hero spread on days 3–9.
+Still open: day 3 worst pair 84% (was 94%; witch / chrono vs pyro), and **day 15**: berserker 71%, assassin 27%
+(berserker beats assassin 86%, scaling vs burst 81%). Burst is meant to fade late, but not this far. The next tuning
+round should target day 15 (assassin Lv3, berserker's late scaling) and duelist's early peak (43% on day 3, meant ~58%).
+Health: 0-skill 0.1%, fatigue ≤ 12% every day, average fight 13.9 s.

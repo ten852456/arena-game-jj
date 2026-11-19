@@ -87,6 +87,10 @@ of them to support daily rules and free rotation later.
 - [x] **Fight stats** — `CombatResult.sides[side]`: casts, skills that never fired, frozen / delayed / slowed ticks, total control, resists
 - [x] **Run length** — 10 wins; defeat costs 2/3/4/5 HP by day (cap 5)
 - [x] **Power curves** — heroes peak at different days (burst early, control/tank mid, scaling late): see docs/SKILL_TREE.md
+- [x] **Auto-tuner (sim v11)** — `npm run tune`: CMA-ES over 54 knobs in `src/sim/tuning.ts` towards per-hero power
+  curves, reach-10 15–45%, no hard counters, healthy fights; watch-build penalties for exploits (docs/TUNING.md).
+  First pass + exploit-report fixes applied: 12 → 7 sim targets missed. Open: day-15 burst vs scaling, day-3 pairs
+  (see SKILL_TREE.md "Sim v11")
 - [ ] Bot: place engines next to slow heavy skills (bot.ts `arrangeList` does not know engines yet)
 - [ ] UI: show "never fired" skills and control time from `sides`; explain ตั้งหลัก / สลัดการคุม / react in the log
 

@@ -1,0 +1,1443 @@
+{
+ "meta": {
+  "mode": "all",
+  "n": 200,
+  "days": [
+   3,
+   6,
+   9,
+   12,
+   15
+  ],
+  "tier": "normal",
+  "seed": 1,
+  "pool": 24,
+  "simVersion": 11
+ },
+ "matchups": {
+  "3": {
+   "arch": {
+    "tank": {
+     "tank": 0.508125,
+     "burst": 0.4525,
+     "scaling": 0.54390625,
+     "control": 0.3140625
+    },
+    "burst": {
+     "tank": 0.531875,
+     "burst": 0.49375,
+     "scaling": 0.5396875,
+     "control": 0.4284375
+    },
+    "scaling": {
+     "tank": 0.46359375,
+     "burst": 0.4528125,
+     "scaling": 0.50625,
+     "control": 0.3203125
+    },
+    "control": {
+     "tank": 0.68171875,
+     "burst": 0.573125,
+     "scaling": 0.6740625,
+     "control": 0.49875
+    }
+   },
+   "hero": {
+    "knight": {
+     "knight": 0.50875,
+     "thornguard": 0.3275,
+     "assassin": 0.26,
+     "duelist": 0.40125,
+     "berserker": 0.5425,
+     "pyro": 0.41375,
+     "witch": 0.3125,
+     "chrono": 0.46375
+    },
+    "thornguard": {
+     "knight": 0.69125,
+     "thornguard": 0.505,
+     "assassin": 0.40125,
+     "duelist": 0.7475,
+     "berserker": 0.63,
+     "pyro": 0.589375,
+     "witch": 0.18875,
+     "chrono": 0.29125
+    },
+    "assassin": {
+     "knight": 0.70875,
+     "thornguard": 0.57625,
+     "assassin": 0.5,
+     "duelist": 0.5475,
+     "berserker": 0.46125,
+     "pyro": 0.70375,
+     "witch": 0.415,
+     "chrono": 0.58375
+    },
+    "duelist": {
+     "knight": 0.58,
+     "thornguard": 0.2625,
+     "assassin": 0.435,
+     "duelist": 0.4925,
+     "berserker": 0.42875,
+     "pyro": 0.565,
+     "witch": 0.35,
+     "chrono": 0.365
+    },
+    "berserker": {
+     "knight": 0.4675,
+     "thornguard": 0.395625,
+     "assassin": 0.5325,
+     "duelist": 0.58125,
+     "berserker": 0.49125,
+     "pyro": 0.61,
+     "witch": 0.36875,
+     "chrono": 0.47625
+    },
+    "pyro": {
+     "knight": 0.59125,
+     "thornguard": 0.4,
+     "assassin": 0.28125,
+     "duelist": 0.41625,
+     "berserker": 0.4275,
+     "pyro": 0.49625,
+     "witch": 0.14375,
+     "chrono": 0.2925
+    },
+    "witch": {
+     "knight": 0.68375,
+     "thornguard": 0.7975,
+     "assassin": 0.58625,
+     "duelist": 0.6625,
+     "berserker": 0.615,
+     "pyro": 0.835,
+     "witch": 0.515,
+     "chrono": 0.5025
+    },
+    "chrono": {
+     "knight": 0.525,
+     "thornguard": 0.720625,
+     "assassin": 0.42,
+     "duelist": 0.62375,
+     "berserker": 0.49875,
+     "pyro": 0.7475,
+     "witch": 0.4875,
+     "chrono": 0.49
+    }
+   },
+   "overall": {
+    "knight": 0.38875,
+    "thornguard": 0.505625,
+    "assassin": 0.5708928571428571,
+    "duelist": 0.42660714285714285,
+    "berserker": 0.49026785714285714,
+    "pyro": 0.36464285714285716,
+    "witch": 0.6689285714285714,
+    "chrono": 0.5747321428571428
+   },
+   "spread": 0.30428571428571427,
+   "zeroSkill": {
+    "knight": 0.00171875,
+    "thornguard": 0.00421875,
+    "assassin": 0.00953125,
+    "duelist": 0,
+    "berserker": 0.00515625,
+    "pyro": 0,
+    "witch": 0.00125,
+    "chrono": 0.01984375
+   },
+   "avgLen": 8.8507890625
+  },
+  "6": {
+   "arch": {
+    "tank": {
+     "tank": 0.5065625,
+     "burst": 0.39515625,
+     "scaling": 0.54640625,
+     "control": 0.5453125
+    },
+    "burst": {
+     "tank": 0.61125,
+     "burst": 0.49,
+     "scaling": 0.65109375,
+     "control": 0.546875
+    },
+    "scaling": {
+     "tank": 0.44484375,
+     "burst": 0.35421875,
+     "scaling": 0.51,
+     "control": 0.39390625
+    },
+    "control": {
+     "tank": 0.47453125,
+     "burst": 0.4409375,
+     "scaling": 0.6046875,
+     "control": 0.503125
+    }
+   },
+   "hero": {
+    "knight": {
+     "knight": 0.505,
+     "thornguard": 0.36125,
+     "assassin": 0.4025,
+     "duelist": 0.39875,
+     "berserker": 0.485625,
+     "pyro": 0.540625,
+     "witch": 0.559375,
+     "chrono": 0.64625
+    },
+    "thornguard": {
+     "knight": 0.641875,
+     "thornguard": 0.518125,
+     "assassin": 0.338125,
+     "duelist": 0.44125,
+     "berserker": 0.618125,
+     "pyro": 0.54125,
+     "witch": 0.45375,
+     "chrono": 0.521875
+    },
+    "assassin": {
+     "knight": 0.596875,
+     "thornguard": 0.673125,
+     "assassin": 0.505625,
+     "duelist": 0.445,
+     "berserker": 0.6275,
+     "pyro": 0.6575,
+     "witch": 0.499375,
+     "chrono": 0.54375
+    },
+    "duelist": {
+     "knight": 0.6,
+     "thornguard": 0.575,
+     "assassin": 0.513125,
+     "duelist": 0.49625,
+     "berserker": 0.634375,
+     "pyro": 0.685,
+     "witch": 0.52875,
+     "chrono": 0.615625
+    },
+    "berserker": {
+     "knight": 0.508125,
+     "thornguard": 0.37125,
+     "assassin": 0.37375,
+     "duelist": 0.396875,
+     "berserker": 0.49625,
+     "pyro": 0.425,
+     "witch": 0.346875,
+     "chrono": 0.42625
+    },
+    "pyro": {
+     "knight": 0.47,
+     "thornguard": 0.43,
+     "assassin": 0.32,
+     "duelist": 0.32625,
+     "berserker": 0.6,
+     "pyro": 0.51875,
+     "witch": 0.36375,
+     "chrono": 0.43875
+    },
+    "witch": {
+     "knight": 0.454375,
+     "thornguard": 0.546875,
+     "assassin": 0.52375,
+     "duelist": 0.42875,
+     "berserker": 0.675,
+     "pyro": 0.5925,
+     "witch": 0.525,
+     "chrono": 0.49875
+    },
+    "chrono": {
+     "knight": 0.376875,
+     "thornguard": 0.52,
+     "assassin": 0.43875,
+     "duelist": 0.3725,
+     "berserker": 0.59875,
+     "pyro": 0.5525,
+     "witch": 0.5,
+     "chrono": 0.48875
+    }
+   },
+   "overall": {
+    "knight": 0.4849107142857143,
+    "thornguard": 0.5080357142857143,
+    "assassin": 0.5775892857142857,
+    "duelist": 0.593125,
+    "berserker": 0.406875,
+    "pyro": 0.42125,
+    "witch": 0.5314285714285715,
+    "chrono": 0.4799107142857143
+   },
+   "spread": 0.18625000000000003,
+   "zeroSkill": {
+    "knight": 0,
+    "thornguard": 0.00109375,
+    "assassin": 0.00125,
+    "duelist": 0,
+    "berserker": 0.00140625,
+    "pyro": 0,
+    "witch": 0,
+    "chrono": 0.0021875
+   },
+   "avgLen": 11.280367187500001
+  },
+  "9": {
+   "arch": {
+    "tank": {
+     "tank": 0.515625,
+     "burst": 0.54203125,
+     "scaling": 0.495625,
+     "control": 0.61984375
+    },
+    "burst": {
+     "tank": 0.43328125,
+     "burst": 0.48890625,
+     "scaling": 0.54359375,
+     "control": 0.48359375
+    },
+    "scaling": {
+     "tank": 0.51078125,
+     "burst": 0.45921875,
+     "scaling": 0.48796875,
+     "control": 0.47015625
+    },
+    "control": {
+     "tank": 0.3775,
+     "burst": 0.5053125,
+     "scaling": 0.5234375,
+     "control": 0.493125
+    }
+   },
+   "hero": {
+    "knight": {
+     "knight": 0.523125,
+     "thornguard": 0.386875,
+     "assassin": 0.538125,
+     "duelist": 0.5525,
+     "berserker": 0.416875,
+     "pyro": 0.55,
+     "witch": 0.624375,
+     "chrono": 0.685
+    },
+    "thornguard": {
+     "knight": 0.635,
+     "thornguard": 0.5175,
+     "assassin": 0.5325,
+     "duelist": 0.545,
+     "berserker": 0.509375,
+     "pyro": 0.50625,
+     "witch": 0.56875,
+     "chrono": 0.60125
+    },
+    "assassin": {
+     "knight": 0.429375,
+     "thornguard": 0.455,
+     "assassin": 0.49625,
+     "duelist": 0.4675,
+     "berserker": 0.52875,
+     "pyro": 0.53125,
+     "witch": 0.46125,
+     "chrono": 0.48375
+    },
+    "duelist": {
+     "knight": 0.405625,
+     "thornguard": 0.443125,
+     "assassin": 0.50625,
+     "duelist": 0.485625,
+     "berserker": 0.551875,
+     "pyro": 0.5625,
+     "witch": 0.46875,
+     "chrono": 0.520625
+    },
+    "berserker": {
+     "knight": 0.593125,
+     "thornguard": 0.518125,
+     "assassin": 0.4425,
+     "duelist": 0.475625,
+     "berserker": 0.47125,
+     "pyro": 0.45625,
+     "witch": 0.48875,
+     "chrono": 0.50125
+    },
+    "pyro": {
+     "knight": 0.44625,
+     "thornguard": 0.485625,
+     "assassin": 0.47125,
+     "duelist": 0.4475,
+     "berserker": 0.5325,
+     "pyro": 0.491875,
+     "witch": 0.40375,
+     "chrono": 0.486875
+    },
+    "witch": {
+     "knight": 0.335625,
+     "thornguard": 0.434375,
+     "assassin": 0.54875,
+     "duelist": 0.505,
+     "berserker": 0.54875,
+     "pyro": 0.54875,
+     "witch": 0.490625,
+     "chrono": 0.540625
+    },
+    "chrono": {
+     "knight": 0.3275,
+     "thornguard": 0.4125,
+     "assassin": 0.5025,
+     "duelist": 0.465,
+     "berserker": 0.484375,
+     "pyro": 0.511875,
+     "witch": 0.443125,
+     "chrono": 0.498125
+    }
+   },
+   "overall": {
+    "knight": 0.53625,
+    "thornguard": 0.556875,
+    "assassin": 0.4795535714285714,
+    "duelist": 0.49410714285714286,
+    "berserker": 0.4965178571428571,
+    "pyro": 0.46767857142857144,
+    "witch": 0.4945535714285714,
+    "chrono": 0.44955357142857144
+   },
+   "spread": 0.10732142857142857,
+   "zeroSkill": {
+    "knight": 0,
+    "thornguard": 0,
+    "assassin": 0,
+    "duelist": 0,
+    "berserker": 0,
+    "pyro": 0,
+    "witch": 0,
+    "chrono": 0
+   },
+   "avgLen": 15.26258203125
+  },
+  "12": {
+   "arch": {
+    "tank": {
+     "tank": 0.49453125,
+     "burst": 0.5946875,
+     "scaling": 0.4209375,
+     "control": 0.57640625
+    },
+    "burst": {
+     "tank": 0.39921875,
+     "burst": 0.4971875,
+     "scaling": 0.3996875,
+     "control": 0.4140625
+    },
+    "scaling": {
+     "tank": 0.58328125,
+     "burst": 0.60765625,
+     "scaling": 0.49578125,
+     "control": 0.4921875
+    },
+    "control": {
+     "tank": 0.42046875,
+     "burst": 0.5878125,
+     "scaling": 0.5046875,
+     "control": 0.505625
+    }
+   },
+   "hero": {
+    "knight": {
+     "knight": 0.501875,
+     "thornguard": 0.389375,
+     "assassin": 0.645625,
+     "duelist": 0.580625,
+     "berserker": 0.38625,
+     "pyro": 0.440625,
+     "witch": 0.61375,
+     "chrono": 0.54875
+    },
+    "thornguard": {
+     "knight": 0.605,
+     "thornguard": 0.481875,
+     "assassin": 0.58,
+     "duelist": 0.5725,
+     "berserker": 0.44875,
+     "pyro": 0.408125,
+     "witch": 0.61625,
+     "chrono": 0.526875
+    },
+    "assassin": {
+     "knight": 0.35,
+     "thornguard": 0.41,
+     "assassin": 0.50625,
+     "duelist": 0.44375,
+     "berserker": 0.43875,
+     "pyro": 0.38,
+     "witch": 0.405,
+     "chrono": 0.365
+    },
+    "duelist": {
+     "knight": 0.396875,
+     "thornguard": 0.44,
+     "assassin": 0.558125,
+     "duelist": 0.480625,
+     "berserker": 0.39875,
+     "pyro": 0.38125,
+     "witch": 0.44125,
+     "chrono": 0.445
+    },
+    "berserker": {
+     "knight": 0.619375,
+     "thornguard": 0.56875,
+     "assassin": 0.6,
+     "duelist": 0.575,
+     "berserker": 0.50375,
+     "pyro": 0.36125,
+     "witch": 0.490625,
+     "chrono": 0.445625
+    },
+    "pyro": {
+     "knight": 0.5925,
+     "thornguard": 0.5525,
+     "assassin": 0.645,
+     "duelist": 0.610625,
+     "berserker": 0.585625,
+     "pyro": 0.5325,
+     "witch": 0.51625,
+     "chrono": 0.51625
+    },
+    "witch": {
+     "knight": 0.421875,
+     "thornguard": 0.400625,
+     "assassin": 0.600625,
+     "duelist": 0.56125,
+     "berserker": 0.47875,
+     "pyro": 0.49625,
+     "witch": 0.496875,
+     "chrono": 0.521875
+    },
+    "chrono": {
+     "knight": 0.4375,
+     "thornguard": 0.421875,
+     "assassin": 0.62625,
+     "duelist": 0.563125,
+     "berserker": 0.53875,
+     "pyro": 0.505,
+     "witch": 0.488125,
+     "chrono": 0.515625
+    }
+   },
+   "overall": {
+    "knight": 0.515,
+    "thornguard": 0.5367857142857143,
+    "assassin": 0.3989285714285714,
+    "duelist": 0.4373214285714286,
+    "berserker": 0.5229464285714286,
+    "pyro": 0.5741071428571428,
+    "witch": 0.4973214285714286,
+    "chrono": 0.5115178571428571
+   },
+   "spread": 0.1751785714285714,
+   "zeroSkill": {
+    "knight": 0,
+    "thornguard": 0,
+    "assassin": 0,
+    "duelist": 0,
+    "berserker": 0,
+    "pyro": 0,
+    "witch": 0,
+    "chrono": 0
+   },
+   "avgLen": 16.304316406250003
+  },
+  "15": {
+   "arch": {
+    "tank": {
+     "tank": 0.499375,
+     "burst": 0.72140625,
+     "scaling": 0.364375,
+     "control": 0.66234375
+    },
+    "burst": {
+     "tank": 0.25921875,
+     "burst": 0.50890625,
+     "scaling": 0.21015625,
+     "control": 0.455
+    },
+    "scaling": {
+     "tank": 0.63984375,
+     "burst": 0.8065625,
+     "scaling": 0.5053125,
+     "control": 0.69515625
+    },
+    "control": {
+     "tank": 0.3340625,
+     "burst": 0.53328125,
+     "scaling": 0.32359375,
+     "control": 0.4940625
+    }
+   },
+   "hero": {
+    "knight": {
+     "knight": 0.493125,
+     "thornguard": 0.400625,
+     "assassin": 0.765,
+     "duelist": 0.669375,
+     "berserker": 0.275,
+     "pyro": 0.37875,
+     "witch": 0.68,
+     "chrono": 0.6075
+    },
+    "thornguard": {
+     "knight": 0.601875,
+     "thornguard": 0.501875,
+     "assassin": 0.76125,
+     "duelist": 0.69,
+     "berserker": 0.390625,
+     "pyro": 0.413125,
+     "witch": 0.726875,
+     "chrono": 0.635
+    },
+    "assassin": {
+     "knight": 0.236875,
+     "thornguard": 0.19625,
+     "assassin": 0.520625,
+     "duelist": 0.36875,
+     "berserker": 0.13125,
+     "pyro": 0.17375,
+     "witch": 0.40125,
+     "chrono": 0.4125
+    },
+    "duelist": {
+     "knight": 0.3175,
+     "thornguard": 0.28625,
+     "assassin": 0.6375,
+     "duelist": 0.50875,
+     "berserker": 0.238125,
+     "pyro": 0.2975,
+     "witch": 0.504375,
+     "chrono": 0.501875
+    },
+    "berserker": {
+     "knight": 0.7475,
+     "thornguard": 0.606875,
+     "assassin": 0.8625,
+     "duelist": 0.80625,
+     "berserker": 0.48125,
+     "pyro": 0.5025,
+     "witch": 0.765,
+     "chrono": 0.675
+    },
+    "pyro": {
+     "knight": 0.62875,
+     "thornguard": 0.57625,
+     "assassin": 0.80625,
+     "duelist": 0.75125,
+     "berserker": 0.52125,
+     "pyro": 0.51625,
+     "witch": 0.69,
+     "chrono": 0.650625
+    },
+    "witch": {
+     "knight": 0.29875,
+     "thornguard": 0.273125,
+     "assassin": 0.5775,
+     "duelist": 0.48875,
+     "berserker": 0.284375,
+     "pyro": 0.32625,
+     "witch": 0.500625,
+     "chrono": 0.479375
+    },
+    "chrono": {
+     "knight": 0.40125,
+     "thornguard": 0.363125,
+     "assassin": 0.595625,
+     "duelist": 0.47125,
+     "berserker": 0.32875,
+     "pyro": 0.355,
+     "witch": 0.499375,
+     "chrono": 0.496875
+    }
+   },
+   "overall": {
+    "knight": 0.5394642857142857,
+    "thornguard": 0.6026785714285714,
+    "assassin": 0.274375,
+    "duelist": 0.3975892857142857,
+    "berserker": 0.709375,
+    "pyro": 0.660625,
+    "witch": 0.38973214285714286,
+    "chrono": 0.430625
+   },
+   "spread": 0.435,
+   "zeroSkill": {
+    "knight": 0,
+    "thornguard": 0,
+    "assassin": 0,
+    "duelist": 0,
+    "berserker": 0,
+    "pyro": 0,
+    "witch": 0,
+    "chrono": 0
+   },
+   "avgLen": 21.25403515625
+  }
+ },
+ "length": {
+  "1": {
+   "fights": 400,
+   "avgLen": 9.682500000000001,
+   "p10": 6.6,
+   "p90": 12.6,
+   "zeroSkill": 0.00375,
+   "locked": 0.00375,
+   "ctlAvg": 0.37124999999999997,
+   "ctlMax": 2,
+   "fatigue": 0.03,
+   "close": 0.11083123425692695,
+   "trigPerFight": 0.2225,
+   "chainMax": 2
+  },
+  "2": {
+   "fights": 400,
+   "avgLen": 9.334999999999999,
+   "p10": 6,
+   "p90": 12.6,
+   "zeroSkill": 0.005,
+   "locked": 0.00625,
+   "ctlAvg": 0.3795,
+   "ctlMax": 2,
+   "fatigue": 0.0275,
+   "close": 0.1825,
+   "trigPerFight": 0.2275,
+   "chainMax": 2
+  },
+  "3": {
+   "fights": 400,
+   "avgLen": 8.77,
+   "p10": 5,
+   "p90": 12.3,
+   "zeroSkill": 0.01,
+   "locked": 0.005,
+   "ctlAvg": 0.41100000000000003,
+   "ctlMax": 2,
+   "fatigue": 0.0275,
+   "close": 0.1457286432160804,
+   "trigPerFight": 0.2625,
+   "chainMax": 3
+  },
+  "4": {
+   "fights": 400,
+   "avgLen": 11.123000000000001,
+   "p10": 7.3,
+   "p90": 15.3,
+   "zeroSkill": 0.00125,
+   "locked": 0.05,
+   "ctlAvg": 0.6705,
+   "ctlMax": 4.5,
+   "fatigue": 0.0475,
+   "close": 0.21052631578947367,
+   "trigPerFight": 0.85,
+   "chainMax": 4
+  },
+  "5": {
+   "fights": 400,
+   "avgLen": 10.467,
+   "p10": 6.9,
+   "p90": 14.6,
+   "zeroSkill": 0,
+   "locked": 0.055,
+   "ctlAvg": 0.6561250000000001,
+   "ctlMax": 4.5,
+   "fatigue": 0.015,
+   "close": 0.16120906801007556,
+   "trigPerFight": 1.21,
+   "chainMax": 4
+  },
+  "6": {
+   "fights": 400,
+   "avgLen": 11.81025,
+   "p10": 8,
+   "p90": 16.5,
+   "zeroSkill": 0,
+   "locked": 0.0575,
+   "ctlAvg": 0.876125,
+   "ctlMax": 4.5,
+   "fatigue": 0.01,
+   "close": 0.1457286432160804,
+   "trigPerFight": 1.3175,
+   "chainMax": 4
+  },
+  "7": {
+   "fights": 400,
+   "avgLen": 11.429,
+   "p10": 7.5,
+   "p90": 15.6,
+   "zeroSkill": 0,
+   "locked": 0.06375,
+   "ctlAvg": 0.9057499999999999,
+   "ctlMax": 4.5,
+   "fatigue": 0.0025,
+   "close": 0.1775,
+   "trigPerFight": 1.8425,
+   "chainMax": 4
+  },
+  "8": {
+   "fights": 400,
+   "avgLen": 15.667750000000002,
+   "p10": 10.8,
+   "p90": 22,
+   "zeroSkill": 0,
+   "locked": 0.0675,
+   "ctlAvg": 1.347625,
+   "ctlMax": 6,
+   "fatigue": 0.045,
+   "close": 0.17794486215538846,
+   "trigPerFight": 2.86,
+   "chainMax": 5
+  },
+  "9": {
+   "fights": 400,
+   "avgLen": 15.44425,
+   "p10": 10.3,
+   "p90": 22,
+   "zeroSkill": 0,
+   "locked": 0.05875,
+   "ctlAvg": 1.3775,
+   "ctlMax": 6,
+   "fatigue": 0.0325,
+   "close": 0.17293233082706766,
+   "trigPerFight": 3.08,
+   "chainMax": 4
+  },
+  "10": {
+   "fights": 400,
+   "avgLen": 15.501,
+   "p10": 10.4,
+   "p90": 22.5,
+   "zeroSkill": 0,
+   "locked": 0.07,
+   "ctlAvg": 1.462,
+   "ctlMax": 6,
+   "fatigue": 0.025,
+   "close": 0.1925,
+   "trigPerFight": 3.7825,
+   "chainMax": 5
+  },
+  "11": {
+   "fights": 400,
+   "avgLen": 16.53775,
+   "p10": 11,
+   "p90": 24,
+   "zeroSkill": 0,
+   "locked": 0.06125,
+   "ctlAvg": 1.6771249999999998,
+   "ctlMax": 6,
+   "fatigue": 0.0275,
+   "close": 0.1725,
+   "trigPerFight": 4.1625,
+   "chainMax": 4
+  },
+  "12": {
+   "fights": 400,
+   "avgLen": 16.50175,
+   "p10": 11,
+   "p90": 23.8,
+   "zeroSkill": 0,
+   "locked": 0.0825,
+   "ctlAvg": 1.667625,
+   "ctlMax": 6,
+   "fatigue": 0.0275,
+   "close": 0.17587939698492464,
+   "trigPerFight": 4.6725,
+   "chainMax": 5
+  },
+  "13": {
+   "fights": 400,
+   "avgLen": 17.01275,
+   "p10": 11.4,
+   "p90": 24,
+   "zeroSkill": 0,
+   "locked": 0.06375,
+   "ctlAvg": 1.7908750000000002,
+   "ctlMax": 6,
+   "fatigue": 0.035,
+   "close": 0.1575,
+   "trigPerFight": 4.85,
+   "chainMax": 5
+  },
+  "14": {
+   "fights": 400,
+   "avgLen": 18.47825,
+   "p10": 12.5,
+   "p90": 26.2,
+   "zeroSkill": 0,
+   "locked": 0.07125,
+   "ctlAvg": 1.92175,
+   "ctlMax": 6,
+   "fatigue": 0.05,
+   "close": 0.1625,
+   "trigPerFight": 5.3,
+   "chainMax": 6
+  },
+  "15": {
+   "fights": 400,
+   "avgLen": 20.85325,
+   "p10": 13.5,
+   "p90": 30,
+   "zeroSkill": 0,
+   "locked": 0.06125,
+   "ctlAvg": 2.367375,
+   "ctlMax": 6,
+   "fatigue": 0.115,
+   "close": 0.1975,
+   "trigPerFight": 6.655,
+   "chainMax": 5
+  }
+ },
+ "health": {
+  "fights": 6000,
+  "avgLen": 13.907566666666668,
+  "p10": 8,
+  "p90": 21.5,
+  "zeroSkill": 0.0013333333333333333,
+  "locked": 0.051833333333333335,
+  "ctlAvg": 1.1921416666666667,
+  "ctlMax": 6,
+  "fatigue": 0.0345,
+  "close": 0.1695906432748538,
+  "trigPerFight": 2.753,
+  "chainMax": 6
+ },
+ "runs": {
+  "heroes": {
+   "knight": {
+    "share": 0.12354651162790697,
+    "reach8": 0.425,
+    "avgWins": 7.35,
+    "avgDays": 12.76
+   },
+   "thornguard": {
+    "share": 0.1569767441860465,
+    "reach8": 0.54,
+    "avgWins": 8.2,
+    "avgDays": 12.635
+   },
+   "assassin": {
+    "share": 0.12063953488372094,
+    "reach8": 0.415,
+    "avgWins": 7.76,
+    "avgDays": 12.385
+   },
+   "duelist": {
+    "share": 0.10755813953488372,
+    "reach8": 0.37,
+    "avgWins": 7.035,
+    "avgDays": 12.56
+   },
+   "berserker": {
+    "share": 0.13517441860465115,
+    "reach8": 0.465,
+    "avgWins": 7.42,
+    "avgDays": 12.655
+   },
+   "pyro": {
+    "share": 0.11337209302325581,
+    "reach8": 0.39,
+    "avgWins": 6.34,
+    "avgDays": 12.405
+   },
+   "witch": {
+    "share": 0.11773255813953488,
+    "reach8": 0.405,
+    "avgWins": 7.33,
+    "avgDays": 12.215
+   },
+   "chrono": {
+    "share": 0.125,
+    "reach8": 0.43,
+    "avgWins": 6.89,
+    "avgDays": 12.04
+   }
+  },
+  "spread": 0.17000000000000004,
+  "byTier": {
+   "normal": {
+    "runs": 1600,
+    "won": 688
+   }
+  },
+  "repeats": {
+   "meet3": 0.3075,
+   "lostTwiceSame": 0.6140350877192983,
+   "lostMostlySame": 0.0021929824561403508
+  },
+  "health": {
+   "fights": 19931,
+   "avgLen": 12.566208419045708,
+   "p10": 0,
+   "p90": 0,
+   "zeroSkill": 0.002157443178967438,
+   "locked": 0.045657518438613216,
+   "ctlAvg": 0.9044353017911796,
+   "ctlMax": 6,
+   "fatigue": 0.02789624203502082,
+   "close": 0.1570960423493824,
+   "trigPerFight": 2.7512919572525214,
+   "chainMax": 5
+  }
+ },
+ "skills": {
+  "bulwark": {
+   "id": "bulwark",
+   "arch": "tank*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.5760188087774295,
+   "dmgShare": 0.2978665369481633,
+   "fights": 2552
+  },
+  "spikewall": {
+   "id": "spikewall",
+   "arch": "tank*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.6489908982983775,
+   "dmgShare": 0.37703478261153256,
+   "fights": 2527
+  },
+  "execute": {
+   "id": "execute",
+   "arch": "burst*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.6265643924101736,
+   "dmgShare": 0.37944587031886934,
+   "fights": 2477
+  },
+  "flurry": {
+   "id": "flurry",
+   "arch": "burst*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.5601114649681529,
+   "dmgShare": 0.36206835831012346,
+   "fights": 2512
+  },
+  "rampage": {
+   "id": "rampage",
+   "arch": "scaling*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.5863295140260767,
+   "dmgShare": 0.3246865551689395,
+   "fights": 2531
+  },
+  "inferno": {
+   "id": "inferno",
+   "arch": "scaling*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.5110842402257154,
+   "dmgShare": 0.39179560735984587,
+   "fights": 2481
+  },
+  "shatter": {
+   "id": "shatter",
+   "arch": "control*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.6000818665575113,
+   "dmgShare": 0.4262336272593041,
+   "fights": 2443
+  },
+  "timewarp": {
+   "id": "timewarp",
+   "arch": "control*",
+   "pick8": 1,
+   "pick": 1,
+   "winRate": 0.5722591362126246,
+   "dmgShare": 0.36581319568394227,
+   "fights": 2408
+  },
+  "strike": {
+   "id": "strike",
+   "arch": "burst",
+   "pick8": 0.7020348837209303,
+   "pick": 0.6675,
+   "winRate": 0.6173147224991692,
+   "dmgShare": 0.3598552686906578,
+   "fights": 12036
+  },
+  "jab": {
+   "id": "jab",
+   "arch": "burst",
+   "pick8": 0.4258720930232558,
+   "pick": 0.405,
+   "winRate": 0.5723694057775782,
+   "dmgShare": 0.312973407137122,
+   "fights": 6681
+  },
+  "cleanse": {
+   "id": "cleanse",
+   "arch": "tank",
+   "pick8": 0.38953488372093026,
+   "pick": 0.34125,
+   "winRate": 0.6462846174938306,
+   "dmgShare": 0.10433832470146609,
+   "fights": 3647
+  },
+  "train": {
+   "id": "train",
+   "arch": "scaling",
+   "pick8": 0.38953488372093026,
+   "pick": 0.345625,
+   "winRate": 0.6556309362279511,
+   "dmgShare": 0.127839339694593,
+   "fights": 3685
+  },
+  "thorns": {
+   "id": "thorns",
+   "arch": "tank",
+   "pick8": 0.38808139534883723,
+   "pick": 0.34875,
+   "winRate": 0.6463744588744589,
+   "dmgShare": 0.1438665925430837,
+   "fights": 3696
+  },
+  "shield": {
+   "id": "shield",
+   "arch": "tank",
+   "pick8": 0.3851744186046512,
+   "pick": 0.346875,
+   "winRate": 0.6514632217242289,
+   "dmgShare": 0.11394510936146994,
+   "fights": 3793
+  },
+  "ignite": {
+   "id": "ignite",
+   "arch": "scaling",
+   "pick8": 0.36046511627906974,
+   "pick": 0.345625,
+   "winRate": 0.6329013488495107,
+   "dmgShare": 0.167189059127544,
+   "fights": 3781
+  },
+  "frost": {
+   "id": "frost",
+   "arch": "control",
+   "pick8": 0.3502906976744186,
+   "pick": 0.341875,
+   "winRate": 0.6061696658097686,
+   "dmgShare": 0.27624629776676685,
+   "fights": 5835
+  },
+  "feast": {
+   "id": "feast",
+   "arch": "scaling",
+   "pick8": 0.34738372093023256,
+   "pick": 0.323125,
+   "winRate": 0.6534376746785914,
+   "dmgShare": 0.09894540490171588,
+   "fights": 3578
+  },
+  "stoneskin": {
+   "id": "stoneskin",
+   "arch": "tank",
+   "pick8": 0.3444767441860465,
+   "pick": 0.3375,
+   "winRate": 0.6138725077225499,
+   "dmgShare": 0.08856606688130723,
+   "fights": 3561
+  },
+  "chill": {
+   "id": "chill",
+   "arch": "control",
+   "pick8": 0.3328488372093023,
+   "pick": 0.3225,
+   "winRate": 0.6197901899631415,
+   "dmgShare": 0.10834046827483833,
+   "fights": 3527
+  },
+  "dispel": {
+   "id": "dispel",
+   "arch": "control",
+   "pick8": 0.32994186046511625,
+   "pick": 0.325625,
+   "winRate": 0.6045977011494252,
+   "dmgShare": 0.09391434813586916,
+   "fights": 3480
+  },
+  "amplify": {
+   "id": "amplify",
+   "arch": "scaling",
+   "pick8": 0.32703488372093026,
+   "pick": 0.343125,
+   "winRate": 0.5811289882737933,
+   "dmgShare": 0.0008978368667652433,
+   "fights": 3667
+  },
+  "charge": {
+   "id": "charge",
+   "arch": "burst",
+   "pick8": 0.32122093023255816,
+   "pick": 0.33375,
+   "winRate": 0.6026188442926274,
+   "dmgShare": 0.00007459035754001518,
+   "fights": 3513
+  },
+  "heavy": {
+   "id": "heavy",
+   "arch": "burst",
+   "pick8": 0.3168604651162791,
+   "pick": 0.329375,
+   "winRate": 0.6285550129273197,
+   "dmgShare": 0.22019450135819293,
+   "fights": 3481
+  },
+  "gear": {
+   "id": "gear",
+   "arch": "none",
+   "pick8": 0.12790697674418605,
+   "pick": 0.12375,
+   "winRate": 0.6341059602649006,
+   "dmgShare": 0,
+   "fights": 1208
+  },
+  "overclock": {
+   "id": "overclock",
+   "arch": "none",
+   "pick8": 0.12063953488372094,
+   "pick": 0.12625,
+   "winRate": 0.6374269005847953,
+   "dmgShare": 0,
+   "fights": 1197
+  },
+  "ironwill": {
+   "id": "ironwill",
+   "arch": "none",
+   "pick8": 0.10465116279069768,
+   "pick": 0.12375,
+   "winRate": 0.5668016194331984,
+   "dmgShare": 0.005659232697447865,
+   "fights": 1235
+  }
+ },
+ "tiers": {
+  "days": {
+   "3": {
+    "hard>normal": 0.78125,
+    "normal>easy": 0.7925,
+    "hard>easy": 0.92125
+   },
+   "6": {
+    "hard>normal": 0.70625,
+    "normal>easy": 0.68875,
+    "hard>easy": 0.8875
+   },
+   "9": {
+    "hard>normal": 0.7325,
+    "normal>easy": 0.73,
+    "hard>easy": 0.85
+   },
+   "12": {
+    "hard>normal": 0.77,
+    "normal>easy": 0.675,
+    "hard>easy": 0.875
+   },
+   "15": {
+    "hard>normal": 0.71375,
+    "normal>easy": 0.71,
+    "hard>easy": 0.925
+   }
+  },
+  "avg": {
+   "hard>normal": 0.74075,
+   "normal>easy": 0.7192500000000001,
+   "hard>easy": 0.89175
+  },
+  "builds": {
+   "hard": {
+    "gold": 3674,
+    "skills": 12834,
+    "lv": 26248,
+    "n": 2000
+   },
+   "normal": {
+    "gold": 8722,
+    "skills": 10063,
+    "lv": 26744,
+    "n": 2000
+   },
+   "easy": {
+    "gold": 32242,
+    "skills": 9230,
+    "lv": 24064,
+    "n": 2000
+   }
+  }
+ },
+ "targets": [
+  {
+   "name": "day 3: archetype matchups ≤ 75%",
+   "ok": true,
+   "value": 0.68171875,
+   "limit": "worst 68%"
+  },
+  {
+   "name": "day 3: hero pairs ≤ 75%",
+   "ok": false,
+   "value": 0.835,
+   "limit": "worst 84%"
+  },
+  {
+   "name": "day 3: hero spread ≤ 30 pts",
+   "ok": false,
+   "value": 0.30428571428571427,
+   "limit": "30 pts"
+  },
+  {
+   "name": "day 6: archetype matchups ≤ 75%",
+   "ok": true,
+   "value": 0.65109375,
+   "limit": "worst 65%"
+  },
+  {
+   "name": "day 6: hero pairs ≤ 75%",
+   "ok": true,
+   "value": 0.685,
+   "limit": "worst 69%"
+  },
+  {
+   "name": "day 6: hero spread ≤ 30 pts",
+   "ok": true,
+   "value": 0.18625000000000003,
+   "limit": "19 pts"
+  },
+  {
+   "name": "day 9: archetype matchups ≤ 75%",
+   "ok": true,
+   "value": 0.61984375,
+   "limit": "worst 62%"
+  },
+  {
+   "name": "day 9: hero pairs ≤ 75%",
+   "ok": true,
+   "value": 0.685,
+   "limit": "worst 69%"
+  },
+  {
+   "name": "day 9: hero spread ≤ 30 pts",
+   "ok": true,
+   "value": 0.10732142857142857,
+   "limit": "11 pts"
+  },
+  {
+   "name": "day 12: archetype matchups ≤ 75%",
+   "ok": true,
+   "value": 0.60765625,
+   "limit": "worst 61%"
+  },
+  {
+   "name": "day 12: hero pairs ≤ 75%",
+   "ok": true,
+   "value": 0.645625,
+   "limit": "worst 65%"
+  },
+  {
+   "name": "day 12: hero spread ≤ 30 pts",
+   "ok": true,
+   "value": 0.1751785714285714,
+   "limit": "18 pts"
+  },
+  {
+   "name": "day 15: archetype matchups ≤ 75%",
+   "ok": false,
+   "value": 0.8065625,
+   "limit": "worst 81%"
+  },
+  {
+   "name": "day 15: hero pairs ≤ 75%",
+   "ok": false,
+   "value": 0.8625,
+   "limit": "worst 86%"
+  },
+  {
+   "name": "day 15: hero spread ≤ 30 pts",
+   "ok": false,
+   "value": 0.435,
+   "limit": "44 pts"
+  },
+  {
+   "name": "avg fight length in target every day (1–15)",
+   "ok": true,
+   "value": 0,
+   "limit": "all days"
+  },
+  {
+   "name": "fatigue-ended ≤ 20% every day",
+   "ok": true,
+   "value": 0.115,
+   "limit": "worst 12% (day 15)"
+  },
+  {
+   "name": "0-skill fights ≤ 3% (days 1–15)",
+   "ok": true,
+   "value": 0.0013333333333333333,
+   "limit": "0%"
+  },
+  {
+   "name": "knight reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.425,
+   "limit": "43%"
+  },
+  {
+   "name": "thornguard reaches 10 wins in 15%–45% of runs",
+   "ok": false,
+   "value": 0.54,
+   "limit": "54%"
+  },
+  {
+   "name": "assassin reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.415,
+   "limit": "42%"
+  },
+  {
+   "name": "duelist reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.37,
+   "limit": "37%"
+  },
+  {
+   "name": "berserker reaches 10 wins in 15%–45% of runs",
+   "ok": false,
+   "value": 0.465,
+   "limit": "47%"
+  },
+  {
+   "name": "pyro reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.39,
+   "limit": "39%"
+  },
+  {
+   "name": "witch reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.405,
+   "limit": "41%"
+  },
+  {
+   "name": "chrono reaches 10 wins in 15%–45% of runs",
+   "ok": true,
+   "value": 0.43,
+   "limit": "43%"
+  },
+  {
+   "name": "tiers: hard beats normal ≥ 55% avg, ≥ 50% every day",
+   "ok": true,
+   "value": 0.74075,
+   "limit": "avg 74%, worst day 71%"
+  },
+  {
+   "name": "tiers: normal beats easy ≥ 55% avg, ≥ 50% every day",
+   "ok": true,
+   "value": 0.7192500000000001,
+   "limit": "avg 72%, worst day 68%"
+  }
+ ]
+}

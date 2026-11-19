@@ -17,7 +17,8 @@
     "runs": "tsx scripts/runs.ts",
     "sim": "tsx scripts/sim.ts",
     "exploit": "tsx scripts/exploit.ts",
-    "explain": "tsx scripts/explain-check.ts"
+    "explain": "tsx scripts/explain-check.ts",
+    "tune": "tsx scripts/tune.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0"
