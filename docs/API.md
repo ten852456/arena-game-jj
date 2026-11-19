@@ -75,7 +75,7 @@ A build's archetype = its skills' archetypes, with the hero's archetype counted 
 
 ## POST /api/run/finish
 
-Call once when a run ends (8 wins, dead, or conceded). Request:
+Call once when a run ends (10 wins, dead, or conceded). Request:
 
 ```json
 { "playerId": "p-8d1e…", "runId": "3f2c…", "name": "Mochi-4401", "hero": "knight",

@@ -396,7 +396,7 @@ function renderTitle() {
   <div class="actions"><button class="ghost" data-a="town">← กลับเมือง</button></div>
   <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120">
   <h2>เลือกฮีโร่</h2>
-  <p class="muted">ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือดเท่ากับเลขวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน</p>
+  <p class="muted">ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด 2–5 ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน</p>
   <label class="name">ชื่อของคุณ <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="ผู้เล่น"></label>
   ${resume}
   ${runActive() ? '' : `<p class="muted">รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)</p>`}

@@ -5,17 +5,21 @@
 /** Fight length targets in seconds: [min, max] per day range. */
 export const lengthTarget = (day: number): [number, number] => (day <= 3 ? [7, 13] : day <= 7 ? [10, 18] : [15, 26]);
 
+// Design goal (19 Nov 2026, product owner): variety and distinct power curves, NOT equal win rates.
+// Heroes may be strong early, mid or late; targets only catch dead heroes, hard counters and lock-ups.
 export const TARGETS = {
-  /** archetype vs archetype win rate (off-diagonal) */
-  arch: 0.65,
-  /** single hero vs hero pairs may lean a bit more (designed counters) */
-  hero: 0.7,
-  /** best − worst hero overall win rate */
-  heroSpread: 0.15,
-  /** best − worst hero "reach 8 wins" rate in bot runs */
-  runSpread: 0.1,
-  /** no hero should own more than this share of all 8-win runs */
-  runShare: 0.5,
+  /** archetype vs archetype win rate (off-diagonal), any day */
+  arch: 0.75,
+  /** single hero vs hero pairs, any day */
+  hero: 0.75,
+  /** best − worst hero overall win rate on one day (loose: curves are meant to differ by day) */
+  heroSpread: 0.3,
+  /** every hero reaches the run's win target in at least this share of bot runs (no dead hero) */
+  runMin: 0.15,
+  /** and in at most this share (no must-pick hero) */
+  runMax: 0.45,
+  /** no hero should own more than this share of all winning runs */
+  runShare: 0.3,
   /** share of fighter-sides that cast 0 skills in a fight (control lock / instant KO) */
   zeroSkill: 0.03,
   /** share of fights (per day) ended by fatigue */

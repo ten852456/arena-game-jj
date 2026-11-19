@@ -19,7 +19,7 @@ export interface Ctx {
 export const tierOf = (c: Ctx, ...key: (string | number)[]): BotTier =>
   c.tier === 'mix' ? BOT_TIERS[hashSeed(c.seed, 'tier', ...key) % BOT_TIERS.length] : c.tier;
 
-export const MAX_DAY = 20;
+export const MAX_DAY = 25;
 
 export type Job =
   | { k: 'builds'; c: Ctx; day: number; hero: string; from: number; to: number }

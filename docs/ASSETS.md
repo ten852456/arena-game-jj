@@ -52,7 +52,7 @@ Needs Python 3 with numpy and Pillow. The raw PNGs (~15 MB) are not committed (`
 | `ko` | someone's HP hits 0 |
 | `win`, `lose` | after-fight jingle / sting |
 | `last_chance` | last-chance choice appears |
-| `champion` | 8 wins: run victory fanfare |
+| `champion` | 10 wins: run victory fanfare |
 | `stardust` | stardust reward granted |
 
 Made by `python scripts/assets/sfx.py` (numpy only): FM / additive bells, marimba, plucks, filtered noise, FFT

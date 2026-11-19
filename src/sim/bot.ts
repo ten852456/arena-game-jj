@@ -107,7 +107,25 @@ function effectsOf(skills: SkillInstance[]) {
 }
 
 const BONUS_W = { trigger: 2, power: 1.5, haste: 1.2, dmg: 1.5, shield: 1 } as const;
-const linkScore = (skills: SkillInstance[]) => activeBonuses(skills).reduce((n, a) => n + BONUS_W[a.b.e], 0);
+const cdSecs = (k: SkillInstance) => nodeOf(k).cd / 10; // TPS = 10
+/**
+ * Engines want strong neighbours: ฟันเฟือง (gear) feeds the hitters next to it (one alone at the list's edge gets
+ * fed twice as often), เร่งเครื่อง (overclock) pays off most between slow, heavy skills whose cooldown it restarts.
+ * Slow cooldown is the proxy for "heavy" here.
+ */
+function engineScore(skills: SkillInstance[]) {
+  let n = 0;
+  skills.forEach((k, i) => {
+    const en = nodeOf(k).engine;
+    if (!en) return;
+    const nb = [skills[i - 1], skills[i + 1]].filter((x): x is SkillInstance => !!x && !nodeOf(x).engine);
+    const sum = nb.reduce((s, x) => s + cdSecs(x), 0);
+    n += en.kind === 'gear' ? en.power * 0.4 * (nb.length === 1 ? 2 * sum : sum) : en.power * 0.5 * sum;
+  });
+  return n;
+}
+const linkScore = (skills: SkillInstance[]) =>
+  activeBonuses(skills).reduce((n, a) => n + BONUS_W[a.b.e], 0) + engineScore(skills);
 
 /** Reorder the list to turn on as many connect bonuses as possible (hill-climb over swaps). Returns the score. */
 export function arrangeList(skills: SkillInstance[]): number {

@@ -13,7 +13,7 @@
     { "key": "critical", "th": "คริติคอล!", "en": "Critical hit!" },
     { "key": "frozen", "th": "แช่แข็ง!", "en": "Frozen!" },
     { "key": "last_chance", "th": "โอกาสสุดท้าย!", "en": "Last chance!" },
-    { "key": "champion", "th": "ชนะครบแปดครั้ง! แชมป์แห่งดวงจันทร์!", "en": "Eight wins! Champion of the moon!" },
+    { "key": "champion", "th": "ชนะครบสิบครั้ง! แชมป์แห่งดวงจันทร์!", "en": "Ten wins! Champion of the moon!" },
     { "key": "perfect", "th": "เพอร์เฟกต์! ไม่แพ้เลยสักครั้ง!", "en": "Perfect run!", "asr_ok": ["Perfect ไม่แพ้เลยสักครั้ง"] },
     { "key": "stardust", "th": "ได้รับผงดาวแล้ว!", "en": "Stardust earned!" },
     { "key": "new_day", "th": "วันใหม่มาแล้ว!", "en": "A new day begins!" }

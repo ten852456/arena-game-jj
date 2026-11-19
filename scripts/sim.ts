@@ -2,6 +2,7 @@
 // Usage: npm run sim -- [matchups|runs|skills|tiers|all] [--n 200] [--days 3,5,10,13] [--tier easy|normal|hard|mix]
 //          [--seed 1] [--pool 24] [--workers N] [--json out.json] [--compare old.json] [--strict] [--full]
 // See docs/SIMULATOR.md.
+import { WIN_TARGET } from '../src/sim/run';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { BOT_TIERS, type BotTier } from '../src/sim/bot';
@@ -255,7 +256,7 @@ async function runs() {
   const res = await runRuns();
   hr(`Bot runs · tier ${TIER} · ${N} runs per hero vs a same-day pool of ${POOL} bot builds`);
   const totalWon = res.reduce((n, x) => n + x.won, 0);
-  console.log('hero         8-win share  reach 8   avg wins  avg days');
+  console.log(`hero         win share    reach ${WIN_TARGET}  avg wins  avg days`);
   const reach: number[] = [];
   const heroes: Record<string, unknown> = {};
   for (const x of res) {
@@ -264,11 +265,11 @@ async function runs() {
     reach.push(r8);
     heroes[x.hero] = { share, reach8: r8, avgWins: x.wins / x.runs, avgDays: x.days / x.runs };
     console.log(`${x.hero.padEnd(12)}${pct(share, 11)}${pct(r8, 10)}${num(x.wins / x.runs, 2, 11)}${num(x.days / x.runs, 1, 10)}`);
-    if (share > TARGETS.runShare) target(`${x.hero} owns ≤ 50% of 8-win runs`, share, false, pct(share, 0));
+    if (share > TARGETS.runShare) target(`${x.hero} owns ≤ ${pct(TARGETS.runShare, 0)} of ${WIN_TARGET}-win runs`, share, false, pct(share, 0));
+    target(`${x.hero} reaches ${WIN_TARGET} wins in ${pct(TARGETS.runMin, 0)}–${pct(TARGETS.runMax, 0)} of runs`, r8, r8 >= TARGETS.runMin && r8 <= TARGETS.runMax, pct(r8, 0));
   }
   const spread = Math.max(...reach) - Math.min(...reach);
-  console.log(`spread of "reach 8": ${(spread * 100).toFixed(0)} pts (target ≤ ${TARGETS.runSpread * 100})`);
-  target(`8-win rate spread ≤ ${TARGETS.runSpread * 100} pts`, spread, spread <= TARGETS.runSpread, `${(spread * 100).toFixed(0)} pts`);
+  console.log(`spread of "reach ${WIN_TARGET}": ${(spread * 100).toFixed(0)} pts (info only: heroes are meant to differ)`);
 
   const byTier: Record<string, { runs: number; won: number }> = {};
   for (const x of res) for (const [t, v] of Object.entries(x.byTier)) {
