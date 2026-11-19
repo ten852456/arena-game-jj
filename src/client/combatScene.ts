@@ -306,7 +306,7 @@ export class CombatScene extends Phaser.Scene {
       // soft mochi breathing: squash and stretch around the feet
       const b = Math.sin(now / 300 + i * 1.7);
       f.setScale(HERO_S * (1 + b * 0.012), HERO_S * (1 - b * 0.02));
-      if (now < this.flashUntil[i]) f.setTintFill(0xffffff);
+      if (now < this.flashUntil[i]) f.setTint(0xffc4d2); // soft pink hit flash; the character stays visible
       else if (this.clock < this.frozenUntil[i]) f.setTint(0x88ccff);
       else f.clearTint();
     });

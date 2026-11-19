@@ -492,7 +492,7 @@ export class FxLayer {
       }
       case 'impact': {
         this.p('fx_ring', x, y, 0, 0, L(340), 0.4, 2.2 * k, { tint: 0xfff0b8, a: 0.95 });
-        this.p('fx_glow', x, y, 0, 0, L(220), 1.2 * k, 2.2 * k, { tint: 0xffffff, a: 0.8 });
+        this.p('fx_glow', x, y, 0, 0, L(200), 0.6 * k, 1.2 * k, { tint: 0xffe6a8, a: 0.45 });
         this.stars(x, y, n(7), k * 1.15, L);
         break;
       }
