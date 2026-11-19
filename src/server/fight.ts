@@ -18,7 +18,7 @@ const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 4
 function trackOf(runId: string, playerId: string | undefined, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
   t.name = name;
-  if (playerId) t.playerId = playerId;
+  if (playerId && !t.playerId) t.playerId = playerId; // the first player to fight a run owns it
   t.t = Date.now();
   return t;
 }
@@ -35,6 +35,8 @@ export function handleFight(body: any): Res {
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
   // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
   // (otherwise a client could retry a lost day until it wins and inflate the run-end reward).
+  // runIds are public (leaderboard, replays): only the run's owner may fight its days
+  if (prev?.playerId && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
   if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
   if (prev && Object.hasOwn(prev.days, day)) return { status: 409, json: { error: 'day already fought' } };
   const streak = streakOf(prev);
