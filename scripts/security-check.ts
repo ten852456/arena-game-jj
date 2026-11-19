@@ -30,4 +30,6 @@ while (s.phase !== 'won' && s.phase !== 'dead') {
   s.rating = f.rating; recordResult(s, f.won, { opp: f.opponent.name, ai: f.opponent.ai, fightId: f.fightId });
 }
 const fin = await post('/api/run/finish', { runId: s.id, playerId: 'p4', name: '', hero: s.hero, wins: s.wins, losses: s.losses, day: s.day, build: toBuild(s) });
+check('fighting after the run ended → 409', (await post('/api/fight', { runId: s.id, playerId: 'p4', name: '', day: s.day + 1, rating: 1000, build: toBuild(s) }))[0] === 409);
+check('skipping ahead a day → 409', (await post('/api/fight', { runId: 'sec-skip-' + Date.now(), playerId: 'p5', day: 3, rating: 1000, build }))[0] === 409);
 check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0, `w${s.wins} l${s.losses} → ${fin[1].reward?.stardust} ผงดาว`);

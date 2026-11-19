@@ -1,6 +1,7 @@
 // POST /api/fight and GET /api/scout.
 import { randomInt, randomUUID } from 'node:crypto';
 import { SIM_VERSION, simulate } from '../sim/combat';
+import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { ARCHES, type Archetype, type Build } from '../sim/types';
 import { aiBuildFor, archetypeOf, candidates, closest, streakOf, tierFor } from './match';
@@ -40,7 +41,10 @@ export function handleFight(body: any): Res {
   // runIds are public (leaderboard, replays): only the run's owner may fight its days
   if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
   if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
-  if (prev && Object.hasOwn(prev.days, day)) return { status: 409, json: { error: 'day already fought' } };
+  if (prev?.over) return { status: 409, json: { error: 'run is over' } };
+  // days are fought one by one in order: no skipping ahead, no repeating a day
+  const fought = prev ? Object.keys(prev.days).length : 0;
+  if (day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   const streak = streakOf(prev);
 
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
@@ -71,6 +75,18 @@ export function handleFight(body: any): Res {
   const track = trackOf(runId, playerId, name);
   track.rating = newRating;
   track.days[day] = won ? 1 : 0;
+  // same rules as the client (run.ts recordResult): a loss costs HP by day, the first death is the last chance
+  // at 1 HP, the second ends the run, WIN_TARGET wins end it too. A modified client can't fight past its end.
+  track.hp ??= START_HP;
+  if (!won) track.hp -= damageFor(day);
+  const winsSoFar = Object.values(track.days).filter((d) => d === 1).length;
+  if (winsSoFar >= WIN_TARGET) track.over = true;
+  else if (track.hp <= 0) {
+    if (!track.ghost) {
+      track.ghost = true;
+      track.hp = 1;
+    } else track.over = true;
+  }
   if (opp.snap) {
     track.snaps.push(opp.snap.id);
     track.opps.push(opp.snap.runId);
