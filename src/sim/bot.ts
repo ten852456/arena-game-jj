@@ -1,89 +1,109 @@
 import { HEROES, HEROES_BY_ID } from './heroes';
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
-import { MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf, type RunState } from './run';
-import { SKILLS, lvOf } from './skills';
+import {
+  MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
+  type Offer, type RunState,
+} from './run';
+import { SKILLS, SKILL_LIST, lvOf, nodeOf, type Effect, type SkillNode, type Variant } from './skills';
 import { ARCHES, type Archetype, type Build, type SkillInstance } from './types';
 
 /**
  * Rule-based bot (no LLM). Plays through the same run API as a human.
  * Used for: AI opponents when there are few player builds, balance testing,
  * and later the player-configured bots (โควตา/กฎ in the vision doc).
+ *
+ * Difficulty tiers:
+ * - easy:   no rerolls, noisy picks, sometimes leaves a slot empty on days 1–3, keeps the list in buy order.
+ * - normal: the original bot (archetype / hero preference, 2 rerolls a day, sorts the list for connect bonuses).
+ * - hard:   values skills by their numbers, buys for connect bonuses, finishes upgrade branches that fit the build,
+ *           buys anti-control when its archetype has none, spends its gold (rerolls, slots).
+ * Every tier makes sure the build owns at least one damage skill with a short cooldown, so it always casts early.
  */
+export type BotTier = 'easy' | 'normal' | 'hard';
+export const BOT_TIERS: BotTier[] = ['easy', 'normal', 'hard'];
+
 export interface BotRules {
   /** archetypes in priority order */
   prefer: Archetype[];
   /** gold to keep after rerolling */
   reserve: number;
   maxRerolls: number;
+  /** default 'normal' */
+  tier?: BotTier;
 }
 
-export function botShopTurn(s: RunState, rules: BotRules) {
-  let rerolls = 0;
-  const want = HEROES_BY_ID[s.hero]?.botWant ?? [];
-  /** how much the bot likes a skill (0 = not at all) */
-  const like = (id: string) => {
-    const d = SKILLS[id];
-    let score = 0;
-    const pi = rules.prefer.indexOf(d.arch as Archetype);
-    if (pi >= 0) score += 3 - pi;
-    if (d.hero) score += 3;
-    if (want.includes(id)) score += 2;
-    return score;
-  };
-  for (let guard = 0; guard < 40; guard++) {
-    let best = -1;
-    let bestScore = 0;
-    const full = s.skills.length >= slotsOf(s);
-    s.shop.forEach((offer, i) => {
-      if (!offer) return;
-      const id = offer.id;
-      if (priceOf(offer) > s.gold) return;
-      let score: number;
-      if (offer.v !== '') {
-        if (!upgradeOf(s, offer)) return;
-        score = 3; // an upgrade of something we own
-      } else {
-        if (s.skills.some((k) => k.id === id)) return;
-        score = full ? 1 : 2; // a free slot is worth filling with anything
+/** Default rules for a tier. */
+export function botRules(prefer: Archetype[], tier: BotTier = 'normal'): BotRules {
+  if (tier === 'easy') return { prefer, reserve: 0, maxRerolls: 0, tier };
+  if (tier === 'hard') return { prefer, reserve: 0, maxRerolls: 8, tier };
+  return { prefer, reserve: 0, maxRerolls: 2, tier };
+}
+
+// ---------------- skill facts read from the skill data (no hard-coded skill lists) ----------------
+
+/** "Fires early": cooldown at most this many ticks (5s). */
+export const EARLY_CD = 50;
+const directDamage = (e: Effect) => (e.k === 'hit' && (e.n > 0 || !!e.shieldPct || !!e.thornsX || !!e.burnPct) && !e.ifSlowed) || e.k === 'burn';
+/** A variant that deals damage on its own and fires within EARLY_CD. */
+export const isEarlyHitter = (k: Pick<SkillInstance, 'id' | 'v'>) => {
+  const n = nodeOf(k);
+  return n.cd <= EARLY_CD && n.fx.some(directDamage);
+};
+/** Effects that answer freeze / slow / cast delay. */
+const ANTI_CONTROL = new Set<Effect['k']>(['cleanse', 'steadfast']);
+const nodeAntiControl = (n: SkillNode) => n.fx.some((e) => ANTI_CONTROL.has(e.k));
+/** Lv1 of this skill already removes or reduces control. */
+export const isAntiControl = (id: string) => !!SKILLS[id] && nodeAntiControl(SKILLS[id].tree['']);
+/** An archetype is weak to control when none of its own skills answer it at Lv1. */
+export const weakToControl = (arch: Archetype) => !SKILL_LIST.some((d) => d.arch === arch && isAntiControl(d.id));
+
+/** Rough strength of one variant per second of cooldown (hard bot only; tuning numbers, not game rules). */
+function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
+  let v = 0;
+  for (const e of n.fx) {
+    switch (e.k) {
+      case 'hit': {
+        let d = e.n;
+        if (e.shieldPct) d += e.shieldPct * (has.has('shield') ? 10 : 4);
+        if (e.thornsX) d += e.thornsX * (has.has('thorns') ? 3 : 1.5);
+        if (e.burnPct) d += e.burnPct * (has.has('burn') ? 10 : 3);
+        d *= e.times ?? 1;
+        if (e.pierce) d *= 1 + 0.25 * e.pierce;
+        if (e.exec) d *= 1 + (e.exec[1] - 1) * 0.35;
+        if (e.frozen) d *= has.has('freeze') ? 1 + (e.frozen - 1) * 0.5 : 1;
+        if (e.noShield) d *= 1 + (e.noShield - 1) * 0.6;
+        if (e.ifSlowed) d *= has.has('slow') ? 0.8 : 0.2;
+        if (e.leech) d *= 1 + e.leech;
+        if (e.burn) d += e.burn[0] * e.burn[1];
+        if (e.perRemoved) d += e.perRemoved * 0.5;
+        v += d;
+        break;
       }
-      score += like(id);
-      if (score > bestScore) {
-        bestScore = score;
-        best = i;
-      }
-    });
-    if (best >= 0 && bestScore >= 2) {
-      const offer = s.shop[best]!;
-      const id = offer.id;
-      const isNew = offer.v === '';
-      if (isNew && full) {
-        // make room: buy a slot if it leaves enough gold, else swap out a weaker skill
-        if (slotsOf(s) < MAX_SLOTS && s.gold >= slotPrice(s) + priceOf(offer)) buySlot(s);
-        else {
-          let worst = -1;
-          s.skills.forEach((k, i) => {
-            const v = like(k.id) * 2 + lvOf(k.v);
-            if (worst < 0 || v < like(s.skills[worst].id) * 2 + lvOf(s.skills[worst].v)) worst = i;
-          });
-          const k = s.skills[worst];
-          if (worst >= 0 && like(k.id) * 2 + lvOf(k.v) < like(id) * 2 + 1) sell(s, worst);
-          else {
-            s.shop[best] = null; // not worth it: ignore this offer for today
-            continue;
-          }
-        }
-      }
-      buy(s, best);
-      continue;
+      case 'shield': v += e.n * 0.7; break;
+      case 'heal': v += e.n * 0.8; break;
+      case 'burn': v += e.dps * e.secs * 0.8 + (e.growthHalf && has.has('grow') ? 4 : 0); break;
+      case 'freeze': v += e.secs * 6; break;
+      case 'slow': v += e.pct * e.secs * 8; break;
+      case 'delay': v += e.secs * 5; break;
+      case 'grow': v += e.n * 4; break;
+      case 'charge': v += (e.mult - 1) * 7 * (e.hits ?? 1); break;
+      case 'thorns': v += e.n * (e.perm ? 4 : 2.5); break;
+      case 'steadfast': v += 3; break;
+      case 'cleanse': v += 2; break;
+      case 'dispel': v += 3; break;
+      case 'amplify': v += has.has('grow') || has.has('thorns') || has.has('charge') ? 6 : 1; break;
+      case 'leech': v += e.pct * 8; break;
     }
-    if (rerolls < rules.maxRerolls && s.gold >= REROLL + PRICES[0] + rules.reserve) {
-      reroll(s);
-      rerolls++;
-      continue;
-    }
-    break;
   }
+  return v / Math.max(1, n.cd / 10);
+}
+
+/** Effect kinds present in the build (for branch synergy: shieldPct wants shields, frozen wants freeze, ...). */
+function effectsOf(skills: SkillInstance[]) {
+  const has = new Set<Effect['k'] | 'frozenHit'>();
+  for (const k of skills) for (const e of nodeOf(k).fx) has.add(e.k);
+  return has;
 }
 
 const BONUS_W = { trigger: 2, power: 1.5, haste: 1.2, dmg: 1.5, shield: 1 } as const;
@@ -108,10 +128,259 @@ export function arrangeList(skills: SkillInstance[]): number {
   return best;
 }
 
+/** Connect-bonus score gained if `extra` joined the list at its best position (or replaced skill `drop`). Cheap: no re-sort. */
+function linkGain(skills: SkillInstance[], extra: SkillInstance, drop = -1) {
+  const base = linkScore(skills);
+  const rest = skills.filter((_, i) => i !== drop);
+  let best = -Infinity;
+  for (let p = 0; p <= rest.length; p++) best = Math.max(best, linkScore([...rest.slice(0, p), extra, ...rest.slice(p)]));
+  return best - base;
+}
+
+// ---------------- shop turn ----------------
+
+/** How many early hitters the bot owns. */
+const ownedHitters = (s: RunState) => s.skills.filter(isEarlyHitter).length;
+
+/**
+ * Guarantee: the build owns a damage skill that fires early. Buys the cheapest such offer (making room by selling
+ * the weakest non-hitter if needed), rerolling a few times when the shop has none. Returns false if it could not.
+ */
+function ensureHitter(s: RunState, keep: (k: SkillInstance) => number): boolean {
+  for (let tries = 0; tries < 4; tries++) {
+    if (ownedHitters(s) > 0) return true;
+    // an upgrade can turn an owned skill into an early hitter too, but a new Lv1 hitter is the reliable fix
+    let pick = -1;
+    s.shop.forEach((o, i) => {
+      if (!o || o.v !== '' || priceOf(o) > s.gold + (s.skills.length >= slotsOf(s) ? minSell(s, keep) : 0)) return;
+      if (s.skills.some((k) => k.id === o.id) || !isEarlyHitter({ id: o.id, v: '' })) return;
+      if (pick < 0 || priceOf(o) < priceOf(s.shop[pick]!)) pick = i;
+    });
+    if (pick >= 0) {
+      if (s.skills.length >= slotsOf(s)) sell(s, weakest(s, keep));
+      if (!buy(s, pick)) return true;
+    }
+    if (s.day <= 1 || s.gold < REROLL + PRICES[0]) return false;
+    reroll(s);
+  }
+  return ownedHitters(s) > 0;
+}
+const weakest = (s: RunState, keep: (k: SkillInstance) => number) => {
+  let w = -1;
+  s.skills.forEach((k, i) => {
+    if (w < 0 || keep(k) < keep(s.skills[w])) w = i;
+  });
+  return w;
+};
+const minSell = (s: RunState, keep: (k: SkillInstance) => number) => {
+  const w = weakest(s, keep);
+  return w >= 0 ? lvOf(s.skills[w].v) : 0;
+};
+
+export function botShopTurn(s: RunState, rules: BotRules) {
+  const tier = rules.tier ?? 'normal';
+  if (tier === 'hard') return hardShopTurn(s, rules);
+  const rng = new Rng(hashSeed(s.seed, 'bot', s.day, tier));
+  const easy = tier === 'easy';
+  let rerolls = 0;
+  const want = HEROES_BY_ID[s.hero]?.botWant ?? [];
+  /** how much the bot likes a skill (0 = not at all) */
+  const like = (id: string) => {
+    const d = SKILLS[id];
+    let score = 0;
+    const pi = rules.prefer.indexOf(d.arch as Archetype);
+    if (pi >= 0) score += 3 - pi;
+    if (d.hero) score += 3;
+    if (!easy && want.includes(id)) score += 2;
+    return score;
+  };
+  /** value of an owned skill when deciding what to sell; the last early hitter is never sold */
+  const keep = (k: SkillInstance) => like(k.id) * 2 + lvOf(k.v) + (isEarlyHitter(k) && ownedHitters(s) <= 1 ? 100 : 0);
+  ensureHitter(s, keep);
+  // easy: most easy bots leave one slot empty on days 1–3; at most 1 purchase a day early, 2 later
+  const lazy = easy && s.day <= 3 && new Rng(hashSeed(s.seed, 'lazy')).next() < 0.7;
+  const buyCap = !easy ? 99 : s.day <= 3 ? 1 : 2;
+  let bought = 0;
+  for (let guard = 0; guard < 40 && bought < buyCap; guard++) {
+    let best = -1;
+    let bestScore = 0;
+    const full = s.skills.length >= slotsOf(s) - (lazy ? 1 : 0);
+    s.shop.forEach((offer, i) => {
+      if (!offer) return;
+      const id = offer.id;
+      if (priceOf(offer) > s.gold) return;
+      let score: number;
+      if (offer.v !== '') {
+        if (!upgradeOf(s, offer) || lazy) return; // lazy easy bots do not upgrade early either
+        score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
+      } else {
+        if (s.skills.some((k) => k.id === id)) return;
+        score = full ? 1 : 2; // a free slot is worth filling with anything
+      }
+      score += easy ? like(id) * 0.5 + rng.next() * 3 : like(id);
+      if (score > bestScore) {
+        bestScore = score;
+        best = i;
+      }
+    });
+    if (best >= 0 && bestScore >= 2) {
+      const offer = s.shop[best]!;
+      const id = offer.id;
+      const isNew = offer.v === '';
+      if (isNew && full) {
+        if (easy) {
+          s.shop[best] = null; // easy never makes room
+          continue;
+        }
+        // make room: buy a slot if it leaves enough gold, else swap out a weaker skill
+        if (slotsOf(s) < MAX_SLOTS && s.gold >= slotPrice(s) + priceOf(offer)) buySlot(s);
+        else {
+          const worst = weakest(s, keep);
+          if (worst >= 0 && keep(s.skills[worst]) < like(id) * 2 + 1) sell(s, worst);
+          else {
+            s.shop[best] = null; // not worth it: ignore this offer for today
+            continue;
+          }
+        }
+      }
+      buy(s, best);
+      bought++;
+      continue;
+    }
+    if (rerolls < rules.maxRerolls && s.gold >= REROLL + PRICES[0] + rules.reserve) {
+      reroll(s);
+      rerolls++;
+      continue;
+    }
+    break;
+  }
+}
+
+/** hard tier: numbers-aware shopping, connect bonuses, coherent upgrades, anti-control, no gold left lying around. */
+function hardShopTurn(s: RunState, rules: BotRules) {
+  const hero = HEROES_BY_ID[s.hero];
+  const want = hero?.botWant ?? [];
+  const arch = hero?.arch ?? rules.prefer[0];
+  const needAnti = weakToControl(arch) && s.day >= 4;
+  const pref = (id: string) => {
+    const d = SKILLS[id];
+    const pi = rules.prefer.indexOf(d.arch as Archetype);
+    return (pi >= 0 ? 2 - pi * 0.5 : 0) + (d.hero ? 2.5 : 0) + (want.includes(id) ? 1.5 : 0);
+  };
+  // the list's effect kinds, recomputed only when the list changes (version)
+  let version = 0;
+  let hasV = -1;
+  let hasCache = effectsOf(s.skills);
+  const hasNow = () => {
+    if (hasV !== version) [hasCache, hasV] = [effectsOf(s.skills), version];
+    return hasCache;
+  };
+  const instValue = (k: Pick<SkillInstance, 'id' | 'v'>, has = hasNow()) => nodeValue(nodeOf(k), has) + pref(k.id);
+  const keep = (k: SkillInstance) => {
+    let v = instValue(k) + lvOf(k.v) * 1.5;
+    if (isEarlyHitter(k) && ownedHitters(s) <= 1) v += 100;
+    if (needAnti && isAntiControl(k.id) && s.skills.filter((x) => isAntiControl(x.id)).length <= 1) v += 50;
+    return v;
+  };
+  ensureHitter(s, keep);
+  version++; // the list may have changed
+  const hasAnti = () => s.skills.some((k) => isAntiControl(k.id) || nodeAntiControl(nodeOf(k)));
+
+  /** score of an offer = value gained per gold (0 = skip) */
+  const score = (o: Offer): number => {
+    const has = hasNow();
+    if (o.v !== '') {
+      const owned = upgradeOf(s, o);
+      if (!owned) return 0;
+      const gain = nodeValue(nodeOf({ id: o.id, v: o.v }), has) - nodeValue(nodeOf(owned), has);
+      // finishing a branch (Lv2 → Lv3) on a skill that fits the build is worth more than spreading gold thin
+      const branch = lvOf(owned.v) === 2 ? 1.5 : 0.5;
+      // a Lv2 variant whose Lv3 children suit the build (best child value) is a coherent branch to start
+      const kids = lvOf(o.v) === 2 ? Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (o.v + c) as Variant }), has))) * 0.2 : 0;
+      if (gain + kids <= 0) return 0;
+      return (gain + kids + branch + pref(o.id) * 0.5) / priceOf(o);
+    }
+    if (s.skills.some((k) => k.id === o.id)) return 0;
+    const inst: SkillInstance = { id: o.id, v: '', bonus: o.bonus };
+    const full = s.skills.length >= slotsOf(s);
+    let v = instValue(inst, has) + linkGain(s.skills, inst) * 0.8;
+    if (needAnti && !hasAnti() && isAntiControl(o.id)) v += 6;
+    if (!full) v += 3; // an empty slot fights for nothing
+    return v / priceOf(o);
+  };
+
+  // offer scores only change when the list changes: cache them per list version
+  const cache = new WeakMap<Offer, [number, number]>();
+  const cachedScore = (o: Offer) => {
+    const c = cache.get(o);
+    if (c && c[0] === version) return c[1];
+    const sc = score(o);
+    cache.set(o, [version, sc]);
+    return sc;
+  };
+  let rerolls = 0;
+  for (let guard = 0; guard < 60; guard++) {
+    let best = -1;
+    let bestScore = 0;
+    s.shop.forEach((o, i) => {
+      if (!o || priceOf(o) > s.gold) return;
+      const sc = cachedScore(o);
+      if (sc > bestScore) {
+        bestScore = sc;
+        best = i;
+      }
+    });
+    if (best >= 0 && bestScore > 0.3) {
+      const o = s.shop[best]!;
+      if (o.v === '' && s.skills.length >= slotsOf(s)) {
+        if (slotsOf(s) < MAX_SLOTS && s.gold >= slotPrice(s) + priceOf(o) && s.day >= 3) buySlot(s);
+        else {
+          const w = weakest(s, keep);
+          const inst: SkillInstance = { id: o.id, v: '', bonus: o.bonus };
+          const newV = instValue(inst) + linkGain(s.skills, inst, w) * 0.8 + (needAnti && !hasAnti() && isAntiControl(o.id) ? 6 : 0);
+          if (w >= 0 && keep(s.skills[w]) + 1 < newV) {
+            sell(s, w);
+            version++;
+          } else {
+            s.shop[best] = null;
+            continue;
+          }
+        }
+      }
+      buy(s, best);
+      version++;
+      continue;
+    }
+    // nothing worth buying: from day 3 a slot is better than a gold pile
+    if (s.day >= 3 && slotsOf(s) < MAX_SLOTS && s.gold >= slotPrice(s) + PRICES[0] && s.skills.length >= slotsOf(s)) {
+      buySlot(s);
+      version++;
+      continue;
+    }
+    if (rerolls < rules.maxRerolls && s.gold >= REROLL + PRICES[0] + rules.reserve) {
+      reroll(s);
+      rerolls++;
+      continue;
+    }
+    break;
+  }
+}
+
+/** One full shop day for a bot: shop, then sort the list (easy keeps buy order). */
+export function botDay(s: RunState, rules: BotRules) {
+  botShopTurn(s, rules);
+  if ((rules.tier ?? 'normal') !== 'easy') arrangeList(s.skills);
+}
+
 /** Build a bot's build as of `day`, by running its shop turns day by day. */
-export function aiBuild(hero: string, day: number, prefer: Archetype[], seed: number): Build {
+export function aiBuild(hero: string, day: number, prefer: Archetype[], seed: number, tier: BotTier = 'normal'): Build {
+  return toBuild(aiRun(hero, day, prefer, seed, tier));
+}
+
+/** The bot's run state after its shop on `day` (aiBuild without the toBuild; the simulator reads its unspent gold). */
+export function aiRun(hero: string, day: number, prefer: Archetype[], seed: number, tier: BotTier = 'normal'): RunState {
   const s = newRun(hero, seed, 'ai');
-  const rules: BotRules = { prefer, reserve: 0, maxRerolls: 2 };
+  const rules = botRules(prefer, tier);
   for (let d = 1; d <= day; d++) {
     if (d > 1) {
       s.day = d;
@@ -120,15 +389,14 @@ export function aiBuild(hero: string, day: number, prefer: Archetype[], seed: nu
       reroll(s); // costs 1, but gives a fresh shop for the day
       s.gold += 1;
     }
-    botShopTurn(s, rules);
-    arrangeList(s.skills);
+    botDay(s, rules);
   }
-  return toBuild(s);
+  return s;
 }
 
-export function randomAiBuild(day: number, seed: number): Build {
+export function randomAiBuild(day: number, seed: number, tier: BotTier = 'normal'): Build {
   const rng = new Rng(seed);
   const hero = rng.pick(HEROES);
   const second = rng.pick(ARCHES.filter((a) => a !== hero.arch));
-  return aiBuild(hero.id, day, [hero.arch, second], hashSeed(seed, 'ai'));
+  return aiBuild(hero.id, day, [hero.arch, second], hashSeed(seed, 'ai'), tier);
 }
