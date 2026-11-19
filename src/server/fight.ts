@@ -1,6 +1,7 @@
 // POST /api/fight and GET /api/scout.
 import { randomInt, randomUUID } from 'node:crypto';
 import { SIM_VERSION, simulate } from '../sim/combat';
+import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { ARCHES, type Archetype, type Build } from '../sim/types';
 import { aiBuildFor, archetypeOf, candidates, closest, streakOf, tierFor } from './match';
@@ -15,30 +16,35 @@ const bad = (error: string): Res => ({ status: 400, json: { error } });
 
 const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
 
-function trackOf(runId: string, playerId: string | undefined, name: string): RunTrack {
+function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
   t.name = name;
-  if (playerId && !t.playerId) t.playerId = playerId; // the first player to fight a run owns it
+  t.playerId ??= playerId; // the run belongs to the player who started it
   t.t = Date.now();
   return t;
 }
 
 export function handleFight(body: any): Res {
   const runId = cleanId(body?.runId);
-  const playerId = body?.playerId == null || body.playerId === '' ? undefined : cleanId(body.playerId);
+  // a fight always belongs to a player: runs are bound to the playerId that started them
+  const playerId = cleanId(body?.playerId);
   const day = intIn(body?.day, 1, MAX_DAY);
-  if (!runId || day === null || playerId === null) return bad('bad request');
+  if (!runId || day === null || !playerId) return bad('bad request');
   const build = validateBuild(body?.build, day);
   if (typeof build === 'string') return bad(build);
   const name = cleanName(body?.name, playerId ?? runId);
-  const rating = cleanRating(body?.rating);
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // matchmaking and AI difficulty use the server's own rating for this run, never the client's
+  const rating = prev?.rating ?? 1000;
   // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
   // (otherwise a client could retry a lost day until it wins and inflate the run-end reward).
   // runIds are public (leaderboard, replays): only the run's owner may fight its days
-  if (prev?.playerId && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
+  if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
   if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
-  if (prev && Object.hasOwn(prev.days, day)) return { status: 409, json: { error: 'day already fought' } };
+  if (prev?.over) return { status: 409, json: { error: 'run is over' } };
+  // days are fought one by one in order: no skipping ahead, no repeating a day
+  const fought = prev ? Object.keys(prev.days).length : 0;
+  if (day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   const streak = streakOf(prev);
 
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
@@ -67,7 +73,20 @@ export function handleFight(body: any): Res {
 
   // What this run has met and how each day went (no repeats, streak for the AI tier, verified wins at run end).
   const track = trackOf(runId, playerId, name);
+  track.rating = newRating;
   track.days[day] = won ? 1 : 0;
+  // same rules as the client (run.ts recordResult): a loss costs HP by day, the first death is the last chance
+  // at 1 HP, the second ends the run, WIN_TARGET wins end it too. A modified client can't fight past its end.
+  track.hp ??= START_HP;
+  if (!won) track.hp -= damageFor(day);
+  const winsSoFar = Object.values(track.days).filter((d) => d === 1).length;
+  if (winsSoFar >= WIN_TARGET) track.over = true;
+  else if (track.hp <= 0) {
+    if (!track.ghost) {
+      track.ghost = true;
+      track.hp = 1;
+    } else track.over = true;
+  }
   if (opp.snap) {
     track.snaps.push(opp.snap.id);
     track.opps.push(opp.snap.runId);

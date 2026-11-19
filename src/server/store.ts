@@ -56,6 +56,12 @@ export interface RunTrack {
   opps: string[];
   /** day → 1 won, 0 lost/draw (a retried fight on the same day overwrites) */
   days: Record<string, 0 | 1>;
+  /** run state mirrored on the server with the game's own rules (run.ts): HP, last chance used, run over */
+  hp?: number;
+  ghost?: boolean;
+  over?: boolean;
+  /** the run's rating, kept on the server (the client's value is never trusted) */
+  rating?: number;
   /** set when POST /api/run/finish recorded this run */
   finished?: number;
   t: number;

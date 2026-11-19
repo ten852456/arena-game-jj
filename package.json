@@ -13,6 +13,7 @@
     "balance": "tsx scripts/balance.ts",
     "test": "tsx scripts/determinism.ts",
     "smoke": "tsx scripts/smoke.ts",
+    "security": "tsx scripts/security-check.ts",
     "runs": "tsx scripts/runs.ts",
     "sim": "tsx scripts/sim.ts",
     "explain": "tsx scripts/explain-check.ts"
