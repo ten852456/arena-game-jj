@@ -5,9 +5,41 @@ import { initTutorial } from './tutorial';
 import { startUI, type Stage } from './ui';
 import { ZOOM } from './view';
 import { initLang, mountLangSwitch, onLang } from './lang';
+import { getLang, L } from '../i18n';
+import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMuted } from './audio';
 import './style.css';
 
 initLang();
+// voice lines follow the game language (English UI → English announcer)
+setVoiceLang(getLang());
+onLang((l) => setVoiceLang(l));
+initAudio({ uiSounds: true }); // sound starts after the first tap/click (autoplay rules)
+music('town');
+
+/** Sound on/off button in the header, after the language switch (never on top of it). */
+function mountMute() {
+  const header = document.querySelector('header');
+  if (!header || header.querySelector('.mute-btn')) return;
+  const mute = document.createElement('button');
+  mute.className = 'mute-btn small ghost';
+  mute.type = 'button';
+  mute.dataset.sfx = 'none';
+  const paint = () => {
+    const off = getAudioSettings().muted;
+    mute.textContent = off ? '🔇' : '🔊';
+    const label = off ? L('เปิดเสียง', 'Sound on') : L('ปิดเสียง', 'Sound off');
+    mute.setAttribute('aria-label', label);
+    mute.title = label;
+    mute.setAttribute('aria-pressed', String(off));
+  };
+  mute.addEventListener('click', () => {
+    toggleMuted();
+    paint();
+  });
+  onLang(paint);
+  paint();
+  header.appendChild(mute);
+}
 
 async function boot() {
   // Make sure the Thai font is ready before Phaser draws canvas text.
@@ -39,6 +71,7 @@ async function boot() {
   startUI(stage);
   initTutorial();
   mountLangSwitch();
+  mountMute();
   onLang(() => town.refreshLabels());
 }
 

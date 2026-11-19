@@ -1,0 +1,220 @@
+/**
+ * HTML for the fight summary extras, the end-of-run results page, profile, leaderboard and the scouting chip.
+ * Pure string builders in the current language (L); ui.ts owns state, events and rendering.
+ */
+import { L } from '../../i18n';
+import { IMAGES } from '../assets';
+import type { Explanation, Lock } from '../../sim/explain';
+import { HEROES_BY_ID } from '../../sim/heroes';
+import { WIN_TARGET } from '../../sim/run';
+import { ARCH_NAME } from '../../sim/skills';
+import type { FinishRunResult, FightNote, Leaderboard, Period, Profile, RunSummary, Scout } from './meta';
+
+export const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+
+const heroName = (id: string) => HEROES_BY_ID[id]?.name ?? id;
+const replayHref = (id: string) => `?replay=${encodeURIComponent(id)}`;
+const dustWord = () => L('ผงดาว', 'stardust');
+
+/** Tiny decorative stars + moon for page headers (pure CSS shapes, aria-hidden). */
+const sky = () => `<div class="mm-sky" aria-hidden="true"><i class="mm-moon"></i><i class="s1"></i><i class="s2"></i><i class="s3"></i><i class="s4"></i><i class="s5"></i></div>`;
+
+// ---------- fight result extras ----------
+
+/** "Close fight!" banner, tiebreak rule, lock callouts and big-moment cards for one fight. */
+export function fightHighlights(x: Explanation, opts: { replayHref?: string; replayAction?: string } = {}) {
+  const parts: string[] = [];
+  if (x.close) {
+    const watch = opts.replayHref
+      ? `<a class="mm-btn ghost" href="${esc(opts.replayHref)}">▶ ${L('ดู replay อีกครั้ง', 'Watch the replay')}</a>`
+      : opts.replayAction
+        ? `<button class="mm-btn ghost" data-a="${opts.replayAction}">▶ ${L('ดูอีกครั้ง', 'Watch again')}</button>`
+        : '';
+    parts.push(`<div class="mm-close" role="status"><b>${L('สูสี!', 'Close fight!')}</b><span>${L(
+      'ผู้ชนะเหลือเลือดไม่ถึง 10% · ดู replay เพื่อหาจังหวะที่ตัดสินเกม',
+      'The winner had under 10% HP left · watch the replay to find the moment that decided it',
+    )}</span>${watch}</div>`);
+  }
+  if (x.tiebreak) parts.push(`<div class="mm-rule"><span aria-hidden="true">⚖</span><span>${esc(x.tiebreak)}</span></div>`);
+  for (const l of x.locks) parts.push(lockCallout(l));
+  if (x.moments.length)
+    parts.push(`<div class="mm-moments">${x.moments
+      .map((m) => `<div class="mm-moment k-${m.kind} side-${m.side}"><span class="mm-mi" aria-hidden="true">${m.icon}</span><div><b>${esc(m.title)}</b><span>${esc(m.text)}</span></div></div>`)
+      .join('')}</div>`);
+  return parts.join('');
+}
+
+function lockCallout(l: Lock) {
+  return `<div class="mm-lock side-${l.side}"><span aria-hidden="true">❄</span><span>${esc(l.text)}</span></div>`;
+}
+
+// ---------- end of run ----------
+
+export interface OverData {
+  won: boolean;
+  conceded: boolean;
+  hero: string;
+  heroArt: string;
+  wins: number;
+  losses: number;
+  winTarget: number;
+  days: number;
+  rating: number;
+  buildHTML: string;
+  historyHTML: string;
+  best: FightNote | null;
+  /** undefined = still asking the server, null = no reward available */
+  reward: FinishRunResult | null | undefined;
+}
+
+export function runOverPage(d: OverData) {
+  const title = d.won ? L(`ชนะครบ ${d.winTarget}!`, `All ${d.winTarget} wins!`) : d.conceded ? L('จบรอบ (ยอมแพ้)', 'Run over (gave up)') : L('จบรอบแล้ว', 'Run over');
+  const sub = d.won
+    ? L('โมจิของคุณได้รับมงกุฎดวงจันทร์คืนนี้', 'Your mochi wears the moon crown tonight')
+    : d.wins >= d.winTarget / 2
+      ? L('เกือบแล้ว! พักให้นุ่มแล้วกลับมาใหม่', 'So close! Rest up, stay soft, and come back')
+      : L('ดวงจันทร์ยังรออยู่ ลองแนว build ใหม่ดูนะ', 'The moon is still waiting. Try a new kind of build');
+  const dust = `<img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true" width="40" height="40">`;
+  const reward =
+    d.reward === undefined
+      ? `<div class="mm-reward pending">${dust}<span>${L('กำลังนับผงดาว…', 'Counting stardust…')}</span></div>`
+      : d.reward
+        ? `<div class="mm-reward">${dust}<div><div class="mm-reward-n">+${d.reward.stardust} <small>${dustWord()}</small></div>${
+            d.reward.total !== undefined ? `<div class="mm-reward-t">${L(`รวมทั้งหมด ${d.reward.total} ผงดาว`, `${d.reward.total} stardust in total`)}</div>` : ''
+          }</div></div>`
+        : '';
+  const best = d.best
+    ? `<div class="mm-best"><div class="mm-best-h">🌟 ${L('ช่วงเวลาที่ดีที่สุด', 'Best moment')} · ${L('วันที่', 'day')} ${d.best.day}</div><p>${esc(d.best.text)}</p>${
+        d.best.fightId ? `<a class="mm-btn" href="${replayHref(d.best.fightId)}">▶ ${L('ดู replay ไฟต์นี้', 'Watch this fight')}</a>` : ''
+      }</div>`
+    : '';
+  const pips = Array.from({ length: d.winTarget }, (_, i) => `<i class="${i < d.wins ? 'on' : ''}"></i>`).join('');
+  return `<section class="mm-over ${d.won ? 'won' : 'lost'}">
+    ${sky()}
+    <div class="mm-banner" style="background-image:url('${d.won ? IMAGES.bannerVictory : IMAGES.bannerDefeat}')"><h2 class="mm-over-title">${title}</h2></div>
+    <div class="mm-over-hero">${d.heroArt}</div>
+    <p class="mm-over-sub">${sub}</p>
+    <div class="mm-pips" role="img" aria-label="${L(`ชนะ ${d.wins} จาก ${d.winTarget}`, `${d.wins} of ${d.winTarget} wins`)}">${pips}</div>
+    <div class="mm-statgrid">
+      <div><b>${d.wins}</b><span>${L('ชนะ', 'Wins')}</span></div>
+      <div><b>${d.losses}</b><span>${L('แพ้', 'Losses')}</span></div>
+      <div><b>${d.days}</b><span>${L('วัน', 'Days')}</span></div>
+      <div><b>${d.rating}</b><span>${L('คะแนน build', 'Build rating')}</span></div>
+    </div>
+    ${reward}
+  </section>
+  ${best}
+  <h3>${L('ตาราง build สุดท้าย', 'Final grid build')} · ${esc(heroName(d.hero))}</h3>
+  ${d.buildHTML}
+  <h3>${L('ทุกไฟต์ในรอบนี้', 'Every fight this run')}</h3>
+  ${d.historyHTML}
+  <div class="actions mm-actions">
+    <button class="primary" data-a="home">${L('เล่นอีกรอบ', 'Play again')}</button>
+    <button data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button>
+    <button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>
+  </div>`;
+}
+
+/** Fights of a run as tappable rows (replay links), phone friendly. */
+export function historyList(log: { day: number; won: boolean; opp: string; ai: boolean; fightId?: string }[], notes: FightNote[]) {
+  if (!log.length) return `<p class="muted">${L('ยังไม่มีไฟต์', 'No fights yet')}</p>`;
+  return `<ol class="mm-hist">${log
+    .map((l) => {
+      const n = notes.find((x) => x.day === l.day);
+      const tag = n?.close ? `<span class="mm-tag close">${L('สูสี', 'Close')}</span>` : '';
+      const body = `<span class="mm-hd">${L('วัน', 'Day')} ${l.day}</span><span class="mm-hr ${l.won ? 'win' : 'lose'}">${l.won ? L('ชนะ', 'Win') : L('แพ้', 'Loss')}</span>
+        <span class="mm-ho">${esc(l.opp)}${l.ai && !/^AI\b|\bAI\b/.test(l.opp) ? ' <small class="muted">AI</small>' : ''} ${tag}</span>`;
+      return l.fightId
+        ? `<li><a href="${replayHref(l.fightId)}" aria-label="${L(`ดู replay วันที่ ${l.day}`, `Watch the replay of day ${l.day}`)}">${body}<span class="mm-go" aria-hidden="true">▶</span></a></li>`
+        : `<li><div>${body}<span></span></div></li>`;
+    })
+    .join('')}</ol>`;
+}
+
+// ---------- profile ----------
+
+export function profilePage(p: Profile | null, name: string, loading: boolean) {
+  const head = `<div class="actions"><button class="ghost" data-a="town">← ${L('กลับเมือง', 'Back to town')}</button><button class="ghost" data-a="leaderboard">🏆 ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
+  if (!p)
+    return `${head}<section class="mm-card">${sky()}<h2>${L('โปรไฟล์', 'Profile')}</h2><p class="muted">${loading ? L('กำลังโหลด…', 'Loading…') : L('ยังไม่มีข้อมูล', 'No data yet')}</p></section>`;
+  const runRow = (r: RunSummary) => `<li>
+      <div class="mm-run-main"><b>${esc(heroName(r.hero))}</b> <span class="${r.wins >= WIN_TARGET ? 'win' : ''}">${L(`ชนะ ${r.wins}`, `${r.wins} wins`)}</span> <span class="muted">${L(
+        `แพ้ ${r.losses} · ${r.days} วัน${r.conceded ? ' · ยอมแพ้' : ''}`,
+        `${r.losses} losses · ${r.days} days${r.conceded ? ' · gave up' : ''}`,
+      )}</span>
+        ${r.stardust !== undefined ? `<span class="mm-chipdust"><img src="${IMAGES.stardust}" alt="${dustWord()}" width="18" height="18"> ${r.stardust}</span>` : ''}</div>
+      ${r.bestText ? `<div class="muted small">${esc(r.bestText)}</div>` : ''}
+      ${r.bestFightId ? `<a class="mm-btn ghost small" href="${replayHref(r.bestFightId)}">▶ ${L('replay ไฟต์เด่น', 'Best fight replay')}</a>` : ''}
+    </li>`;
+  return `${head}
+  <section class="mm-card mm-profile">
+    ${sky()}
+    <h2>${esc(p.name ?? name)}</h2>
+    ${p.local ? `<p class="muted small">${L('ข้อมูลจากเครื่องนี้ (เซิร์ฟเวอร์ยังไม่มีโปรไฟล์)', 'From this device only (the server has no profile yet)')}</p>` : ''}
+    <div class="mm-statgrid">
+      <div><b>${p.runs}</b><span>${L('รอบที่เล่น', 'Runs')}</span></div>
+      <div><b>${p.wins}</b><span>${L('ชนะรวม', 'Total wins')}</span></div>
+      <div><b>${p.bestWins}</b><span>${L('ชนะสูงสุดใน 1 รอบ', 'Best wins in a run')}</span></div>
+      <div><b class="mm-dustn"><img src="${IMAGES.stardust}" alt="" aria-hidden="true" width="22" height="22"> ${p.stardust}</b><span>${dustWord()}</span></div>
+    </div>
+  </section>
+  ${p.best ? `<h3>${L('รอบที่ดีที่สุด', 'Best run')}</h3><ul class="mm-runs best">${runRow(p.best)}</ul>` : ''}
+  <h3>${L('รอบล่าสุด', 'Recent runs')}</h3>
+  ${p.last.length ? `<ul class="mm-runs">${p.last.slice(0, 10).map(runRow).join('')}</ul>` : `<p class="muted">${L('ยังไม่มีรอบที่จบ ลองเข้าสนามประลองดูสิ', 'No finished runs yet. Try the arena!')}</p>`}`;
+}
+
+// ---------- leaderboard ----------
+
+export function leaderboardPage(period: Period, lb: Leaderboard | null, loading: boolean, local: RunSummary[]) {
+  const tabs = (['season', 'day'] as Period[])
+    .map((p) => `<button class="mm-tab ${p === period ? 'on' : ''}" data-a="lbPeriod" data-i="${p}" aria-pressed="${p === period}">${p === 'season' ? L('ทั้งซีซั่น', 'Season') : L('วันนี้', 'Today')}</button>`)
+    .join('');
+  const winsWord = (n: number) => L(`${n} ชนะ`, `${n} wins`);
+  let body: string;
+  if (lb && lb.entries.length) {
+    body = `<ol class="mm-lb">${lb.entries
+      .slice(0, 50)
+      .map((e) => `<li class="${e.me ? 'me' : ''} r${e.rank <= 3 ? e.rank : ''}"><span class="mm-rank">${e.rank <= 3 ? ['🥇', '🥈', '🥉'][e.rank - 1] : e.rank}</span>
+        <span class="mm-lbn">${esc(e.name)}${e.me ? ` <small class="muted">(${L('คุณ', 'you')})</small>` : ''}${e.hero ? ` <small class="muted">${esc(heroName(e.hero))}</small>` : ''}</span>
+        <span class="mm-lbs">${winsWord(e.score)}</span></li>`)
+      .join('')}</ol>${lb.me && !lb.entries.some((e) => e.me) ? `<p class="mm-lbme">${L('อันดับของคุณ', 'Your rank')}: <b>${lb.me.rank}</b> · ${lb.me.score}</p>` : ''}`;
+  } else if (loading) body = `<p class="muted">${L('กำลังโหลด…', 'Loading…')}</p>`;
+  else {
+    const mine = [...local].sort((a, b) => b.wins - a.wins).slice(0, 5);
+    body = `<p class="muted">${L('กระดานผู้นำยังไม่เปิด', 'The leaderboard is not open yet')}${lb ? L(' (ยังไม่มีใครติดอันดับ)', ' (nobody is ranked yet)') : ''}</p>${
+      mine.length
+        ? `<h4>${L('สถิติของคุณในเครื่องนี้', 'Your runs on this device')}</h4><ol class="mm-lb">${mine
+            .map((r, i) => `<li><span class="mm-rank">${i + 1}</span><span class="mm-lbn">${esc(heroName(r.hero))}</span><span class="mm-lbs">${winsWord(r.wins)}</span></li>`)
+            .join('')}</ol>`
+        : ''
+    }`;
+  }
+  return `
+  <img class="mm-lbhead" src="${IMAGES.headerLeaderboard}" alt="" aria-hidden="true" width="1200" height="560">
+  <div class="actions"><button class="ghost" data-a="town">← ${L('กลับเมือง', 'Back to town')}</button><button class="ghost" data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button></div>
+  <section class="mm-card">${sky()}<h2>🏆 ${L('กระดานผู้นำ', 'Leaderboard')}</h2>
+    <p class="muted small">${lb?.scoreLabel ? esc(lb.scoreLabel) : L('จัดอันดับนักสู้โมจิบนดวงจันทร์ตามจำนวนชนะ', 'Mochi fighters on the moon, ranked by wins')}</p>
+    <div class="mm-tabs" role="group" aria-label="${L('ช่วงเวลา', 'Period')}">${tabs}</div>
+  </section>
+  ${body}`;
+}
+
+// ---------- scouting chip (shop, above the fight button) ----------
+
+const ARCH_ORDER = ['tank', 'burst', 'scaling', 'control'] as const;
+export function scoutChip(s: Scout | null, day: number) {
+  if (!s) return '';
+  const list = ARCH_ORDER.filter((a) => s.mix[a] !== undefined).sort((a, b) => (s.mix[b] ?? 0) - (s.mix[a] ?? 0));
+  const bar = list.map((a) => `<i class="a-${a}" style="flex:${Math.max(0.02, s.mix[a] ?? 0)}"></i>`).join('');
+  const top = list[0];
+  const rows = list
+    .map((a) => `<li><i class="dot a-${a}" aria-hidden="true"></i>${ARCH_NAME[a]}<b>${Math.round((s.mix[a] ?? 0) * 100)}%</b></li>`)
+    .join('');
+  const topName = top ? ARCH_NAME[top] : '?';
+  return `<details class="mm-scout">
+    <summary><span class="mm-scout-ic" aria-hidden="true">🔭</span><span class="mm-scout-t">${L(`สนามวันที่ ${day}: ส่วนมากเป็น<b>${topName}</b>`, `Day ${day} arena: mostly<b>${topName}</b>`)}</span><span class="mm-scout-bar" aria-hidden="true">${bar}</span></summary>
+    <ul>${rows}</ul>
+    <p class="muted small">${L('สัดส่วนแนว build ของคู่ต่อสู้ที่อาจเจอวันนี้', 'Mix of build styles you may meet today')}${s.total ? L(` (จาก ${s.total} build)`, ` (from ${s.total} builds)`) : ''}${s.ai !== undefined ? ` · AI ${Math.round(s.ai * 100)}%` : ''}</p>
+  </details>`;
+}

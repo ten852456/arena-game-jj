@@ -415,3 +415,212 @@ header .logo-moon { -webkit-text-fill-color: initial; color: initial; filter: dr
 header .lang { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); }
 header .lang button { min-width: 44px; padding: 3px 8px; }
 header .lang button.on { background: var(--accent); color: #1a1420; border-color: transparent; }
+
+/* ===== grid pages (GC2) ===== */
+/* fight log + result, close-fight banner, moments, lock callouts, end-of-run reward, profile, leaderboard, scouting chip, generated art, mute button */
+/* moon-night mochi palette for the fight, result, end-of-run, profile and leaderboard screens */
+:root {
+  --mm-night: #1b1640;
+  --mm-night2: #2a2260;
+  --mm-lav: #b9a8ff;
+  --mm-moon: #fff4d6;
+  --mm-mochi: #ffc4d8;
+  --mm-star: #ffd98a;
+  --mm-you: #8ec9ff;
+  --mm-foe: #ff9fae;
+  --mm-ice: #a8e6ff;
+}
+.who { font-weight: 600; }
+.who.s0 { color: var(--mm-you); }
+.who.s1 { color: var(--mm-foe); }
+.mm-versus { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 16px; }
+.mm-speed button { min-height: 44px; min-width: 52px; }
+.log .dmg { color: #ffb1a8; }
+.log li { padding: 2px 0; line-height: 1.5; }
+
+/* tags + buttons */
+.mm-tag { display: inline-block; font-size: 13px; padding: 1px 10px; border-radius: 999px; vertical-align: middle; font-weight: 600; }
+.mm-tag.close { background: linear-gradient(90deg, var(--mm-mochi), var(--mm-star)); color: #3a1b33; box-shadow: 0 0 10px rgba(255, 196, 216, 0.5); }
+.mm-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 16px;
+  border-radius: 999px; background: var(--mm-moon); color: #2a1f4a; font: inherit; font-weight: 600; text-decoration: none;
+  border: 1px solid var(--mm-moon); cursor: pointer;
+}
+.mm-btn.ghost { background: transparent; color: var(--mm-moon); border-color: rgba(255, 244, 214, 0.5); }
+.mm-btn.small { min-height: 40px; padding: 4px 14px; font-size: 13px; margin-top: 6px; }
+.mm-btn:hover { filter: brightness(1.08); }
+
+/* result header */
+.mm-result {
+  border-radius: 16px; padding: 4px 16px 6px; margin-top: 8px;
+  background: linear-gradient(160deg, rgba(42, 34, 96, 0.9), rgba(27, 22, 64, 0.9)); border: 1px solid #3b3280;
+}
+.mm-result.won { box-shadow: inset 0 0 0 1px rgba(255, 217, 138, 0.35); }
+.mm-result p { margin: 4px 0; }
+
+/* close fight / tiebreak / lock callouts */
+.mm-close {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 10px 0; padding: 10px 14px; border-radius: 14px;
+  background: linear-gradient(100deg, rgba(255, 196, 216, 0.18), rgba(255, 217, 138, 0.14)); border: 1px solid rgba(255, 196, 216, 0.55);
+}
+.mm-close b { font-size: 20px; color: var(--mm-mochi); }
+.mm-close span { flex: 1 1 200px; }
+.mm-rule, .mm-lock { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; padding: 8px 12px; border-radius: 12px; line-height: 1.5; }
+.mm-rule { background: rgba(185, 168, 255, 0.12); border: 1px solid rgba(185, 168, 255, 0.4); }
+.mm-lock { background: rgba(168, 230, 255, 0.1); border: 1px solid rgba(168, 230, 255, 0.45); color: #dff4ff; }
+.mm-lock > span:first-child, .mm-rule > span:first-child { font-size: 18px; line-height: 1.3; }
+
+/* big moments */
+.mm-moments { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 10px 0; }
+.mm-moment { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 14px; background: rgba(42, 34, 96, 0.7); border: 1px solid #3b3280; }
+.mm-moment .mm-mi { font-size: 22px; line-height: 1.2; }
+.mm-moment b { display: block; color: var(--mm-star); }
+.mm-moment span { font-size: 14px; }
+.mm-moment.side-0 { border-left: 4px solid var(--mm-you); }
+.mm-moment.side-1 { border-left: 4px solid var(--mm-foe); }
+
+/* night sky decoration */
+.mm-sky { position: absolute; inset: 0; pointer-events: none; overflow: hidden; border-radius: inherit; }
+.mm-sky i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: #fff; opacity: 0.7; animation: mm-twinkle 3s ease-in-out infinite; }
+.mm-sky .s1 { top: 14%; left: 8%; } .mm-sky .s2 { top: 30%; left: 86%; animation-delay: 0.6s; }
+.mm-sky .s3 { top: 70%; left: 14%; animation-delay: 1.2s; } .mm-sky .s4 { top: 12%; left: 62%; animation-delay: 1.8s; }
+.mm-sky .s5 { top: 78%; left: 80%; animation-delay: 2.4s; }
+.mm-sky .mm-moon {
+  width: 54px; height: 54px; top: -14px; right: -10px; left: auto; opacity: 0.9; animation: none;
+  background: radial-gradient(circle at 35% 35%, #fffaf0, var(--mm-moon) 55%, #f3dca8); box-shadow: 0 0 30px rgba(255, 244, 214, 0.45);
+}
+@keyframes mm-twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.95; } }
+@media (prefers-reduced-motion: reduce) { .mm-sky i { animation: none; } }
+
+/* end of run */
+.mm-over, .mm-card {
+  position: relative; text-align: center; border-radius: 22px; padding: 22px 16px 18px; margin: 10px 0 6px;
+  background: radial-gradient(120% 90% at 50% 0%, var(--mm-night2), var(--mm-night) 70%); border: 1px solid #3b3280;
+}
+.mm-card { text-align: left; }
+.mm-card h2 { margin-top: 0; position: relative; }
+.mm-over.won { border-color: rgba(255, 217, 138, 0.6); box-shadow: 0 0 40px rgba(255, 217, 138, 0.15); }
+.mm-over-hero { position: relative; display: flex; justify-content: center; }
+.mm-over-hero .hero-art { background: radial-gradient(circle, rgba(255, 244, 214, 0.18), transparent 70%); }
+.mm-over.won .mm-over-hero .hero-art svg { animation: mm-bounce 1.4s ease-in-out infinite; }
+@keyframes mm-bounce {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  40% { transform: translateY(-6px) scale(0.98, 1.03); }
+  60% { transform: translateY(0) scale(1.04, 0.95); }
+}
+@media (prefers-reduced-motion: reduce) { .mm-over.won .mm-over-hero .hero-art svg { animation: none; } }
+.mm-over-title { position: relative; font-size: 28px; margin: 6px 0 2px; color: var(--mm-moon); }
+.mm-over.won .mm-over-title { color: var(--mm-star); text-shadow: 0 0 18px rgba(255, 217, 138, 0.5); }
+.mm-over-sub { position: relative; margin: 0 0 10px; color: #cfc6f5; }
+.mm-pips { position: relative; display: flex; justify-content: center; gap: 6px; margin: 8px 0 12px; }
+.mm-pips i { width: 16px; height: 16px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.2); }
+.mm-pips i.on { background: radial-gradient(circle at 35% 35%, #fff, var(--mm-star)); border-color: var(--mm-star); box-shadow: 0 0 8px rgba(255, 217, 138, 0.6); }
+.mm-statgrid { position: relative; display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+.mm-statgrid div { background: rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 8px 4px; display: flex; flex-direction: column; align-items: center; }
+.mm-statgrid b { font-size: 22px; color: var(--mm-moon); font-variant-numeric: tabular-nums; }
+.mm-statgrid span { font-size: 12px; color: #bdb3e8; text-align: center; }
+.mm-reward {
+  position: relative; display: inline-flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 18px; border-radius: 999px;
+  background: rgba(255, 217, 138, 0.12); border: 1px solid rgba(255, 217, 138, 0.55);
+}
+.mm-reward.pending { opacity: 0.75; }
+.mm-dust { font-size: 26px; color: var(--mm-star); text-shadow: 0 0 12px rgba(255, 217, 138, 0.8); }
+.mm-reward-n { font-size: 24px; font-weight: 600; color: var(--mm-star); text-align: left; }
+.mm-reward-n small { font-size: 14px; }
+.mm-reward-t { font-size: 13px; color: #d8cfa8; text-align: left; }
+.mm-best { border-radius: 16px; padding: 12px 14px; margin: 12px 0; background: rgba(255, 196, 216, 0.08); border: 1px solid rgba(255, 196, 216, 0.4); }
+.mm-best-h { color: var(--mm-mochi); font-weight: 600; }
+.mm-best p { margin: 6px 0 10px; }
+.mm-actions button, .mm-card ~ .actions button, .actions:has([data-a="profile"]) button { min-height: 44px; }
+
+/* fight history list (tap a row for its replay) */
+.mm-hist, .mm-runs, .mm-lb { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mm-hist li > a, .mm-hist li > div {
+  display: grid; grid-template-columns: 48px 40px minmax(0, 1fr) 16px; align-items: center; gap: 8px; min-height: 48px; padding: 6px 12px;
+  border-radius: 12px; background: var(--panel); border: 1px solid var(--line); color: var(--text); text-decoration: none;
+}
+.mm-hist li > a:hover { border-color: var(--mm-lav); }
+.mm-hd { color: var(--muted); font-size: 13px; }
+.mm-hr { font-weight: 600; }
+.mm-ho { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-go { color: var(--mm-lav); }
+
+/* profile */
+.mm-runs li { padding: 10px 12px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+.mm-runs.best li { border-color: rgba(255, 217, 138, 0.6); background: rgba(255, 217, 138, 0.06); }
+.mm-run-main { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.mm-chipdust { margin-left: auto; color: var(--mm-star); font-weight: 600; }
+
+/* leaderboard */
+.mm-tabs { position: relative; display: inline-flex; gap: 4px; padding: 4px; border-radius: 999px; background: rgba(0, 0, 0, 0.25); }
+.mm-tab { min-height: 44px; min-width: 96px; border-radius: 999px; border: none; background: transparent; color: #cfc6f5; }
+.mm-tab.on { background: var(--mm-moon); color: #2a1f4a; font-weight: 600; }
+.mm-lb li {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 48px; padding: 6px 12px;
+  border-radius: 12px; background: var(--panel); border: 1px solid var(--line);
+}
+.mm-lb li.me { border-color: var(--mm-you); background: rgba(142, 201, 255, 0.08); }
+.mm-lb li.r1 { border-color: rgba(255, 217, 138, 0.7); }
+.mm-rank { text-align: center; font-weight: 600; font-size: 18px; color: var(--muted); }
+.mm-lbn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mm-lbs { font-weight: 600; color: var(--mm-star); font-variant-numeric: tabular-nums; }
+.mm-lbme { margin: 8px 0; }
+
+/* today's arena scouting chip (above the fight button) */
+.mm-scout { margin: 10px 0 0; border-radius: 14px; background: rgba(42, 34, 96, 0.75); border: 1px solid #3b3280; max-width: 720px; }
+.mm-scout summary { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; cursor: pointer; list-style: none; color: var(--text); }
+.mm-scout summary::-webkit-details-marker { display: none; }
+.mm-scout-ic { font-size: 20px; }
+.mm-scout-t { flex: 1; min-width: 0; }
+.mm-scout-t b { margin-left: 4px; color: var(--mm-star); }
+.mm-scout-bar { display: flex; width: 90px; height: 10px; border-radius: 6px; overflow: hidden; flex: none; }
+.mm-scout ul { list-style: none; margin: 0; padding: 0 14px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 12px; }
+.mm-scout li { display: flex; align-items: center; gap: 6px; }
+.mm-scout li b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.mm-scout p { margin: 6px 14px 10px; }
+.mm-scout .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.a-tank { background: var(--tank); } .a-burst { background: var(--burst); }
+.a-scaling { background: var(--scaling); } .a-control { background: var(--control); }
+
+@media (max-width: 520px) {
+  .mm-statgrid { grid-template-columns: repeat(2, 1fr); }
+  .mm-over-title { font-size: 24px; }
+  .mm-moments { grid-template-columns: 1fr; }
+  .mm-scout-bar { width: 56px; }
+  .mm-close .mm-btn, .mm-best .mm-btn { width: 100%; }
+}
+
+/* generated art */
+.brand-logo { display: block; width: min(320px, 80%); height: auto; margin: 4px auto 2px; filter: drop-shadow(0 4px 10px rgba(0,0,0,.35)); }
+.mm-banner { position: relative; width: min(420px, 100%); aspect-ratio: 16 / 9; margin: 0 auto -8px; background: center / contain no-repeat; display: flex; align-items: flex-end; justify-content: center; }
+.mm-banner .mm-over-title { margin: 0 0 21%; font-size: clamp(17px, 4.6vw, 24px); font-weight: 800; color: #3a2b33; text-shadow: 0 1px 0 #fff8ec, 0 0 6px rgba(255,248,236,.9); }
+.mm-over.won .mm-banner .mm-over-title, .mm-over.lost .mm-banner .mm-over-title { color: #3a2b33; text-shadow: 0 1px 0 #fff8ec, 0 0 6px rgba(255,248,236,.9); font-size: clamp(18px, 5.2vw, 26px); }
+.mm-dust-img { width: 40px; height: 40px; object-fit: contain; flex: none; }
+.mm-lbhead { display: block; width: 100%; max-height: 140px; object-fit: cover; border-radius: 14px; margin-bottom: 8px; }
+
+/* mute button: lives in the header next to the language switch */
+header .mute-btn { min-width: 44px; min-height: 44px; padding: 0 6px; font-size: 18px; line-height: 1; border-radius: 8px; }
+header .lang button, header .tut-open { min-height: 44px; }
+header { flex-wrap: nowrap; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+header .logo { white-space: nowrap; min-width: 0; }
+@media (max-width: 420px) {
+  header { gap: 4px; }
+  header .logo { font-size: 1.05rem; }
+  header .lang button { min-width: 44px; padding: 3px 4px; }
+}
+.mm-chipdust { display: inline-flex; align-items: center; gap: 4px; }
+.mm-chipdust img { width: 18px; height: 18px; object-fit: contain; }
+.mm-dustn { display: inline-flex; align-items: center; gap: 4px; }
+.mm-dustn img { width: 22px; height: 22px; object-fit: contain; }
+.mm-lbhead { height: auto; aspect-ratio: 1200 / 560; }
+.brand-logo { max-height: 150px; object-fit: contain; }
+/* phone-first: big touch targets on the fight / result / end pages, no sideways scroll */
+.mm-actions button, .mm-speed button, .mm-markpick button, #panel .heroes button.hero { min-height: 44px; }
+.log { overflow-wrap: anywhere; }
+.mm-result h2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.vs, .explain, .mm-moment, .mm-close, .mm-lock, .mm-rule { overflow-wrap: anywhere; }
+@media (max-width: 520px) {
+  .mm-hist li > a, .mm-hist li > div { grid-template-columns: 44px 36px minmax(0, 1fr) 14px; gap: 6px; padding: 6px 10px; }
+  .mm-tab { min-width: 0; flex: 1; }
+  .mm-tabs { display: flex; }
+}

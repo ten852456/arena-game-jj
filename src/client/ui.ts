@@ -2,8 +2,13 @@ import { autoArrange, randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, fits, matches, type Offer } from '../sim/grid';
 import { HEROES, HEROES_BY_ID } from '../sim/heroes';
-import { explain } from '../sim/explain';
+import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
+import { fatigueStart } from '../sim/combat';
 import { hashSeed } from '../sim/rng';
+import * as M from './views/meta';
+import * as P from './views/pages';
+import { music, sfx, voice } from './audio';
+import { IMAGES } from './assets';
 import * as R from '../sim/run';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Build, CombatEvent, CombatResult, Rot, SkillInstance } from '../sim/types';
@@ -22,7 +27,73 @@ export interface Stage {
   show(key: 'town' | 'combat'): void;
 }
 
-type View = 'town' | 'title' | 'shop' | 'fighting' | 'result' | 'lastchance' | 'mark' | 'over' | 'replay' | 'replayDone';
+type View =
+  | 'town' | 'title' | 'shop' | 'fighting' | 'result' | 'lastchance' | 'mark' | 'over' | 'replay' | 'replayDone'
+  | 'profile' | 'leaderboard';
+
+// ---------- GC2: fight names, end-of-run reward, profile / leaderboard / scouting state ----------
+/** damage events of the fight on screen that are thorns reflections (the thorns skill also uses src 'thorns') */
+let logRefl = new Set<CombatEvent>();
+/** run whose reward is being / has been asked for this session */
+const claimAsked = new Set<string>();
+const pendingClaim = new Set<string>();
+let profileData: M.Profile | null = null;
+let profileLoading = false;
+let lbPeriod: M.Period = 'season';
+let lbData: M.Leaderboard | null = null;
+let lbLoading = false;
+/** Opponent label: real name, or name · AI (tier). Never "You" (that is the player). */
+function oppLabel(o: { name: string; ai: boolean; tier?: unknown }) {
+  const nm = o.name && o.name !== 'คุณ' && o.name !== 'You' ? o.name : L('คู่ต่อสู้', 'Opponent');
+  if (!o.ai) return nm;
+  const tier = M.tierLabel(o.tier);
+  const base = /\bAI\b/.test(nm) ? nm : `${nm} · AI`;
+  return `${base}${tier ? ` (${tier})` : ''}`;
+}
+/** what the player is called in fight texts (the explanation, the log and the summary say "You") */
+const youName = () => L('คุณ', 'You');
+
+// ---------- audio cues (music per screen, one-shot voice/sfx when a screen is entered) ----------
+let shownView: View | null = null;
+/** the last fight of the run was close (winner ≤10% HP): the result screen says so out loud */
+let lastClose = false;
+let lastShopDay = 0;
+let welcomed = false;
+let heroPrompted = false;
+function onEnterView(v: View) {
+  if (v === 'town' || v === 'profile' || v === 'leaderboard') {
+    music('town');
+    if (!welcomed) {
+      welcomed = true;
+      voice('welcome');
+    }
+  } else if (v === 'title') {
+    music('town');
+    if (!runActive() && !heroPrompted) {
+      heroPrompted = true;
+      voice('choose_hero');
+    }
+  } else if (v === 'shop') {
+    music('shop');
+    if (run && run.day !== lastShopDay) {
+      voice(lastShopDay ? 'new_day' : 'shop_open');
+      lastShopDay = run.day;
+    }
+  } else if (v === 'result') {
+    if (last?.won) music('victory');
+    else music('shop');
+    if (lastClose) voice('close_fight');
+  } else if (v === 'lastchance') {
+    sfx('last_chance');
+    voice('last_chance');
+  } else if (v === 'over') {
+    if (run?.phase === 'won') {
+      music('victory');
+      sfx('champion');
+      voice(run.losses === 0 ? 'perfect' : 'champion');
+    } else music('town');
+  } else if (v === 'replay') music('battle');
+}
 
 const $panel = document.getElementById('panel') as HTMLElement;
 let scene!: CombatScene;
@@ -223,8 +294,14 @@ function streakText(s: number) {
 const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'lastchance' || run.phase === 'mark');
 
 function render() {
-  stage.show(view === 'town' ? 'town' : 'combat');
+  if (view !== shownView) {
+    shownView = view;
+    onEnterView(view);
+  }
+  stage.show(view === 'town' || view === 'profile' || view === 'leaderboard' ? 'town' : 'combat');
   const html = {
+    profile: renderProfile,
+    leaderboard: renderLeaderboard,
     town: renderTown,
     title: renderTitle,
     shop: renderShop,
@@ -239,6 +316,7 @@ function render() {
   hideTip();
   $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML();
   toast = '';
+  if (view === 'shop') mountScout();
   playBlockAnims();
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'shop' && sel !== null) highlightFor('g:' + sel);
@@ -263,7 +341,10 @@ function renderTown() {
         body += L(`<p>รอบที่เล่นค้างไว้: <b>${HEROES_BY_ID[r.hero].name}</b> · วันที่ ${r.day} · ชนะ ${r.wins}/${R.WIN_TARGET} · เลือด ${r.hp}/${R.START_HP}</p>`, `<p>Run in progress: <b>${HEROES_BY_ID[r.hero].name}</b> · day ${r.day} · wins ${r.wins}/${R.WIN_TARGET} · HP ${r.hp}/${R.START_HP}</p>`);
       }
       body += `<div class="actions"><button class="primary" data-a="enterArena">${runActive() ? L('เล่นต่อ', 'Continue') : L('เข้าสนามประลอง', 'Enter the arena')}</button></div>`;
+    } else if (b.id === 'board') {
+      body += `<div class="actions mm-actions"><button class="primary" data-a="leaderboard">🏆 ${L('กระดานผู้นำ', 'Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
+      body += `<div class="actions mm-actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button></div>`;
       body += `<p class="muted">${L(`ฮีโร่ทั้งหมด ${HEROES.length} ตัว · แต่ละรอบสุ่มให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย`, `${HEROES.length} heroes in all · each run offers ${R.HERO_CHOICES} from different styles`)}</p><div class="heroes">${HEROES.map(
         (h) => `<div class="card arch-${h.arch}">${heroArt(h.id, 'small')}<div class="nm">${h.name}</div><div class="tag">${ARCH_NAME[h.arch]}</div>
           <div class="desc"><b>${L('วิธีเล่น', 'How to play')}:</b> ${h.style}</div>
@@ -289,6 +370,7 @@ function renderTitle() {
     : '';
   return `
   <div class="actions"><button class="ghost" data-a="town">← ${L('กลับเมือง', 'Back to town')}</button></div>
+  <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="1024" height="504">
   <h2>${L('เลือกฮีโร่', 'Pick a hero')}</h2>
   <p class="muted">${L(`ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือดเท่ากับเลขวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`, `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs HP equal to the day number · you fight other players’ builds from the same day`)}</p>
   <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
@@ -414,37 +496,32 @@ function concedeHTML() {
 
 function renderFighting() {
   return `
-  <p>${esc(names[0])} <span class="muted">vs</span> ${esc(names[1])} ${view === 'fighting' ? `<span class="stats-right">${concedeHTML()}</span>` : ''}</p>
-  <div class="actions">
+  <p class="mm-versus"><span class="who s0">${esc(names[0])}</span> <span class="muted">vs</span> <span class="who s1">${esc(names[1])}</span> ${view === 'fighting' ? `<span class="stats-right">${concedeHTML()}</span>` : ''}</p>
+  <div class="actions mm-speed">
     ${[1, 2, 4].map((s) => `<button class="small ${scene.speed === s ? 'on' : ''}" data-a="speed" data-i="${s}">${s}x</button>`).join('')}
     <button class="small" data-a="skip">${L('ข้าม', 'Skip')}</button>
   </div>
   <p class="muted small glossary">${L(`<b>พลังโจมตี</b> = ดาเมจเพิ่มให้ทุกการโจมตีของทุก skill · <b>รวมพลัง</b> = การโจมตีครั้งถัดไป 1 ครั้งแรงขึ้น ·
     <b>หนาม</b> = สะท้อนดาเมจทุกครั้งที่โดนตี · <b>ใจเหล็ก</b> = โดนแช่แข็ง/ช้าน้อยลง 60% · <b>ไฟ</b> = เสียเลือดทุกวิ ไม่สนโล่ ·
-    <b>แช่แข็ง</b> = skill ทุกตัวหยุดนับคูลดาวน์ · <b>ช้า</b> = คูลดาวน์ทุกตัวเดินช้าลง`, `<b>Power</b> = extra damage on every hit of every skill · <b>Charge</b> = your next hit is stronger ·
+    <b>แช่แข็ง</b> = skill ทุกตัวหยุดนับคูลดาวน์ · <b>ช้า</b> = คูลดาวน์ทุกตัวเดินช้าลง · <b>เชน ⚡</b> = บล็อกที่ติดกันสั่งกันทำงานต่อทันที`, `<b>Power</b> = extra damage on every hit of every skill · <b>Charge</b> = your next hit is stronger ·
     <b>Thorns</b> = reflect damage each time you are hit · <b>Iron Will</b> = freeze/slow on you 60% weaker · <b>Burn</b> = lose HP every second, ignores shields ·
-    <b>Freeze</b> = all cooldowns stop · <b>Slow</b> = all cooldowns run slower`)}</p>
+    <b>Freeze</b> = all cooldowns stop · <b>Slow</b> = all cooldowns run slower · <b>Chain ⚡</b> = touching blocks fire each other right away`)}</p>
   <ol id="log" class="log"></ol>`;
 }
 
 const PILES = (): { key: keyof BlockStat; name: string; unit: string; help: string }[] => [
-  { key: 'd', name: L('ดาเมจ', 'Damage'), unit: '', help: L('ดาเมจที่แต่ละ skill ทำ (รวมส่วนที่โล่ศัตรูกันไว้)', 'Damage each skill dealt (including what enemy shields blocked)') },
+  { key: 'd', name: L('ดาเมจ', 'Damage'), unit: '', help: L('ดาเมจที่แต่ละ skill ทำ (รวมส่วนที่โล่ศัตรูกันไว้ ไฟ และส่วนแบ่งหนามที่สะท้อน)', 'Damage each skill dealt (including what enemy shields blocked, burn, and its share of thorns reflection)') },
   { key: 'bf', name: L('บัฟ', 'Buffs'), unit: '', help: L('ดาเมจที่บัฟของ skill นั้น (พลังโจมตี รวมพลัง) เพิ่มให้การโจมตีของทุก skill', 'Damage that skill’s buffs (power, charge) added to every skill’s hits') },
   { key: 'h', name: L('ฟื้นเลือด', 'Healing'), unit: '', help: L('เลือดที่ฟื้นได้จริง', 'HP actually healed') },
   { key: 'sh', name: L('โล่', 'Shield'), unit: '', help: L('โล่ที่ได้รับ', 'Shield gained') },
-  { key: 'fz', name: L('แช่แข็ง', 'Freeze'), unit: L(' วิ', 's'), help: L('เวลาที่ศัตรูถูกแช่แข็ง', 'Time the enemy spent frozen') },
+  { key: 'fz', name: L('ควบคุม', 'Control'), unit: L(' วิ', 's'), help: L('เวลาที่ศัตรูถูกแช่แข็งหรือถ่วงคูลดาวน์', 'Time the enemy spent frozen or with cooldowns pushed back') },
 ];
 
 const YOU = '#3987e5';
 const FOE = '#d95926';
 
-/**
- * Post-fight "You vs Enemy": mirrored bars per kind of value (you left, enemy right, same scale per row),
- * then where the damage each side took came from, as ranked bars. Hover any bar for the skills behind it.
- */
-/** C6: Thai explanation of the fight (headline, facts, why) from side `me`'s point of view. */
-function explainHTML(r: CombatResult, builds: [Build, Build], me: 0 | 1, names2: [string, string]) {
-  const x = explain(r, builds, me, names2);
+/** Explanation of the fight (headline, facts, why) from side `me`'s point of view. */
+function explainHTML(r: CombatResult, x: Explanation, me: 0 | 1) {
   const won = r.winner === me;
   return `<div class="explain">
     <p><b>${esc(x.headline)}</b></p>
@@ -453,19 +530,28 @@ function explainHTML(r: CombatResult, builds: [Build, Build], me: 0 | 1, names2:
   </div>`;
 }
 
+/**
+ * Post-fight "You vs Enemy": mirrored bars per kind of value (you left, enemy right, same scale per row),
+ * then where the damage each side took came from, as ranked bars. Hover any bar for the skills behind it.
+ */
 function vsSummary(r: CombatResult, builds: [Build, Build], names2: [string, string]) {
   const fmt = (key: keyof BlockStat, v: number) => (key === 'fz' ? (v / 10).toFixed(1) : String(v));
+  // damage per skill with thorns reflection split fairly (the sim credits it all to the oldest thorns stack)
+  const dmg = [skillDamage(r, builds[0], 0), skillDamage(r, builds[1], 1)];
   const breakdown = (side: 0 | 1, key: keyof BlockStat) => {
-    const list = builds[side].skills
-      .map((k, i) => ({ name: SKILLS[k.id].name, v: r.stats[side][i]?.[key] ?? 0 }))
+    const list = (key === 'd'
+      ? dmg[side].map((x) => ({ name: x.name, v: x.total }))
+      : builds[side].skills.map((k, i) => ({ name: nodeOf(k).name, v: r.stats[side][i]?.[key] ?? 0 })))
       .filter((x) => x.v > 0)
       .sort((a, b) => b.v - a.v);
     return list.length
-      ? list.map((x) => `<div class="tt-row"><span>${x.name}</span><b>${fmt(key, x.v)}</b></div>`).join('')
+      ? list.map((x) => `<div class="tt-row"><span>${esc(x.name)}</span><b>${fmt(key, x.v)}</b></div>`).join('')
       : `<div class="muted">${L('ไม่มี', 'None')}</div>`;
   };
   const rows = PILES().map((pile) => {
-    const tot = [0, 1].map((side) => r.stats[side].reduce((n, st) => n + (st?.[pile.key] ?? 0), 0));
+    const tot = ([0, 1] as const).map((side) =>
+      pile.key === 'd' ? dmg[side].reduce((n, x) => n + x.total, 0) : r.stats[side].reduce((n, st) => n + (st?.[pile.key] ?? 0), 0),
+    );
     if (!tot[0] && !tot[1]) return '';
     const max = Math.max(tot[0], tot[1]);
     const half = (side: 0 | 1) => {
@@ -481,12 +567,11 @@ function vsSummary(r: CombatResult, builds: [Build, Build], names2: [string, str
   // where the damage each side TOOK came from: the other side's skills (burn and thorns included) + fatigue
   const fatigue = [0, 0];
   for (const e of r.events) if (e.type === 'damage' && e.src === 'fatigue') fatigue[e.side] += e.amount + e.blocked;
+  const fStart = (fatigueStart(r.day) / 10).toFixed(0);
   const tookFrom = (side: 0 | 1) => {
     const att = (1 - side) as 0 | 1;
-    const list = builds[att].skills
-      .map((k, i) => ({ name: SKILLS[k.id].name, v: r.stats[att][i]?.d ?? 0, fatigue: false }))
-      .filter((x) => x.v > 0);
-    if (fatigue[side]) list.push({ name: L('เหนื่อยล้า (หลัง 30 วิ)', 'Fatigue (after 30s)'), v: fatigue[side], fatigue: true });
+    const list = dmg[att].map((x) => ({ name: x.name, v: x.total, fatigue: false })).filter((x) => x.v > 0);
+    if (fatigue[side]) list.push({ name: L(`เหนื่อยล้า (หลัง ${fStart} วิ)`, `Fatigue (after ${fStart}s)`), v: fatigue[side], fatigue: true });
     list.sort((a, b) => b.v - a.v);
     const total = list.reduce((n, x) => n + x.v, 0);
     if (!total) return `<p class="muted small">${L('ไม่โดนดาเมจเลย', 'Took no damage')}</p>`;
@@ -498,7 +583,7 @@ function vsSummary(r: CombatResult, builds: [Build, Build], names2: [string, str
       .map((x) => {
         const pct = Math.round((x.v / total) * 100);
         const fill = x.fatigue ? '#6b7480' : color;
-        return `<div class="rank"><span class="rank-n">${x.name}</span>
+        return `<div class="rank"><span class="rank-n">${esc(x.name)}</span>
           <div class="rank-track"><i style="width:${(x.v / top[0].v) * 100}%;background:${fill}"></i></div>
           <span class="rank-v">${x.v} <small class="muted">${pct}%</small></span></div>`;
       })
@@ -506,29 +591,31 @@ function vsSummary(r: CombatResult, builds: [Build, Build], names2: [string, str
   };
 
   return `<div class="vs">
-    <div class="vs-head"><span style="color:${YOU}">■</span> <b>${esc(names2[0])}</b><span class="muted">vs</span><b>${esc(names2[1])}</b> <span style="color:${FOE}">■</span></div>
+    <div class="vs-head"><span style="color:${YOU}">■</span> <b class="who s0">${esc(names2[0])}</b><span class="muted">vs</span><b class="who s1">${esc(names2[1])}</b> <span style="color:${FOE}">■</span></div>
     ${rows}
     <div class="two took">
-      <div><h4>${L(`ดาเมจที่ ${esc(names2[0])} โดน มาจาก`, `Where ${esc(names2[0])}’s damage taken came from`)}</h4>${tookFrom(0)}</div>
-      <div><h4>${L(`ดาเมจที่ ${esc(names2[1])} โดน มาจาก`, `Where ${esc(names2[1])}’s damage taken came from`)}</h4>${tookFrom(1)}</div>
+      <div><h4>${L(`ดาเมจที่ ${esc(names2[0])} โดน มาจาก`, `Where ${names2[0] === 'You' ? 'you' : esc(names2[0])} took damage from`)}</h4>${tookFrom(0)}</div>
+      <div><h4>${L(`ดาเมจที่ ${esc(names2[1])} โดน มาจาก`, `Where ${names2[1] === 'You' ? 'you' : esc(names2[1])} took damage from`)}</h4>${tookFrom(1)}</div>
     </div>
     <p class="muted small">${L('ชี้เมาส์ (หรือแตะ) ที่แถบเพื่อดูว่ามาจาก skill ไหน · ดาเมจรวมส่วนที่โล่กันไว้', 'Hover (or tap) a bar to see which skills it came from · damage includes what shields blocked')}</p>
-    <details><summary>${L(`ดูราย skill ของ ${esc(names2[0])}`, `Per-skill stats for ${esc(names2[0])}`)}</summary>${statsTable(builds[0], r.stats[0])}</details>
-    <details><summary>${L(`ดูราย skill ของ ${esc(names2[1])}`, `Per-skill stats for ${esc(names2[1])}`)}</summary>${statsTable(builds[1], r.stats[1])}</details>
+    <details><summary>${L(`ดูราย skill ของ ${esc(names2[0])}`, `Per-skill stats: ${esc(names2[0])}`)}</summary>${statsTable(builds[0], r.stats[0], dmg[0])}</details>
+    <details><summary>${L(`ดูราย skill ของ ${esc(names2[1])}`, `Per-skill stats: ${esc(names2[1])}`)}</summary>${statsTable(builds[1], r.stats[1], dmg[1])}</details>
   </div>`;
 }
 
-/** Per-skill breakdown table (the table view of the summary). */
-function statsTable(b: Build, stats: BlockStat[]) {
-  const rows = b.skills.map((k, i) => ({ k, st: stats[i] })).filter((x) => x.st);
+/** Per-skill breakdown table (the table view of the summary). Placed blocks only; damage = own hits + burn + fair thorns share. */
+function statsTable(b: Build, stats0: BlockStat[], dmg: ReturnType<typeof skillDamage>) {
+  const rows = b.skills
+    .map((k, i) => ({ k, st: stats0[i] ? { ...stats0[i], d: dmg[i]?.total ?? stats0[i].d } : stats0[i] }))
+    .filter((x) => x.st && x.k.x >= 0);
   const total = rows.reduce((n, x) => n + x.st.d, 0);
   const has = (key: keyof BlockStat) => rows.some((x) => x.st[key] > 0);
   rows.sort((p, q) => q.st.d - p.st.d || q.st.h + q.st.sh - (p.st.h + p.st.sh));
   const top = rows[0];
   const headline =
     top && total > 0
-      ? L(`<p class="statline"><b>${SKILLS[top.k.id].name}</b> ทำดาเมจ <b>${Math.round((top.st.d / total) * 100)}%</b> ของทั้งหมด (${top.st.d} จาก ${total})</p>`, `<p class="statline"><b>${SKILLS[top.k.id].name}</b> dealt <b>${Math.round((top.st.d / total) * 100)}%</b> of all damage (${top.st.d} of ${total})</p>`)
-      : `<p class="statline muted">${L('ยังไม่ได้ทำดาเมจเลย', 'No damage dealt yet')}</p>`;
+      ? L(`<p class="statline"><b>${nodeOf(top.k).name}</b> ทำดาเมจ <b>${Math.round((top.st.d / total) * 100)}%</b> ของทั้งหมด (${top.st.d} จาก ${total})</p>`, `<p class="statline"><b>${nodeOf(top.k).name}</b> dealt <b>${Math.round((top.st.d / total) * 100)}%</b> of all damage (${top.st.d} of ${total})</p>`)
+      : `<p class="statline muted">${L('ยังไม่ได้ทำดาเมจเลย', 'No damage dealt')}</p>`;
   const body = rows
     .map(({ k, st }) => {
       const pct = total ? Math.round((st.d / total) * 100) : 0;
@@ -546,26 +633,73 @@ function statsTable(b: Build, stats: BlockStat[]) {
     .join('');
   return `${headline}<div class="statwrap"><table class="stats-t">
     <tr><th>skill</th><th>${L('ใช้ <small>(+ถูกสั่ง)</small>', 'Uses <small>(+fired)</small>')}</th><th>${L('ดาเมจ', 'Damage')}</th>
-      ${has('bd') ? `<th>${L('จากโบนัสติดกัน', 'From connect bonuses')}</th>` : ''}${has('bf') ? `<th>${L('บัฟเพิ่มดาเมจ', 'Buff damage')}</th>` : ''}${has('h') ? `<th>${L('ฟื้นเลือด', 'Healing')}</th>` : ''}${has('sh') ? `<th>${L('โล่', 'Shield')}</th>` : ''}${has('fz') ? `<th>${L('แช่แข็ง', 'Freeze')}</th>` : ''}</tr>
+      ${has('bd') ? `<th>${L('จากโบนัสติดกัน', 'From connect bonuses')}</th>` : ''}${has('bf') ? `<th>${L('บัฟเพิ่มดาเมจ', 'Buff damage')}</th>` : ''}${has('h') ? `<th>${L('ฟื้นเลือด', 'Healing')}</th>` : ''}${has('sh') ? `<th>${L('โล่', 'Shield')}</th>` : ''}${has('fz') ? `<th>${L('ควบคุม', 'Control')}</th>` : ''}</tr>
     ${body}</table></div>`;
+}
+
+/** Reward for a finished run from the server (asked once per run), plus the local history entry. */
+function claimReward(r: R.RunState) {
+  if (claimAsked.has(r.id) || M.claimed(r.id)) return;
+  claimAsked.add(r.id);
+  pendingClaim.add(r.id);
+  const best = M.bestNote(r.id);
+  const summary: M.RunSummary = {
+    runId: r.id, hero: r.hero, wins: r.wins, losses: r.losses, days: r.log.length, conceded: !!r.conceded, at: Date.now(),
+    bestFightId: best?.fightId, bestText: best?.text,
+  };
+  M.saveLocalRun(summary);
+  void M.finishRun({
+    runId: r.id, playerId: M.playerId(), name: playerName(), hero: r.hero, wins: r.wins, losses: r.losses, day: r.day,
+    rating: r.rating, conceded: !!r.conceded, won: r.phase === 'won', build: R.toBuild(r),
+  }).then((res) => {
+    pendingClaim.delete(r.id);
+    if (res) {
+      if (res.stardust > 0) {
+        // after the champion / run-over cue has had its moment
+        setTimeout(() => {
+          sfx('stardust');
+          voice('stardust');
+        }, r.phase === 'won' ? 2600 : 600);
+      }
+      M.rememberClaim(r.id, res);
+      M.saveLocalRun({ ...summary, stardust: res.stardust });
+    } else M.rememberClaim(r.id, { none: true });
+    if (view === 'over') render();
+  });
+}
+
+/** Remember the memorable bits of a fight of this run (end-of-run page, local history). */
+function noteFight(r: R.RunState, f: FightResponse, x: Explanation, day: number) {
+  const m = x.moments.find((y) => y.kind === 'comeback') ?? x.moments.find((y) => y.kind === 'chain') ?? x.moments.find((y) => y.kind === 'hit');
+  const comeback = x.moments.some((y) => y.kind === 'comeback' && y.side === 0);
+  const score = (f.won ? 50 : 0) + (x.close ? 30 : 0) + (comeback ? 40 : 0) + day;
+  const text = `${f.won ? L('ชนะ', 'Beat') : L('แพ้', 'Lost to')} ${names[1]}${x.close ? L(' แบบสูสี', ' in a close fight') : ''}${m ? ` · ${m.title} ${m.text}` : ''}`;
+  M.addFightNote(r.id, { day, won: f.won, opp: names[1], fightId: f.fightId, close: x.close, score, text });
 }
 
 function renderResult() {
   const f = last!;
   const r = run!;
   const link = f.fightId ? `${location.origin}${location.pathname}?replay=${f.fightId}` : '';
+  const oname = names[1];
+  const x = lastBuild ? explain(f.result, [lastBuild, f.opponent.build], 0, [youName(), oname], { drawIsLoss: true }) : null;
+  const draw = f.result.winner === -1;
   return `
-  <h2 class="${f.won ? 'win' : 'lose'}">${f.won ? L('ชนะ', 'Victory') : L('แพ้', 'Defeat')} · ${L('วันที่', 'day')} ${lastDay}</h2>
-  <p>${L('คู่ต่อสู้', 'Opponent')}: <b>${esc(f.opponent.name)}</b>${f.opponent.ai ? ' <span class="mark">AI</span>' : ''} · ${HEROES_BY_ID[f.opponent.build.hero].name}
-   ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
-  <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `${r.wins}/${R.WIN_TARGET} wins`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
+  <div class="mm-result ${f.won ? 'won' : 'lost'}">
+    <h2 class="${f.won ? 'win' : 'lose'}">${f.won ? L('ชนะ', 'Victory') : draw ? L('เสมอ (นับเป็นแพ้)', 'Draw (counts as a loss)') : L('แพ้', 'Defeat')} · ${L('วันที่', 'day')} ${lastDay}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close fight!')}</span>` : ''}</h2>
+    <p>${L('คู่ต่อสู้', 'Opponent')}: <b class="who s1">${esc(oname)}</b> · ${HEROES_BY_ID[f.opponent.build.hero].name}
+     ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
+    <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `${r.wins}/${R.WIN_TARGET} wins`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
+  </div>
+  ${x ? P.fightHighlights(x, { replayAction: 'rewatch' }) : ''}
+  <div class="actions mm-actions"><button class="primary" data-a="next">${L('ต่อไป', 'Next')}</button>${x && !x.close ? `<button data-a="rewatch">▶ ${L('ดูไฟต์นี้อีกครั้ง', 'Watch this fight again')}</button>` : ''}</div>
   <h3>${L('สรุปการสู้', 'Fight summary')}</h3>
-  ${lastBuild ? explainHTML(f.result, [lastBuild, f.opponent.build], 0, [L('คุณ', 'You'), f.opponent.name]) : ''}
-  ${lastBuild ? vsSummary(f.result, [lastBuild, f.opponent.build], [L('คุณ', 'You'), f.opponent.name]) : ''}
-  <h3>${L('build ของคู่ต่อสู้', 'Opponent’s build')}</h3>
+  ${x ? explainHTML(f.result, x, 0) : ''}
+  ${lastBuild ? vsSummary(f.result, [lastBuild, f.opponent.build], [youName(), oname]) : ''}
+  <h3>${L(`build ของ ${esc(oname)}`, `${esc(oname)}’s build`)}</h3>
   ${buildList(f.opponent.build)}
   ${link ? `<p class="muted">${L('ลิงก์ replay', 'Replay link')}: <input class="link" readonly value="${esc(link)}" onclick="this.select()"></p>` : ''}
-  <div class="actions"><button class="primary" data-a="next">${L('ต่อไป', 'Next')}</button></div>`;
+  <div class="actions mm-actions"><button class="primary" data-a="next">${L('ต่อไป', 'Next')}</button></div>`;
 }
 
 function renderLastChance() {
@@ -575,7 +709,7 @@ function renderLastChance() {
   <p>${L('คุณเข้าสู่สถานะ <b>กึ่งวิญญาณ</b>: กลับมาด้วยเลือด 1 แพ้อีกครั้งคือจบรอบ เลือกพลังหนึ่งอย่าง', 'You become a <b>half-ghost</b>: you come back with 1 HP and the next loss ends the run. Pick one power')}</p>
   <div class="heroes">
     <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for builds with all the pieces but low levels')}</span></button>
-    <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Roll one of four marks, then put it on a skill')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for builds with one clear main skill')}</span></button>
+    <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill ในตาราง', 'Roll one of four marks, then put it on a skill on your grid')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for builds with one clear main skill')}</span></button>
     <button class="hero" data-a="lc" data-i="supply"><b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${L('เงิน 8 และตาราง +1 แถวถาวร', '8 gold and +1 grid row for good')}</span><span class="muted">${L('เหมาะกับ build ที่ยังขาดชิ้นสำคัญ', 'Good for builds still missing a key piece')}</span></button>
   </div>`;
 }
@@ -585,8 +719,8 @@ function renderMark() {
   const m = R.MARK_INFO[r.pendingMark!];
   return `
   <h2>${L('ได้ตรา', 'Mark')}: ${m.name}</h2>
-  <p>${m.desc} · ${L('เลือก skill ที่จะใส่ตรา', 'pick the skill to mark')}</p>
-  <ol class="build">${r.skills
+  <p>${m.desc} · ${L('เลือก skill ในตารางที่จะใส่ตรา', 'pick the skill on your grid to mark')}</p>
+  <ol class="build mm-markpick">${r.skills
     .map((k, i) => (k.x < 0 ? '' : `<li class="arch-${SKILLS[k.id].arch}">${skillLine(k)}<span class="btns"><button data-a="mark" data-i="${i}">${L('ใส่ตรานี้', 'Mark this')}</button></span></li>`))
     .join('')}</ol>
   <div class="actions"><button class="ghost" data-a="mark" data-i="-1">${L('ไม่ใส่', 'Skip')}</button></div>`;
@@ -596,69 +730,147 @@ function renderOver() {
   const r = run!;
   scene.idle(r.hero, R.lookOf(r));
   const won = r.phase === 'won';
-  return `
-  <h2 class="${won ? 'win' : 'lose'}">${won ? L(`ชนะครบ ${R.WIN_TARGET}!`, `All ${R.WIN_TARGET} wins!`) : r.conceded ? L('จบรอบ (ยอมแพ้)', 'Run over (gave up)') : L('จบรอบ', 'Run over')}</h2>
-  <p>${HEROES_BY_ID[r.hero].name} · ${L(`ชนะ ${r.wins} แพ้ ${r.losses} · ${r.log.length} วัน · คะแนน build ${r.rating}`, `${r.wins} wins, ${r.losses} losses · ${r.log.length} days · build rating ${r.rating}`)}</p>
-  <h3>${L('build สุดท้าย', 'Final build')}</h3>
-  ${buildList(R.toBuild(r))}
-  <h3>${L('ประวัติ', 'History')}</h3>
-  <table class="hist"><tr><th>${L('วัน', 'Day')}</th><th>${L('ผล', 'Result')}</th><th>${L('คู่ต่อสู้', 'Opponent')}</th><th></th></tr>
-  ${r.log
-    .map(
-      (l) => `<tr><td>${l.day}</td><td class="${l.won ? 'win' : 'lose'}">${l.won ? L('ชนะ', 'Win') : L('แพ้', 'Loss')}</td>
-      <td>${esc(l.opp)}${l.ai ? ' (AI)' : ''}</td><td>${l.fightId ? `<a href="?replay=${l.fightId}">replay</a>` : ''}</td></tr>`,
-    )
-    .join('')}</table>
-  <div class="actions"><button class="primary" data-a="home">${L('เล่นอีกรอบ', 'Play again')}</button><button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button></div>`;
+  claimReward(r);
+  const c = M.claimed(r.id);
+  const reward = c && 'stardust' in c ? c : null;
+  return P.runOverPage({
+    won, conceded: !!r.conceded, hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), wins: r.wins, losses: r.losses,
+    winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, buildHTML: buildList(R.toBuild(r)),
+    historyHTML: P.historyList(r.log, M.fightNotes(r.id)), best: M.bestNote(r.id), reward: pendingClaim.has(r.id) ? undefined : reward,
+  });
+}
+
+/** Display names of a replay: "You" for your own fights, and never two identical names. */
+function replayNames(f: ReplayRecord): [string, string] {
+  const mine = !!run?.log.some((l) => l.fightId === f.id) || M.localHistory().some((h) => h.bestFightId === f.id) || replayIsMine(f.id);
+  const a = mine ? youName() : f.a.name || L('ผู้เล่น', 'Player');
+  const b = oppLabel({ name: f.b.name, ai: f.b.ai, tier: (f.b as { tier?: unknown }).tier });
+  return b === a ? [`${a} (${L('ซ้าย', 'left')})`, `${b} (${L('ขวา', 'right')})`] : [a, b];
+}
+/** fight ids of this browser's own fights (any run), remembered so old replays still say "You" */
+const MINE_KEY = 'mochi.myFights';
+function replayIsMine(id: string) {
+  return (fetchStore(MINE_KEY) ?? '').split(',').includes(id);
+}
+function rememberMine(id?: string) {
+  if (!id) return;
+  const list = (fetchStore(MINE_KEY) ?? '').split(',').filter(Boolean);
+  if (!list.includes(id)) store(MINE_KEY, [id, ...list].slice(0, 200).join(','));
 }
 
 function renderReplayDone() {
   const f = replay!;
+  const x = replayResult ? explain(replayResult, [f.a.build, f.b.build], 0, names) : null;
   return `
-  <h2>Replay · ${L('วันที่', 'day')} ${f.day}</h2>
-  <div class="two">
-    <div><h3>${esc(f.a.name)} · ${HEROES_BY_ID[f.a.build.hero].name}</h3>${buildList(f.a.build)}</div>
-    <div><h3>${esc(f.b.name)}${f.b.ai ? ' (AI)' : ''} · ${HEROES_BY_ID[f.b.build.hero].name}</h3>${buildList(f.b.build)}</div>
-  </div>
+  <h2>Replay · ${L('วันที่', 'day')} ${f.day}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close fight!')}</span>` : ''}</h2>
+  ${x ? P.fightHighlights(x, { replayAction: 'replayAgain' }) : ''}
+  <div class="actions mm-actions"><button data-a="replayAgain">▶ ${L('ดูอีกครั้ง', 'Watch again')}</button><button class="primary" data-a="leaveReplay">${L('เล่นเกมของคุณ', 'Play your own game')}</button></div>
   <h3>${L('สรุปการสู้', 'Fight summary')}</h3>
-  ${replayResult ? explainHTML(replayResult, [f.a.build, f.b.build], 0, [f.a.name, f.b.name]) : ''}
-  ${replayResult ? vsSummary(replayResult, [f.a.build, f.b.build], [f.a.name, f.b.name]) : ''}
-  <div class="actions"><button data-a="replayAgain">${L('ดูอีกครั้ง', 'Watch again')}</button><button class="primary" data-a="leaveReplay">${L('เล่นเกมของคุณ', 'Play your own game')}</button></div>`;
+  ${replayResult && x ? explainHTML(replayResult, x, 0) : ''}
+  ${replayResult ? vsSummary(replayResult, [f.a.build, f.b.build], names) : ''}
+  <div class="two">
+    <div><h3><span class="who s0">${esc(names[0])}</span> · ${HEROES_BY_ID[f.a.build.hero].name}</h3>${buildList(f.a.build)}</div>
+    <div><h3><span class="who s1">${esc(names[1])}</span> · ${HEROES_BY_ID[f.b.build.hero].name}</h3>${buildList(f.b.build)}</div>
+  </div>`;
+}
+
+function renderProfile() {
+  if (!profileData && !profileLoading) {
+    profileLoading = true;
+    void M.getProfile(M.playerId()).then((p) => {
+      profileLoading = false;
+      // the server may not have profiles yet: fall back to this browser's finished runs
+      profileData = p && (p.runs || p.last.length) ? p : M.localProfile();
+      if (p && !p.runs && !p.last.length) profileData.name = p.name;
+      if (view === 'profile') render();
+    });
+  }
+  return P.profilePage(profileData, M.serverName() ?? playerName(), profileLoading);
+}
+
+function renderLeaderboard() {
+  if (!lbData && !lbLoading) {
+    lbLoading = true;
+    const period = lbPeriod;
+    void M.getLeaderboard(period).then((lb) => {
+      if (period !== lbPeriod) return;
+      lbLoading = false;
+      lbData = lb ?? { entries: [] };
+      if (view === 'leaderboard') render();
+    });
+  }
+  return P.leaderboardPage(lbPeriod, lbData && lbData.entries.length ? lbData : null, lbLoading, M.localHistory());
+}
+
+/** Today's-arena scouting chip, placed above the fight button of the shop (the shop markup itself is not touched). */
+function mountScout() {
+  const r = run;
+  const btn = $panel.querySelector('[data-a="fight"]');
+  const row = btn?.closest('.actions');
+  if (!r || !row) return;
+  const slot = document.createElement('div');
+  slot.className = 'mm-scout-slot';
+  row.before(slot);
+  const day = r.day;
+  void M.scout(day, r.rating, r.id).then((s) => {
+    if (view === 'shop' && run?.day === day && slot.isConnected) slot.innerHTML = P.scoutChip(s, day);
+  });
 }
 
 // ---------- combat log ----------
+/** builds of the fight on screen [left, right] (for skill variant names in the log) */
+let logBuilds: [Build, Build] | null = null;
+/** start a new combat log: remember the builds and which damage events are thorns reflections */
+function beginLog(result: CombatResult, builds: [Build, Build]) {
+  logBuilds = builds;
+  logRefl = reflectEvents(result.events);
+}
 function describe(e: CombatEvent): string | null {
-  const who = (s: number) => esc(names[s]);
+  // each side in its own colour, so "who lost HP" is never ambiguous
+  const who = (s: number) => `<span class="who s${s}">${esc(names[s])}</span>`;
+  const isYou = (s: number) => names[s] === youName();
+  // English verbs agree with "You" (you lose / Mochi-12 loses)
+  const v = (s: number, you: string, other: string) => (isYou(s) ? you : other);
+  const varName = (side: number, id: string) => {
+    const k = logBuilds?.[side]?.skills.find((x) => x.id === id && x.x >= 0);
+    return k ? nodeOf(k).name : SKILLS[id]?.name ?? id;
+  };
+  const sp = '&nbsp;&nbsp;';
   switch (e.type) {
     case 'cast':
-      return `${e.chain ? '&nbsp;&nbsp;⚡ ' : ''}${who(e.side)} ${L('ใช้', 'uses')} <b>${SKILLS[e.skill].name}</b> Lv${e.lv}${e.chain ? ` <span class="combo">${L('เชน', 'chain')} x${e.chain + 1}</span>` : ''}${e.echo ? L(' (ตีซ้ำ)', ' (echo)') : ''}`;
+      return `${e.chain ? `${sp}⚡ ` : ''}${who(e.side)} ${L('ใช้', v(e.side, 'use', 'uses'))} <b>${varName(e.side, e.skill)}</b> Lv${e.lv}${e.chain ? ` <span class="combo">${L('เชน', 'chain')} x${e.chain + 1}</span>` : ''}${e.echo ? L(' (ตีซ้ำ)', ' (echo)') : ''}`;
     case 'damage': {
-      const src = e.src === 'burn' ? L('ไฟ', 'burn') : e.src === 'fatigue' ? L('ความเหนื่อยล้า', 'fatigue') : e.src === 'thorns' ? L('หนาม', 'thorns') : SKILLS[e.src]?.name ?? e.src;
-      return `&nbsp;&nbsp;${who(e.side)} ${L('เสีย', 'loses')} ${e.amount}${e.blocked ? ` (${L('โล่กัน', 'shield blocked')} ${e.blocked})` : ''} ${L('จาก', 'from ')}${src}`;
+      const attacker = 1 - e.side;
+      const src =
+        e.src === 'burn' ? L('ไฟ', 'burn')
+        : e.src === 'fatigue' ? L('ความเหนื่อยล้า', 'fatigue')
+        : logRefl.has(e) ? L(`หนามของ${esc(names[attacker])}`, isYou(attacker) ? 'your thorns' : `${esc(names[attacker])}’s thorns`)
+        : varName(attacker, e.src);
+      return `${sp}${who(e.side)} ${L('เสีย', v(e.side, 'lose', 'loses'))} <b class="dmg">${e.amount}</b>${e.blocked ? ` (${L('โล่กัน', 'shield blocked')} ${e.blocked})` : ''} ${L('จาก', 'from ')}${src}`;
     }
     case 'status':
       switch (e.status) {
         case 'freeze':
-          return e.value > 0 ? `&nbsp;&nbsp;${who(e.side)} ${L('ถูกแช่แข็ง', 'is frozen for')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : `&nbsp;&nbsp;${who(e.side)} ${L('ต้านการแช่แข็ง', 'resists the freeze')}`;
+          return e.value > 0 ? `${sp}${who(e.side)} ${L('ถูกแช่แข็ง', v(e.side, 'are frozen for', 'is frozen for'))} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : `${sp}${who(e.side)} ${L('ต้านการแช่แข็ง', v(e.side, 'resist the freeze', 'resists the freeze'))}`;
         case 'slow':
-          return `&nbsp;&nbsp;${who(e.side)} ${L('ช้าลง', 'is slowed')} ${e.value}%`;
+          return `${sp}${who(e.side)} ${L('ช้าลง', v(e.side, 'are slowed', 'is slowed'))} ${e.value}%`;
         case 'rage':
-          return `${who(e.side)} <b>${L('คลั่ง!', 'rages!')}</b> ${L('พลังโจมตี', 'attack power')} +${e.value}`;
+          return `${who(e.side)} <b>${L('คลั่ง!', v(e.side, 'rage!', 'rages!'))}</b> ${L('พลังโจมตี', 'power')} +${e.value}`;
         case 'amplify':
-          return e.value > 0 ? `&nbsp;&nbsp;${who(e.side)} ${L('บัฟเป็น 2 เท่า', 'doubles their buffs')} (+${e.value})` : null;
+          return e.value > 0 ? `${sp}${who(e.side)} ${L('บัฟเป็น 2 เท่า', v(e.side, 'double your buffs', 'doubles their buffs'))} (+${e.value})` : null;
         case 'cleanse':
-          return e.value > 0 ? `&nbsp;&nbsp;${who(e.side)} ${L(`ล้างดีบัฟ ${e.value} อย่าง`, `cleanses ${e.value} debuffs`)}` : null;
+          return e.value > 0 ? `${sp}${who(e.side)} ${L(`ล้างดีบัฟ ${e.value} อย่าง`, `${v(e.side, 'cleanse', 'cleanses')} ${e.value} debuffs`)}` : null;
         case 'dispel':
-          return e.value > 0 ? `&nbsp;&nbsp;${who(e.side)} ${L(`ถูกลบบัฟ ${e.value} อย่าง`, `loses ${e.value} buffs`)}` : null;
+          return e.value > 0 ? `${sp}${who(e.side)} ${L(`ถูกลบบัฟ ${e.value} อย่าง`, `${v(e.side, 'lose', 'loses')} ${e.value} buffs`)}` : null;
         case 'delay':
-          return e.value > 0 ? `&nbsp;&nbsp;${who(e.side)} ${L('คูลดาวน์ถอยหลัง', 'cooldowns pushed back')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : `&nbsp;&nbsp;${who(e.side)} ${L('ต้านการถ่วงเวลา', 'resists the delay')}`;
+          return e.value > 0 ? `${sp}${who(e.side)} ${L('คูลดาวน์ถอยหลัง', 'cooldowns pushed back')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : `${sp}${who(e.side)} ${L('ต้านการถ่วงเวลา', v(e.side, 'resist the delay', 'resists the delay'))}`;
         default:
           return null;
       }
     case 'fatigue':
       return `<span class="muted">${L(`เหนื่อยล้า: ทั้งสองฝ่ายเสีย ${e.amount}`, `Fatigue: both sides lose ${e.amount}`)}</span>`;
     case 'end':
-      return `<b>${e.winner === -1 ? L('เสมอ', 'Draw') : who(e.winner) + L(' ชนะ', ' wins')}</b>`;
+      return `<b>${e.winner === -1 ? L('เสมอ', 'Draw') : who(e.winner) + L(' ชนะ', v(e.winner, ' win', ' wins'))}</b>`;
     default:
       return null;
   }
@@ -684,7 +896,10 @@ async function doFight() {
   lastDamage = R.damageFor(r.day);
   let res: FightResponse;
   try {
-    res = await api.fight({ runId: r.id, name: playerName(), day: r.day, rating: r.rating, build });
+    // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
+    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId() };
+    res = await api.fight(body as Parameters<typeof api.fight>[0]);
+    M.rememberFromFight(res);
     if (import.meta.env.DEV) {
       // the browser can re-run the exact fight from the seed — this is what makes replays shareable
       const local = simulate(build, res.opponent.build, res.seed, r.day);
@@ -705,9 +920,24 @@ async function doFight() {
   r.rating = res.rating;
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId });
   saveRun();
-  names = [playerName(), res.opponent.name + (res.opponent.ai ? ' (AI)' : '')];
+  rememberMine(res.fightId);
+  names = [youName(), oppLabel(res.opponent as FightResponse['opponent'] & { tier?: unknown })];
+  const ex = explain(res.result, [build, res.opponent.build], 0, names, { drawIsLoss: true });
+  lastClose = ex.close;
+  noteFight(r, res, ex, lastDay);
   view = 'fighting';
+  sfx('fight_start');
+  voice('fight');
+  music('battle');
   render();
+  playLast();
+}
+
+/** Play the last fight of the run in the arena (first time, or again from the result screen). */
+function playLast() {
+  const res = last!;
+  const build = lastBuild!;
+  beginLog(res.result, [build, res.opponent.build]);
   // the server sends only events; re-run the same fight here to get per-tick cooldowns for the clock-wipe
   const traced = simulate(build, res.opponent.build, res.seed, lastDay, { trace: true });
   const shown = traced.winner === res.result.winner ? { ...res.result, trace: traced.trace } : res.result;
@@ -731,7 +961,7 @@ async function openReplay(id: string) {
     replay = await api.replay(id);
   } catch {
     toast = L('ไม่พบ replay นี้', 'Replay not found');
-    view = 'title';
+    view = 'town';
     render();
     return;
   }
@@ -748,9 +978,10 @@ function playReplay() {
   }
   const result = simulate(f.a.build, f.b.build, f.seed, f.day, { trace: true }); // recomputed locally from the seed
   replayResult = result;
-  names = [f.a.name, f.b.name + (f.b.ai ? ' (AI)' : '')];
+  names = replayNames(f);
   view = 'replay';
   render();
+  beginLog(result, [f.a.build, f.b.build]);
   scene.play({ result, left: { name: names[0], build: f.a.build }, right: { name: names[1], build: f.b.build } }, addLog, () => {
     view = 'replayDone';
     render();
@@ -876,6 +1107,28 @@ function onClick(ev: Event) {
     case 'replayAgain':
       playReplay();
       return;
+    case 'rewatch':
+      if (!last || !lastBuild || busy) return;
+      busy = true;
+      view = 'replay';
+      render();
+      playLast();
+      return;
+    case 'profile':
+      profileData = null; // refresh on every visit
+      view = 'profile';
+      break;
+    case 'leaderboard':
+      lbData = null;
+      lbLoading = false;
+      view = 'leaderboard';
+      break;
+    case 'lbPeriod':
+      if (arg !== 'season' && arg !== 'day') return;
+      lbPeriod = arg;
+      lbData = null;
+      lbLoading = false;
+      break;
     case 'leaveReplay':
       history.replaceState(null, '', location.pathname);
       replay = null;
@@ -885,6 +1138,8 @@ function onClick(ev: Event) {
       return;
   }
   if (err) toast = err;
+  else if (a === 'buy' || a === 'sell' || a === 'reroll') sfx(a);
+  else if (a === 'expand') sfx('unlock');
   saveRun();
   render();
 }
