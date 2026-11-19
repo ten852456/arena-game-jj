@@ -139,3 +139,69 @@ Day-1 gold becomes 6–7 (two Lv1 skills = 6, unique = 4). Every list has at lea
 3. Day-1 gold: exactly 2 Lv1 skills (6), or a little extra so a unique (4) + a Lv1 (3) is possible (7)? I suggest **7**.
 4. Should hero-unique skills appear in random shops after day 1 (as now), or only on day 1 and as upgrades?
 5. Icons: emoji for now (fast, readable). Pixel-art icons drawn in code can replace them later. OK?
+
+## Sim v10 update (19 Nov 2026): control lock, chains, engines, power curves
+
+Live numbers are in `src/sim/skills.ts` / `heroes.ts`; the tables in section 3 are the original draft.
+
+### Control rules (no more 0-skill fights)
+
+| Rule | Value |
+|---|---|
+| Freeze + cast delay share one cap per fight | `freezeCap` (2s / 4.5s / 6s by day) **and** at most 1s + 30% of the time fought so far |
+| Already frozen | cannot be frozen or delayed again |
+| ตั้งหลัก (control immunity) | when a freeze ends (or is cleansed) or a delay lands: freeze and delay are resisted for 1.5s |
+| สลัดการคุม (shake off) | a fighter that has not fired any skill for 4s drops freeze / slow and resists all control until it fires |
+| Slow | own cap (1.75 × freeze cap, also growing with the fight) |
+| ✨ / 🗿 react | a skill with ชำระ or ใจเหล็ก fires **right away** when ≥0.5s of control (or a ≥30% slow) lands on its owner, at most once per its cooldown (its cooldown restarts). ใจเหล็ก also shortens a freeze already on you |
+| Weaker fires carry weaker control | fires below 100% power (engines, ตีซ้ำ echo) freeze / slow / delay for that share; ขยาย's cap also scales |
+
+These apply to every source: own cooldown, trigger chains and engines.
+Bot fights where a side fires 0 skills: 1.6% (all in 5s fights on days 1–3, none caused by control).
+
+### Chains ("ต่อ")
+
+- A skill set off by another skill (trigger bonus or engine) cannot be set off again for its own cooldown
+  (at least 2s, at most 4s). So ต่อ at most doubles a fast skill and triples a slow one.
+- Chain step 2 fires at ×0.75, step 3 at ×0.56 … (step 1 = full power). Each skill still fires once per chain.
+- Max set-off fires per side per fight in bot fights: 17 (was 27 in the playtest).
+
+### Engine skills (shared, type ทั่วไป)
+
+Engines do nothing alone: they fire the skill **right above / below** them in the list. Fires they cause count as ต่อ.
+
+| Skill | Lv1 | Lv2 A | Lv3 A1 / A2 | Lv2 B | Lv3 B1 / B2 |
+|---|---|---|---|---|---|
+| **ฟันเฟือง** gear ⚙ | fires above, then below, taking turns, at 40% ⏱3 | **เฟืองหนัก** (แรงขึ้น) 70% | **เฟืองเหล็ก** 100% / **เฟืองโล่** 70% 🛡3 | **เฟืองไว** (ถี่ขึ้น) 50% ⏱2.4 | **เฟืองพายุ** 75% ⏱2 / **เฟืองคู่** both neighbours 50% ⏱2.8 |
+| **เร่งเครื่อง** overclock 🚀 | fires both neighbours at 85%, then **their cooldowns restart** ⏱6 | **เร่งแรง** (แรงขึ้น) 130% | **เร่งสุดขีด** 160% / **เร่งแล้วตั้งรับ** 130% 🛡4 | **เร่งไว** (ถี่ขึ้น) 110% ⏱4.5 | **เร่งถี่** 125% ⏱4 / **เร่งต่อเนื่อง** 90% ⏱4.5, cooldowns keep running |
+
+Why order matters more now: ฟันเฟือง at the top/bottom of the list fires its single neighbour twice as often
+(good next to one big skill); in the middle it feeds two. เร่งเครื่อง restarts its neighbours' cooldowns, so it wants
+slow, heavy skills (ทุบหนัก, รวมพลัง) next to it and wastes fast ones. The engine's own power bonus scales its fires.
+Measured (day 10, +1 skill to 4-skill bot builds): engines win 15–37% depending on position vs 8–33% for ฟัน of the same level.
+
+### Run: 10 wins
+
+- `WIN_TARGET` 10. HP lost per defeat = 2 (days 1–3), 3 (4–6), 4 (7–9), 5 from day 10 (cap). START_HP stays 20.
+- Bot 10-win runs end around day 13–15 with 3–4.5 losses.
+
+### Intended power curves (who is strong when)
+
+Per-hero win rates vs all other heroes, bot builds, `npm run balance -- 80 3,6,9,12,15 --no-len`:
+
+| Hero | Curve | d3 | d6 | d9 | d12 | d15 |
+|---|---|---|---|---|---|---|
+| นักดาบคู่ duelist | **early** burst, fades late | 52 | 59 | 57 | 52 | 36 |
+| นักฆ่า assassin | **early–mid** burst (first hit ×1.6), fades late | 47 | 59 | 57 | 42 | 37 |
+| แม่มดน้ำแข็ง witch | **early** control (freeze matters most while HP is low) | 56 | 44 | 44 | 53 | 42 |
+| จอมเวทเวลา chrono | **mid–late** control | 48 | 42 | 51 | 62 | 54 |
+| นักรบหนาม thornguard | **mid–late** tank, thorns pile up | 44 | 52 | 52 | 54 | 56 |
+| อัศวิน knight | steady wall, best late | 54 | 45 | 48 | 43 | 55 |
+| นักรบคลั่ง berserker | **late** scaling (พลัง +1 per 5 hits taken) | 50 | 46 | 46 | 52 | 66 |
+| นักเวทเพลิง pyro | **late** scaling, burns +30% longer | 49 | 54 | 45 | 43 | 55 |
+
+Burst wins the early/mid days (burst vs tank 66% on day 6, vs scaling 67% on day 9); tank and scaling win day 15
+(70% / 68% vs burst). Hero passives changed in this pass: นักฆ่า "first hit ×1.6" (was charge +0.25),
+นักดาบคู่ "every 3rd hit +30%", นักรบคลั่ง "+10% HP, +1 พลัง per 5 hits taken, +2 at half HP",
+นักเวทเพลิง "burns +30% longer", แม่มด "+16% HP, freezes +0.3s", จอมเวทเวลา "+16% HP, hits on a slowed/frozen enemy +10%",
+อัศวิน "+30% HP, start shield 12%", นักรบหนาม "+20% HP, thorns last 13s".

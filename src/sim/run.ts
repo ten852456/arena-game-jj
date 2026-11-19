@@ -4,10 +4,10 @@ import { rollBonuses } from './links';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
 
-/** One run (รอบ) of the game: pick skills day by day until 8 wins or HP runs out. */
+/** One run (รอบ) of the game: pick skills day by day until 10 wins or HP runs out. */
 
 export const START_HP = 20;
-export const WIN_TARGET = 8;
+export const WIN_TARGET = 10;
 export const SHOP_SIZE = 5;
 /** price by the level you buy: Lv1 skill, Lv2 upgrade, Lv3 upgrade (hero-unique skills +1) */
 export const PRICES = [3, 4, 5];
@@ -119,7 +119,12 @@ export function buySlot(s: RunState): string | null {
 export const priceOf = (o: Offer) => PRICES[lvOf(o.v) - 1] + (SKILLS[o.id].hero ? 1 : 0);
 /** gold back when selling: 1 / 2 / 3 by level */
 export const sellPrice = (k: SkillInstance) => lvOf(k.v);
-export const damageFor = (day: number) => day;
+/**
+ * HP lost on a defeat: 2 on days 1–3, 3 on days 4–6, 4 on days 7–9, 5 from day 10 (capped), so a good run to 10 wins
+ * (≈ day 13–16) survives 3–4 defeats, plus the last chance.
+ */
+export const LOSS_CAP = 5;
+export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / 3));
 
 /** Win streak bonus is clearly bigger than the loss-streak comeback money. */
 export function incomeFor(day: number, streak: number) {

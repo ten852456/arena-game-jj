@@ -41,7 +41,8 @@ of them to support daily rules and free rotation later.
 - **Buff / debuff skills:** ขยายพลัง (double own buffs, capped), ชำระล้าง (remove debuffs on self),
   สลายเวท (remove one of each enemy buff, 20% of their shield).
 - **Control caps:** freeze and cast delay share a cap per fight (3s / 5s / 7s by day) with diminishing returns;
-  total slowed time is capped at twice that. ใจเหล็ก reduces control by 60%.
+  total slowed time is capped at twice that. ใจเหล็ก reduces control by 60%. *(Sim v10 adds immunity windows and
+  reactions: see Phase 1.5.)*
 - "🏳 ยอมแพ้" (give up the run) sits in the top bar and during your own fights.
 
 ### Combat
@@ -76,6 +77,18 @@ of them to support daily rules and free rotation later.
 - [ ] Vision doc: TCG section → "skills fire on their own cooldowns, all at once" (vision doc is outside the repo)
 
 ---
+
+## Phase 1.5 — Playtest fixes (19 Nov 2026, sim v10)
+
+- [x] **Control lock** — freeze/delay cap also grows with fight time, frozen = can't be re-controlled, 1.5s ตั้งหลัก immunity
+  after a freeze ends / a delay lands, 4s without any fire = shake off control, ✨/🗿 skills react instantly to control
+- [x] **Chains** — a skill can be set off (ต่อ) at most once per its cooldown (2–4s); deeper chain steps ×0.75 each
+- [x] **Engine skills** — ฟันเฟือง (fires above/below in turns) and เร่งเครื่อง (fires both, restarts their cooldowns), Lv1→3 trees
+- [x] **Fight stats** — `CombatResult.sides[side]`: casts, skills that never fired, frozen / delayed / slowed ticks, total control, resists
+- [x] **Run length** — 10 wins; defeat costs 2/3/4/5 HP by day (cap 5)
+- [x] **Power curves** — heroes peak at different days (burst early, control/tank mid, scaling late): see docs/SKILL_TREE.md
+- [ ] Bot: place engines next to slow heavy skills (bot.ts `arrangeList` does not know engines yet)
+- [ ] UI: show "never fired" skills and control time from `sides`; explain ตั้งหลัก / สลัดการคุม / react in the log
 
 ## Phase 2 — Server-authoritative run & guest accounts ← **NEXT**
 
