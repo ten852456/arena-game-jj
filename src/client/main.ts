@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { initAudio, music } from './audio';
 import { CombatScene, H, W, sceneReady } from './combatScene';
 import { TownScene, townReady } from './townScene';
 import { initTutorial } from './tutorial';
@@ -7,6 +8,8 @@ import { ZOOM } from './view';
 import './style.css';
 
 async function boot() {
+  initAudio({ uiSounds: true }); // sound starts after the first tap/click (autoplay rules)
+  music('town');
   // Make sure the Thai font is ready before Phaser draws canvas text.
   try {
     await Promise.race([document.fonts.load('20px Kanit'), new Promise((r) => setTimeout(r, 1500))]);
