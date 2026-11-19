@@ -82,9 +82,14 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
     raf = 0;
     if (!active) return;
     // auto-scroll near the top / bottom edge of the screen
+    // the bottom zone starts above the sticky Fight bar, so dropping onto the last rows does not scroll the page away
+    const bar = document.querySelector<HTMLElement>('.sv-fight');
+    const bottom = bar ? Math.min(window.innerHeight, bar.getBoundingClientRect().top) : window.innerHeight;
     let v = 0;
     if (lastY < EDGE_PX) v = -Math.ceil((EDGE_PX - lastY) / 6);
-    else if (lastY > window.innerHeight - EDGE_PX) v = Math.ceil((lastY - (window.innerHeight - EDGE_PX)) / 6);
+    else if (lastY > bottom - EDGE_PX / 2) v = Math.min(14, Math.ceil((lastY - (bottom - EDGE_PX / 2)) / 6));
+    // stop at the ends of the page
+    if ((v < 0 && window.scrollY <= 0) || (v > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1)) v = 0;
     if (v) window.scrollBy(0, v);
     update();
     if (v) raf = requestAnimationFrame(tick);

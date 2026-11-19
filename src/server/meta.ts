@@ -10,7 +10,8 @@ import type { Res } from './fight';
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
 /** ผงดาว by wins (index = wins); a flawless 8–0 run adds FLAWLESS_BONUS. */
-export const STARDUST_BY_WINS = [5, 10, 15, 25, 35, 50, 70, 90, 130];
+/** ผงดาว by wins, index 0..WIN_TARGET (10). Keep one entry per possible win count. */
+export const STARDUST_BY_WINS = [5, 10, 15, 25, 35, 50, 65, 80, 100, 120, 160];
 export const FLAWLESS_BONUS = 70;
 
 const LB_SIZE = 50;
@@ -31,7 +32,8 @@ const better = (a: Pick<FinishedRun, 'wins' | 'losses' | 'day'>, b: Pick<Finishe
   b.wins - a.wins || a.losses - b.losses || a.day - b.day;
 
 export function rewardFor(wins: number, losses: number) {
-  const base = STARDUST_BY_WINS[Math.min(wins, WIN_TARGET)];
+  // never read past the table (the win target can change): the last entry is the full-run reward
+  const base = STARDUST_BY_WINS[Math.max(0, Math.min(wins, WIN_TARGET, STARDUST_BY_WINS.length - 1))] ?? 0;
   const flawless = wins >= WIN_TARGET && losses === 0 ? FLAWLESS_BONUS : 0;
   return { base, flawless, stardust: base + flawless };
 }

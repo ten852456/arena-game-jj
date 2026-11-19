@@ -88,7 +88,7 @@ build valid for that day and of that hero. If the server already saw this run wi
 **Only fights the server ran count**: counted wins = min(claimed, wins the server recorded for this runId);
 counted losses = max(claimed, losses recorded). `capped: true` when the claim was higher.
 
-Reward (ผงดาว / `stardust`) by counted wins: `0:5 1:10 2:15 3:25 4:35 5:50 6:70 7:90 8:130`, +70 for a flawless 8–0.
+Reward (ผงดาว / `stardust`) by counted wins: `0:5 1:10 2:15 3:25 4:35 5:50 6:65 7:80 8:100 9:120 10:160`, +70 for a flawless 10–0.
 
 ```json
 { "already": false,
