@@ -38,9 +38,9 @@ async function play(label, ctxOpts, runs = 1) {
   await p.waitForTimeout(1500);
   ok(`${label}: title is Mochi Moon`, (await p.title()) === 'Mochi Moon');
   // tutorial
-  const tut = await has('button:has-text("✕")');
+  const tut = await has('.tut-x');
   ok(`${label}: tutorial shows on first visit`, tut);
-  await tap('button:has-text("✕")');
+  await tap('.tut-x');
   ok(`${label}: town has no horizontal scroll`, await noHScroll());
   await tap('[data-lang="en"]');
   ok(`${label}: English switch changes language`, await p.locator('html').getAttribute('lang') === 'en');
@@ -177,7 +177,52 @@ async function api() {
   ok('static: path traversal blocked', !tr[1].includes('"arena-poc"'), String(tr[0]));
 }
 
+// One-screen layout: on PC and phones held sideways no screen may scroll the page (panels scroll inside).
+// Upright phones may scroll only in the shop. Run over is reached by giving up, to keep this quick.
+async function layout(label, ctxOpts, portrait = false) {
+  const browser = await chromium.launch({ executablePath: exe, headless: true });
+  const ctx = await browser.newContext({ ...ctxOpts, locale: 'th-TH' });
+  const p = await ctx.newPage();
+  const tap = async (sel, wait = 500) => {
+    const l = p.locator(sel).first();
+    if (!(await l.count())) return false;
+    await l.click({ timeout: 4000 }).catch(() => {});
+    await p.waitForTimeout(wait);
+    return true;
+  };
+  const fits = async (screen, sel) => {
+    const on = await p.locator(sel).count();
+    const m = await p.evaluate(() => ({ sh: document.documentElement.scrollHeight, ih: innerHeight, sw: document.documentElement.scrollWidth, iw: innerWidth }));
+    const pass = on > 0 && m.sh <= m.ih + 2 && m.sw <= m.iw + 1;
+    ok(`layout ${label}: ${screen} fits one screen (no page scroll)`, pass, `${on ? '' : 'screen not shown · '}${m.sh}/${m.ih} tall, ${m.sw}/${m.iw} wide`);
+    await p.screenshot({ path: path.join(OUT, `layout-${label}-${screen}.png`) });
+  };
+  await p.goto(BASE, { waitUntil: 'load' });
+  await p.waitForTimeout(1500);
+  await tap('.tut-x');
+  await fits('town', '.town-card');
+  await tap('[data-a="goto"][data-i="arena"]');
+  await tap('[data-a="enterArena"]', 900);
+  await fits('hero pick', '[data-a="start"]');
+  await tap('[data-a="start"]', 1000);
+  if (!portrait) await fits('shop', '.shopv');
+  for (let i = 0; i < 4; i++) await tap('[data-a="buy"]:not([disabled])', 250);
+  await tap('[data-a="fight"]', 1200);
+  await fits('fight', '#log');
+  await tap('[data-a="skip"]', 1800);
+  await fits('result', '.mm-result');
+  await tap('[data-a="next"]', 700);
+  await tap('[data-a="concede"]', 400);
+  await tap('[data-a="concedeYes"]', 1500);
+  await fits('run over', '.mm-over');
+  await browser.close();
+}
+
 await api();
+await layout('pc-1440x900', { viewport: { width: 1440, height: 900 } });
+await layout('pc-1280x720', { viewport: { width: 1280, height: 720 } });
+await layout('phone-landscape-844x390', { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+await layout('phone-portrait-390x844', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, true);
 await play('phone', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, 2);
 await play('desktop', { viewport: { width: 1280, height: 860 } }, 1);
 const failed = results.filter((r) => !r.pass);

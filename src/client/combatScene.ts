@@ -7,6 +7,7 @@ import { hashSeed } from '../sim/rng';
 import { CHIBI_ORIGIN_Y, chibiScale, ensureChibi } from './chibi';
 import { drawArenaBackdrop } from './townArt';
 import { L } from '../i18n';
+import { ArenaLife, HeroIdle } from './idle';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -81,6 +82,11 @@ export class CombatScene extends Phaser.Scene {
   private quiet = false;
   private onEvent?: (e: CombatEvent) => void;
   private onDone?: () => void;
+  /** ambient arena life (lanterns, petals, crowd) and the shop hero's idle moves (idle.ts) */
+  private life!: ArenaLife;
+  private heroIdle!: HeroIdle;
+  /** hero + look standing alone in the arena right now ('' = none) */
+  private idleKey = '';
 
   constructor() {
     super({ key: 'combat', active: true });
@@ -89,6 +95,7 @@ export class CombatScene extends Phaser.Scene {
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
     this.drawBackground();
+    this.life = new ArenaLife(this, W, H, GROUND);
     this.fighters = [0, 1].map((i) =>
       this.add.image(POS[i], GROUND, '__DEFAULT').setOrigin(0.5, CHIBI_ORIGIN_Y).setScale(HERO_S).setFlipX(i === 1).setVisible(false),
     );
@@ -120,6 +127,7 @@ export class CombatScene extends Phaser.Scene {
             .setOrigin(0, 0)
             .setVisible(false),
         );
+    this.heroIdle = new HeroIdle(this);
     this.idle(null);
     resolveReady(this);
   }
@@ -130,6 +138,11 @@ export class CombatScene extends Phaser.Scene {
 
   /** Shop / menu: show our hero standing alone. */
   idle(hero: string | null, look = 0) {
+    // the shop re-renders on every click: keep the same hero idling instead of restarting it
+    const key = hero ? `${hero}:${look}` : '';
+    if (!this.playing && key && key === this.idleKey && this.keys[0]) return;
+    this.idleKey = key;
+    this.heroIdle?.detach();
     this.playing = false;
     this.tweens.killAll();
     this.banner.setText('');
@@ -165,7 +178,15 @@ export class CombatScene extends Phaser.Scene {
       if (this.want[i] !== token) return;
       this.keys[i] = prefix;
       f.setTexture(prefix + '_idle').setScale(HERO_S).setVisible(true);
+      if (!this.playing && i === 0 && this.idleKey) this.heroIdle.attach(f, prefix, hero, seed, HERO_S);
     });
+  }
+
+  /** The hero in the arena reacts to the shop: buy = happy hop + sparkles (and the crowd cheers), sell = sad wobble. */
+  react(kind: 'buy' | 'sell' | 'reroll' | 'pick') {
+    if (this.playing) return;
+    this.heroIdle.react(kind);
+    if (kind === 'buy') this.life.cheer();
   }
 
   /** winner of the fight on screen once it ended (null = not over) */
@@ -184,6 +205,7 @@ export class CombatScene extends Phaser.Scene {
 
   play(data: PlayData, onEvent: (e: CombatEvent) => void, onDone: () => void) {
     this.idle(null);
+    this.fighters.forEach((f) => f.setFlipX(f === this.fighters[1]));
     this.builds = [data.left.build, data.right.build];
     [data.left, data.right].forEach((side, i) => {
       this.show(i, side.build.hero, lookSeed(side), POS[i]);
@@ -218,7 +240,12 @@ export class CombatScene extends Phaser.Scene {
   }
 
   update(_t: number, delta: number) {
-    if (!this.playing) return;
+    const t = this.time.now;
+    this.life.update(t, delta);
+    if (!this.playing) {
+      this.heroIdle.update(t, delta);
+      return;
+    }
     this.clock += (delta * this.speed) / 100; // 100ms per tick at 1x
     while (this.ei < this.evs.length && this.evs[this.ei].t <= this.clock) this.handle(this.evs[this.ei++]);
     this.drawQueue();
@@ -349,6 +376,7 @@ export class CombatScene extends Phaser.Scene {
         this.endWinner = w;
         this.banner.setText(this.bannerText()).setColor(w === 0 ? '#66ff88' : w === 1 ? '#ff6666' : '#dddddd');
         this.banner.setScale(0.5);
+        if (w === 0 && !this.quiet) this.life.cheer();
         this.tweens.add({ targets: this.banner, scale: 1, duration: 250, ease: 'Back.Out' });
         ([0, 1] as Side[]).forEach((s) => {
           if (w !== -1 && s !== w) {

@@ -17,3 +17,7 @@ cd ../e2e-tools && node e2e.mjs http://localhost:8787 ./e2e-out
 
 Chromium is taken from `CHROME_PATH`, else `%LOCALAPPDATA%/ms-playwright/chromium-1248`.
 Exit code 0 = all checks passed; screenshots and `e2e.json` go to the output folder.
+
+`e2e.mjs` also checks the one-screen layout: at 1440×900, 1280×720 and phone landscape 844×390 the town, hero pick,
+shop, fight, result and run-over screens must not scroll the page (`scrollHeight <= innerHeight + 2`); upright
+390×844 is checked for every screen except the shop (the shop may scroll there). Screenshots: `layout-*.png`.

@@ -22,6 +22,7 @@ import { music, sfx, voice } from './audio';
 import { IMAGES, skillIcon, archIcon } from './assets';
 import { L } from '../i18n';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
+import { setView } from './layout';
 
 export interface Stage {
   town: TownScene;
@@ -343,6 +344,10 @@ function streakText(s: number) {
 }
 
 // ---------- views ----------
+/** Where the arena canvas goes on this screen (layout.ts places it). cover = fill and crop (town). */
+const stageSlot = (cover = false, cls = '') => `<div class="stage-slot ${cls}"${cover ? ' data-stage="cover"' : ''} aria-hidden="true"></div>`;
+/** hero shown in the arena on the hero-pick screen (hover / focus a hero card to preview it) */
+let previewHero: string | null = null;
 const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'lastchance' || run.phase === 'mark');
 
 function render() {
@@ -368,6 +373,7 @@ function render() {
   hideTip();
   $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML();
   toast = '';
+  setView(view);
   if (view === 'shop') mountScout();
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'title') {
@@ -412,47 +418,60 @@ function renderTown() {
     }
     detail = `<div class="bcard"><h3>${b.name}${b.open ? '' : ` <span class="mark">${L('เร็วๆ นี้', 'soon')}</span>`}</h3>${body}</div>`;
   }
-  return `
-  <h2>${L('เมืองของคุณ', 'Your town')}</h2>
-  <p class="muted">${L(
-    'ลากซ้ายขวาเพื่อเดินดูเมือง (ใช้ล้อเมาส์หรือปุ่มลูกศรก็ได้) · แตะอาคารเพื่อดูรายละเอียด · แตะแผนที่ย่อด้านล่างเพื่อกระโดดไปจุดนั้น',
-    'Drag left and right to walk around town (the mouse wheel or arrow keys work too) · tap a building for details · tap the mini map below to jump there',
-  )}</p>
-  <div class="chips">${chips}</div>
-  ${detail}`;
+  return `${stageSlot(true, 'town-slot bleed')}
+  <section class="town-card glass">
+    <h2 class="town-h">${L('เมืองของคุณ', 'Your town')}</h2>
+    <p class="town-hint">${L(
+      'ลากซ้ายขวาเพื่อเดินดูเมือง (ใช้ล้อเมาส์หรือปุ่มลูกศรก็ได้) · แตะอาคารเพื่อดูรายละเอียด · แตะแผนที่ย่อด้านล่างเพื่อกระโดดไปจุดนั้น',
+      'Drag left and right to walk around town (the mouse wheel or arrow keys work too) · tap a building for details · tap the mini map below to jump there',
+    )}</p>
+    <div class="chips">${chips}</div>
+    ${detail}
+  </section>`;
 }
 
 function renderTitle() {
-  if (scene) scene.idle(null);
+  const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
+  if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
+  if (scene) scene.idle(previewHero, runActive() ? R.lookOf(run!) : 0);
   const resume = runActive()
     ? `<button class="primary" data-a="resume">${L(
         `เล่นต่อ: ${HEROES_BY_ID[run!.hero].name} วันที่ ${run!.day} (ชนะ ${run!.wins})`,
         `Continue: ${HEROES_BY_ID[run!.hero].name}, day ${run!.day} (${run!.wins} wins)`,
       )}</button>`
     : '';
-  return `
-  <div class="actions"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button></div>
-  <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120">
-  <h2>${L('เลือกฮีโร่', 'Choose your hero')}</h2>
-  <p class="muted">${L(
-    `ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด 2–5 ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
-    `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs 2–5 HP depending on the day · fight other players' builds from the same day`,
-  )}</p>
-  <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
-  ${resume}
-  ${runActive() ? '' : `<p class="muted">${L(
-    `รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`,
-    `This run offers ${R.HERO_CHOICES} heroes from different styles (see every hero in the Hero Hall in town)`,
-  )}</p>`}
-  <div class="heroes">${(runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id])).map(
-    (h) => `<button class="hero arch-${h.arch}" data-a="start" data-i="${h.id}">
-      ${heroArt(h.id)}
-      <b>${h.name}</b><span class="tag">${ARCH_NAME[h.arch]}</span>
-      <span>${h.style}</span>
-      <span>${h.passive}</span>
-      <span class="muted">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
-    </button>`,
-  ).join('')}</div>`;
+  return `<div class="pick">
+  <div class="pick-side">
+    <div class="pick-brand"><button class="ghost back" data-a="town">${L('← กลับเมือง', '← Back to town')}</button>
+      <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120"></div>
+    ${stageSlot(true, 'pick-slot')}
+    <p class="pick-rules">${L(
+      `ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด 2–5 ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
+      `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs 2–5 HP depending on the day · fight other players' builds from the same day`,
+    )}</p>
+  </div>
+  <section class="pick-main glass">
+    <div class="pick-head">
+      <h2>${L('เลือกฮีโร่', 'Choose your hero')}</h2>
+      <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
+    </div>
+    ${resume}
+    ${runActive() ? '' : `<p class="pick-note">${L(
+      `รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย · แตะการ์ดเพื่อเริ่ม (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`,
+      `This run offers ${R.HERO_CHOICES} heroes from different styles · tap a card to start (see every hero in the Hero Hall in town)`,
+    )}</p>`}
+    <div class="heroes pick3">${offered.map(
+      (h) => `<button class="hero arch-${h.arch}${h.id === previewHero ? ' previewing' : ''}" data-a="start" data-i="${h.id}">
+        ${heroArt(h.id)}
+        <b class="hero-nm">${h.name}</b><span class="tag">${ARCH_NAME[h.arch]}</span>
+        <span class="hero-style">${h.style}</span>
+        <span class="hero-passive">${h.passive}</span>
+        <span class="muted hero-uniq">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
+        <span class="hero-go">${L('เริ่มด้วยตัวนี้ ▶', 'Start with this hero ▶')}</span>
+      </button>`,
+    ).join('')}</div>
+  </section>
+  </div>`;
 }
 
 /** Shop card that sells +1 skill slot. */
@@ -579,7 +598,7 @@ function renderShop() {
   const inc = r.lastIncome;
   const nLocked = r.shop.filter((_, i) => R.isLocked(r, i)).length;
   resetHints();
-  return `<div class="shopv"><div class="rotate-hint"><img src="${IMAGES.rotatePhone}" alt=""><span>${L('หมุนโทรศัพท์แนวนอนเพื่อมองเห็นสนามได้กว้างขึ้น', 'Rotate your phone for a wider view')}</span></div>
+  return `<div class="shopv">
   <div class="sv-top">
     <span class="pill"><small>${L('วันที่', 'Day')}</small> <b>${r.day}</b></span>
     <span class="pill hp"><small>${L('เลือด', 'HP')}</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'half-spirit')}</span>` : ''}</span>
@@ -589,9 +608,18 @@ function renderShop() {
     ${streakText(r.streak) ? `<span class="pill streak">${streakText(r.streak)}</span>` : ''}
     <span class="stats-right">${concedeHTML()}</span>
   </div>
-  <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · <b>${hero.name}</b>: ${hero.passive}</p>
+  <aside class="sv-side">
+    ${stageSlot(true, 'sv-slot')}
+    <div class="sv-hero glass">
+      <div class="svh-name"><b>${hero.name}</b> <span class="tag">${ARCH_NAME[hero.arch]}</span></div>
+      <div class="svh-hp" aria-label="${L('เลือด', 'HP')} ${r.hp}/${R.START_HP}"><span>${L('เลือด', 'HP')}</span><i class="svh-bar"><i style="width:${Math.max(0, Math.min(100, (r.hp / R.START_HP) * 100))}%"></i></i><b>${r.hp}/${R.START_HP}</b></div>
+      <div class="svh-wins" aria-label="${L(`ชนะ ${r.wins} จาก ${R.WIN_TARGET}`, `${r.wins} of ${R.WIN_TARGET} wins`)}">${Array.from({ length: R.WIN_TARGET }, (_, i) => `<i class="${i < r.wins ? 'on' : ''}"></i>`).join('')}</div>
+      <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · ${hero.passive}</p>
+    </div>
+    <div class="mm-scout-slot sv-scout"></div>
+  </aside>
 
-  <section class="sv-sec">
+  <section class="sv-sec sv-shop">
     <div class="sv-h"><h3>${L('ร้าน skill', 'Skill shop')}</h3>
       <button class="reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} <span class="coin">${R.REROLL}</span></button></div>
     <p class="sv-note">🔓 ${L(
@@ -602,7 +630,7 @@ function renderShop() {
     <div class="shop">${shop}${slotCard(r)}${wishCard(r)}</div>
   </section>
 
-  <section class="sv-sec">
+  <section class="sv-sec sv-mine">
     <div class="sv-h"><h3>${L('skill ของคุณ', 'Your skills')} <span class="sv-count">${r.skills.length}/${slots}</span></h3>
       <span class="sv-hint">${L(`โบนัสเชื่อมต่อทำงาน ${act.length} อัน`, `${act.length} connect bonuses active`)}</span></div>
     <p class="sv-note">${L(
@@ -643,21 +671,28 @@ function concedeHTML() {
 }
 
 function renderFighting() {
-  return `
-  <p class="mm-versus"><span class="who s0">${esc(names[0])}</span> <span class="muted">vs</span> <span class="who s1">${esc(names[1])}</span> ${view === 'fighting' ? `<span class="stats-right">${concedeHTML()}</span>` : ''}</p>
-  <div class="actions mm-speed">
-    ${[1, 2, 4].map((s) => `<button class="small ${scene.speed === s ? 'on' : ''}" data-a="speed" data-i="${s}">${s}x</button>`).join('')}
-    <button class="small" data-a="skip">${L('ข้าม', 'Skip')}</button>
-  </div>
-  <p class="muted small glossary">${L(
+  return `<div class="fightv">
+  <div class="fv-arena">
+    ${stageSlot(false, 'fv-slot')}
+    <div class="fv-gloss glass"><b class="fv-gh">${L('📖 คำศัพท์ในไฟต์', '📖 Fight words')}</b><p class="muted small glossary">${L(
     `<b>พลังโจมตี</b> = ดาเมจเพิ่มให้ทุกการโจมตีของทุก skill · <b>รวมพลัง</b> = การโจมตีครั้งถัดไป 1 ครั้งแรงขึ้น ·
     <b>หนาม</b> = สะท้อนดาเมจทุกครั้งที่โดนตี · <b>ใจเหล็ก</b> = โดนแช่แข็ง/ช้าน้อยลง 60% · <b>ไฟ</b> = เสียเลือดทุกวิ ไม่สนโล่ ·
     <b>แช่แข็ง</b> = skill ทุกตัวหยุดนับคูลดาวน์ · <b>ช้า</b> = คูลดาวน์ทุกตัวเดินช้าลง`,
     `<b>Power</b> = extra damage on every hit of every skill · <b>Charge</b> = the next hit is stronger ·
     <b>Thorns</b> = reflect damage each time you are hit · <b>Iron Will</b> = freeze/slow 60% weaker on you · <b>Burn</b> = lose HP every second, ignores shields ·
     <b>Freeze</b> = every skill stops counting its cooldown · <b>Slow</b> = every cooldown runs slower`,
-  )}</p>
-  <ol id="log" class="log"></ol>`;
+  )}</p></div>
+  </div>
+  <aside class="fv-side glass">
+  <p class="mm-versus"><span class="who s0">${esc(names[0])}</span> <span class="muted">vs</span> <span class="who s1">${esc(names[1])}</span> ${view === 'fighting' ? `<span class="stats-right">${concedeHTML()}</span>` : ''}</p>
+  <div class="actions mm-speed">
+    ${[1, 2, 4].map((s) => `<button class="small ${scene.speed === s ? 'on' : ''}" data-a="speed" data-i="${s}">${s}x</button>`).join('')}
+    <button class="small" data-a="skip">${L('ข้าม ⏭', 'Skip ⏭')}</button>
+  </div>
+  <div class="fv-logh">${L('📜 บันทึกการสู้ (ล่าสุดอยู่บน)', '📜 Fight log (newest on top)')}</div>
+  <ol id="log" class="log"></ol>
+  </aside>
+  </div>`;
 }
 
 const fatigueLabel = (day: number) => {
@@ -856,27 +891,34 @@ function renderResult() {
   const oname = names[1];
   const x = lastBuild ? explain(f.result, [lastBuild, f.opponent.build], 0, [youName(), oname], { drawIsLoss: true }) : null;
   const draw = f.result.winner === -1;
-  return `
+  return `<div class="resv">
+  <div class="rv-side">
+  ${stageSlot(false, 'rv-slot')}
   <div class="mm-result ${f.won ? 'won' : 'lost'}">
     <h2 class="${f.won ? 'win' : 'lose'}">${f.won ? L('ชนะ', 'Victory') : draw ? L('เสมอ (นับเป็นแพ้)', 'Draw (counts as a loss)') : L('แพ้', 'Defeat')} · ${L('วันที่', 'day')} ${lastDay}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close!')}</span>` : ''}</h2>
     <p>${L('คู่ต่อสู้', 'Opponent')}: <b class="who s1">${esc(oname)}</b> · ${HEROES_BY_ID[f.opponent.build.hero].name}
      ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
     <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `Wins: ${r.wins}/${R.WIN_TARGET}`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
   </div>
+  <div class="actions rv-actions"><button class="primary" data-a="next">${L('ต่อไป ▶', 'Continue ▶')}</button>${x && !x.close ? `<button data-a="rewatch">${L('▶ ดูไฟต์นี้อีกครั้ง', '▶ Watch this fight again')}</button>` : ''}</div>
+  </div>
+  <div class="rv-main glass">
   ${x ? P.fightHighlights(x, { replayAction: 'rewatch' }) : ''}
-  <div class="actions"><button class="primary" data-a="next">${L('ต่อไป', 'Continue')}</button>${x && !x.close ? `<button data-a="rewatch">${L('▶ ดูไฟต์นี้อีกครั้ง', '▶ Watch this fight again')}</button>` : ''}</div>
   <h3>${L('สรุปการสู้', 'Fight summary')}</h3>
   ${x ? explainHTML(f.result, x, 0) : ''}
   ${lastBuild ? vsSummary(f.result, [lastBuild, f.opponent.build], [youName(), oname]) : ''}
   <h3>${L(`build ของ ${esc(oname)}`, `Build of ${esc(oname)}`)}</h3>
   ${buildList(f.opponent.build)}
   ${link ? `<p class="muted">${L('ลิงก์ replay:', 'Replay link:')} <input class="link" readonly value="${esc(link)}" onclick="this.select()"></p>` : ''}
-  <div class="actions"><button class="primary" data-a="next">${L('ต่อไป', 'Continue')}</button></div>`;
+  </div>
+  </div>`;
 }
 
 function renderLastChance() {
   scene.idle(run!.hero, R.lookOf(run!));
-  return `
+  return `<div class="lay">
+  <div class="lay-side">${stageSlot(true)}</div>
+  <section class="lay-main glass">
   <h2 class="lose">${L('เลือดหมด… แต่ยังไม่จบ', 'Out of HP… but not out yet')}</h2>
   <p>${L(
     'คุณเข้าสู่สถานะ <b>กึ่งวิญญาณ</b>: กลับมาด้วยเลือด 1 แพ้อีกครั้งคือจบรอบ เลือกพลังหนึ่งอย่าง',
@@ -886,19 +928,26 @@ function renderLastChance() {
     <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
     <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Get 1 of 4 random marks, then pick a skill for it')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for a build with a clear main skill')}</span></button>
     <button class="hero" data-a="lc" data-i="supply"><b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${L('เงิน 8 และช่อง skill +1 ถาวร', '8 gold and +1 skill slot for good')}</span><span class="muted">${L('เหมาะกับ build ที่ยังขาดชิ้นสำคัญ', 'Good for a build still missing a key piece')}</span></button>
+  </div>
+  </section>
   </div>`;
 }
 
 function renderMark() {
   const r = run!;
   const m = R.MARK_INFO[r.pendingMark!];
-  return `
+  scene.idle(r.hero, R.lookOf(r));
+  return `<div class="lay">
+  <div class="lay-side">${stageSlot(true)}</div>
+  <section class="lay-main glass">
   <h2>${L('ได้ตรา', 'New mark')}: ${m.name}</h2>
   <p>${m.desc} · ${L('เลือก skill ที่จะใส่ตรา', 'pick the skill that gets the mark')}</p>
   <ol class="build">${r.skills
     .map((k, i) => (`<li class="arch-${SKILLS[k.id].arch}"><div class="sk-text">${skillLine(k)}</div><span class="btns"><button data-a="mark" data-i="${i}">${L('ใส่ตรานี้', 'Mark this')}</button></span></li>`))
     .join('')}</ol>
-  <div class="actions"><button class="ghost" data-a="mark" data-i="-1">${L('ไม่ใส่', 'Skip')}</button></div>`;
+  <div class="actions"><button class="ghost" data-a="mark" data-i="-1">${L('ไม่ใส่', 'Skip')}</button></div>
+  </section>
+  </div>`;
 }
 
 function renderOver() {
@@ -908,7 +957,7 @@ function renderOver() {
   claimReward(r);
   const c = M.claimed(r.id);
   const reward = c && 'stardust' in c ? c : null;
-  return P.runOverPage({
+  return stageSlot(true, 'over-slot bleed') + P.runOverPage({
     won, conceded: !!r.conceded, hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), wins: r.wins, losses: r.losses,
     winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, buildHTML: buildList(R.toBuild(r)),
     historyHTML: P.historyList(r.log, M.fightNotes(r.id)), best: M.bestNote(r.id), reward: pendingClaim.has(r.id) ? undefined : reward,
@@ -926,16 +975,23 @@ function replayNames(f: ReplayRecord): [string, string] {
 function renderReplayDone() {
   const f = replay!;
   const x = replayResult ? explain(replayResult, [f.a.build, f.b.build], 0, names) : null;
-  return `
-  <h2>${L('Replay วันที่', 'Replay: day')} ${f.day}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close!')}</span>` : ''}</h2>
+  return `<div class="resv">
+  <div class="rv-side">
+  ${stageSlot(false, 'rv-slot')}
+  <div class="mm-result"><h2>${L('Replay วันที่', 'Replay: day')} ${f.day}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close!')}</span>` : ''}</h2>
+  <p><span class="who s0">${esc(names[0])}</span> <span class="muted">vs</span> <span class="who s1">${esc(names[1])}</span></p></div>
+  <div class="actions rv-actions"><button data-a="replayAgain">${L('▶ ดูอีกครั้ง', '▶ Watch again')}</button><button class="primary" data-a="leaveReplay">${L('เล่นเกมของคุณ', 'Play your own game')}</button></div>
+  </div>
+  <div class="rv-main glass">
   ${x ? P.fightHighlights(x) : ''}
-  <div class="actions"><button data-a="replayAgain">${L('▶ ดูอีกครั้ง', '▶ Watch again')}</button><button class="primary" data-a="leaveReplay">${L('เล่นเกมของคุณ', 'Play your own game')}</button></div>
   <h3>${L('สรุปการสู้', 'Fight summary')}</h3>
   ${replayResult && x ? explainHTML(replayResult, x, 0) : ''}
   ${replayResult ? vsSummary(replayResult, [f.a.build, f.b.build], names) : ''}
   <div class="two">
     <div><h3><span class="who s0">${esc(names[0])}</span> · ${HEROES_BY_ID[f.a.build.hero].name}</h3>${buildList(f.a.build)}</div>
     <div><h3><span class="who s1">${esc(names[1])}</span> · ${HEROES_BY_ID[f.b.build.hero].name}</h3>${buildList(f.b.build)}</div>
+  </div>
+  </div>
   </div>`;
 }
 
@@ -972,13 +1028,17 @@ function mountScout() {
   const r = run;
   const btn = $panel.querySelector('[data-a="fight"]');
   const row = btn?.closest('.actions');
-  if (!r || !row) return;
-  const slot = document.createElement('div');
-  slot.className = 'mm-scout-slot';
-  row.before(slot);
+  let slot = $panel.querySelector<HTMLElement>('.sv-scout');
+  if (!r || (!row && !slot)) return;
+  if (!slot) {
+    slot = document.createElement('div');
+    slot.className = 'mm-scout-slot';
+    row!.before(slot);
+  }
+  const box = slot;
   const day = r.day;
   void M.scout(day, r.rating, r.id).then((s) => {
-    if (view === 'shop' && run?.day === day && slot.isConnected) slot.innerHTML = P.scoutChip(s, day);
+    if (view === 'shop' && run?.day === day && box.isConnected) box.innerHTML = P.scoutChip(s, day);
   });
 }
 
@@ -1325,6 +1385,24 @@ function onClick(ev: Event) {
   else if (a === 'lock') sfx('lock');
   saveRun();
   render();
+  // the hero in the shop arena reacts (happy hop on a buy, sad wobble on a sell)
+  if (!err && view === 'shop') {
+    if (a === 'buy' || a === 'wish' || a === 'slot') scene.react('buy');
+    else if (a === 'sell') scene.react('sell');
+    else if (a === 'reroll') scene.react('reroll');
+  }
+}
+
+/** Hero pick: pointing at (or focusing) a hero card shows that hero in the arena. */
+function onPreview(ev: Event) {
+  if (view !== 'title') return;
+  const card = (ev.target as Element).closest?.<HTMLElement>('[data-a="start"]');
+  const id = card?.dataset.i;
+  if (!id || id === previewHero) return;
+  previewHero = id;
+  scene.idle(id, 0);
+  scene.react('pick');
+  $panel.querySelectorAll('[data-a="start"]').forEach((b) => b.classList.toggle('previewing', b === card));
 }
 
 // ---------- tooltip ----------
@@ -1404,6 +1482,8 @@ export function startUI(st: Stage) {
     }
   });
   $panel.addEventListener('pointerdown', onPointerDown);
+  $panel.addEventListener('pointerover', onPreview);
+  $panel.addEventListener('focusin', onPreview);
   initDrag($panel, { onPreview: previewOrder, onDrop: dropSkill });
   window.addEventListener('pointermove', onHover);
   $panel.addEventListener('pointerleave', hideTip);
