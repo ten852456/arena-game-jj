@@ -1,0 +1,22 @@
+/* Sound settings panel (soundPanel.ts) */
+header .vol-btn { min-width: 44px; min-height: 44px; padding: 0 6px; font-size: 18px; line-height: 1; border-radius: 50%; flex: none; }
+.vol-panel {
+  position: fixed; top: 58px; right: 12px; z-index: 60; width: min(320px, calc(100vw - 24px));
+  padding: 12px 14px 14px; border-radius: 16px; color: #f6f0ff;
+  background: rgba(36, 28, 72, 0.96); border: 1.5px solid rgba(255, 226, 160, 0.55);
+  box-shadow: 0 12px 32px rgba(10, 6, 30, 0.55), 0 0 18px rgba(255, 226, 160, 0.18);
+}
+.vol-panel[hidden] { display: none; }
+.vol-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: #ffe2a0; }
+.vol-x { min-width: 32px; min-height: 32px; border-radius: 50%; }
+.vol-row { display: grid; grid-template-columns: 24px 84px 1fr 32px; align-items: center; gap: 6px; padding: 6px 0; font-size: 14px; }
+.vol-ico { text-align: center; }
+.vol-val { text-align: right; font-variant-numeric: tabular-nums; color: #ffe2a0; font-size: 13px; }
+.vol-row input[type=range] { width: 100%; accent-color: #ffcf6b; height: 28px; cursor: pointer; }
+.vol-mute { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 14px; color: #d8d0f4; cursor: pointer; }
+.vol-mute input { width: 18px; height: 18px; accent-color: #ff9cb8; }
+@media (max-height: 500px), (max-width: 420px) {
+  header .vol-btn { min-width: 34px; min-height: 34px; font-size: 15px; }
+  .vol-panel { top: 46px; padding: 8px 12px 10px; }
+  .vol-row { padding: 2px 0; }
+}

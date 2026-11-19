@@ -11,6 +11,7 @@ import './style.css';
 import './chain.css';
 import './layout.css';
 import { initLayout, setGameRefresh } from './layout';
+import { mountSoundPanel } from './soundPanel';
 
 initLang();
 initLayout();
@@ -36,13 +37,16 @@ function mountMute() {
     mute.title = label;
     mute.setAttribute('aria-pressed', String(off));
   };
+  let panel: { refresh: () => unknown } | undefined;
   mute.addEventListener('click', () => {
     toggleMuted();
     paint();
+    panel?.refresh();
   });
   onLang(paint);
   paint();
   header.appendChild(mute);
+  panel = mountSoundPanel(paint); // 🎚 volume sliders next to the mute button
 }
 
 async function boot() {
