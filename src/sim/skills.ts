@@ -10,7 +10,7 @@ import type { Archetype, SkillInstance } from './types';
 
 export type Keyword =
   | 'hit' | 'pierce' | 'shield' | 'heal' | 'leech' | 'burn' | 'freeze' | 'slow' | 'delay' | 'grow' | 'charge'
-  | 'thorns' | 'steadfast' | 'cleanse' | 'dispel' | 'amplify' | 'exec' | 'shatter' | 'cd';
+  | 'thorns' | 'steadfast' | 'cleanse' | 'dispel' | 'amplify' | 'exec' | 'shatter' | 'gear' | 'overclock' | 'cd';
 
 export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: string }> = {
   hit: { icon: '⚔', name: 'ตี', desc: 'ทำดาเมจใส่ศัตรู (+พลังที่สะสม) · ×N = ตี N ครั้ง' },
@@ -19,18 +19,20 @@ export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: strin
   heal: { icon: '❤', name: 'ฟื้น', desc: 'ฟื้นเลือดตัวเอง' },
   leech: { icon: '🩸', name: 'ดูดเลือด', desc: 'ฟื้นเลือดตามสัดส่วนของดาเมจที่ทำ' },
   burn: { icon: '🔥', name: 'ไฟ', desc: 'ศัตรูเสียเลือด X ต่อวินาที นาน N วิ · ไม่สนโล่ · ซ้อนกันได้' },
-  freeze: { icon: '❄', name: 'แช่แข็ง', desc: 'skill ทุกตัวของศัตรูหยุดนับคูลดาวน์ · โดนถี่ๆ ผลลดลง · มีเพดานต่อการสู้' },
+  freeze: { icon: '❄', name: 'แช่แข็ง', desc: 'skill ทุกตัวของศัตรูหยุดนับคูลดาวน์ · โดนถี่ๆ ผลลดลง · มีเพดานต่อการสู้ · หลุดแช่แข็งแล้วต้านการคุมได้ 1.5 วิ' },
   slow: { icon: '🐌', name: 'ช้า', desc: 'คูลดาวน์ทุกตัวของศัตรูเดินช้าลง X% · มีเพดานต่อการสู้' },
-  delay: { icon: '⏪', name: 'ถ่วงเวลา', desc: 'ดึงคูลดาวน์ทุกตัวของศัตรูถอยหลัง N วิ · ใช้เพดานร่วมกับแช่แข็ง' },
+  delay: { icon: '⏪', name: 'ถ่วงเวลา', desc: 'ดึงคูลดาวน์ทุกตัวของศัตรูถอยหลัง N วิ · ใช้เพดานร่วมกับแช่แข็ง · โดนแล้วต้านการคุมได้ 1.5 วิ' },
   grow: { icon: '💪', name: 'พลัง', desc: 'ทุกการตีของทุก skill ทำดาเมจเพิ่ม +X จนจบการสู้' },
   charge: { icon: '⚡', name: 'รวมพลัง', desc: 'การตีครั้งถัดไปของคุณ (skill ไหนก็ได้) แรง ×N' },
   thorns: { icon: '🌵', name: 'หนาม', desc: 'ทุกครั้งที่โดนตี สะท้อนดาเมจเท่าหนาม (ไม่เกิน 75% ของดาเมจที่โดน) · ระหว่างมีหนาม ศัตรูฟื้นเลือดได้ครึ่งเดียว' },
-  steadfast: { icon: '🗿', name: 'ใจเหล็ก', desc: 'แช่แข็ง ช้า และถ่วงเวลาที่คุณโดน อ่อนลง 60% จนจบการสู้' },
-  cleanse: { icon: '✨', name: 'ชำระ', desc: 'ลบดีบัฟบนตัวคุณ: ไฟ (กองแรงสุด) ความช้า การแช่แข็ง' },
+  steadfast: { icon: '🗿', name: 'ใจเหล็ก', desc: 'แช่แข็ง ช้า และถ่วงเวลาที่คุณโดน อ่อนลง 60% จนจบการสู้ · skill ที่มี 🗿 ทำงานทันทีเมื่อคุณโดนคุม (1 ครั้งต่อคูลดาวน์)' },
+  cleanse: { icon: '✨', name: 'ชำระ', desc: 'ลบดีบัฟบนตัวคุณ: ไฟ (กองแรงสุด) ความช้า การแช่แข็ง · skill ที่มี ✨ ทำงานทันทีเมื่อคุณโดนคุม (1 ครั้งต่อคูลดาวน์)' },
   dispel: { icon: '💥', name: 'สลาย', desc: 'ลบบัฟของศัตรูอย่างละ 1: พลัง หนาม รวมพลัง ใจเหล็ก และโล่ 20%' },
   amplify: { icon: '✖2', name: 'ขยาย', desc: 'บัฟที่มีตอนนี้ (พลัง หนาม รวมพลัง) เพิ่มเป็น 2 เท่า ไม่เกินเพดาน' },
   exec: { icon: '🎯', name: 'ประหาร', desc: 'แรงขึ้นเมื่อศัตรูเลือดต่ำกว่าที่กำหนด' },
   shatter: { icon: '🧊', name: 'ทุบน้ำแข็ง', desc: 'แรงขึ้นเมื่อศัตรูกำลังถูกแช่แข็ง' },
+  gear: { icon: '⚙', name: 'ฟันเฟือง', desc: 'ทุกครั้งที่ทำงาน สั่ง skill ข้างบนหรือข้างล่างให้ทำงานทันที สลับกันทีละตัว ที่แรงตาม % · คูลดาวน์ของตัวนั้นเดินต่อตามปกติ · อยู่ขอบ list = สั่งตัวเดียวถี่ขึ้น' },
+  overclock: { icon: '🚀', name: 'เร่งเครื่อง', desc: 'สั่ง skill ข้างบนและข้างล่างให้ทำงานพร้อมกันทันที ที่แรงตาม % · แล้วคูลดาวน์ของสองตัวนั้นเริ่มนับใหม่ (คุ้มกับ skill คูลดาวน์ยาว)' },
   cd: { icon: '⏱', name: 'คูลดาวน์', desc: 'ใช้ได้ทุกกี่วินาที (ทุก skill นับพร้อมกัน)' },
 };
 
@@ -80,6 +82,22 @@ export type Effect =
   | { k: 'amplify'; cap: number }
   | { k: 'leech'; /** your next hit heals this share of its damage */ pct: number };
 
+/**
+ * Engine: fires the skills right above / below it in the list (combat.ts). Those fires count as "set off" (ต่อ):
+ * a skill can be set off at most once per TRIGGER_GAP, and control they carry is scaled by the power.
+ * gear = n neighbours per fire, taking turns (above, below, above…); their cooldowns keep running
+ * overclock = both neighbours fire now; their cooldowns restart unless keep
+ */
+export interface Engine {
+  kind: 'gear' | 'overclock';
+  /** power of the fires it causes (1 = full) */
+  power: number;
+  /** gear: neighbours per fire (default 1) */
+  n?: number;
+  /** overclock: the fired skills keep their cooldown progress */
+  keep?: boolean;
+}
+
 export interface SkillNode {
   name: string;
   /** cooldown in ticks (10 ticks = 1s) */
@@ -87,6 +105,8 @@ export interface SkillNode {
   fx: Effect[];
   /** short playstyle label for Lv2 branches */
   style?: string;
+  /** engine skills fire their list neighbours */
+  engine?: Engine;
 }
 
 export type Variant = '' | 'a' | 'b' | 'a1' | 'a2' | 'b1' | 'b2';
@@ -196,6 +216,7 @@ export function execNode(node: SkillNode, c: Ctx) {
 const s = (secs: number) => Math.round(secs * 10);
 const hit = (n: number, o: Omit<Extract<Effect, { k: 'hit' }>, 'k' | 'n'> = {}): Effect => ({ k: 'hit', n, ...o });
 const N = (name: string, cdSecs: number, fx: Effect[], style?: string): SkillNode => ({ name, cd: s(cdSecs), fx, ...(style ? { style } : {}) });
+const E = (name: string, cdSecs: number, engine: Engine, fx: Effect[] = [], style?: string): SkillNode => ({ ...N(name, cdSecs, fx, style), engine });
 
 type Tree = Record<Variant, SkillNode>;
 const def = (id: string, arch: Archetype | 'none', tree: Tree, hero?: string): SkillDef => ({ id, arch, tree, name: tree[''].name, ...(hero ? { hero } : {}) });
@@ -205,34 +226,34 @@ export const SKILL_LIST: SkillDef[] = [
   def('strike', 'burst', {
     '': N('ฟัน', 4.3, [hit(4)]),
     a: N('ฟันหนัก', 5, [hit(9)], 'ตีหนัก'),
-    a1: N('ฟันทะลวง', 5, [hit(17, { pierce: 1 })]),
-    a2: N('ฟันประหาร', 5, [hit(16, { exec: [0.5, 1.6] })]),
+    a1: N('ฟันทะลวง', 5, [hit(20, { pierce: 1 })]),
+    a2: N('ฟันประหาร', 5, [hit(19, { exec: [0.5, 1.6] })]),
     b: N('ฟันคู่', 4, [hit(4, { times: 2 })], 'ตีหลายครั้ง'),
-    b1: N('ฟันพายุ', 4, [hit(5, { times: 4 })]),
-    b2: N('ฟันดูดเลือด', 4, [hit(7, { times: 2, leech: 0.3 })]),
+    b1: N('ฟันพายุ', 4, [hit(6, { times: 4 })]),
+    b2: N('ฟันดูดเลือด', 4, [hit(9, { times: 2, leech: 0.3 })]),
   }),
   def('jab', 'burst', {
     '': N('แทงเร็ว', 3.3, [hit(2)]),
     a: N('แทงไว', 2.7, [hit(4)], 'ความเร็ว'),
-    a1: N('แทงสายฟ้า', 2.1, [hit(5)]),
-    a2: N('แทงพิษ', 2.7, [hit(4, { burn: [1, 3] })]),
+    a1: N('แทงสายฟ้า', 2.1, [hit(7)]),
+    a2: N('แทงพิษ', 2.7, [hit(5, { burn: [1, 3] })]),
     b: N('แทงจุดตาย', 3, [hit(6, { noShield: 1.5 })], 'ตีศัตรูไร้โล่'),
-    b1: N('แทงทะลุ', 3, [hit(10, { pierce: 1, noShield: 1.5 })]),
+    b1: N('แทงทะลุ', 3, [hit(12, { pierce: 1, noShield: 1.5 })]),
     b2: N('แทงสะกด', 3, [hit(6, { noShield: 1.5 }), { k: 'delay', secs: 0.5 }]),
   }),
   def('heavy', 'burst', {
     '': N('ทุบหนัก', 7.5, [hit(12, { pierce: 0.5 })]),
     a: N('ค้อนทลาย', 8, [hit(17, { pierce: 1 })], 'ทลายโล่'),
-    a1: N('ค้อนพิฆาต', 8, [hit(34, { pierce: 1 })]),
-    a2: N('ค้อนสะท้าน', 8, [hit(18, { pierce: 1 }), { k: 'freeze', secs: 1 }]),
+    a1: N('ค้อนพิฆาต', 8, [hit(36, { pierce: 1 })]),
+    a2: N('ค้อนสะท้าน', 8, [hit(21, { pierce: 1 }), { k: 'freeze', secs: 1 }]),
     b: N('ทุบสั่น', 6, [hit(10, { pierce: 0.5 }), { k: 'slow', pct: 0.2, secs: 3 }], 'ตีแล้วคุม'),
-    b1: N('ทุบถ่วง', 6, [hit(12, { pierce: 0.5 }), { k: 'delay', secs: 1 }]),
-    b2: N('ทุบคู่', 6, [hit(10, { pierce: 0.5, times: 2 })]),
+    b1: N('ทุบถ่วง', 6, [hit(14, { pierce: 0.5 }), { k: 'delay', secs: 1 }]),
+    b2: N('ทุบคู่', 6, [hit(11, { pierce: 0.5, times: 2 })]),
   }),
   def('charge', 'burst', {
     '': N('รวมพลัง', 5, [{ k: 'charge', mult: 1.7 }]),
     a: N('รวมพลังใหญ่', 6, [{ k: 'charge', mult: 2.2 }], 'ตีทีเดียวแรงมาก'),
-    a1: N('ทุ่มสุดตัว', 7, [{ k: 'charge', mult: 3.3 }]),
+    a1: N('ทุ่มสุดตัว', 7, [{ k: 'charge', mult: 3.5 }]),
     a2: N('พลังเดือด', 6, [{ k: 'charge', mult: 2.2 }, { k: 'grow', n: 1 }]),
     b: N('รวมพลังเร็ว', 3.5, [{ k: 'charge', mult: 1.5 }], 'ใช้บ่อย'),
     b1: N('ต่อเนื่อง', 2.5, [{ k: 'charge', mult: 1.5 }]),
@@ -240,17 +261,17 @@ export const SKILL_LIST: SkillDef[] = [
   }),
   // ======================= tank =======================
   def('shield', 'tank', {
-    '': N('ยกโล่', 6, [{ k: 'shield', n: 6 }, hit(3)]),
-    a: N('ป้อมโล่', 7, [{ k: 'shield', n: 10 }, hit(4)], 'กำแพง'),
-    a1: N('กำแพงเหล็ก', 7, [{ k: 'shield', n: 15 }, hit(5)]),
-    a2: N('โล่หนาม', 7, [{ k: 'shield', n: 10 }, { k: 'thorns', n: 2 }, hit(5)]),
-    b: N('โล่ตอบโต้', 6, [{ k: 'shield', n: 6 }, hit(0, { shieldPct: 0.5 })], 'โล่เป็นดาเมจ'),
+    '': N('ยกโล่', 6, [{ k: 'shield', n: 6 }, hit(4)]),
+    a: N('ป้อมโล่', 7, [{ k: 'shield', n: 11 }, hit(6)], 'กำแพง'),
+    a1: N('กำแพงเหล็ก', 7, [{ k: 'shield', n: 15 }, hit(7)]),
+    a2: N('โล่หนาม', 7, [{ k: 'shield', n: 10 }, { k: 'thorns', n: 2 }, hit(6)]),
+    b: N('โล่ตอบโต้', 6, [{ k: 'shield', n: 7 }, hit(2, { shieldPct: 0.5 })], 'โล่เป็นดาเมจ'),
     b1: N('โล่กระแทกกลับ', 6, [{ k: 'shield', n: 6 }, hit(0, { shieldPct: 1 })]),
     b2: N('โล่ฟื้นฟู', 6, [{ k: 'shield', n: 6 }, hit(0, { shieldPct: 0.5 }), { k: 'heal', n: 4 }]),
   }),
   def('thorns', 'tank', {
-    '': N('เกราะหนาม', 7, [{ k: 'thorns', n: 2 }, hit(3)]),
-    a: N('หนามแหลม', 7, [{ k: 'thorns', n: 4 }, hit(4)], 'สะท้อนแรง'),
+    '': N('เกราะหนาม', 7, [{ k: 'thorns', n: 2 }, hit(4)]),
+    a: N('หนามแหลม', 7, [{ k: 'thorns', n: 4 }, hit(5)], 'สะท้อนแรง'),
     a1: N('หนามพิษ', 7, [{ k: 'thorns', n: 6 }, hit(5)]),
     a2: N('หนามขัดขวาง', 7, [{ k: 'thorns', n: 4, heal: 0.25 }, hit(5)]),
     b: N('หนามถาวร', 9, [{ k: 'thorns', n: 2, perm: true }], 'สะสมถาวร'),
@@ -259,16 +280,16 @@ export const SKILL_LIST: SkillDef[] = [
   }),
   def('stoneskin', 'tank', {
     '': N('ผิวหิน', 7, [{ k: 'shield', n: 2 }, { k: 'heal', n: 3 }, hit(3)]),
-    a: N('หินฟื้น', 7, [{ k: 'heal', n: 6 }, hit(4)], 'ฟื้นเลือด'),
-    a1: N('หินชีวิต', 7, [{ k: 'heal', n: 9 }, hit(5)]),
-    a2: N('หินบริสุทธิ์', 7, [{ k: 'heal', n: 6 }, { k: 'cleanse', n: 1 }, hit(5)]),
-    b: N('หินแกร่ง', 7, [{ k: 'shield', n: 6 }, hit(4)], 'เกราะ'),
-    b1: N('หินผา', 7, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(5)]),
-    b2: N('หินพุ่ง', 7, [{ k: 'shield', n: 6 }, hit(6)]),
+    a: N('หินฟื้น', 7, [{ k: 'heal', n: 6 }, hit(5)], 'ฟื้นเลือด'),
+    a1: N('หินชีวิต', 7, [{ k: 'heal', n: 9 }, hit(6)]),
+    a2: N('หินบริสุทธิ์', 7, [{ k: 'heal', n: 6 }, { k: 'cleanse', n: 1 }, hit(6)]),
+    b: N('หินแกร่ง', 7, [{ k: 'shield', n: 6 }, hit(5)], 'เกราะ'),
+    b1: N('หินผา', 7, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(6)]),
+    b2: N('หินพุ่ง', 7, [{ k: 'shield', n: 6 }, hit(8)]),
   }),
   def('cleanse', 'tank', {
     '': N('ชำระล้าง', 6, [{ k: 'cleanse', n: 1 }, { k: 'shield', n: 1 }, hit(3)]),
-    a: N('ล้างพิษ', 6, [{ k: 'cleanse', n: 2 }, { k: 'heal', n: 3 }, hit(4)], 'กันไฟ/การคุม'),
+    a: N('ล้างพิษ', 6, [{ k: 'cleanse', n: 2 }, { k: 'heal', n: 4 }, hit(5)], 'กันไฟ/การคุม'),
     a1: N('ล้างทั้งหมด', 6, [{ k: 'cleanse', n: 99 }, { k: 'heal', n: 5 }, hit(5)]),
     a2: N('ล้างแล้วแกร่ง', 6, [{ k: 'cleanse', n: 2 }, { k: 'steadfast' }]),
     b: N('ล้างแล้วตอบโต้', 6, [{ k: 'cleanse', n: 1 }, hit(4, { perRemoved: 3 })], 'ลงโทษดีบัฟ'),
@@ -277,36 +298,36 @@ export const SKILL_LIST: SkillDef[] = [
   }),
   // ======================= scaling =======================
   def('train', 'scaling', {
-    '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(2)]),
-    a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(1)], 'พลังก้อนใหญ่'),
-    a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 4 }, hit(1)]),
-    a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(3)]),
-    b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(1)], 'พลังถี่'),
-    b1: N('ฝึกไม่หยุด', 2.5, [{ k: 'grow', n: 1 }, hit(1)]),
-    b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(2)]),
+    '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(3)]),
+    a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(2)], 'พลังก้อนใหญ่'),
+    a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 4 }, hit(2)]),
+    a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
+    b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(2)], 'พลังถี่'),
+    b1: N('ฝึกไม่หยุด', 2.5, [{ k: 'grow', n: 1 }, hit(2)]),
+    b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(3)]),
   }),
   def('ignite', 'scaling', {
     '': N('จุดไฟ', 5.5, [{ k: 'burn', dps: 2, secs: 4 }]),
     a: N('ไฟลุก', 5.5, [{ k: 'burn', dps: 3, secs: 6 }], 'ไฟแรง'),
-    a1: N('ไฟนรก', 5.5, [{ k: 'burn', dps: 4, secs: 6 }]),
-    a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 3, secs: 6, growthHalf: true }]),
+    a1: N('ไฟนรก', 5.5, [{ k: 'burn', dps: 6, secs: 6 }]),
+    a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 4, secs: 6, growthHalf: true }]),
     b: N('ไฟยาว', 5.5, [{ k: 'burn', dps: 2, secs: 10 }], 'ไฟนาน'),
-    b1: N('ไฟไม่ดับ', 5.5, [{ k: 'burn', dps: 2, secs: 14 }]),
-    b2: N('ไฟเย็น', 5.5, [{ k: 'burn', dps: 2, secs: 10 }, { k: 'slow', pct: 0.15, secs: 3 }]),
+    b1: N('ไฟไม่ดับ', 5.5, [{ k: 'burn', dps: 3, secs: 14 }]),
+    b2: N('ไฟเย็น', 5.5, [{ k: 'burn', dps: 4, secs: 8 }, { k: 'slow', pct: 0.15, secs: 3 }]),
   }),
   def('feast', 'scaling', {
-    '': N('กินฟื้นแรง', 5.5, [{ k: 'heal', n: 4 }, { k: 'grow', n: 1 }]),
-    a: N('กินอิ่ม', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }], 'อยู่รอด'),
-    a1: N('งานเลี้ยง', 5.5, [{ k: 'heal', n: 8 }, { k: 'grow', n: 1 }]),
-    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }]),
-    b: N('กินโต', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }], 'โตเร็ว'),
-    b1: N('กินไม่หยุด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 3 }]),
-    b2: N('กินเลือด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }]),
+    '': N('กินฟื้นแรง', 5.5, [{ k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
+    a: N('กินอิ่ม', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
+    a1: N('งานเลี้ยง', 5.5, [{ k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
+    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
+    b: N('กินโต', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
+    b1: N('กินไม่หยุด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 3 }, hit(3)]),
+    b2: N('กินเลือด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
   }),
   def('amplify', 'scaling', {
     '': N('ขยายพลัง', 7, [{ k: 'amplify', cap: 4 }]),
     a: N('ขยายใหญ่', 7, [{ k: 'amplify', cap: 8 }], 'ระเบิดช่วงท้าย'),
-    a1: N('ทวีคูณ', 7, [{ k: 'amplify', cap: 14 }]),
+    a1: N('ทวีคูณ', 7, [{ k: 'amplify', cap: 16 }]),
     a2: N('ขยายรวมพลัง', 7, [{ k: 'amplify', cap: 8 }, { k: 'charge', mult: 1.3 }]),
     b: N('ขยายเร็ว', 4.5, [{ k: 'amplify', cap: 3 }], 'สม่ำเสมอ'),
     b1: N('ขยายถี่', 3.5, [{ k: 'amplify', cap: 3 }]),
@@ -314,31 +335,31 @@ export const SKILL_LIST: SkillDef[] = [
   }),
   // ======================= control =======================
   def('frost', 'control', {
-    '': N('ลูกน้ำแข็ง', 5, [hit(5), { k: 'freeze', secs: 1.2 }]),
-    a: N('แช่ยาว', 5, [hit(4), { k: 'freeze', secs: 2 }], 'ล็อกศัตรู'),
-    a1: N('ยุคน้ำแข็ง', 5, [hit(4), { k: 'freeze', secs: 2.5 }]),
-    a2: N('หนาวสะท้าน', 5, [hit(4), { k: 'freeze', secs: 2 }, { k: 'slow', pct: 0.2, secs: 3 }]),
+    '': N('ลูกน้ำแข็ง', 5, [hit(5), { k: 'freeze', secs: 1 }]),
+    a: N('แช่ยาว', 5, [hit(4), { k: 'freeze', secs: 1.7 }], 'ล็อกศัตรู'),
+    a1: N('ยุคน้ำแข็ง', 5, [hit(10), { k: 'freeze', secs: 2.5 }]),
+    a2: N('หนาวสะท้าน', 5, [hit(8), { k: 'freeze', secs: 2 }, { k: 'slow', pct: 0.2, secs: 3 }]),
     b: N('น้ำแข็งคม', 5, [hit(7), { k: 'freeze', secs: 1 }], 'ดาเมจ'),
-    b1: N('หอกน้ำแข็ง', 5, [hit(10), { k: 'freeze', secs: 1 }]),
-    b2: N('ลูกเห็บ', 5, [hit(4, { times: 2 }), { k: 'freeze', secs: 0.7 }]),
+    b1: N('หอกน้ำแข็ง', 5, [hit(15), { k: 'freeze', secs: 1 }]),
+    b2: N('ลูกเห็บ', 5, [hit(6, { times: 2 }), { k: 'freeze', secs: 0.7 }]),
   }),
   def('chill', 'control', {
-    '': N('ลมหนาว', 7, [hit(2), { k: 'slow', pct: 0.35, secs: 3 }]),
-    a: N('พายุหิมะ', 7, [hit(3), { k: 'slow', pct: 0.4, secs: 3 }], 'ช้ามาก'),
-    a1: N('ลมเยือกแข็ง', 7, [hit(3), { k: 'slow', pct: 0.45, secs: 3 }]),
-    a2: N('พายุมีด', 7, [hit(4, { ifSlowed: true }), { k: 'slow', pct: 0.4, secs: 3 }]),
-    b: N('ลมเย็นยาว', 7, [hit(3), { k: 'slow', pct: 0.25, secs: 5 }], 'ช้านาน'),
-    b1: N('หนาวนิรันดร์', 7, [hit(3), { k: 'slow', pct: 0.25, secs: 7 }]),
-    b2: N('ลมร้อนเย็น', 7, [hit(3), { k: 'slow', pct: 0.25, secs: 5 }, { k: 'burn', dps: 1, secs: 5 }]),
+    '': N('ลมหนาว', 6.5, [hit(3), { k: 'slow', pct: 0.35, secs: 3 }]),
+    a: N('พายุหิมะ', 6.5, [hit(5), { k: 'slow', pct: 0.4, secs: 3 }], 'ช้ามาก'),
+    a1: N('ลมเยือกแข็ง', 6.5, [hit(5), { k: 'slow', pct: 0.45, secs: 3 }]),
+    a2: N('พายุมีด', 6.5, [hit(3), { k: 'slow', pct: 0.4, secs: 3 }, hit(4, { ifSlowed: true })]),
+    b: N('ลมเย็นยาว', 6.5, [hit(5), { k: 'slow', pct: 0.25, secs: 5 }], 'ช้านาน'),
+    b1: N('หนาวนิรันดร์', 6.5, [hit(5), { k: 'slow', pct: 0.25, secs: 7 }]),
+    b2: N('ลมร้อนเย็น', 6.5, [hit(4), { k: 'slow', pct: 0.25, secs: 5 }, { k: 'burn', dps: 1, secs: 5 }]),
   }),
   def('dispel', 'control', {
     '': N('สลายเวท', 6, [{ k: 'dispel', n: 1 }, hit(4)]),
     a: N('สลายใหญ่', 6, [{ k: 'dispel', n: 2, shield: 0.3 }, hit(3)], 'ล้างบัฟ'),
-    a1: N('สลายสิ้น', 6, [{ k: 'dispel', n: 3 }, hit(3)]),
-    a2: N('ทลายโล่', 6, [{ k: 'dispel', n: 2, shield: 0.4 }, hit(3)]),
+    a1: N('สลายสิ้น', 6, [{ k: 'dispel', n: 3 }, hit(4)]),
+    a2: N('ทลายโล่', 6, [{ k: 'dispel', n: 2, shield: 0.4 }, hit(4)]),
     b: N('สลายแล้วตี', 6, [{ k: 'dispel', n: 1 }, hit(2, { perRemoved: 2 })], 'ลงโทษบัฟ'),
-    b1: N('สลายพิฆาต', 6, [{ k: 'dispel', n: 1 }, hit(2, { perRemoved: 3 })]),
-    b2: N('ขโมยพลัง', 6, [{ k: 'dispel', n: 1, steal: true }, hit(3)]),
+    b1: N('สลายพิฆาต', 6, [{ k: 'dispel', n: 1 }, hit(3, { perRemoved: 3 })]),
+    b2: N('ขโมยพลัง', 6, [{ k: 'dispel', n: 1, steal: true }, hit(4)]),
   }),
   def('ironwill', 'none', {
     '': N('ใจเหล็ก', 8, [{ k: 'steadfast' }, { k: 'shield', n: 2 }]),
@@ -349,78 +370,97 @@ export const SKILL_LIST: SkillDef[] = [
     b1: N('ใจเพลิง', 8, [{ k: 'steadfast' }, { k: 'grow', n: 2 }]),
     b2: N('ใจกล้า', 8, [{ k: 'steadfast' }, hit(4)]),
   }),
+  // ======================= engines (fire the skills right above / below) =======================
+  def('gear', 'none', {
+    '': E('ฟันเฟือง', 3, { kind: 'gear', power: 0.4 }),
+    a: E('เฟืองหนัก', 3, { kind: 'gear', power: 0.7 }, [], 'แรงขึ้น'),
+    a1: E('เฟืองเหล็ก', 3, { kind: 'gear', power: 1 }),
+    a2: E('เฟืองโล่', 3, { kind: 'gear', power: 0.7 }, [{ k: 'shield', n: 3 }]),
+    b: E('เฟืองไว', 2.4, { kind: 'gear', power: 0.5 }, [], 'ถี่ขึ้น'),
+    b1: E('เฟืองพายุ', 2, { kind: 'gear', power: 0.75 }),
+    b2: E('เฟืองคู่', 2.8, { kind: 'gear', power: 0.6, n: 2 }),
+  }),
+  def('overclock', 'none', {
+    '': E('เร่งเครื่อง', 6, { kind: 'overclock', power: 0.85 }),
+    a: E('เร่งแรง', 6, { kind: 'overclock', power: 1.3 }, [], 'แรงขึ้น'),
+    a1: E('เร่งสุดขีด', 6, { kind: 'overclock', power: 1.6 }),
+    a2: E('เร่งแล้วตั้งรับ', 6, { kind: 'overclock', power: 1.3 }, [{ k: 'shield', n: 4 }]),
+    b: E('เร่งไว', 4.5, { kind: 'overclock', power: 1.1 }, [], 'ถี่ขึ้น'),
+    b1: E('เร่งถี่', 4, { kind: 'overclock', power: 1.25 }),
+    b2: E('เร่งต่อเนื่อง', 4.5, { kind: 'overclock', power: 0.9, keep: true }),
+  }),
   // ======================= hero uniques =======================
   def('bulwark', 'tank', {
-    '': N('โล่กระแทก', 6, [hit(5, { shieldPct: 1 })]),
-    a: N('ปะทะ', 6, [hit(6, { shieldPct: 1.3 })], 'โล่เป็นดาเมจ'),
-    a1: N('ทลายด้วยโล่', 6, [hit(7, { shieldPct: 1.7 })]),
-    a2: N('โล่สะท้าน', 6, [hit(7, { shieldPct: 1.3 }), { k: 'freeze', secs: 0.5 }]),
-    b: N('ปะทะแล้วตั้งรับ', 6, [hit(6, { shieldPct: 0.8 }), { k: 'shield', n: 3 }], 'วนโล่'),
-    b1: N('ตั้งรับเต็มที่', 6, [hit(7, { shieldPct: 0.8 }), { k: 'shield', n: 6 }]),
-    b2: N('ปะทะฟื้น', 6, [hit(7, { shieldPct: 0.8 }), { k: 'shield', n: 3 }, { k: 'heal', n: 4 }]),
+    '': N('โล่กระแทก', 6, [hit(6, { shieldPct: 1 })]),
+    a: N('ปะทะ', 6, [hit(8, { shieldPct: 1.3 })], 'โล่เป็นดาเมจ'),
+    a1: N('ทลายด้วยโล่', 6, [hit(9, { shieldPct: 1.7 })]),
+    a2: N('โล่สะท้าน', 6, [hit(9, { shieldPct: 1.3 }), { k: 'freeze', secs: 0.5 }]),
+    b: N('ปะทะแล้วตั้งรับ', 6, [hit(8, { shieldPct: 0.8 }), { k: 'shield', n: 4 }], 'วนโล่'),
+    b1: N('ตั้งรับเต็มที่', 6, [hit(9, { shieldPct: 0.8 }), { k: 'shield', n: 6 }]),
+    b2: N('ปะทะฟื้น', 6, [hit(9, { shieldPct: 0.8 }), { k: 'shield', n: 4 }, { k: 'heal', n: 4 }]),
   }, 'knight'),
   def('spikewall', 'tank', {
-    '': N('ป้อมหนาม', 5.5, [hit(3, { thornsX: 3 })]),
-    a: N('ระเบิดหนาม', 5.5, [hit(3, { thornsX: 3 })], 'แปลงหนามเป็นดาเมจ'),
-    a1: N('หนามพุ่ง', 5.5, [hit(3, { thornsX: 3.5 })]),
-    a2: N('หนามล้อม', 5.5, [hit(3, { thornsX: 3 }), { k: 'shield', n: 4 }]),
-    b: N('ปลูกหนาม', 5.5, [hit(3, { thornsX: 2 }), { k: 'thorns', n: 1 }], 'สะสมหนาม'),
-    b1: N('สวนหนาม', 5.5, [hit(3, { thornsX: 2 }), { k: 'thorns', n: 2 }]),
-    b2: N('หนามฟื้น', 5.5, [hit(3, { thornsX: 2 }), { k: 'thorns', n: 1 }, { k: 'heal', n: 3 }]),
+    '': N('ป้อมหนาม', 5.5, [hit(6, { thornsX: 3 })]),
+    a: N('ระเบิดหนาม', 5.5, [hit(8, { thornsX: 3.5 })], 'แปลงหนามเป็นดาเมจ'),
+    a1: N('หนามพุ่ง', 5.5, [hit(8, { thornsX: 3 })]),
+    a2: N('หนามล้อม', 5.5, [hit(7, { thornsX: 3.5 }), { k: 'shield', n: 5 }]),
+    b: N('ปลูกหนาม', 5.5, [hit(4, { thornsX: 2 }), { k: 'thorns', n: 1 }], 'สะสมหนาม'),
+    b1: N('สวนหนาม', 5.5, [hit(7, { thornsX: 2 }), { k: 'thorns', n: 2 }]),
+    b2: N('หนามฟื้น', 5.5, [hit(6, { thornsX: 2 }), { k: 'thorns', n: 1 }, { k: 'heal', n: 4 }]),
   }, 'thornguard'),
   def('execute', 'burst', {
-    '': N('ปลิดชีพ', 5, [hit(7, { exec: [0.5, 1.6] })]),
-    a: N('ประหาร', 5, [hit(8, { exec: [0.5, 1.8] })], 'ปิดเกม'),
-    a1: N('เพชฌฆาต', 5, [hit(8, { exec: [0.35, 2.5] })]),
-    a2: N('ประหารทะลุ', 5, [hit(9, { exec: [0.5, 1.8], pierce: 1 })]),
-    b: N('เชือดเร็ว', 4, [hit(5, { exec: [0.5, 1.5] })], 'ใช้บ่อย'),
-    b1: N('เชือดไว', 3, [hit(5, { exec: [0.5, 1.5] })]),
-    b2: N('เชือดดูดเลือด', 4, [hit(5, { exec: [0.5, 1.5], leech: 0.3 })]),
+    '': N('ปลิดชีพ', 5, [hit(10, { exec: [0.5, 1.5] })]),
+    a: N('ประหาร', 5, [hit(11, { exec: [0.5, 1.6] })], 'ปิดเกม'),
+    a1: N('เพชฌฆาต', 5, [hit(11, { exec: [0.35, 2.2] })]),
+    a2: N('ประหารทะลุ', 5, [hit(11, { exec: [0.5, 1.5], pierce: 1 })]),
+    b: N('เชือดเร็ว', 4, [hit(8, { exec: [0.5, 1.4] })], 'ใช้บ่อย'),
+    b1: N('เชือดไว', 3, [hit(7, { exec: [0.5, 1.4] })]),
+    b2: N('เชือดดูดเลือด', 4, [hit(8, { exec: [0.5, 1.4], leech: 0.3 })]),
   }, 'assassin'),
   def('flurry', 'burst', {
     '': N('พายุดาบ', 5, [hit(2, { times: 3 })]),
-    a: N('พายุคม', 5, [hit(1, { times: 4 })], 'ตีรัวขึ้น'),
-    a1: N('พายุพันดาบ', 5, [hit(1, { times: 6 })]),
-    a2: N('ดาบเพลิง', 5, [hit(1, { times: 5, burn: [1, 2] })]),
-    b: N('ดาบหนัก', 5, [hit(2, { times: 3 })], 'ตีน้อยแต่แรง'),
-    b1: N('ดาบทลาย', 5, [hit(4, { times: 3 })]),
-    b2: N('ดาบถ่วง', 5, [hit(2, { times: 3 }), { k: 'delay', secs: 0.3 }]),
+    a: N('พายุคม', 5, [hit(2, { times: 4 })], 'ตีรัวขึ้น'),
+    a1: N('พายุพันดาบ', 5, [hit(2, { times: 5 })]),
+    a2: N('ดาบเพลิง', 5, [hit(2, { times: 5, burn: [1, 2] })]),
+    b: N('ดาบหนัก', 5, [hit(3, { times: 3 })], 'ตีน้อยแต่แรง'),
+    b1: N('ดาบทลาย', 5, [hit(6, { times: 3 })]),
+    b2: N('ดาบถ่วง', 5, [hit(4, { times: 3 }), { k: 'delay', secs: 0.3 }]),
   }, 'duelist'),
   def('rampage', 'scaling', {
-    '': N('คลั่ง', 7.5, [hit(2, { times: 2 })]),
-    a: N('คลั่งรัว', 6.5, [hit(2, { times: 3 })], 'ตีหลายครั้ง'),
-    a1: N('บ้าคลั่ง', 6.5, [hit(2, { times: 4 })]),
-    a2: N('คลั่งโต', 6.5, [hit(2, { times: 3 }), { k: 'grow', n: 1 }]),
-    b: N('คลั่งหนัก', 6.5, [hit(4, { times: 2 })], 'ตีแรง'),
-    b1: N('คลั่งทลาย', 6.5, [hit(6, { times: 2 })]),
-    b2: N('คลั่งเลือด', 6.5, [hit(4, { times: 2, leech: 0.3 })]),
+    '': N('คลั่ง', 7, [hit(2, { times: 2 })]),
+    a: N('คลั่งรัว', 6, [hit(2, { times: 3 })], 'ตีหลายครั้ง'),
+    a1: N('บ้าคลั่ง', 6, [hit(4, { times: 4 })]),
+    a2: N('คลั่งโต', 6, [hit(2, { times: 3 }), { k: 'grow', n: 1 }]),
+    b: N('คลั่งหนัก', 6, [hit(5, { times: 2 })], 'ตีแรง'),
+    b1: N('คลั่งทลาย', 6, [hit(9, { times: 2 })]),
+    b2: N('คลั่งเลือด', 6, [hit(6, { times: 2, leech: 0.3 })]),
   }, 'berserker'),
   def('inferno', 'scaling', {
     '': N('ระเบิดเพลิง', 6, [hit(2, { burnPct: 0.5, pierce: 1 })]),
-    a: N('ระเบิดใหญ่', 6, [hit(2, { burnPct: 0.7, pierce: 1 })], 'จุดระเบิดไฟที่สะสม'),
-    a1: N('ระเบิดมหันต์', 6, [hit(2, { burnPct: 0.9, pierce: 1 })]),
-    a2: N('ระเบิดลุกลาม', 6, [hit(2, { burnPct: 0.7, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }]),
+    a: N('ระเบิดใหญ่', 6, [hit(2, { burnPct: 0.75, pierce: 1 })], 'จุดระเบิดไฟที่สะสม'),
+    a1: N('ระเบิดมหันต์', 6, [hit(2, { burnPct: 0.95, pierce: 1 })]),
+    a2: N('ระเบิดลุกลาม', 6, [hit(2, { burnPct: 0.75, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }]),
     b: N('จุดระเบิด', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 1.5, secs: 6 }], 'สะสมไฟ'),
     b1: N('ระเบิดลาวา', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 3, secs: 6 }]),
     b2: N('ระเบิดควัน', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }, { k: 'slow', pct: 0.2, secs: 3 }]),
   }, 'pyro'),
   def('shatter', 'control', {
     '': N('ทุบน้ำแข็ง', 4.5, [hit(5, { pierce: 0.5, frozen: 1.8 })]),
-    a: N('ทุบแตก', 4.5, [hit(6, { pierce: 0.5, frozen: 2.5 })], 'คอมโบแช่แข็ง'),
-    a1: N('ทุบแหลก', 4.5, [hit(10, { pierce: 1, frozen: 3.5 })]),
-    a2: N('ทุบแล้วแช่', 4.5, [hit(9, { pierce: 1, frozen: 3 }), { k: 'freeze', secs: 0.5 }]),
+    a: N('ทุบแตก', 4.5, [hit(5, { pierce: 0.5, frozen: 2.2 })], 'คอมโบแช่แข็ง'),
+    a1: N('ทุบแหลก', 4.5, [hit(10, { pierce: 1, frozen: 3 })]),
+    a2: N('ทุบแล้วแช่', 4.5, [hit(8, { pierce: 1, frozen: 2.6 }), { k: 'freeze', secs: 0.5 }]),
     b: N('ทุบตรง', 4.5, [hit(8, { pierce: 0.5, frozen: 2 })], 'ไม่ต้องรอคอมโบ'),
-    b1: N('ทุบทะลวง', 4.5, [hit(13, { pierce: 1, frozen: 2 })]),
+    b1: N('ทุบทะลวง', 4.5, [hit(12, { pierce: 1, frozen: 2 })]),
     b2: N('ทุบเย็น', 4.5, [hit(11, { pierce: 1, frozen: 2 }), { k: 'slow', pct: 0.2, secs: 3 }]),
   }, 'witch'),
   def('timewarp', 'control', {
     '': N('บิดเวลา', 5, [hit(7), { k: 'delay', secs: 1.25 }]),
-    a: N('ย้อนเวลา', 5, [hit(6), { k: 'delay', secs: 1.6 }], 'ล็อกเวลา'),
-    a1: N('หยุดกาล', 5, [hit(6), { k: 'delay', secs: 1.75 }]),
-    a2: N('ย้อนแล้วช้า', 5, [hit(6), { k: 'delay', secs: 1.6 }, { k: 'slow', pct: 0.2, secs: 3 }]),
-    b: N('เวลาคม', 5, [hit(8), { k: 'delay', secs: 1 }], 'ดาเมจ'),
-    b1: N('ตัดเวลา', 5, [hit(8), { k: 'delay', secs: 1 }]),
-    b2: N('เวลาแข็ง', 5, [hit(8), { k: 'delay', secs: 1 }, { k: 'freeze', secs: 0.5 }]),
+    a: N('ย้อนเวลา', 5, [hit(9), { k: 'delay', secs: 1.5 }], 'ล็อกเวลา'),
+    a1: N('หยุดกาล', 5, [hit(9), { k: 'delay', secs: 1.5 }]),
+    a2: N('ย้อนแล้วช้า', 5, [hit(10), { k: 'delay', secs: 1.5 }, { k: 'slow', pct: 0.2, secs: 3 }]),
+    b: N('เวลาคม', 4.5, [hit(11), { k: 'delay', secs: 1 }], 'ดาเมจ'),
+    b1: N('ตัดเวลา', 4.5, [hit(11), { k: 'delay', secs: 1 }]),
+    b2: N('เวลาแข็ง', 4.5, [hit(10), { k: 'freeze', secs: 1 }]),
   }, 'chrono'),
 ];
 
@@ -431,6 +471,12 @@ export const nodeOf = (k: Pick<SkillInstance, 'id' | 'v'>): SkillNode => SKILLS[
 
 /** True if the variant deals direct hits (used by bots and the explanation). */
 export const hits = (node: SkillNode) => node.fx.some((e) => e.k === 'hit');
+
+/** True if the variant fires early when its owner is controlled (it has ✨ ชำระ or 🗿 ใจเหล็ก). */
+export const reacts = (node: SkillNode) => node.fx.some((e) => e.k === 'cleanse' || e.k === 'steadfast');
+
+/** True for engine skills (ฟันเฟือง, เร่งเครื่อง): they fire their list neighbours. */
+export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
 
 export const ARCH_NAME: Record<Archetype | 'none', string> = {
   tank: 'ถึก',
@@ -453,6 +499,9 @@ const sec = (t: number) => `${+t.toFixed(2)}s`;
 /** Effect list → icon chips, e.g. [⚔4 ×2] [🔥2 6s]. The cooldown chip comes last. */
 export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
   const out: Chip[] = [];
+  const en = node.engine;
+  if (en?.kind === 'gear') out.push({ kw: 'gear', text: `⚙${en.n && en.n > 1 ? '↕ บน+ล่าง' : '↕ สลับบน/ล่าง'} ${pct(en.power)}` });
+  if (en?.kind === 'overclock') out.push({ kw: 'overclock', text: `🚀↕ บน+ล่าง ${pct(en.power)}${en.keep ? ' คูลดาวน์ไม่เริ่มใหม่' : ''}` });
   for (const e of node.fx) {
     switch (e.k) {
       case 'hit': {

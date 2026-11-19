@@ -1,9 +1,9 @@
 import { HEROES_BY_ID, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
-import { SKILLS, execNode, lvOf, nodeOf, type Ctx, type FighterView } from './skills';
+import { SKILLS, execNode, lvOf, nodeOf, reacts, type Ctx, type FighterView } from './skills';
 import type {
-  BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SkillInstance, Snap, StatusKind,
+  BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
 } from './types';
 
 /**
@@ -14,17 +14,27 @@ import type {
  * Every equipped skill runs its own cooldown at the same time. When it is ready it fires.
  * Connect bonuses work when the skill right above or below matches their condition. A trigger bonus makes the
  * matching neighbour fire right away too, without resetting its cooldown. Ties fire top to bottom.
+ * Engine skills fire their neighbours (ฟันเฟือง: one per fire, taking turns; เร่งเครื่อง: both + restart their cooldown).
+ * Anything set off by another skill (trigger bonus or engine) counts as "ต่อ": a skill can be set off at most once
+ * per TRIGGER_GAP, so chains stay bounded.
+ *
+ * Control rules (so no side is locked for a whole fight):
+ * - freeze and cast delay share a cap per fight (freezeCap), whatever skill, chain or engine applies them;
+ * - a frozen fighter cannot be frozen or delayed again; when a freeze ends or a delay lands, the fighter is immune
+ *   to freeze and delay for CTL_IMMUNE ticks;
+ * - skills with ✨ ชำระ or 🗿 ใจเหล็ก react: when control lands on their owner they fire right away
+ *   (at most once per their cooldown, and their cooldown restarts).
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 9;
+export const SIM_VERSION = 10;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
  * Base HP per day, tuned with `npm run balance` so fights last ≈10–13s on days 1–3,
  * 15–22s on days 4–7 and 23–30s on day 8+ (bot damage per second grows about linearly with the day).
  */
-const HP_BY_DAY = [16, 18, 21, 36, 46, 56, 66, 105, 116, 134, 152, 172, 192];
+const HP_BY_DAY = [16, 18, 21, 39, 50, 61, 72, 127, 135, 156, 176, 198, 220];
 export const hpFor = (day: number) => {
   const d = Math.max(1, Math.floor(day));
   return d <= HP_BY_DAY.length ? HP_BY_DAY[d - 1] : HP_BY_DAY[HP_BY_DAY.length - 1] + 60 * (d - HP_BY_DAY.length);
@@ -41,6 +51,24 @@ export const freezeCap = (day: number) => (day <= 3 ? 2 : day <= 7 ? 4.5 : 6) * 
 const SLOW_CAP = 0.5;
 /** longest trigger chain (each skill fires at most once per chain anyway) */
 const MAX_CHAIN = 8;
+/**
+ * A skill set off by another skill (trigger bonus / engine) cannot be set off again for its own cooldown,
+ * but at least TRIGGER_GAP and at most TRIGGER_GAP_MAX ticks. So "ต่อ" at most doubles a fast skill and
+ * triples a slow one, and a chain can never loop.
+ */
+export const TRIGGER_GAP = 2 * TPS;
+export const TRIGGER_GAP_MAX = 4 * TPS;
+/** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … */
+export const CHAIN_DECAY = 0.75;
+/** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
+export const CTL_IMMUNE = 1.5 * TPS;
+/** The control cap also grows with the fight: at tick t at most CTL_BASE + CTL_SHARE × t ticks can have been spent. */
+export const CTL_BASE = 1 * TPS;
+export const CTL_SHARE = 0.3;
+/** A fighter that has not fired any skill for this long shakes off freeze / slow and resists all control until it fires. */
+export const SHAKE_OFF = 4 * TPS;
+/** control shorter than this does not set off ✨/🗿 reactions */
+const REACT_MIN = 5;
 /** A thorns stack lasts this long, so thorns cannot pile up for the whole fight. */
 export const THORNS_TICKS = 10 * TPS;
 /** A reflection is at most this share of the hit that caused it. */
@@ -61,6 +89,16 @@ interface Block {
   shieldOnFire: number;
   /** blocks (indexes into fighter.blocks) this one sets off when it fires */
   triggers: number[];
+  /** list neighbours (indexes into fighter.blocks), used by engines */
+  adj: number[];
+  /** gear: next neighbour to fire */
+  rr: number;
+  /** tick from which another skill may set this one off again */
+  trigAt: number;
+  /** ✨/🗿 skill: fires early when its owner gets controlled */
+  reacts: boolean;
+  /** tick from which it may react again */
+  reactAt: number;
 }
 
 /** A buff stack remembers which block made it, so damage can be credited and dispel removes one stack. */
@@ -81,7 +119,7 @@ interface Fighter {
   shield: number;
   frozen: number;
   frozenTotal: number;
-  /** cooldown ticks pushed back by cast delay (shares the control cap with freeze) */
+  /** control used from the shared cap: frozen ticks + delayed ticks */
   delayN: number;
   slowPct: number;
   slowT: number;
@@ -106,6 +144,13 @@ interface Fighter {
   thornsHeal: number;
   flags: Record<string, number>;
   stats: BlockStat[];
+  /** freeze and delay are resisted until this tick (control-immunity window) */
+  immuneUntil: number;
+  /** blocks waiting to react to control (processed after the current action) */
+  pendingReact: number[];
+  /** tick of this fighter's last skill fire (for SHAKE_OFF) */
+  lastFire: number;
+  side_: SideStat;
 }
 
 const sum = (xs: Stack[]) => xs.reduce((n, x) => n + x.v, 0);
@@ -126,8 +171,10 @@ function makeBlocks(b: Build): Block[] {
     out.push({
       inst: { ...inst }, idx, cd: cdTicks(inst, t.haste), prog: 0,
       power: t.power, dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
+  out.forEach((blk, i) => { blk.adj = [i - 1, i + 1].filter((j) => j >= 0 && j < out.length); });
   return out;
 }
 
@@ -142,6 +189,8 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
     burns: [], freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat),
+    immuneUntil: 0, pendingReact: [], lastFire: 0,
+    side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0 },
   };
 }
 
@@ -241,9 +290,30 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   }
 
   /** power = cast power (connect bonus × echo); bonusDmg = + damage per hit from connect bonuses */
+  /** control lands on foe: queue its ✨/🗿 reactions */
+  function controlled(foe: Fighter) {
+    for (let bi = 0; bi < foe.blocks.length; bi++) {
+      const b = foe.blocks[bi];
+      if (b.reacts && t >= b.reactAt && !foe.pendingReact.includes(bi)) foe.pendingReact.push(bi);
+    }
+  }
+  /** freeze / delay ticks that can still land on this fighter now (their shared cap) */
+  const ctlRoom = (x: Fighter) => Math.floor(Math.min(fCap, CTL_BASE + CTL_SHARE * t) - x.frozenTotal);
+  /** can freeze / delay land on this fighter now? (counts a resist when not) */
+  const shaking = (x: Fighter) => t - x.lastFire >= SHAKE_OFF;
+  function canControl(foe: Fighter) {
+    if (foe.frozen > 0 || t < foe.immuneUntil || shaking(foe)) {
+      foe.side_.resisted++;
+      return false;
+    }
+    return true;
+  }
+
   function runSkill(f: Fighter, foe: Fighter, blk: Block, power: number, bonusDmg: number) {
     const inst = blk.inst;
     const st = f.stats[blk.idx];
+    /** fires below full power (engines, echo) also carry less control */
+    const ctl = Math.min(1, power);
     const thornsUntil = () => t + (f.hooks.thornsSecs ? f.hooks.thornsSecs * TPS : THORNS_TICKS);
     const ctx: Ctx = {
       v: (n) => Math.max(1, Math.round(n * power)),
@@ -296,48 +366,65 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       },
       burn(dps, secs) { addBurn(foe, dps, f.hooks.burnSecs ? f.hooks.burnSecs(secs) : secs, blk.idx); },
       freeze(secs) {
-        if (foe.ignoreFreeze) {
-          foe.ignoreFreeze = false;
+        if (!canControl(foe)) {
           emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
           return;
         }
-        let ticks = secs * TPS;
+        if (foe.ignoreFreeze) {
+          foe.ignoreFreeze = false;
+          foe.side_.resisted++;
+          emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
+          return;
+        }
+        let ticks = secs * ctl * TPS;
         if (f.hooks.freezeTicks) ticks = f.hooks.freezeTicks(ticks);
         ticks *= Math.pow(FREEZE_DR, foe.freezeN) * foe.ctlKeep; // diminishing returns (recovers over time), ใจเหล็ก
-        ticks = Math.max(0, Math.min(MAX_FREEZE_TICKS, fCap - foe.frozenTotal, Math.round(ticks)));
+        ticks = Math.max(0, Math.min(MAX_FREEZE_TICKS, ctlRoom(foe), Math.round(ticks)));
         foe.freezeN++;
+        if (ticks <= 0) foe.side_.resisted++;
         if (ticks > foe.frozen) {
           foe.frozenTotal += ticks - foe.frozen;
           st.fz += ticks - foe.frozen;
           foe.frozen = ticks;
         }
         emit({ type: 'status', side: foe.side, status: 'freeze', value: ticks });
+        if (ticks >= REACT_MIN) controlled(foe);
       },
       slow(pct0, secs0) {
-        const [pct, secs] = f.hooks.slow ? f.hooks.slow(pct0, secs0) : [pct0, secs0];
+        const [pct, secs] = f.hooks.slow ? f.hooks.slow(pct0, secs0 * ctl) : [pct0, secs0 * ctl];
         const p = Math.min(SLOW_CAP, pct * foe.ctlKeep);
         foe.slowPct = foe.slowT > 0 ? Math.max(foe.slowPct, p) : p;
         // total slowed time per fight is capped (twice the freeze cap); past it, slows are resisted
-        const room = Math.max(0, sCap - foe.slowTotal - foe.slowT);
+        // total slowed time has its own cap (1.75 × the freeze cap), which also grows with the fight
+        const room = shaking(foe) ? 0 : Math.max(0, Math.floor(Math.min(sCap, 2 * CTL_BASE + 2 * CTL_SHARE * t)) - foe.slowTotal - foe.slowT);
         const add = Math.min(room, Math.max(0, secs * TPS - foe.slowT));
         if (add <= 0 && foe.slowT <= 0) {
+          foe.side_.resisted++;
           emit({ type: 'status', side: foe.side, status: 'slow', value: 0 });
           return;
         }
         foe.slowT += add;
         emit({ type: 'status', side: foe.side, status: 'slow', value: Math.round(p * 100) });
+        if (add >= REACT_MIN && p >= 0.3) controlled(foe);
       },
       delay(secs) {
         // cast delay: every enemy cooldown goes back. Diminishes with repeated use and shares the control cap with freeze.
-        let ticks = secs * TPS * Math.pow(FREEZE_DR, foe.delayN) * foe.ctlKeep;
-        ticks = Math.max(0, Math.min(fCap - foe.frozenTotal, Math.round(ticks)));
+        if (!canControl(foe)) {
+          emit({ type: 'status', side: foe.side, status: 'delay', value: 0 });
+          return;
+        }
+        let ticks = secs * ctl * TPS * Math.pow(FREEZE_DR, foe.delayN) * foe.ctlKeep;
+        ticks = Math.max(0, Math.min(ctlRoom(foe), Math.round(ticks)));
         foe.delayN++;
         if (ticks > 0) {
           foe.frozenTotal += ticks;
+          foe.side_.dl += ticks;
           st.fz += ticks;
           for (const b of foe.blocks) b.prog = Math.max(0, b.prog - ticks);
-        }
+          foe.immuneUntil = t + CTL_IMMUNE;
+        } else foe.side_.resisted++;
         emit({ type: 'status', side: foe.side, status: 'delay', value: ticks });
+        if (ticks >= REACT_MIN) controlled(foe);
       },
       grow(n) {
         f.growth.push({ v: n, idx: blk.idx });
@@ -360,9 +447,12 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       steadfast(keep, ignoreFreeze) {
         f.ctlKeep = Math.min(f.ctlKeep, keep);
         if (ignoreFreeze) f.ignoreFreeze = true;
+        // a freeze already on you is shortened too
+        if (f.frozen > 0) f.frozen = Math.max(1, Math.round(f.frozen * keep));
         emit({ type: 'status', side: f.side, status: 'steadfast', value: 1 });
       },
-      amplify(cap) {
+      amplify(cap0) {
+        const cap = Math.max(1, Math.round(cap0 * ctl));
         const g = Math.min(cap, sum(f.growth));
         const th = Math.min(cap, sum(f.thorns));
         if (g > 0) f.growth.push({ v: g, idx: blk.idx });
@@ -381,7 +471,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           n++;
         }
         if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
-        if (f.frozen > 0) { f.frozen = 0; n++; }
+        if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
         emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
         return n;
       },
@@ -422,53 +512,115 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     execNode(nodeOf(inst), ctx);
   }
 
-  /** Fires one skill (plus its mark effects and shield-on-fire bonus). from = block that triggered it. */
-  function fireOne(f: Fighter, bi: number, from: number | undefined) {
+  interface Fire {
+    bi: number;
+    depth: number;
+    /** block that set this one off */
+    from?: number;
+    /** power of this fire (engines fire at less than full power) */
+    mult: number;
+    /** เร่งเครื่อง: the fired block's cooldown restarts */
+    restart?: boolean;
+    react?: boolean;
+  }
+
+  /** Fires one skill (plus its mark effects and shield-on-fire bonus). Returns the follow-up fires (trigger bonuses + engines). */
+  function fireOne(f: Fighter, q: Fire): Fire[] {
     const foe = F[1 - f.side];
-    const blk = f.blocks[bi];
+    const blk = f.blocks[q.bi];
     const inst = blk.inst;
     const st = f.stats[blk.idx];
-    if (from === undefined) st.c++;
-    else st.tc++;
+    if (q.from === undefined) st.c++;
+    else {
+      st.tc++;
+      blk.trigAt = t + Math.min(TRIGGER_GAP_MAX, Math.max(TRIGGER_GAP, blk.cd));
+      if (q.restart) blk.prog = 0;
+    }
+    f.side_.casts++;
+    f.lastFire = t;
     emit({
       type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx,
-      ...(from !== undefined ? { from: f.blocks[from].idx } : {}),
+      ...(q.from !== undefined ? { from: f.blocks[q.from].idx } : {}),
+      ...(q.react ? { react: true } : {}),
     });
-    runSkill(f, foe, blk, blk.power, blk.dmg);
+    const power = blk.power * q.mult;
+    runSkill(f, foe, blk, power, Math.round(blk.dmg * q.mult));
     if (blk.shieldOnFire > 0 && f.hp > 0) {
-      f.shield += blk.shieldOnFire;
-      st.sh += blk.shieldOnFire;
-      emit({ type: 'shield', side: f.side, amount: blk.shieldOnFire });
+      const n = Math.max(1, Math.round(blk.shieldOnFire * q.mult));
+      f.shield += n;
+      st.sh += n;
+      emit({ type: 'shield', side: f.side, amount: n });
     }
     if (inst.mark === 'echo' && foe.hp > 0 && f.hp > 0) {
       emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
-      runSkill(f, foe, blk, blk.power * 0.5, Math.round(blk.dmg * 0.5));
+      runSkill(f, foe, blk, power * 0.5, Math.round(blk.dmg * q.mult * 0.5));
     }
     if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1, 3, blk.idx);
+
+    // trigger bonuses fire at the same power, but deeper chain steps get weaker
+    const tm = q.depth >= 1 ? q.mult * CHAIN_DECAY : q.mult;
+    const next: Fire[] = blk.triggers.map((bi) => ({ bi, depth: q.depth + 1, from: q.bi, mult: tm }));
+    const en = nodeOf(inst).engine;
+    // engine power: the engine's own power bonus counts, but a chain never fires above the engine's power
+    const ep = en ? en.power * blk.power * Math.min(1, q.mult) : 0;
+    if (en?.kind === 'gear' && blk.adj.length) {
+      for (let i = 0; i < Math.min(en.n ?? 1, blk.adj.length); i++)
+        next.push({ bi: blk.adj[blk.rr++ % blk.adj.length], depth: q.depth + 1, from: q.bi, mult: ep });
+    } else if (en?.kind === 'overclock') {
+      for (const bi of blk.adj) next.push({ bi, depth: q.depth + 1, from: q.bi, mult: ep, restart: !en.keep });
+    }
+    return next;
   }
 
-  /** Fire a skill, then the neighbours its trigger bonuses set off (breadth-first), each at most once per chain. */
-  function fire(f: Fighter, start: number) {
+  /**
+   * Fire a skill, then everything it sets off (breadth-first). Each skill fires at most once per chain, and a skill
+   * set off by another one cannot be set off again for TRIGGER_GAP ticks.
+   */
+  function fire(f: Fighter, start: number, react = false) {
     const seen = new Set<number>([start]);
-    const queue: { bi: number; depth: number; from?: number }[] = [{ bi: start, depth: 0 }];
+    const queue: Fire[] = [{ bi: start, depth: 0, mult: 1, react }];
     while (queue.length) {
       const q = queue.shift()!;
       if (f.hp <= 0 || F[1 - f.side].hp <= 0) return;
-      fireOne(f, q.bi, q.from);
+      const next = fireOne(f, q);
       if (q.depth >= MAX_CHAIN) continue;
-      for (const bi of f.blocks[q.bi].triggers) {
-        if (seen.has(bi)) continue;
-        seen.add(bi);
-        queue.push({ bi, depth: q.depth + 1, from: q.bi });
+      for (const n of next) {
+        if (seen.has(n.bi) || t < f.blocks[n.bi].trigAt) continue;
+        seen.add(n.bi);
+        queue.push(n);
       }
+    }
+  }
+
+  /** ✨/🗿 skills that were queued by control on f fire now (their cooldown restarts). */
+  function reactAll(f: Fighter) {
+    while (f.pendingReact.length) {
+      const bi = f.pendingReact.shift()!;
+      const blk = f.blocks[bi];
+      if (f.hp <= 0 || F[1 - f.side].hp <= 0 || t < blk.reactAt) continue;
+      blk.reactAt = t + blk.cd;
+      blk.prog = 0;
+      fire(f, bi, true);
     }
   }
 
   function act(f: Fighter) {
     if (f.hp <= 0 || f.blocks.length === 0) return;
+    if (shaking(f) && (f.frozen > 0 || f.slowT > 0)) {
+      // too long without a single skill: shake off all control
+      f.frozen = 0;
+      f.slowT = 0;
+      f.slowPct = 0;
+      emit({ type: 'status', side: f.side, status: 'cleanse', value: 1 });
+    }
     const frozen = f.frozen > 0;
-    if (frozen) f.frozen--;
+    if (frozen) {
+      f.frozen--;
+      f.side_.fr++;
+      if (f.frozen === 0) f.immuneUntil = t + CTL_IMMUNE;
+    }
     const rate = f.slowT > 0 ? 1 - f.slowPct : 1;
+    if (f.slowT > 0) f.side_.ctl += f.slowPct;
     const ready: number[] = [];
     f.blocks.forEach((blk, bi) => {
       if (frozen && blk.inst.mark !== 'steadfast') return; // steadfast mark: keeps counting while frozen
@@ -485,12 +637,17 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   let decided = false;
   for (t = 1; t <= MAX_TICKS; t++) {
     const order: Side[] = (t + first) % 2 === 0 ? [0, 1] : [1, 0];
-    for (const s of order) act(F[s]);
+    for (const s of order) {
+      act(F[s]);
+      reactAll(F[1 - s]);
+      reactAll(F[s]);
+    }
     record();
     for (const f of F) {
       if (f.slowT > 0) {
         f.slowT--;
         f.slowTotal++;
+        f.side_.sl++;
       }
       if (t % FREEZE_DR_DECAY === 0 && f.freezeN > 0) f.freezeN--;
       if (t % FREEZE_DR_DECAY === 0 && f.delayN > 0) f.delayN--;
@@ -531,10 +688,15 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     winner = r0 === r1 ? -1 : r0 > r1 ? 0 : 1;
   }
   emit({ type: 'end', winner });
+  const sides = F.map((f) => ({
+    ...f.side_,
+    never: f.stats.flatMap((st, i) => (SKILLS[[a, b][f.side].skills[i]?.id] && st.c + st.tc === 0 ? [i] : [])),
+    ctl: Math.round(f.side_.fr + f.side_.dl + f.side_.ctl),
+  })) as [SideStat, SideStat];
 
   return {
     v: SIM_VERSION, seed, day, winner, ticks: t, maxHp: [F[0].maxHp, F[1].maxHp], init, events,
-    stats: [F[0].stats, F[1].stats],
+    stats: [F[0].stats, F[1].stats], sides,
     ...(trace ? { trace } : {}),
   };
 }
