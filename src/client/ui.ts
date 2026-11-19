@@ -379,7 +379,7 @@ function renderTitle() {
   <div class="actions"><button class="ghost" data-a="town">← ${L('กลับเมือง', 'Back to town')}</button></div>
   <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="1024" height="504">
   <h2>${L('เลือกฮีโร่', 'Pick a hero')}</h2>
-  <p class="muted">${L(`ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือดเท่ากับเลขวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`, `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs HP equal to the day number · you fight other players’ builds from the same day`)}</p>
+  <p class="muted">${L(`ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด 2–5 ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`, `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs 2–5 HP by day · you fight other players’ builds from the same day`)}</p>
   <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
   ${resume}
   ${runActive() ? '' : `<p class="muted">${L(`รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`, `This run offers ${R.HERO_CHOICES} heroes from different styles (see them all in the Hero Hall in town)`)}</p>`}
