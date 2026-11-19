@@ -12,6 +12,9 @@ import { api, type FightResponse, type ReplayRecord } from './api';
 import type { CombatScene } from './combatScene';
 import { BUILDINGS, BUILDING_BY_ID } from './townData';
 import type { TownScene } from './townScene';
+import { dragging, initDrag } from './shop/drag';
+import { resetHints, showHints } from './shop/hints';
+import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
 
 export interface Stage {
   town: TownScene;
@@ -143,7 +146,7 @@ function bonusPanel(skills: SkillInstance[], act: ReturnType<typeof activeBonuse
     .join('');
   return `<aside class="bonus-panel" aria-label="โบนัสเชื่อมต่อที่ทำงาน">
     <div class="bp-h">🔗 โบนัสเชื่อมต่อที่ทำงาน <span class="bp-count">${act.length}/${total}</span></div>
-    ${act.length ? `<ul class="bp-list">${items}</ul>` : `<p class="muted small">ยังไม่มีโบนัสทำงาน · ดูชิป 🔗 ใต้แต่ละ skill แล้วใช้ ▲▼ จัดให้ skill ที่ตรงเงื่อนไขอยู่ติดกัน (ช่องบนหรือล่าง)</p>`}
+    ${act.length ? `<ul class="bp-list">${items}</ul>` : `<p class="muted small">ยังไม่มีโบนัสทำงาน · ดูชิป 🔗 ใต้แต่ละ skill แล้วลาก ⠿ (หรือกด ▲▼) จัดให้ skill ที่ตรงเงื่อนไขอยู่ติดกัน (ช่องบนหรือล่าง)</p>`}
     ${act.length && total > act.length ? `<p class="muted small">อีก ${total - act.length} โบนัสยังไม่ทำงาน</p>` : ''}
   </aside>`;
 }
@@ -338,11 +341,52 @@ function slotCard(r: R.RunState) {
   const price = R.slotPrice(r);
   const maxed = R.slotsOf(r) >= R.MAX_SLOTS;
   const why = maxed ? 'เต็มแล้ว' : r.gold < price ? 'เงินไม่พอ' : '';
-  return `<div class="card offer expand" title="ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ">
+  return `<div class="card offer expand extra" title="ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ">
+    <div class="offer-art" aria-hidden="true">＋</div>
     <div class="offer-name">ช่อง skill +1</div>
     <div class="offer-desc">${maxed ? `มีครบ ${R.MAX_SLOTS} ช่องแล้ว` : `ถาวรทั้งรอบ · ตอนนี้ ${R.slotsOf(r)}/${R.MAX_SLOTS} ช่อง`}</div>
-    <button data-a="slot" ${why ? 'disabled' : ''}>${why || `ซื้อ ${price}`}</button>
+    <button class="buy" data-a="slot" ${why ? 'disabled' : ''}>${why || `ซื้อ <span class="coin">${price}</span>`}</button>
   </div>`;
+}
+
+/** Shop card for พรจันทร์ (moon wish): the late-run gold sink, a random upgrade (or a random mark once all are Lv3). */
+function wishCard(r: R.RunState) {
+  const kind = R.wishKind(r);
+  const price = R.wishPrice(r);
+  const why = !r.skills.length ? 'ยังไม่มี skill' : !kind ? 'ครบทุกอย่างแล้ว' : r.gold < price ? 'เงินไม่พอ' : '';
+  const pool = kind === 'upgrade' ? r.skills.filter((k) => lvOf(k.v) < R.MAX_LV).length : r.skills.filter((k) => !k.mark).length;
+  const desc =
+    kind === 'mark'
+      ? `ทุกตัว Lv3 แล้ว: สุ่มใส่ <b>ตรา</b> ให้ 1 ใน ${pool} skill ที่ยังไม่มีตรา`
+      : `สุ่มอัปเกรด 1 ใน ${pool} skill ที่ยังไม่ Lv3 ขึ้นขั้นถัดไป (สุ่มสาย)`;
+  const tip = `<div class="tt-h"><b>🌙 พรจันทร์</b></div><div class="desc">ที่ใช้เงินเหลือ: จ่ายแพงกว่าการ์ดอัปเกรดปกติ แต่ไม่ต้องรอร้านสุ่มเจอ
+    เลือก skill และสายให้แบบสุ่ม (ช่องเดิม โบนัสเชื่อมต่อเดิม) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน
+    · ราคาเริ่ม ${R.WISH_BASE} และแพงขึ้น +2 ทุกครั้งในวันเดียวกัน</div>`;
+  return `<div class="card offer extra wish" data-ttxt="${esc(tip)}">
+    <div class="offer-art" aria-hidden="true">🌙</div>
+    <div class="offer-name">พรจันทร์</div>
+    <div class="offer-desc">${kind || !r.skills.length ? desc : 'ทุก skill Lv3 และมีตราแล้ว'}</div>
+    <button class="buy" data-a="wish" ${why ? 'disabled' : ''}>${why || `ขอพร <span class="coin">${price}</span>`}</button>
+  </div>`;
+}
+
+/** Re-draw only the timeline for a list order (used live while dragging). */
+function previewOrder(order: number[]) {
+  const r = run;
+  const el = document.getElementById('timeline');
+  if (!r || !el) return;
+  const skills = order.map((i) => r.skills[i]).slice(0, R.slotsOf(r));
+  el.innerHTML = timelineHTML(skills, r.hero);
+}
+
+/** Drop from the drag: move skill `from` to position `to`. */
+function dropSkill(from: number, to: number) {
+  const r = run;
+  if (!r || view !== 'shop' || !r.skills[from]) return;
+  const [k] = r.skills.splice(from, 1);
+  r.skills.splice(to, 0, k);
+  saveRun();
+  render();
 }
 
 function renderShop() {
@@ -363,11 +407,15 @@ function renderShop() {
       const branch = o.v ? d.tree[o.v[0] as 'a' | 'b'].style : '';
       // which of the offer's bonuses an owned skill could switch on
       const can = new Set((o.bonus ?? []).map((b, bi) => (r.skills.some((k) => matches(b.t, k)) ? bi : -1)).filter((bi) => bi >= 0));
-      return `<div class="card offer arch-${d.arch}${o.v ? ' upgrade' : ''}" data-tip="s:${i}">
-        <div class="offer-name">${node.name} <small>Lv${lvOf(o.v)}</small> ${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">⬆ อัปเกรด ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="muted">${ARCH_NAME[d.arch]}</span>`}${d.hero ? '<span class="mark">เฉพาะ</span>' : ''}</div>
+      const locked = R.isLocked(r, i);
+      const lockBtn = `<button class="lock${locked ? ' on' : ''}" data-a="lock" data-i="${i}" aria-pressed="${locked}"
+        aria-label="${locked ? 'ปลดล็อกการ์ดนี้' : 'ล็อกการ์ดนี้ไว้ถึงพรุ่งนี้'}" title="${locked ? 'ล็อกอยู่: การ์ดนี้จะอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน (กดเพื่อปลด)' : 'ล็อก: เก็บการ์ดนี้ไว้ถึงพรุ่งนี้ (ฟรี)'}">${locked ? '🔒' : '🔓'}</button>`;
+      return `<div class="card offer arch-${d.arch}${o.v ? ' upgrade' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}">
+        <div class="offer-top">${lockBtn}<span class="offer-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+        <div class="offer-name">${node.name}</div>
+        <div class="offer-meta">${o.v ? `<span class="up">⬆ อัปเกรด ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${ARCH_NAME[d.arch]}</span>`}${d.hero ? '<span class="mark">เฉพาะ</span>' : ''}</div>
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${o.v ? '' : bonusChips(o.bonus ?? [], 1, null, can)}</div>
-        <button data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `ซื้อ ${price}`}</button>
+        <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `ซื้อ <span class="coin">${price}</span>`}</button>
       </div>`;
     })
     .join('');
@@ -377,13 +425,15 @@ function renderShop() {
   const rows = r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i, act);
-      const row = `<li class="skillrow arch-${SKILLS[k.id].arch}" data-tip="g:${i}">
+      const row = `<li class="skillrow arch-${SKILLS[k.id].arch}" data-tip="g:${i}" data-i="${i}">
+        <span class="grip" data-drag="${i}" title="ลากเพื่อย้าย" aria-hidden="true">⠿</span>
+        <span class="sk-no" aria-hidden="true">${i + 1}</span>
         <div class="sk-text">${skillLine(k, t.on, t.haste)}</div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
-          <button class="small ghost" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="เลื่อนขึ้น">▲</button>
-          <button class="small ghost" data-a="down" data-i="${i}" ${i === r.skills.length - 1 ? 'disabled' : ''} aria-label="เลื่อนลง">▼</button>
-          <button class="small" data-a="sell" data-i="${i}">ขาย +${R.sellPrice(k)}</button>
+          <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="เลื่อน ${nodeOf(k).name} ขึ้น">▲</button>
+          <button class="ghost mv" data-a="down" data-i="${i}" ${i === r.skills.length - 1 ? 'disabled' : ''} aria-label="เลื่อน ${nodeOf(k).name} ลง">▼</button>
+          <button class="sell" data-a="sell" data-i="${i}">ขาย +${R.sellPrice(k)}</button>
         </div>
       </li>`;
       const gap = i < r.skills.length - 1 ? `<li class="linkgap${linked(i) ? ' on' : ''}" aria-hidden="true">${linked(i) ? '🔗 เชื่อมต่อ' : ''}</li>` : '';
@@ -392,28 +442,49 @@ function renderShop() {
     .join('');
   const empty = '<li class="skillrow emptyslot"><span class="muted">ช่องว่าง: ซื้อ skill จากร้าน</span></li>'.repeat(Math.max(0, slots - r.skills.length));
   const inc = r.lastIncome;
-  return `
-  <div class="stats">
-    <span>วันที่ <b>${r.day}</b></span>
-    <span>เลือด <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ' <span class="mark">กึ่งวิญญาณ</span>' : ''}</span>
-    <span>ชนะ <b>${r.wins}</b>/${R.WIN_TARGET}</span>
-    <span>เงิน <b>${r.gold}</b></span>
-    <span>คะแนน build <b>${r.rating}</b></span>
-    ${streakText(r.streak) ? `<span>${streakText(r.streak)}</span>` : ''}
+  const nLocked = r.shop.filter((_, i) => R.isLocked(r, i)).length;
+  resetHints();
+  return `<div class="shopv">
+  <div class="sv-top">
+    <span class="pill"><small>วันที่</small> <b>${r.day}</b></span>
+    <span class="pill hp"><small>เลือด</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ' <span class="mark">กึ่งวิญญาณ</span>' : ''}</span>
+    <span class="pill win"><small>ชนะ</small> <b>${r.wins}</b>/${R.WIN_TARGET}</span>
+    <span class="pill gold"><small>เงิน</small> <b>${r.gold}</b></span>
+    <span class="pill"><small>คะแนน</small> <b>${r.rating}</b></span>
+    ${streakText(r.streak) ? `<span class="pill streak">${streakText(r.streak)}</span>` : ''}
     <span class="stats-right">${concedeHTML()}</span>
   </div>
-  <p class="muted">วันนี้ได้ +${inc.base}${inc.bonus ? ` และโบนัส +${inc.bonus}` : ''} · ${hero.name}: ${hero.passive}</p>
-  <h3>ร้าน skill <button class="small" data-a="reroll" ${r.gold < R.REROLL ? 'disabled' : ''}>สุ่มใหม่ (${R.REROLL})</button></h3>
-  <div class="shop">${shop}${slotCard(r)}</div>
-  <h3>skill ของคุณ ${r.skills.length}/${slots} <small class="muted">ทุกตัวนับคูลดาวน์พร้อมกัน แล้วทำงานเองเมื่อพร้อม · โบนัสเชื่อมต่อ ${act.length} อันทำงาน</small></h3>
-  <div class="list-wrap">
-    <ol class="skilllist">${rows}${empty}</ol>
-    ${bonusPanel(r.skills, act)}
+  <p class="sv-sub">วันนี้ได้ +${inc.base}${inc.bonus ? ` และโบนัส +${inc.bonus}` : ''} · <b>${hero.name}</b>: ${hero.passive}</p>
+
+  <section class="sv-sec">
+    <div class="sv-h"><h3>ร้าน skill</h3>
+      <button class="reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? 'วันแรกเป็นร้านประจำฮีโร่' : 'สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)'}">🎲 สุ่มใหม่ <span class="coin">${R.REROLL}</span></button></div>
+    <p class="sv-note">🔓 กดรูปกุญแจเพื่อ<b>ล็อกการ์ด</b>ไว้ (ฟรี): การ์ดที่ล็อกจะอยู่ต่อแม้กดสุ่มใหม่ และกลับมาในร้านพรุ่งนี้${nLocked ? ` · ล็อกอยู่ ${nLocked} ใบ` : ''}
+      · ชี้ (หรือแตะ) การ์ดเพื่อดูว่าควรวางติดกับ skill ไหน</p>
+    <div class="shop">${shop}${slotCard(r)}${wishCard(r)}</div>
+  </section>
+
+  <section class="sv-sec">
+    <div class="sv-h"><h3>skill ของคุณ <span class="sv-count">${r.skills.length}/${slots}</span></h3>
+      <span class="sv-hint">โบนัสเชื่อมต่อทำงาน ${act.length} อัน</span></div>
+    <p class="sv-note">ลาก <b>⠿</b> เพื่อจัดลำดับ (หรือกด ▲▼): skill ที่อยู่ติดกัน (บน/ล่าง) เปิด 🔗 โบนัสเชื่อมต่อของกันและกัน · ถ้าครบเวลาพร้อมกัน ตัวบนทำงานก่อน</p>
+    <div class="list-wrap">
+      <ol class="skilllist">${rows}${empty}</ol>
+      <div class="tl" aria-label="ลำดับการทำงาน">
+        <div class="tl-h"><b>⏱ ใครทำงานก่อน: ${TIMELINE_SECS} วิแรก</b>
+          <span class="tl-legend"><i class="tl-dot own"></i> ครบคูลดาวน์ <i class="tl-dot trig">⚡</i> โบนัสสั่งให้ทำงานตาม</span></div>
+        <div id="timeline">${timelineHTML(R.toBuild(r).skills, r.hero)}</div>
+        <p class="tl-foot">จำลองด้วยระบบสู้จริง กับหุ่นซ้อมที่ไม่ตีกลับ · ถ้าศัตรูแช่แข็งหรือทำให้ช้า skill จะทำงานช้ากว่านี้</p>
+      </div>
+      ${bonusPanel(r.skills, act)}
+    </div>
+  </section>
+
+  <div class="sv-fight">
+    <span class="pill gold"><small>เงินเหลือ</small> <b>${r.gold}</b></span>
+    <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ สู้วันที่ ${r.day} <small>แพ้เสียเลือด ${R.damageFor(r.day)}</small></button>
+    <button class="ghost" data-a="town" aria-label="กลับเมือง" title="กลับเมือง">🏠</button>
   </div>
-  <p class="muted small">ใช้ ▲▼ จัดลำดับ: skill ที่อยู่ติดกัน (บน/ล่าง) เปิด 🔗 โบนัสเชื่อมต่อของกันและกัน · ⓘ ดูต้นไม้ skill ทั้งหมด · ชี้เมาส์ (หรือแตะ) ที่ skill เพื่อดูรายละเอียด</p>
-  <div class="actions">
-    <button class="primary" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>สู้วันที่ ${r.day} · ถ้าแพ้เสียเลือด ${R.damageFor(r.day)}</button>
-    <button class="ghost" data-a="town">กลับเมือง</button>
   </div>`;
 }
 
@@ -589,7 +660,7 @@ function renderLastChance() {
   <div class="heroes">
     <button class="hero" data-a="lc" data-i="awaken"><b>ตื่นพลัง</b><span>skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)</span><span class="muted">เหมาะกับ build ที่ของครบแต่เลเวลต่ำ</span></button>
     <button class="hero" data-a="lc" data-i="mark"><b>ตราวิญญาณ</b><span>สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill</span><span class="muted">เหมาะกับ build ที่มี skill หลักชัด</span></button>
-    <button class="hero" data-a="lc" data-i="supply"><b>เสบียงสุดท้าย</b><span>เงิน 8 และตาราง +1 แถวถาวร</span><span class="muted">เหมาะกับ build ที่ยังขาดชิ้นสำคัญ</span></button>
+    <button class="hero" data-a="lc" data-i="supply"><b>เสบียงสุดท้าย</b><span>เงิน 8 และช่อง skill +1 ถาวร</span><span class="muted">เหมาะกับ build ที่ยังขาดชิ้นสำคัญ</span></button>
   </div>`;
 }
 
@@ -823,6 +894,20 @@ function onClick(ev: Event) {
     case 'slot':
       err = R.buySlot(run!);
       break;
+    case 'lock':
+      err = R.toggleLock(run!, n);
+      break;
+    case 'wish': {
+      const w = R.wish(run!);
+      if ('err' in w) err = w.err;
+      else {
+        const k = run!.skills[w.idx];
+        toast = w.mark
+          ? `🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name}`
+          : `🌙 พรจันทร์: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`;
+      }
+      break;
+    }
     case 'tree':
       if (!SKILLS[arg]) return;
       treeOpen = { id: arg, cur: el.dataset.own === '1' ? (el.dataset.cur ?? '') : null, offer: el.dataset.offer || null };
@@ -911,8 +996,17 @@ function hideTip() {
   tipKey = '';
 }
 
+/** shop card under the pointer → light up the list rows it would connect to (-1 = none) */
+function offerHints(ev: PointerEvent) {
+  if (view !== 'shop') return;
+  const card = (ev.target as Element).closest?.('.card.offer[data-tip^="s:"]') as HTMLElement | null;
+  showHints($panel, run, card ? Number(card.dataset.tip!.slice(2)) : -1);
+}
+
 function onHover(ev: PointerEvent) {
   if (ev.pointerType !== 'mouse') return;
+  if (dragging) return hideTip();
+  offerHints(ev);
   // a keyword chip explains its keyword (anywhere: shop, lists, hero hall)
   const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
   if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
@@ -925,6 +1019,8 @@ function onHover(ev: PointerEvent) {
 
 function onPointerDown(ev: PointerEvent) {
   if (ev.pointerType === 'mouse') return;
+  offerHints(ev);
+  if ((ev.target as Element).closest?.('[data-drag]')) return hideTip();
   // touch: tap a keyword chip, a chart bar or a skill to see its details
   const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
   if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
@@ -950,6 +1046,7 @@ export function startUI(st: Stage) {
     }
   });
   $panel.addEventListener('pointerdown', onPointerDown);
+  initDrag($panel, { onPreview: previewOrder, onDrop: dropSkill });
   window.addEventListener('pointermove', onHover);
   $panel.addEventListener('pointerleave', hideTip);
   run = loadRun();
