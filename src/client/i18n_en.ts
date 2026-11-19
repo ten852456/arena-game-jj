@@ -40,62 +40,62 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   heal: { name: 'Heal', desc: 'Restore your own HP' },
   leech: { name: 'Leech', desc: 'Heal a share of the damage you deal' },
   burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields · stacks' },
-  freeze: { name: 'Freeze', desc: "All the enemy's cooldowns stop · weaker if repeated quickly · capped per fight" },
+  freeze: { name: 'Freeze', desc: "All the enemy's cooldowns stop · weaker if repeated quickly · capped per fight · after a freeze ends, the target resists control for 1.5s (Regroup)" },
   slow: { name: 'Slow', desc: "All the enemy's cooldowns run X% slower · capped per fight" },
-  delay: { name: 'Delay', desc: "Pushes all the enemy's cooldowns back N seconds · shares the cap with freeze" },
+  delay: { name: 'Delay', desc: "Pushes all the enemy's cooldowns back N seconds · shares the cap with freeze · then the target resists control for 1.5s (Regroup)" },
   grow: { name: 'Power', desc: 'Every hit of every skill deals +X damage until the fight ends' },
   charge: { name: 'Charge', desc: 'Your next hit (from any skill) is ×N stronger' },
   thorns: { name: 'Thorns', desc: 'Each time you are hit, reflect damage equal to your thorns (max 75% of the hit) · while you have thorns, the enemy heals only half' },
-  steadfast: { name: 'Iron Will', desc: 'Freeze, slow and delay on you are 60% weaker until the fight ends' },
-  cleanse: { name: 'Cleanse', desc: 'Remove debuffs on you: burn (strongest stack), slow, freeze' },
+  steadfast: { name: 'Iron Will', desc: 'Freeze, slow and delay on you are 60% weaker until the fight ends · a block with 🗿 works right away when you get controlled (once per its cooldown)' },
+  cleanse: { name: 'Cleanse', desc: 'Remove debuffs on you: burn (strongest stack), slow, freeze · a block with ✨ works right away when you get controlled (once per its cooldown)' },
   dispel: { name: 'Dispel', desc: "Remove 1 of each enemy buff: power, thorns, charge, iron will, and 20% of their shield" },
   amplify: { name: 'Amplify', desc: 'Double the buffs you have now (power, thorns, charge), up to the cap' },
   exec: { name: 'Execute', desc: 'Stronger when the enemy is below the HP threshold' },
   shatter: { name: 'Shatter', desc: 'Stronger while the enemy is frozen' },
-  gear: { name: 'Gear', desc: 'Each time it works, fires 1 touching block right away (taking turns) at the % power · that block keeps its own cooldown' },
-  overclock: { name: 'Overclock', desc: 'Fires every touching block right away at the % power · then their cooldowns restart' },
+  gear: { name: 'Gear', desc: 'Each time it works, fires 1 touching block right away (taking turns, skipping blocks that were just set off) at the % power · that block keeps its own cooldown · a block can be set off at most once per its own cooldown (3–6s)' },
+  overclock: { name: 'Overclock', desc: 'Fires every touching block right away at the % power · then their cooldowns restart · a block can be set off at most once per its own cooldown (3–6s)' },
   cd: { name: 'Cooldown', desc: 'How often it works, in seconds (all skills count at the same time)' },
 };
 
 export const HEROES_EN: Record<string, { name: string; passive: string; style: string }> = {
   knight: {
     name: 'Knight',
-    passive: 'Max HP +25%, and start the fight with a shield of 8% of your HP',
+    passive: 'Max HP +35%, and start the fight with a shield of 6% of your HP',
     style: 'Shield wall: stack a thick shield, then Shield Slam hits back harder the more shield you have',
   },
   thornguard: {
     name: 'Thornguard',
-    passive: 'Max HP +15% · your thorns last 15s (normally 10) and Dispel removes only half a stack · start with 1 permanent thorn',
+    passive: 'Max HP +18% · your thorns last 15s (normally 10) and Dispel removes only half a stack · start with 1 permanent thorn · while you have thorns, also reflect 8% of each hit you take',
     style: 'It hurts to hit you: stack thorns so fast attackers hurt themselves, then finish with Spike Fort',
   },
   assassin: {
     name: 'Assassin',
-    passive: 'Your Charge skills get +0.25 to their multiplier',
+    passive: 'Your first hit of the fight deals ×1.3 · hits on enemies below half HP deal 10% more',
     style: 'One-shot: charge up, unleash a huge hit and finish the enemy when their HP is low',
   },
   duelist: {
     name: 'Duelist',
-    passive: 'Every 3rd hit you land deals +2 damage',
+    passive: 'Every 3rd hit you land deals 40% more (at least +1)',
     style: 'Nonstop hits: short-cooldown, multi-hit skills; the faster you hit, the more 3rd hits you get',
   },
   berserker: {
     name: 'Berserker',
-    passive: 'Start with +1 attack power · the first time your HP drops below half, gain +4 more (all hits of all skills until the fight ends)',
-    style: 'Never stop growing: stack attack power bit by bit; the longer the fight, the harder you hit',
+    passive: 'Start with +2 attack power · every 5 hits you take give +1 more · the first time your HP drops below half, gain +1 more (all hits of all skills until the fight ends)',
+    style: 'Never stop growing: stack attack power bit by bit; the longer the fight and the more you get hit, the harder you hit',
   },
   pyro: {
     name: 'Pyromancer',
-    passive: 'Burns you apply last 2s longer',
+    passive: 'Burns you apply last 30% longer',
     style: 'Fire on fire: stack many burns, then Inferno blows up the burn that is left (ignores shields)',
   },
   witch: {
     name: 'Ice Witch',
-    passive: 'Freezes you apply last 0.5s longer',
+    passive: 'Max HP +22% · freezes you apply last 0.3s longer',
     style: 'Stop time: freeze the enemy, then Shatter hits ×3 while they cannot move',
   },
   chrono: {
     name: 'Chronomancer',
-    passive: 'Max HP +8% · your slows are 10% stronger and last 1s longer · hits on slowed enemies deal 10% more',
+    passive: 'Max HP +12% · your slows are 10% stronger · hits on slowed enemies deal 10% more',
     style: 'Stall: slow the enemy and push their cooldowns back so their skills barely fire',
   },
 };
@@ -136,7 +136,7 @@ export const BUILDINGS_EN: Record<string, { name: string; desc: string; future?:
     desc: 'Trade tickets and items with other players',
     future: 'List items through the market, with fees and a history, and no direct transfers between accounts',
   },
-  arena: { name: 'Arena', desc: 'The only way to earn rewards from the rulers: win 8 times before your HP runs out' },
+  arena: { name: 'Arena', desc: 'The only way to earn rewards from the rulers: win 10 times before your HP runs out' },
 };
 
 /** Tutorial slides, same order as tutorialSlides.ts. */
@@ -145,8 +145,8 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
     title: 'Welcome to Mochi Moon',
     body: [
       'Pick a hero, buy skills day by day, arrange them on your grid, then send your build to fight other players’ builds',
-      'Goal: <b>win 8 times</b> before your <b>20 HP</b> runs out',
-      'Each loss costs HP equal to the <b>day number</b> (lose on day 3 = lose 3). The longer the run, the bigger the risk',
+      'Goal: <b>win 10 times</b> before your <b>20 HP</b> runs out',
+      'Each loss costs <b>2 HP</b> on days 1–3, 3 on days 4–6, 4 on days 7–9 and <b>5</b> from day 10. The longer the run, the bigger the risk',
     ],
   },
   {

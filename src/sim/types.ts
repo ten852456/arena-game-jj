@@ -105,7 +105,14 @@ export interface Snap {
 
 export type EventBody =
   /** idx = index into that side's build.skills. chain = 0 for a block firing on its own cooldown, n for the n-th link of a chain. */
-  | { type: 'cast'; side: Side; skill: string; lv: number; idx: number; chain: number; from?: number; echo?: boolean }
+  | {
+      type: 'cast'; side: Side; skill: string; lv: number; idx: number; chain: number;
+      /** set off by this block (its trigger bonus, or an engine: ฟันเฟือง / เร่งเครื่อง) */
+      from?: number;
+      echo?: boolean;
+      /** fired early as a reaction to control (blocks with ✨ ชำระ or 🗿 ใจเหล็ก) */
+      react?: boolean;
+    }
   | { type: 'damage'; side: Side; amount: number; blocked: number; src: string }
   | { type: 'shield'; side: Side; amount: number }
   | { type: 'heal'; side: Side; amount: number }
@@ -115,6 +122,24 @@ export type EventBody =
 
 /** t = tick (10 ticks per second). s = HP/shield snapshot AFTER the event. */
 export type CombatEvent = EventBody & { t: number; s: Snap };
+
+/** Per-side summary of one fight (for the result screen: skills that never fired, time spent controlled). */
+export interface SideStat {
+  /** block fires (own cooldown + set off by others + reactions; echo repeats not counted) */
+  casts: number;
+  /** build.skills indexes of placed blocks that never fired this fight */
+  never: number[];
+  /** ticks this side spent frozen */
+  fr: number;
+  /** cooldown ticks pushed back by cast delay */
+  dl: number;
+  /** ticks this side spent slowed */
+  sl: number;
+  /** fr + dl + slowed ticks × slow share: cooldown ticks lost to control in total */
+  ctl: number;
+  /** control effects resisted (control cap, ตั้งหลัก window, สลัดการคุม, ใจเหล็ก's ignore) */
+  resisted: number;
+}
 
 export interface CombatResult {
   v: number;
@@ -126,6 +151,8 @@ export interface CombatResult {
   init: Snap;
   events: CombatEvent[];
   stats: [BlockStat[], BlockStat[]];
+  /** per-side summary (added in sim v8 of the grid; older saved fights do not have it) */
+  sides?: [SideStat, SideStat];
   /** only when simulate(..., { trace: true }): per tick cooldown progress, see CooldownTrace */
   trace?: CooldownTrace;
 }

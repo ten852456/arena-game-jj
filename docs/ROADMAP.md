@@ -82,6 +82,26 @@ of them to support daily rules and free rotation later.
 
 ---
 
+## Phase 1.5 — Grid playtest fixes (19 Nov 2026, grid sim v8)
+
+Details and numbers: docs/SKILL_TREE.md.
+
+- [x] **Control lock** — freeze/delay cap also grows with fight time (1s + 30%), frozen = can't be re-controlled,
+  1.5s ตั้งหลัก immunity after a freeze ends / a delay lands, 4s without any fire = สลัดการคุม, ✨/🗿 blocks react
+  instantly to control; engines, chain steps and echo carry control in proportion to their power
+- [x] **Chains** — a block can be set off at most once per its own cooldown (3–6s); deeper chain steps ×0.75 each;
+  ⚡ trigger rolls 18% (was 25%); gear skips blocks that can't be set off
+- [x] **Fight stats** — `CombatResult.sides[side]`: casts, blocks that never fired, frozen / delayed / slowed ticks,
+  total control, resists; `react` flag on cast events
+- [x] **Run length** — 10 wins; defeat costs 2/3/4/5 HP by day (cap 5); START_HP 20
+- [x] **Fight length** — HP by day retuned, fatigue at 14s / 20s / 28s; ≤ ~20% of fights reach fatigue
+- [x] **Power curves** — burst early/mid, scaling mid–late, control late, tank steady/mid–late (docs/SKILL_TREE.md)
+- [ ] Bot: place engines next to slow, heavy blocks and give trigger bonuses targets (bot.ts does not value engines)
+- [ ] Balance harness: run bots beat the plain `aiBuild` pool ~60%, so "reach 10 wins" reads 47–63%; needs a
+  stronger pool / tiers before the 15–45% target can be read from it
+- [ ] UI: show "never fired" blocks and control time from `sides`; explain ตั้งหลัก / สลัดการคุม / react in the log;
+  Thai texts still say 8 wins and "HP lost = day number" (townData.ts, tutorialSlides.ts, ui.ts hero pick line)
+
 ## Phase 2 — Server-authoritative run & guest accounts ← **NEXT**
 
 - [ ] Run state lives on the server (shop rolls, gold, buys) — the client sends actions, not state
