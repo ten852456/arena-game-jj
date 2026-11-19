@@ -341,9 +341,101 @@ function makeFxArt(scene: Phaser.Scene) {
   });
 }
 
+/** Status overlays and impact art (fighterFx.ts uses these keys too). */
+export function makeJuiceArt(scene: Phaser.Scene) {
+  // starburst behind big damage numbers
+  art(scene, 'fx_burst', 40, 40, (c) => {
+    starPath(c, 20, 20, 12, 19, 10);
+    const g = c.createRadialGradient(20, 20, 2, 20, 20, 19);
+    g.addColorStop(0, '#fffbe0');
+    g.addColorStop(0.5, '#ffd65a');
+    g.addColorStop(1, '#ff9f43');
+    c.fillStyle = g;
+    c.fill();
+    c.lineWidth = 1.4;
+    c.strokeStyle = '#ffffff';
+    c.stroke();
+  });
+  // translucent ice cube that covers a frozen chibi (feet at the bottom edge)
+  art(scene, 'fx_icecube', 92, 104, (c) => {
+    const rr = (x: number, y: number, w: number, h: number, r: number) => {
+      c.beginPath();
+      c.moveTo(x + r, y);
+      c.arcTo(x + w, y, x + w, y + h, r);
+      c.arcTo(x + w, y + h, x, y + h, r);
+      c.arcTo(x, y + h, x, y, r);
+      c.arcTo(x, y, x + w, y, r);
+      c.closePath();
+    };
+    rr(3, 3, 86, 98, 12);
+    const g = c.createLinearGradient(0, 0, 92, 104);
+    g.addColorStop(0, 'rgba(235,250,255,0.62)');
+    g.addColorStop(0.45, 'rgba(160,220,255,0.34)');
+    g.addColorStop(1, 'rgba(110,185,245,0.5)');
+    c.fillStyle = g;
+    c.fill();
+    c.lineWidth = 2.4;
+    c.strokeStyle = 'rgba(255,255,255,0.95)';
+    c.stroke();
+    rr(7, 7, 78, 90, 9);
+    c.lineWidth = 1;
+    c.strokeStyle = 'rgba(120,200,255,0.8)';
+    c.stroke();
+    // facets + cracks
+    c.strokeStyle = 'rgba(255,255,255,0.65)';
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(3, 30); c.lineTo(22, 22); c.lineTo(30, 3);
+    c.moveTo(89, 70); c.lineTo(70, 80); c.lineTo(64, 101);
+    c.moveTo(60, 40); c.lineTo(68, 52); c.lineTo(78, 50); c.moveTo(68, 52); c.lineTo(66, 63);
+    c.stroke();
+    // shine streaks
+    c.lineCap = 'round';
+    c.strokeStyle = 'rgba(255,255,255,0.85)';
+    c.lineWidth = 4;
+    c.beginPath();
+    c.moveTo(14, 64); c.lineTo(14, 20); c.quadraticCurveTo(14, 14, 20, 13);
+    c.stroke();
+    c.lineWidth = 2.4;
+    c.beginPath();
+    c.moveTo(22, 76); c.lineTo(22, 70);
+    c.stroke();
+  });
+  // purple swirl under a slowed fighter's feet
+  art(scene, 'fx_swirl', 80, 22, (c) => {
+    for (let k = 0; k < 3; k++) {
+      c.beginPath();
+      c.ellipse(40, 11, 36 - k * 9, 9 - k * 2.2, 0, k * 1.9, k * 1.9 + 4.2);
+      c.lineWidth = 3 - k * 0.6;
+      c.strokeStyle = k === 1 ? 'rgba(230,210,255,0.9)' : 'rgba(170,120,255,0.85)';
+      c.stroke();
+    }
+  });
+  // pink spiky outline for thorns
+  art(scene, 'fx_thornring', 64, 64, (c) => {
+    starPath(c, 32, 32, 16, 31, 24);
+    c.lineWidth = 2.6;
+    c.strokeStyle = '#ff7ab8';
+    c.stroke();
+    c.lineWidth = 1;
+    c.strokeStyle = '#ffe3f0';
+    c.stroke();
+  });
+  // soft round orb (projectile core)
+  art(scene, 'fx_orb', 20, 20, (c) => {
+    const g = c.createRadialGradient(8, 8, 0.5, 10, 10, 10);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.4)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 20, 20);
+  });
+}
+
 // ------------------------------------------------------------------ particle pool
 
-const MAX = 140;
+const MAX = 200;
 // per-particle fields
 const X = 0, Y = 1, VX = 2, VY = 3, G = 4, VR = 5, S0 = 6, S1 = 7, A = 8, T0 = 9, LIFE = 10, SWAY = 11, PH = 12, FADEIN = 13;
 const NF = 14;
@@ -363,9 +455,14 @@ export class FxLayer {
   private iv = new Float32Array(2 * 4).fill(-1);
   private lastBurst = [0, 0];
   readonly still = reducedMotion();
+  /** the layer's own clock (ms): advanced by update(dt), so hit-stop and slow-mo freeze / slow every particle */
+  private now = 0;
+  /** extra start delay (ms) added to every particle spawned while it is set (e.g. target effects wait for the projectile) */
+  baseDelay = 0;
 
   constructor(private scene: Phaser.Scene, depth = 14) {
     makeFxArt(scene);
+    makeJuiceArt(scene);
     for (let i = 0; i < MAX; i++) this.imgs.push(scene.add.image(0, 0, 'fx_star').setVisible(false).setDepth(depth));
     for (let s = 0; s < 2; s++) {
       this.halos.push(scene.add.image(0, 0, 'fx_glow').setVisible(false).setDepth(depth + 1));
@@ -383,15 +480,15 @@ export class FxLayer {
 
   /** One particle. Speeds in world units per ms, g = gravity (units/ms²), vr = spin (rad/ms). */
   private p(key: string, x: number, y: number, vx: number, vy: number, life: number, s0: number, s1: number,
-    o: { g?: number; rot?: number; vr?: number; a?: number; delay?: number; sway?: number; tint?: number; add?: boolean } = NO) {
+    o: { g?: number; rot?: number; vr?: number; a?: number; delay?: number; sway?: number; tint?: number; add?: boolean; solid?: boolean } = NO) {
     const i = this.next;
     this.next = (this.next + 1) % MAX;
     const m = this.imgs[i];
     const b = i * NF;
     const f = this.f;
     f[b + X] = x; f[b + Y] = y; f[b + VX] = vx; f[b + VY] = vy; f[b + G] = o.g ?? 0; f[b + VR] = o.vr ?? 0;
-    f[b + S0] = (s0 * PS) / TR; f[b + S1] = (s1 * PS) / TR; f[b + A] = o.a ?? 1; f[b + T0] = this.scene.time.now + (o.delay ?? 0);
-    f[b + LIFE] = life; f[b + SWAY] = o.sway ?? 0; f[b + PH] = Math.random() * TAU; f[b + FADEIN] = key === 'fx_slash' || key === 'fx_ring' ? 0 : 0.12;
+    f[b + S0] = (s0 * PS) / TR; f[b + S1] = (s1 * PS) / TR; f[b + A] = o.a ?? 1; f[b + T0] = this.now + this.baseDelay + (o.delay ?? 0);
+    f[b + LIFE] = life; f[b + SWAY] = o.sway ?? 0; f[b + PH] = Math.random() * TAU; f[b + FADEIN] = o.solid ? -1 : key === 'fx_slash' || key === 'fx_ring' ? 0 : 0.12;
     this.live[i] = 1;
     m.setTexture(key).setPosition(x, y).setRotation(o.rot ?? 0).setScale((s0 * PS) / TR).setAlpha(0).setVisible(false);
     if (o.tint !== undefined) m.setTint(o.tint);
@@ -399,7 +496,10 @@ export class FxLayer {
     m.setBlendMode(o.add ? Phaser.BlendModes.ADD : Phaser.BlendModes.NORMAL);
   }
 
-  update(now: number, delta: number) {
+  /** dt = elapsed ms, already scaled by hit-stop / slow-mo */
+  update(delta: number) {
+    this.now += delta;
+    const now = this.now;
     const f = this.f;
     const dt = Math.min(delta, 50);
     for (let i = 0; i < MAX; i++) {
@@ -419,7 +519,7 @@ export class FxLayer {
       f[b + Y] += f[b + VY] * dt;
       const e = 1 - (1 - t) * (1 - t); // ease out
       const fi = f[b + FADEIN];
-      const a = fi > 0 && t < fi ? t / fi : t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45;
+      const a = fi < 0 ? (t < 0.85 ? 1 : 1 - (t - 0.85) / 0.15) : fi > 0 && t < fi ? t / fi : t < 0.55 ? 1 : 1 - (t - 0.55) / 0.45;
       m.setVisible(true)
         .setPosition(f[b + X] + (f[b + SWAY] ? Math.sin(age * 0.008 + f[b + PH]) * f[b + SWAY] : 0), f[b + Y])
         .setScale(f[b + S0] + (f[b + S1] - f[b + S0]) * e)
@@ -462,7 +562,7 @@ export class FxLayer {
     if (!this.scene.textures.exists(key)) return;
     ic.setTexture(key).setPosition(x, y).setData('s', size / (ic.frame.width || 128));
     this.halos[side].setPosition(x, y).setTint(color).setBlendMode(Phaser.BlendModes.SCREEN);
-    this.iv[side * 4] = this.scene.time.now;
+    this.iv[side * 4] = this.now;
     this.iv[side * 4 + 1] = life;
     this.iv[side * 4 + 2] = x;
     this.iv[side * 4 + 3] = y;
@@ -603,6 +703,104 @@ export class FxLayer {
         const a = -Math.PI / 2 + (j - 1.5) * 0.5;
         this.p('fx_spike', x + Math.cos(a) * 20, y + Math.sin(a) * 20, Math.cos(a) * 0.05, Math.sin(a) * 0.05, 300 * lm, 0.4, 1, { rot: a + Math.PI / 2 });
       }
+  }
+
+  /**
+   * A glowing shot from the caster to the target: an archetype-coloured orb with a white core flies in a small arc
+   * for `ms`, leaving a trail of sparks. delay = when it leaves (ms from now).
+   */
+  projectile(x0: number, y0: number, x1: number, y1: number, ms: number, color: number, k: number, delay: number) {
+    if (this.still || ms <= 0) return;
+    const g = -0.00055; // units/ms² pulled upward-negative: a soft lob
+    const vx = (x1 - x0) / ms;
+    const vy = (y1 - y0) / ms - 0.5 * -g * ms; // so that y(ms) = y1 with gravity +(-g)
+    const o = { delay, g: -g, add: true, tint: color, a: 0.95, solid: true };
+    this.p('fx_glow', x0, y0, vx, vy, ms, 0.9 * k, 1.1 * k, o);
+    this.p('fx_orb', x0, y0, vx, vy, ms, 1.1 * k, 1.2 * k, { delay, g: -g, solid: true });
+    this.p('fx_star', x0, y0, vx, vy, ms, 0.7 * k, 0.9 * k, { delay, g: -g, vr: 0.02, solid: true });
+    const n = 5;
+    for (let j = 1; j <= n; j++) {
+      const t = (j / (n + 1)) * ms;
+      const x = x0 + vx * t;
+      const y = y0 + vy * t + 0.5 * -g * t * t;
+      this.p('fx_spark', x, y, 0, 0.01, 260, 0.9 * k, 0.2, { delay: delay + t, tint: color, add: true });
+    }
+  }
+
+  /** Ice breaking off a fighter when a freeze ends: shards fly out and fall, a cold ring, a few flakes. */
+  shatter(x: number, y: number) {
+    if (this.still) return;
+    const m = 9;
+    for (let j = 0; j < m; j++) {
+      const a = -Math.PI * 0.95 + (j / (m - 1)) * Math.PI * 0.9 + rnd(-0.15, 0.15);
+      const v = rnd(0.09, 0.17);
+      this.p('fx_ice', x + rnd(-20, 20), y + rnd(-26, 20), Math.cos(a) * v, Math.sin(a) * v, rnd(480, 640), rnd(1.1, 1.7), 0.7, {
+        g: 0.0005, rot: rnd(0, TAU), vr: rnd(-0.02, 0.02),
+      });
+    }
+    this.p('fx_ring', x, y, 0, 0, 360, 1.2, 3.2, { tint: 0xbfeaff });
+    this.p('fx_glow', x, y, 0, 0, 260, 2, 3, { tint: 0xd8f4ff, a: 0.7, add: true });
+    this.flakes(x, y + 30, 3, (ms) => ms * 0.7);
+  }
+
+  /** One frost flake drifting off a frozen fighter. */
+  frost(x: number, y: number) {
+    if (this.still) return;
+    this.p('fx_flake', x + rnd(-34, 34), y + rnd(-40, 30), rnd(-0.01, 0.01), rnd(0.008, 0.02), rnd(700, 900), rnd(0.5, 0.8), 0.3, {
+      vr: rnd(-0.004, 0.004), sway: 3,
+    });
+    if (Math.random() < 0.5) this.p('fx_spark', x + rnd(-36, 36), y + rnd(-44, 36), 0, 0, 380, 0.3, 0.9, { tint: 0xd8f4ff });
+  }
+
+  /** Small flame + rising ember on a burning fighter. */
+  ember(x: number, y: number) {
+    if (this.still) return;
+    this.p('fx_flame', x + rnd(-26, 26), y + rnd(10, 36), 0, rnd(-0.06, -0.035), rnd(420, 560), rnd(0.7, 1.05), 0.25, { sway: 2 });
+    this.p('fx_spark', x + rnd(-24, 24), y + rnd(0, 30), rnd(-0.01, 0.01), rnd(-0.08, -0.05), rnd(500, 700), 0.45, 0.15, {
+      tint: 0xff9a4a, add: true, sway: 3,
+    });
+  }
+
+  /** Cyan speed lines streaming behind a hasted fighter. */
+  haste(x: number, y: number, dir: number) {
+    if (this.still) return;
+    for (let j = 0; j < 3; j++)
+      this.p('fx_line', x - dir * rnd(26, 46), y + rnd(-40, 30), -dir * 0.22, 0, rnd(200, 260), 1.1, 1.2, {
+        rot: dir > 0 ? Math.PI : 0, delay: j * 50, a: 0.95, tint: 0x7ff0ff, add: true,
+      });
+  }
+
+  /** A shield bubble pops: blue ring and sparkles flying out. */
+  pop(x: number, y: number) {
+    if (this.still) return;
+    this.p('fx_ring', x, y, 0, 0, 300, 2.6, 4.2, { tint: 0xbfe2ff });
+    for (let j = 0; j < 10; j++) {
+      const a = (j / 10) * TAU;
+      const v = rnd(0.1, 0.16);
+      this.p('fx_spark', x + Math.cos(a) * 46, y + Math.sin(a) * 50, Math.cos(a) * v, Math.sin(a) * v, 360, 0.8, 0.2, { tint: 0xd8f0ff });
+    }
+  }
+
+  /** Spinning gold starburst behind a big damage number. */
+  starburst(x: number, y: number, k: number) {
+    if (this.still) return;
+    this.p('fx_burst', x, y, 0, -0.03, 520, 0.6 * k, 1.5 * k, { vr: 0.004, a: 0.95 });
+    this.p('fx_glow', x, y, 0, -0.03, 380, 1.5 * k, 2.6 * k, { tint: 0xffd56b, a: 0.6, add: true });
+  }
+
+  /** Soft green glow + sparkles for a heal. */
+  heal(x: number, y: number) {
+    if (this.still) return;
+    this.p('fx_glow', x, y + 6, 0, 0, 520, 2.2, 3.4, { tint: 0x7dffa0, a: 0.55, add: true });
+    for (let j = 0; j < 5; j++)
+      this.p('fx_spark', x + rnd(-30, 30), y + rnd(-30, 40), 0, -0.03, rnd(420, 560), 0.4, 1, { delay: rnd(0, 200), tint: 0xb8ffc8 });
+  }
+
+  /** A sharp white impact flash at the point of contact (scaled by hit size). */
+  hitFlash(x: number, y: number, k: number) {
+    if (this.still) return;
+    this.p('fx_glow', x, y, 0, 0, 140, 1.2 * k, 2.4 * k, { a: 0.9, add: true });
+    this.p('fx_spark', x, y, 0, 0, 160, 1.4 * k, 2.6 * k, { rot: rnd(0, TAU) });
   }
 
   /** at most one particle burst per fighter every `gap` ms (fast forward), so 4× doesn't flood the pool */

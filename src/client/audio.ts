@@ -233,6 +233,145 @@ export function linkChime(links = 1) {
   setTimeout(() => out.disconnect(), 900);
 }
 
+// ---------- synthesized fight beats ----------
+/**
+ * Small synthesized sounds for the fight's juice beats (combatScene): a soft mochi squish for normal hits, a heavier
+ * thump for big ones, a bell for big / crit hits, ice crack + shatter, burn sizzle, a whoosh when a skill fires, a
+ * bubble pop when a shield breaks, a heal chime and a rising chain note (+2 semitones per chain step).
+ * Each is a handful of short-lived Web Audio nodes; throttled per kind and overall so fast forward stays light.
+ */
+export type FightSound = 'squish' | 'thump' | 'bell' | 'crack' | 'shatter' | 'sizzle' | 'whoosh' | 'pop' | 'heal' | 'chain';
+const SYNTH_GAP: Record<FightSound, number> = {
+  squish: 45, thump: 70, bell: 90, crack: 90, shatter: 120, sizzle: 160, whoosh: 70, pop: 90, heal: 120, chain: 60,
+};
+let noiseBuf: AudioBuffer | null = null;
+let synthRecent: number[] = [];
+function noiseBuffer(c: AudioContext) {
+  if (!noiseBuf) {
+    noiseBuf = c.createBuffer(1, Math.round(c.sampleRate * 0.6), c.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  }
+  return noiseBuf;
+}
+
+/** pitch = semitones up (chain steps); vol = 0..1 extra gain */
+export function fightSfx(kind: FightSound, opts: { pitch?: number; vol?: number } = {}) {
+  if (!unlocked || !ctx || !gains || settings.muted) return;
+  const now = performance.now();
+  if (now - (lastPlayed.get('fx:' + kind) ?? -1e9) < SYNTH_GAP[kind]) return;
+  synthRecent = synthRecent.filter((t) => now - t < 150);
+  if (synthRecent.length >= 5) return;
+  synthRecent.push(now);
+  lastPlayed.set('fx:' + kind, now);
+  const c = ctx;
+  const out = c.createGain();
+  out.gain.value = 0.55 * (opts.vol ?? 1);
+  out.connect(gains.sfx);
+  const t0 = c.currentTime + 0.005;
+  const pm = Math.pow(2, (opts.pitch ?? 0) / 12);
+  /** sine / triangle with a pitch glide and an attack-decay envelope */
+  const tone = (type: OscillatorType, f0: number, f1: number, at: number, peak: number, dec: number, glide = dec) => {
+    const o = c.createOscillator();
+    const g = c.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0 * pm, t0 + at);
+    if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1 * pm, t0 + at + glide);
+    g.gain.setValueAtTime(0, t0 + at);
+    g.gain.linearRampToValueAtTime(peak, t0 + at + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0006, t0 + at + dec);
+    o.connect(g).connect(out);
+    o.start(t0 + at);
+    o.stop(t0 + at + dec + 0.02);
+  };
+  /** filtered noise burst */
+  const hiss = (ftype: BiquadFilterType, freq: number, q: number, at: number, peak: number, dec: number, sweepTo = 0) => {
+    const s = c.createBufferSource();
+    s.buffer = noiseBuffer(c);
+    const f = c.createBiquadFilter();
+    f.type = ftype;
+    f.frequency.setValueAtTime(freq, t0 + at);
+    if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t0 + at + dec);
+    f.Q.value = q;
+    const g = c.createGain();
+    g.gain.setValueAtTime(0, t0 + at);
+    g.gain.linearRampToValueAtTime(peak, t0 + at + Math.min(0.02, dec * 0.3));
+    g.gain.exponentialRampToValueAtTime(0.0006, t0 + at + dec);
+    s.connect(f).connect(g).connect(out);
+    s.start(t0 + at, Math.random() * 0.3);
+    s.stop(t0 + at + dec + 0.02);
+    return g;
+  };
+  let len = 0.3;
+  switch (kind) {
+    case 'squish': // soft mochi squish: a short dropping blob + a muffled pat
+      tone('sine', 260, 95, 0, 0.55, 0.13, 0.1);
+      tone('triangle', 520, 180, 0, 0.12, 0.07);
+      hiss('lowpass', 1100, 0.7, 0, 0.35, 0.07);
+      len = 0.2;
+      break;
+    case 'thump': // heavy hit: deep body thump + squish on top
+      tone('sine', 150, 42, 0, 0.95, 0.28, 0.2);
+      tone('sine', 300, 110, 0, 0.35, 0.12);
+      hiss('lowpass', 600, 0.8, 0, 0.6, 0.14);
+      hiss('bandpass', 1800, 1.2, 0.005, 0.18, 0.06);
+      len = 0.35;
+      break;
+    case 'bell': // crit / big hit chime: inharmonic bell partials
+      for (const [mul, vol] of [[1, 0.5], [2.76, 0.18], [5.4, 0.08], [2, 0.12]] as const) tone('sine', 1046.5 * mul, 1046.5 * mul, 0, vol, 0.9);
+      tone('sine', 1568, 1568, 0.06, 0.22, 0.6);
+      len = 1;
+      break;
+    case 'crack': // freeze: glassy crackle + a cold ping
+      for (const at of [0, 0.028, 0.06, 0.1]) hiss('highpass', 2600 + Math.random() * 1500, 0.9, at, 0.5, 0.035);
+      tone('sine', 2900, 1900, 0, 0.18, 0.35);
+      tone('triangle', 1450, 1300, 0.02, 0.1, 0.3);
+      len = 0.45;
+      break;
+    case 'shatter': // ice breaking into shards: louder crackle + tinkling pings
+      hiss('highpass', 1800, 0.7, 0, 0.7, 0.12);
+      for (let k = 0; k < 6; k++) {
+        const at = 0.02 + k * 0.035 + Math.random() * 0.02;
+        hiss('highpass', 3000 + Math.random() * 2500, 1, at, 0.3, 0.03);
+        tone('sine', 2200 + Math.random() * 2600, 2000, at, 0.09, 0.22);
+      }
+      len = 0.5;
+      break;
+    case 'sizzle': { // burn: fluttering bandpassed hiss
+      const g = hiss('bandpass', 3800, 0.8, 0, 0.42, 0.38, 2600);
+      for (let k = 1; k < 18; k++) g.gain.setValueAtTime(0.12 + Math.random() * 0.3 * (1 - k / 18), t0 + k * 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0006, t0 + 0.4);
+      tone('sine', 180, 120, 0, 0.12, 0.15);
+      len = 0.45;
+      break;
+    }
+    case 'whoosh': // a skill fires: airy swoosh rising
+      hiss('bandpass', 500, 1.4, 0, 0.32, 0.2, 2600);
+      len = 0.25;
+      break;
+    case 'pop': // shield bubble pops
+      tone('sine', 520, 1500, 0, 0.5, 0.08, 0.05);
+      hiss('highpass', 2400, 0.8, 0.01, 0.35, 0.06);
+      for (let k = 0; k < 3; k++) tone('sine', 2400 + k * 700, 2400 + k * 700, 0.05 + k * 0.03, 0.06, 0.12);
+      len = 0.3;
+      break;
+    case 'heal': // soft two-note chime going up
+      tone('sine', 784, 784, 0, 0.3, 0.45);
+      tone('sine', 1175, 1175, 0.07, 0.26, 0.5);
+      tone('triangle', 2350, 2350, 0.07, 0.04, 0.3);
+      len = 0.6;
+      break;
+    case 'chain': // rising pluck (pitch goes up 2 semitones per chain step)
+      tone('triangle', 1046.5, 1046.5, 0, 0.42, 0.32);
+      tone('sine', 1568, 1568, 0.05, 0.3, 0.36);
+      tone('sine', 2093, 2093, 0.1, 0.18, 0.4);
+      hiss('highpass', 6000, 0.7, 0, 0.08, 0.08);
+      len = 0.55;
+      break;
+  }
+  setTimeout(() => out.disconnect(), (len + 0.2) * 1000);
+}
+
 // ---------- voice ----------
 let currentVoice: AudioBufferSourceNode | null = null;
 /** Announcer line in the current language; a new line cuts the previous one. */
@@ -305,16 +444,21 @@ export function currentMusic(): MusicTrack | null {
 }
 
 // ---------- combat ----------
-/** One call per combat event (me = the player's side). Hit / shield / freeze / burn / trigger / KO + win or lose. */
-export function combatSfx(e: CombatEvent, me: Side = 0) {
+/**
+ * One call per combat event (me = the player's side). Shield / freeze / KO + win or lose. With juice (the arena
+ * replay), hits, burn ticks and chains are left to the scene's synthesized beats (fightSfx), which know how big each
+ * hit is and how far a chain went; without it the sampled hit / crit / burn / chain sounds play as before.
+ */
+export function combatSfx(e: CombatEvent, me: Side = 0, juice = false) {
   switch (e.type) {
     case 'cast':
-      if (e.from !== undefined) sfx('chain');
+      if (e.from !== undefined && !juice) sfx('chain');
       break;
     case 'damage':
       if (e.amount <= 0) {
         if (e.blocked > 0) sfx('shield', { volume: 0.5 });
-      } else if (e.src === 'burn') sfx('burn', { volume: 0.7 });
+      } else if (juice) break;
+      else if (e.src === 'burn') sfx('burn', { volume: 0.7 });
       else if (e.src !== 'fatigue') sfx(e.amount >= 10 ? 'crit' : 'hit', { rate: e.side === me ? 0.9 : 1.05 });
       break;
     case 'shield':
