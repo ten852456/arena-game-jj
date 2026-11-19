@@ -10,6 +10,7 @@ import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMute
 import './style.css';
 import './chain.css';
 import './layout.css';
+import './shopux.css';
 import { initLayout, setGameRefresh } from './layout';
 import { mountSoundPanel } from './soundPanel';
 

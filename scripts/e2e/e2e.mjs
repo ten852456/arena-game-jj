@@ -102,6 +102,64 @@ async function play(label, ctxOpts, runs = 1) {
           } else ok(`${label} run${run}: drag test skipped (fewer than 2 skills)`, true);
           ok(`${label} run${run}: firing timeline visible`, (await text()).includes('วิ') && (await has('.shopv svg, .tl, [class*="timeline"]')));
           if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
+          // shop HUD + coin pill on the shop panel
+          ok(`${label} run${run}: HUD shows HP, day and 10 win stars`, (await has('[data-hud="hp"]')) && (await has('[data-hud="day"]')) && (await p.locator('.hud-star').count()) === 10);
+          ok(`${label} run${run}: gold coin pill sits on the shop panel`, await has('.sv-shop .gold-pill .gold-n'));
+          const gold = async () => p.evaluate(() => JSON.parse(localStorage.getItem('arena.run.v7') || '{}').gold);
+          const nRows = async () => p.locator('.skillrow[data-i]').count();
+          const touch = !!ctxOpts.hasTouch;
+          const cdp = touch ? await p.context().newCDPSession(p) : null;
+          // a drag gesture (real touch events on phones, the mouse on desktop); target() is read once the drag has started
+          const gesture = async (x0, y0, target) => {
+            if (touch) {
+              await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+              for (let k = 1; k <= 4; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + k * 4, y: y0 - k * 6 }] }); await p.waitForTimeout(30); }
+              const t = await target();
+              for (let k = 1; k <= 14; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (t.x - x0) * k / 14, y: y0 + (t.y - y0) * k / 14 }] }); await p.waitForTimeout(30); }
+              await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            } else {
+              await p.mouse.move(x0, y0); await p.mouse.down(); await p.mouse.move(x0 + 12, y0 - 12, { steps: 3 });
+              const t = await target();
+              await p.mouse.move(t.x, t.y, { steps: 16 }); await p.waitForTimeout(150); await p.mouse.up();
+            }
+            await p.waitForTimeout(800);
+          };
+          // sell: drag a skill onto the coin jar
+          {
+            const r0 = await nRows(), g0 = await gold();
+            const grip = p.locator('.skillrow[data-i] [data-drag]').last();
+            await grip.scrollIntoViewIfNeeded(); await p.waitForTimeout(250);
+            const gb = await grip.boundingBox();
+            await gesture(gb.x + gb.width / 2, gb.y + gb.height / 2, async () => {
+              const jb = await p.locator('.sell-jar').boundingBox();
+              return { x: jb.x + jb.width / 2, y: jb.y + jb.height / 2 };
+            });
+            const r1 = await nRows(), g1 = await gold();
+            ok(`${label} run${run}: drag a skill onto the coin jar sells it`, r1 === r0 - 1 && g1 > g0, `rows ${r0}→${r1}, gold ${g0}→${g1}`);
+          }
+          // buy: drag a shop card into the list (mouse) / tap a card, then tap the ghost spot (touch)
+          {
+            const card = p.locator('.card.offer[data-tip^="s:"]:not(.nobuy):not(.can-up)').first();
+            if (await card.count()) {
+              const r0 = await nRows(), g0 = await gold();
+              const bname = (await card.locator('.offer-name').innerText()).trim();
+              await card.scrollIntoViewIfNeeded(); await p.waitForTimeout(200);
+              if (touch) {
+                await card.locator('.offer-name').click(); await p.waitForTimeout(500);
+                ok(`${label} run${run}: tapping a card shows the ghost + insert targets`, (await has('.put-here.mode-pick')) && (await has('.ins-slot button')));
+                await tap('.put-here.mode-pick', 900);
+              } else {
+                const cb = await card.locator('.offer-name').boundingBox();
+                await gesture(cb.x + cb.width / 2, cb.y + cb.height / 2, async () => {
+                  const rb = await p.locator('.skillrow[data-i]').first().boundingBox();
+                  return { x: rb.x + rb.width / 2, y: rb.y + 6 };
+                });
+              }
+              const r1 = await nRows(), g1 = await gold();
+              ok(`${label} run${run}: ${touch ? 'tap-to-place' : 'drag a shop card into the list'} buys it`, r1 === r0 + 1 && g1 < g0, `rows ${r0}→${r1}, gold ${g0}→${g1}`);
+              if (!touch) ok(`${label} run${run}: drag-buy lands where it was dropped (top of the list)`, (await p.locator('.skillrow[data-i="0"] .nm').innerText()).includes(bname), bname);
+            } else ok(`${label} run${run}: buy-by-drag skipped (no affordable new skill)`, true);
+          }
         }
         // buy what we can afford (left to right), then fight
         for (let i = 0; i < 6; i++) {
