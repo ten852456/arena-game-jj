@@ -27,7 +27,8 @@ export function initDrag(root: HTMLElement, hooks: DragHooks) {
     if (!grip && (ev.pointerType !== 'mouse' || target.closest('button, a, input, .kw, .bchip'))) return;
     const list = row.closest<HTMLElement>('.skilllist');
     if (!list) return;
-    if (grip) ev.preventDefault(); // no text selection / scroll start from the grip
+    // no text selection (mouse drag from anywhere on the row) / scroll start (touch from the grip)
+    if (grip || ev.pointerType === 'mouse') ev.preventDefault();
     start(ev, row, list, hooks);
   });
 }
