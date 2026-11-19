@@ -1,0 +1,265 @@
+{
+  "voice": "Zephyr",
+  "model": "gemini-3.8-flash",
+  "date": "2026-11-19",
+  "th": {
+    "welcome": {
+      "want": "ยินดีต้อนรับสู่โมจิมูน!",
+      "heard": "ยินดีต้อนรับสู่โมจิมูน",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "choose_hero": {
+      "want": "เลือกฮีโร่ของคุณเลย!",
+      "heard": "เลือกฮีโร่ของคุณเลย",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "shop_open": {
+      "want": "ร้านค้าเปิดแล้วจ้า!",
+      "heard": "ร้านค้าเปิดแล้วจ้า",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 9,
+      "naturalness": 8
+    },
+    "fight": {
+      "want": "เริ่มสู้กันเลย!",
+      "heard": "เริ่มสู้กันเลย",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "victory": {
+      "want": "ชนะแล้ว!",
+      "heard": "ชนะแล้ว",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "defeat": {
+      "want": "แพ้ซะแล้ว ไม่เป็นไรนะ",
+      "heard": "แพ้ซะแล้ว ไม่เป็นไรนะ",
+      "match": true,
+      "cuteness": 9,
+      "clarity": 9,
+      "naturalness": 8
+    },
+    "close_fight": {
+      "want": "สูสีมาก!",
+      "heard": "สูสีมาก",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 10
+    },
+    "ko": {
+      "want": "น็อกเอาต์!",
+      "heard": "น็อคเอาท์",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "combo": {
+      "want": "คอมโบ!",
+      "heard": "คอมโบ!",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 8,
+      "naturalness": 7
+    },
+    "critical": {
+      "want": "คริติคอล!",
+      "heard": "คริติคอล",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 9,
+      "naturalness": 8
+    },
+    "frozen": {
+      "want": "แช่แข็ง!",
+      "heard": "แช่แข็ง",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "last_chance": {
+      "want": "โอกาสสุดท้าย!",
+      "heard": "โอกาสสุดท้าย",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "champion": {
+      "want": "ชนะครบแปดครั้ง! แชมป์แห่งดวงจันทร์!",
+      "heard": "ชนะครบแปดครั้ง แชมป์แห่งดวงจันทร์",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "perfect": {
+      "want": "เพอร์เฟกต์! ไม่แพ้เลยสักครั้ง!",
+      "heard": "เพอร์เฟกต์ ไม่แพ้เลยสักครั้ง",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "stardust": {
+      "want": "ได้รับผงดาวแล้ว!",
+      "heard": "ได้รับผงดาวแล้ว",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "new_day": {
+      "want": "วันใหม่มาแล้ว!",
+      "heard": "วันใหม่มาแล้ว",
+      "match": true,
+      "cuteness": 9,
+      "clarity": 10,
+      "naturalness": 9
+    }
+  },
+  "en": {
+    "welcome": {
+      "want": "Welcome to Mochi Moon!",
+      "heard": "Welcome to Mochi Moon!",
+      "match": true,
+      "cuteness": 9,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "choose_hero": {
+      "want": "Choose your hero!",
+      "heard": "Choose your hero.",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "shop_open": {
+      "want": "The shop is open!",
+      "heard": "The shop is open!",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 9,
+      "naturalness": 7
+    },
+    "fight": {
+      "want": "Fight!",
+      "heard": "Fight!",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "victory": {
+      "want": "Victory!",
+      "heard": "Victory!",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "defeat": {
+      "want": "Defeat... you'll get them next time.",
+      "heard": "Defeat. You'll get them next time.",
+      "match": true,
+      "cuteness": 2,
+      "clarity": 9,
+      "naturalness": 8
+    },
+    "close_fight": {
+      "want": "What a close fight!",
+      "heard": "What a close fight!",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "ko": {
+      "want": "Knockout!",
+      "heard": "Knockout.",
+      "match": true,
+      "cuteness": 1,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "combo": {
+      "want": "Combo!",
+      "heard": "Combo!",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 9,
+      "naturalness": 6
+    },
+    "critical": {
+      "want": "Critical hit!",
+      "heard": "Critical hit!",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 10,
+      "naturalness": 7
+    },
+    "frozen": {
+      "want": "Frozen!",
+      "heard": "Frozen!",
+      "match": true,
+      "cuteness": 5,
+      "clarity": 10,
+      "naturalness": 7
+    },
+    "last_chance": {
+      "want": "Last chance!",
+      "heard": "Last chance!",
+      "match": true,
+      "cuteness": 7,
+      "clarity": 10,
+      "naturalness": 7
+    },
+    "champion": {
+      "want": "Eight wins! Champion of the moon!",
+      "heard": "Eight wins, champion of the moon.",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "perfect": {
+      "want": "Perfect run!",
+      "heard": "Perfect run.",
+      "match": true,
+      "cuteness": 6,
+      "clarity": 10,
+      "naturalness": 9
+    },
+    "stardust": {
+      "want": "Stardust earned!",
+      "heard": "Stardust earned!",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    },
+    "new_day": {
+      "want": "A new day begins!",
+      "heard": "A new day begins.",
+      "match": true,
+      "cuteness": 8,
+      "clarity": 10,
+      "naturalness": 8
+    }
+  }
+}

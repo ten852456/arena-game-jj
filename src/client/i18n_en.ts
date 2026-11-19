@@ -125,10 +125,10 @@ export const BUILDINGS_EN: Record<string, { name: string; desc: string; future?:
     desc: "The town's mages research new things from the resources you gather",
     future: 'Research unlocks buildings and conveniences, never combat power',
   },
-  hall: { name: 'Hero Hall', desc: 'Home of every hero you own. The same hero is equally strong for everyone' },
+  hall: { name: 'Hero Hall', desc: 'Home of every hero you own. The same hero is equally strong for everyone · See your profile, stardust and run history here' },
   board: {
     name: 'Notice Board',
-    desc: 'Daily decrees from the arena rulers, which do not have to make sense',
+    desc: 'Leaderboard of mochi fighters, for the season and for today · Coming soon: daily decrees from the arena rulers',
     future: '20–30 rotating daily rules that change which heroes and builds shine that day',
   },
   market: {

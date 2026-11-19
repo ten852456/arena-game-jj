@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { combatSfx, voice } from './audio';
 import { ZOOM } from './view';
 import { L } from '../i18n';
 import { footprint } from '../sim/grid';
@@ -53,6 +54,12 @@ export class CombatScene extends Phaser.Scene {
   private comboText!: Phaser.GameObjects.Text;
   private clockText!: Phaser.GameObjects.Text;
   private banner!: Phaser.GameObjects.Text;
+  /** big status over each fighter's head: frozen / cooldowns pushed back / never fired a skill */
+  private lockTexts!: Phaser.GameObjects.Text[];
+  private casts = [0, 0];
+  private delayUntil = [0, 0];
+  /** voice cues already played this fight (one of each, so the announcer does not chatter) */
+  private said = new Set<string>();
   /** buff / debuff chips under each HP bar */
   private chips: Phaser.GameObjects.Text[][] = [[], []];
   private fx: (Fx | null)[] = [null, null];
@@ -101,6 +108,15 @@ export class CombatScene extends Phaser.Scene {
     this.comboText = txt(W / 2, 140, 22, '#ffe066');
     this.clockText = txt(W / 2, 24, 14, '#bbbbbb');
     this.banner = txt(W / 2, 170, 48);
+    this.lockTexts = [0, 1].map((i) =>
+      this.add
+        .text(POS[i], GROUND + 22, '', { // under the feet: clear of the skill name and chain text
+          fontFamily: FONT, fontSize: '15px', color: '#dff4ff', backgroundColor: '#1d3a5ccc', padding: { x: 6, y: 2 },
+          stroke: '#0b1830', strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setVisible(false),
+    );
     for (const s of [0, 1])
       for (let i = 0; i < 8; i++)
         this.chips[s].push(
@@ -131,6 +147,10 @@ export class CombatScene extends Phaser.Scene {
     this.fx = [null, null];
     this.chips.forEach((row) => row.forEach((c) => c.setVisible(false)));
     this.nameTexts.forEach((t) => t.setText(''));
+    this.lockTexts?.forEach((t) => t.setVisible(false));
+    this.casts = [0, 0];
+    this.delayUntil = [0, 0];
+    this.said = new Set();
     this.fighters.forEach((f, i) => {
       f.setAngle(0).setAlpha(1).clearTint().setX(POS[i]).setVisible(false);
       this.keys[i] = null;
@@ -196,6 +216,7 @@ export class CombatScene extends Phaser.Scene {
     while (this.ei < this.evs.length && this.evs[this.ei].t <= this.clock) this.handle(this.evs[this.ei++]);
     this.drawQueue();
     this.drawChips();
+    this.drawLocks();
     const lastT = this.evs.at(-1)?.t ?? 0;
     this.clockText.setText((Math.min(this.clock, lastT) / 10).toFixed(1) + L(' วิ', 's'));
     const now = this.time.now;
@@ -257,6 +278,8 @@ export class CombatScene extends Phaser.Scene {
     switch (e.type) {
       case 'cast': {
         const d = SKILLS[e.skill];
+        if (!e.echo) this.casts[e.side]++;
+        if (e.chain >= 2 && e.side === 0) this.say('combo');
         this.glow[e.side].set(e.idx, e.t + 5);
         if (e.from !== undefined) this.chains.push({ side: e.side, from: e.from, to: e.idx, until: e.t + 6 });
         if (!this.quiet) {
@@ -288,6 +311,7 @@ export class CombatScene extends Phaser.Scene {
           this.flashUntil[e.side] = this.time.now + 70;
           if (e.src !== 'fatigue' && e.src !== 'burn') this.pose(e.side, 'hit');
           if (e.amount >= 10) this.cameras.main.shake(140, 0.008);
+          if (e.amount >= 18 && e.side === 1 && e.src !== 'thorns') this.say('critical');
         }
         break;
       }
@@ -314,7 +338,12 @@ export class CombatScene extends Phaser.Scene {
         };
         const [txt, col] = map[e.status] ?? [e.status, '#ffffff'];
         this.float(e.side, txt, col, -24);
-        if (e.status === 'freeze' && e.value > 0) this.frozenUntil[e.side] = e.t + e.value;
+        if (e.status === 'freeze' && e.value > 0) {
+          this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
+          if (e.side === 1 && e.value >= 15) this.say('frozen');
+        }
+        if (e.status === 'cleanse' && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
+        if (e.status === 'delay' && e.value > 0) this.delayUntil[e.side] = e.t + Math.max(8, Math.min(20, e.value));
         break;
       }
       case 'fatigue':
@@ -339,7 +368,44 @@ export class CombatScene extends Phaser.Scene {
       }
     }
     this.drawBars();
+    if (!this.quiet) combatSfx(e, 0);
+    else if (e.type === 'end') combatSfx(e, 0); // skipped to the end: still play the KO and the result jingle
     this.onEvent?.(e);
+  }
+
+  /** One announcer line per kind per fight, never while skipping. */
+  private say(key: 'combo' | 'critical' | 'frozen') {
+    if (this.quiet || this.said.has(key)) return;
+    this.said.add(key);
+    voice(key);
+  }
+
+  /** Frozen / pushed-back label over a fighter, and "no skill fired" once the fight is over. */
+  private drawLocks() {
+    const tick = Math.max(0, Math.min(this.lastTick, Math.floor(this.clock)));
+    const over = this.ei >= this.evs.length;
+    for (const s of [0, 1]) {
+      const t = this.lockTexts[s];
+      const frozen = this.trace ? this.trace.fr[s][tick] === 1 : this.clock < this.frozenUntil[s];
+      let label = '';
+      let bg = '#1d3a5ccc';
+      if (over && this.casts[s] === 0 && this.evs.length) {
+        label = L('ไม่ได้ใช้ skill เลย', 'No skill fired');
+        bg = '#4a1f3acc';
+      } else if (frozen && !this.dead[s]) {
+        const left = Math.max(0, this.frozenUntil[s] - this.clock) / 10;
+        label = `❄ ${L('โดนแช่แข็ง', 'Frozen')}${left > 0.05 ? ` ${left.toFixed(1)}` : ''}`;
+      } else if (this.clock < this.delayUntil[s] && !this.dead[s]) {
+        label = `⏪ ${L('คูลดาวน์ถอยหลัง', 'Cooldowns pushed back')}`;
+        bg = '#33275ccc';
+      }
+      if (!label) {
+        t.setVisible(false);
+        continue;
+      }
+      if (t.text !== label) t.setText(label).setBackgroundColor(bg);
+      t.setVisible(true);
+    }
   }
 
   private drawBars() {
