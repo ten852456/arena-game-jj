@@ -4,6 +4,7 @@
  * connect bonuses (haste, ⚡ trigger), marks and hero passives are exactly what the fight uses.
  * The only thing it can't know is the enemy: their freezes / slows push your skills later in a real fight.
  */
+import { L } from '../../i18n';
 import { TPS, simulate } from '../../sim/combat';
 import { SKILLS, nodeOf } from '../../sim/skills';
 import type { Build, SkillInstance } from '../../sim/types';
@@ -44,15 +45,15 @@ export function timelineHTML(skills: SkillInstance[], hero: string): string {
   const max = TIMELINE_SECS * TPS;
   const pos = (t: number) => `${((t / max) * 100).toFixed(2)}%`;
   const name = (i: number) => nodeOf(skills[i]).name;
-  if (!skills.length) return `<div class="tl-empty">ซื้อ skill แล้วดูตรงนี้ว่าแต่ละตัวทำงานวินาทีไหน</div>`;
+  if (!skills.length) return `<div class="tl-empty">${L('ซื้อ skill แล้วดูตรงนี้ว่าแต่ละตัวทำงานวินาทีไหน', 'Buy a skill, then see here at which second each one fires')}</div>`;
   const lanes = skills
     .map((k, i) => {
       const mine = fires.filter((f) => f.idx === i);
       const dots = mine
         .map((f) => {
           const kind = f.from !== undefined ? 'trig' : f.echo ? 'echo' : 'own';
-          const why = f.from !== undefined ? `⚡ ถูก ${esc(name(f.from))} สั่งให้ทำงานตาม` : f.echo ? 'ตีซ้ำ (ตรา)' : 'ครบคูลดาวน์';
-          const tip = `<div class="tt-h"><b>${esc(name(i))}</b> · ${sec(f.t)} วิ</div><div class="muted small">${why}</div>`;
+          const why = f.from !== undefined ? L(`⚡ ถูก ${esc(name(f.from))} สั่งให้ทำงานตาม`, `⚡ fired by ${esc(name(f.from))}`) : f.echo ? L('ตีซ้ำ (ตรา)', 'Echo (mark)') : L('ครบคูลดาวน์', 'Cooldown ready');
+          const tip = `<div class="tt-h"><b>${esc(name(i))}</b> · ${sec(f.t)}${L(' วิ', 's')}</div><div class="muted small">${why}</div>`;
           return `<i class="tl-dot ${kind}" style="left:${pos(f.t)}" data-ttxt="${esc(tip)}">${kind === 'trig' ? '⚡' : ''}</i>`;
         })
         .join('');
@@ -60,7 +61,7 @@ export function timelineHTML(skills: SkillInstance[], hero: string): string {
       return `<div class="tl-lane arch-${SKILLS[k.id].arch}">
         <span class="tl-name"><span class="tl-no">${i + 1}</span>${esc(name(i))}</span>
         <div class="tl-track">${dots}</div>
-        <span class="tl-n" title="ทำงานกี่ครั้งใน ${TIMELINE_SECS} วิแรก">×${n}</span>
+        <span class="tl-n" title="${L(`ทำงานกี่ครั้งใน ${TIMELINE_SECS} วิแรก`, `Fires in the first ${TIMELINE_SECS}s`)}">×${n}</span>
       </div>`;
     })
     .join('');
@@ -75,7 +76,7 @@ export function timelineHTML(skills: SkillInstance[], hero: string): string {
     )
     .join('');
   return `<div class="tl-lanes">${lanes}
-      <div class="tl-axis" aria-hidden="true"><span class="tl-name"></span><div class="tl-ticks">${ticks}</div><span class="tl-n">วิ</span></div>
+      <div class="tl-axis" aria-hidden="true"><span class="tl-name"></span><div class="tl-ticks">${ticks}</div><span class="tl-n">${L('วิ', 's')}</span></div>
     </div>
-    <ol class="tl-seq" aria-label="ลำดับที่ทำงานก่อนหลัง">${seq}</ol>`;
+    <ol class="tl-seq" aria-label="${L('ลำดับที่ทำงานก่อนหลัง', 'Firing order')}">${seq}</ol>`;
 }

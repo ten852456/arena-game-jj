@@ -2,9 +2,13 @@
  * First-run tutorial: a pop-up panel with slides. Shown once per browser (and again from the "?" button).
  * Slide content lives in tutorialSlides.ts (each game version has its own).
  */
+import { L, getLang } from '../i18n';
+import { onLang, setLang } from './lang';
 import { SLIDES, TUTORIAL_KEY, type Slide } from './tutorialSlides';
 
 let open = false;
+/** re-draws the open tutorial (language change) */
+let redraw = () => {};
 
 function seen(): boolean {
   try {
@@ -37,14 +41,15 @@ export function showTutorial() {
   let i = 0;
   const wrap = document.createElement('div');
   wrap.className = 'tut-backdrop';
-  wrap.innerHTML = `<div class="tut" role="dialog" aria-modal="true" aria-label="วิธีเล่น">
-    <button class="tut-x ghost small" data-t="close" aria-label="ปิด">✕</button>
+  wrap.innerHTML = `<div class="tut" role="dialog" aria-modal="true">
+    <button class="tut-x ghost small" data-t="close">✕</button>
+    <span class="tut-lang" role="group" aria-label="Language"></span>
     <div class="tut-slide"></div>
     <div class="tut-dots"></div>
     <div class="tut-nav">
-      <button class="ghost" data-t="prev">← ก่อนหน้า</button>
-      <button class="ghost small" data-t="close">ข้าม</button>
-      <button class="primary" data-t="next">ถัดไป →</button>
+      <button class="ghost" data-t="prev"></button>
+      <button class="ghost small" data-t="close" data-skip="1"></button>
+      <button class="primary" data-t="next"></button>
     </div>
   </div>`;
   document.body.appendChild(wrap);
@@ -54,12 +59,21 @@ export function showTutorial() {
   const $next = wrap.querySelector('[data-t="next"]') as HTMLButtonElement;
 
   const draw = () => {
+    if (!open) return;
+    wrap.querySelector('.tut')!.setAttribute('aria-label', L('วิธีเล่น', 'How to play'));
+    wrap.querySelector('.tut-x')!.setAttribute('aria-label', L('ปิด', 'Close'));
+    wrap.querySelector('[data-skip]')!.textContent = L('ข้าม', 'Skip');
+    $prev.textContent = L('← ก่อนหน้า', '← Back');
+    wrap.querySelector('.tut-lang')!.innerHTML = (['th', 'en'] as const)
+      .map((l) => `<button class="small ${getLang() === l ? 'on' : 'ghost'}" data-t="lang" data-lang="${l}" aria-pressed="${getLang() === l}">${l.toUpperCase()}</button>`)
+      .join('');
     $slide.innerHTML = slideHTML(SLIDES[i]);
-    $dots.innerHTML = SLIDES.map((_, k) => `<button class="tut-dot ${k === i ? 'on' : ''}" data-t="go" data-k="${k}" aria-label="หน้า ${k + 1}"></button>`).join('');
+    $dots.innerHTML = SLIDES.map((_, k) => `<button class="tut-dot ${k === i ? 'on' : ''}" data-t="go" data-k="${k}" aria-label="${L('หน้า', 'Page')} ${k + 1}"></button>`).join('');
     $prev.disabled = i === 0;
-    $next.textContent = i === SLIDES.length - 1 ? 'เริ่มเล่น!' : 'ถัดไป →';
+    $next.textContent = i === SLIDES.length - 1 ? L('เริ่มเล่น!', 'Let’s play!') : L('ถัดไป →', 'Next →');
     $next.focus();
   };
+  redraw = draw;
   const close = () => {
     markSeen();
     wrap.remove();
@@ -86,6 +100,7 @@ export function showTutorial() {
     else if (a === 'prev') go(i - 1);
     else if (a === 'next') (i === SLIDES.length - 1 ? close() : go(i + 1));
     else if (a === 'go') go(Number(t.dataset.k));
+    else if (a === 'lang' && t.dataset.lang !== getLang()) setLang(t.dataset.lang as 'th' | 'en');
   });
   // swipe on touch screens
   let sx = 0;
@@ -104,9 +119,14 @@ export function initTutorial() {
   if (header && !header.querySelector('.tut-open')) {
     const b = document.createElement('button');
     b.className = 'tut-open small ghost';
-    b.textContent = '? วิธีเล่น';
+    const paint = () => (b.textContent = L('? วิธีเล่น', '? How to play'));
+    paint();
     b.addEventListener('click', showTutorial);
     header.appendChild(b);
+    onLang(() => {
+      paint();
+      redraw();
+    });
   }
   if (!seen()) showTutorial();
 }

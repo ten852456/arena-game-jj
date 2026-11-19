@@ -14,7 +14,7 @@ const ok = (name, pass, info = '') => { results.push({ name, pass, info }); cons
 
 async function play(label, ctxOpts, runs = 1) {
   const browser = await chromium.launch({ executablePath: exe, headless: true });
-  const ctx = await browser.newContext(ctxOpts);
+  const ctx = await browser.newContext({ ...ctxOpts, locale: 'th-TH' });
   const p = await ctx.newPage();
   const errs = [], bad = [];
   p.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
@@ -42,6 +42,10 @@ async function play(label, ctxOpts, runs = 1) {
   ok(`${label}: tutorial shows on first visit`, tut);
   await tap('button:has-text("✕")');
   ok(`${label}: town has no horizontal scroll`, await noHScroll());
+  await tap('[data-lang="en"]');
+  ok(`${label}: English switch changes language`, await p.locator('html').getAttribute('lang') === 'en');
+  await tap('[data-lang="th"]');
+  ok(`${label}: Thai switch changes language`, await p.locator('html').getAttribute('lang') === 'th');
   await shot('town');
 
   // leaderboard + profile pages from the town

@@ -1,30 +1,47 @@
 import Phaser from 'phaser';
-import { getAudioSettings, initAudio, music, toggleMuted } from './audio';
 import { CombatScene, H, W, sceneReady } from './combatScene';
 import { TownScene, townReady } from './townScene';
 import { initTutorial } from './tutorial';
 import { startUI, type Stage } from './ui';
 import { ZOOM } from './view';
+import { initLang, mountLangSwitch, onLang } from './lang';
+import { getLang, L } from '../i18n';
+import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMuted } from './audio';
 import './style.css';
 
-async function boot() {
-  initAudio({ uiSounds: true }); // sound starts after the first tap/click (autoplay rules)
-  music('town');
-  // floating mute toggle (works on every screen, phone-sized touch target)
+initLang();
+// voice lines follow the game language (English UI → English announcer)
+setVoiceLang(getLang());
+onLang((l) => setVoiceLang(l));
+initAudio({ uiSounds: true }); // sound starts after the first tap/click (autoplay rules)
+music('town');
+
+/** Sound on/off button in the header, after the language switch (never on top of it). */
+function mountMute() {
+  const header = document.querySelector('header');
+  if (!header || header.querySelector('.mute-btn')) return;
   const mute = document.createElement('button');
-  mute.className = 'mute-btn';
+  mute.className = 'mute-btn small ghost';
+  mute.type = 'button';
   mute.dataset.sfx = 'none';
   const paint = () => {
     const off = getAudioSettings().muted;
     mute.textContent = off ? '🔇' : '🔊';
-    mute.setAttribute('aria-label', off ? 'เปิดเสียง / Sound on' : 'ปิดเสียง / Sound off');
+    const label = off ? L('เปิดเสียง', 'Sound on') : L('ปิดเสียง', 'Sound off');
+    mute.setAttribute('aria-label', label);
+    mute.title = label;
+    mute.setAttribute('aria-pressed', String(off));
   };
   mute.addEventListener('click', () => {
     toggleMuted();
     paint();
   });
+  onLang(paint);
   paint();
-  document.body.appendChild(mute);
+  header.appendChild(mute);
+}
+
+async function boot() {
   // Make sure the Thai font is ready before Phaser draws canvas text.
   try {
     await Promise.race([document.fonts.load('20px Kanit'), new Promise((r) => setTimeout(r, 1500))]);
@@ -53,6 +70,19 @@ async function boot() {
   };
   startUI(stage);
   initTutorial();
+  mountLangSwitch();
+  mountMute();
+  paintTagline();
+  onLang(() => {
+    town.refreshLabels();
+    paintTagline();
+  });
+}
+
+/** The small line next to the logo in the header. */
+function paintTagline() {
+  const small = document.querySelector('header small');
+  if (small) small.textContent = L('ศึกโมจิใต้แสงจันทร์ · prototype', 'Mochi battles under the moon · prototype');
 }
 
 // Text is rasterised at ZOOM x so it stays sharp on the zoomed cameras.

@@ -6,6 +6,7 @@ import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '
 import { hashSeed } from '../sim/rng';
 import { CHIBI_ORIGIN_Y, chibiScale, ensureChibi } from './chibi';
 import { drawArenaBackdrop } from './townArt';
+import { L } from '../i18n';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -24,12 +25,13 @@ const HERO_H = 116;
 const HERO_S = chibiScale(HERO_H);
 
 /** Look seed of a fighter: the one saved in the build, else one made from the player name (old builds, AI). */
-const lookSeed = (side: { name: string; build: Build }) => side.build.look ?? hashSeed(side.name, side.build.hero);
+/** seedName (the untranslated name) keeps a look stable when the language changes */
+const lookSeed = (side: { name: string; seedName?: string; build: Build }) => side.build.look ?? hashSeed(side.seedName ?? side.name, side.build.hero);
 
 export interface PlayData {
   result: CombatResult;
-  left: { name: string; build: Build };
-  right: { name: string; build: Build };
+  left: { name: string; seedName?: string; build: Build };
+  right: { name: string; seedName?: string; build: Build };
 }
 
 /** Side-view replay: our hero left, enemy right, executing skill in the center. */
@@ -131,6 +133,7 @@ export class CombatScene extends Phaser.Scene {
     this.playing = false;
     this.tweens.killAll();
     this.banner.setText('');
+    this.endWinner = null;
     this.skillText.setText('');
     this.clockText.setText('');
     this.bars.clear();
@@ -163,6 +166,20 @@ export class CombatScene extends Phaser.Scene {
       this.keys[i] = prefix;
       f.setTexture(prefix + '_idle').setScale(HERO_S).setVisible(true);
     });
+  }
+
+  /** winner of the fight on screen once it ended (null = not over) */
+  private endWinner: number | null = null;
+  private bannerText() {
+    const w = this.endWinner;
+    return w === null ? '' : w === 0 ? L('ชนะ!', 'Victory!') : w === 1 ? L('แพ้', 'Defeat') : L('เสมอ', 'Draw');
+  }
+
+  /** Re-label the fighters and the end banner (language change). */
+  setNames(names: [string, string]) {
+    names.forEach((n, i) => this.nameTexts[i]?.text && this.nameTexts[i].setText(n));
+    if (this.banner?.text) this.banner.setText(this.bannerText());
+    this.skillText?.setText(''); // the fading "skill used" line was drawn in the old language
   }
 
   play(data: PlayData, onEvent: (e: CombatEvent) => void, onDone: () => void) {
@@ -208,7 +225,7 @@ export class CombatScene extends Phaser.Scene {
     this.drawChips();
     this.drawLocks();
     const lastT = this.evs.at(-1)?.t ?? 0;
-    this.clockText.setText((Math.min(this.clock, lastT) / 10).toFixed(1) + ' วิ');
+    this.clockText.setText((Math.min(this.clock, lastT) / 10).toFixed(1) + L(' วิ', 's'));
     const now = this.time.now;
     this.fighters.forEach((f, i) => {
       const key = this.keys[i];
@@ -278,7 +295,7 @@ export class CombatScene extends Phaser.Scene {
           this.tweens.add({ targets: f, x: POS[e.side] + dir * 26, duration: this.dur(90), yoyo: true });
           this.pose(e.side, 'cast');
           const inst = this.builds[e.side]?.skills[e.idx];
-          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.echo ? ' (ซ้ำ)' : ''}${e.side === 1 ? ' ◀' : ''}`;
+          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.echo ? L(' (ซ้ำ)', ' (echo)') : ''}${e.side === 1 ? ' ◀' : ''}`;
           this.skillText.setText(label).setColor(SIDE_COLOR[e.side]).setAlpha(1).setScale(1);
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, delay: this.dur(500), duration: this.dur(400) });
@@ -297,25 +314,25 @@ export class CombatScene extends Phaser.Scene {
         break;
       }
       case 'shield':
-        this.float(e.side, `+${e.amount} โล่`, '#7fc8ff');
+        this.float(e.side, `+${e.amount} ${L('โล่', 'shield')}`, '#7fc8ff');
         break;
       case 'heal':
         this.float(e.side, `+${e.amount}`, '#66ff88');
         break;
       case 'status': {
         const map: Record<string, [string, string]> = {
-          freeze: [e.value > 0 ? 'แช่แข็ง!' : 'ต้านได้', '#aee6ff'],
-          slow: ['ช้าลง', '#aee6ff'],
-          burn: ['ติดไฟ', '#ff9933'],
-          grow: [`พลัง ${e.value}`, '#ffd166'],
+          freeze: [e.value > 0 ? L('แช่แข็ง!', 'Frozen!') : L('ต้านได้', 'Resisted'), '#aee6ff'],
+          slow: [L('ช้าลง', 'Slowed'), '#aee6ff'],
+          burn: [L('ติดไฟ', 'Burning'), '#ff9933'],
+          grow: [`${L('พลัง', 'Power')} ${e.value}`, '#ffd166'],
           charge: [`x${e.value}`, '#ffd166'],
-          thorns: ['หนาม', '#c9a0ff'],
-          steadfast: ['ใจเหล็ก', '#ffffff'],
-          rage: ['คลั่ง!', '#ff4444'],
-          amplify: [e.value > 0 ? 'บัฟ x2!' : 'ยังไม่มีบัฟ', '#ffd166'],
-          cleanse: [e.value > 0 ? `ชำระล้าง ${e.value}` : 'ไม่มีดีบัฟ', '#aaffcc'],
-          dispel: [e.value > 0 ? `สลายบัฟ ${e.value}!` : 'ไม่มีบัฟให้ลบ', '#c9a0ff'],
-          delay: [e.value > 0 ? `ถอยเวลา ${(e.value / 10).toFixed(1)} วิ` : 'ต้านได้', '#b8a0ff'],
+          thorns: [L('หนาม', 'Thorns'), '#c9a0ff'],
+          steadfast: [L('ใจเหล็ก', 'Iron Will'), '#ffffff'],
+          rage: [L('คลั่ง!', 'Rage!'), '#ff4444'],
+          amplify: [e.value > 0 ? L('บัฟ x2!', 'Buffs x2!') : L('ยังไม่มีบัฟ', 'No buffs yet'), '#ffd166'],
+          cleanse: [e.value > 0 ? `${L('ชำระล้าง', 'Cleansed')} ${e.value}` : L('ไม่มีดีบัฟ', 'No debuffs'), '#aaffcc'],
+          dispel: [e.value > 0 ? `${L('สลายบัฟ', 'Dispelled')} ${e.value}!` : L('ไม่มีบัฟให้ลบ', 'Nothing to dispel'), '#c9a0ff'],
+          delay: [e.value > 0 ? `${L('ถอยเวลา', 'Delayed')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : L('ต้านได้', 'Resisted'), '#b8a0ff'],
         };
         const [txt, col] = map[e.status] ?? [e.status, '#ffffff'];
         this.float(e.side, txt, col, -24);
@@ -325,11 +342,12 @@ export class CombatScene extends Phaser.Scene {
         break;
       }
       case 'fatigue':
-        if (!this.quiet) this.skillText.setText(`เหนื่อยล้า -${e.amount}`).setColor('#cccccc').setAlpha(1);
+        if (!this.quiet) this.skillText.setText(`${L('เหนื่อยล้า', 'Fatigue')} -${e.amount}`).setColor('#cccccc').setAlpha(1);
         break;
       case 'end': {
         const w = e.winner;
-        this.banner.setText(w === 0 ? 'ชนะ!' : w === 1 ? 'แพ้' : 'เสมอ').setColor(w === 0 ? '#66ff88' : w === 1 ? '#ff6666' : '#dddddd');
+        this.endWinner = w;
+        this.banner.setText(this.bannerText()).setColor(w === 0 ? '#66ff88' : w === 1 ? '#ff6666' : '#dddddd');
         this.banner.setScale(0.5);
         this.tweens.add({ targets: this.banner, scale: 1, duration: 250, ease: 'Back.Out' });
         ([0, 1] as Side[]).forEach((s) => {
@@ -360,13 +378,13 @@ export class CombatScene extends Phaser.Scene {
       let label = '';
       let bg = '#1d3a5ccc';
       if (over && this.casts[s] === 0 && this.evs.length) {
-        label = 'ไม่ได้ใช้ skill เลย';
+        label = L('ไม่ได้ใช้ skill เลย', 'No skill fired');
         bg = '#4a1f3acc';
       } else if (frozen && !this.dead[s]) {
         const left = Math.max(0, this.frozenUntil[s] - this.clock) / 10;
-        label = `❄ โดนแช่แข็ง${left > 0.05 ? ` ${left.toFixed(1)}` : ''}`;
+        label = `❄ ${L('โดนแช่แข็ง', 'Frozen')}${left > 0.05 ? ` ${left.toFixed(1)}` : ''}`;
       } else if (this.clock < this.delayUntil[s] && !this.dead[s]) {
-        label = '⏪ คูลดาวน์ถอยหลัง';
+        label = L('⏪ คูลดาวน์ถอยหลัง', '⏪ Cooldowns pushed back');
         bg = '#33275ccc';
       }
       if (!label) {
@@ -393,7 +411,7 @@ export class CombatScene extends Phaser.Scene {
         g.fillStyle(0x7fc8ff);
         g.fillRect(s === 0 ? x0 : x0 + w - shW, 14, shW, 6);
       }
-      this.hpTexts[s].setText(`${Math.max(0, this.hp[s])}/${this.maxHp[s]}${this.sh[s] ? `  โล่ ${this.sh[s]}` : ''}`);
+      this.hpTexts[s].setText(`${Math.max(0, this.hp[s])}/${this.maxHp[s]}${this.sh[s] ? `  ${L('โล่', 'shield')} ${this.sh[s]}` : ''}`);
     }
   }
 
@@ -407,13 +425,13 @@ export class CombatScene extends Phaser.Scene {
         const since = Math.max(0, this.clock - this.fxT[s]);
         const fr = Math.max(0, f.fr - since);
         const slt = Math.max(0, f.slt - since);
-        if (f.g > 0) list.push([`พลัง +${f.g}`, '#ffd166']);
-        if (f.c > 1) list.push([`รวมพลัง x${+f.c.toFixed(2)}`, '#ffd166']);
-        if (f.th > 0) list.push([`หนาม ${f.th}`, '#ffd166']);
-        if (f.sf) list.push(['ใจเหล็ก', '#ffd166']);
-        if (f.b > 0) list.push([`ไฟ ${f.b}/วิ`, '#ff7b5c']);
-        if (fr > 0) list.push([`แช่แข็ง ${(fr / 10).toFixed(1)}`, '#8fd8ff']);
-        if (f.sl > 0 && slt > 0) list.push([`ช้า ${f.sl}%`, '#8fd8ff']);
+        if (f.g > 0) list.push([`${L('พลัง', 'Power')} +${f.g}`, '#ffd166']);
+        if (f.c > 1) list.push([`${L('รวมพลัง', 'Charge')} x${+f.c.toFixed(2)}`, '#ffd166']);
+        if (f.th > 0) list.push([`${L('หนาม', 'Thorns')} ${f.th}`, '#ffd166']);
+        if (f.sf) list.push([L('ใจเหล็ก', 'Iron Will'), '#ffd166']);
+        if (f.b > 0) list.push([`${L('ไฟ', 'Burn')} ${f.b}${L('/วิ', '/s')}`, '#ff7b5c']);
+        if (fr > 0) list.push([`${L('แช่แข็ง', 'Frozen')} ${(fr / 10).toFixed(1)}`, '#8fd8ff']);
+        if (f.sl > 0 && slt > 0) list.push([`${L('ช้า', 'Slow')} ${f.sl}%`, '#8fd8ff']);
       }
       let x = s === 0 ? 20 : 370;
       let y = 62;

@@ -39,6 +39,8 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
   const pid = ev.pointerId;
   const y0 = ev.clientY;
   const scroll0 = window.scrollY;
+  const scroller = row.closest<HTMLElement>('.sv-sec');
+  const innerScroll0 = scroller?.scrollTop ?? 0;
   // row midpoints in page coordinates (stable while the page scrolls)
   const mids = rows.map((r) => {
     const b = r.getBoundingClientRect();
@@ -61,10 +63,11 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
   };
   const update = () => {
     const pageY = lastY + window.scrollY;
-    const dy = lastY - y0 + (window.scrollY - scroll0);
+    const innerDelta = (scroller?.scrollTop ?? 0) - innerScroll0;
+    const dy = lastY - y0 + (window.scrollY - scroll0) + innerDelta;
     row.style.transform = `translateY(${dy}px)`;
     // the drop index = how many other rows' midpoints the dragged row's centre has passed
-    const centre = mids[from] + (pageY - (y0 + scroll0));
+    const centre = mids[from] + (pageY - (y0 + scroll0)) + innerDelta;
     let n = 0;
     mids.forEach((m, i) => {
       if (i !== from && centre > m) n++;
@@ -89,8 +92,16 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
     if (lastY < EDGE_PX) v = -Math.ceil((EDGE_PX - lastY) / 6);
     else if (lastY > bottom - EDGE_PX / 2) v = Math.min(14, Math.ceil((lastY - (bottom - EDGE_PX / 2)) / 6));
     // stop at the ends of the page
-    if ((v < 0 && window.scrollY <= 0) || (v > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1)) v = 0;
-    if (v) window.scrollBy(0, v);
+    if (scroller && scroller.scrollHeight > scroller.clientHeight) {
+      const bounds = scroller.getBoundingClientRect();
+      v = lastY < bounds.top + EDGE_PX ? -10 : lastY > bounds.bottom - EDGE_PX ? 10 : 0;
+      const before = scroller.scrollTop;
+      if (v) scroller.scrollBy(0, v);
+      if (scroller.scrollTop === before) v = 0;
+    } else {
+      if ((v < 0 && window.scrollY <= 0) || (v > 0 && window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1)) v = 0;
+      if (v) window.scrollBy(0, v);
+    }
     update();
     if (v) raf = requestAnimationFrame(tick);
   };
@@ -141,6 +152,7 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
       rows.forEach((r) => r.classList.remove('drop-near'));
       line?.remove();
       hooks.onPreview(rows.map((_, i) => i));
+      rows.forEach((r) => r.classList.remove('synergy-preview'));
       return;
     }
     hooks.onDrop(from, to);

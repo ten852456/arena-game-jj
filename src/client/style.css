@@ -265,7 +265,10 @@ header { display: flex; align-items: center; gap: 8px; }
   background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 16px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
 }
-.tut-x { position: absolute; top: 10px; right: 10px; }
+.tut-x { position: absolute; top: 10px; right: 10px; min-width: 44px; min-height: 44px; }
+.tut-lang { position: absolute; top: 10px; left: 10px; display: inline-flex; gap: 2px; }
+.tut-lang button { min-width: 44px; min-height: 44px; padding: 2px 6px; }
+.tut-lang button.on { background: var(--accent); color: #1a1420; border-color: transparent; }
 .tut-slide { min-height: 260px; }
 .tut-art { font-size: 44px; text-align: center; margin: 6px 0 10px; line-height: 1.2; }
 .tut-art .kw { font-size: 18px; padding: 3px 10px; }
@@ -682,11 +685,20 @@ button.info { min-width: 28px; padding: 2px 6px; font-weight: 700; }
 }
 
 /* ===== audio ===== */
-.mute-btn {
-  position: fixed; right: max(118px, calc(env(safe-area-inset-right) + 118px)); top: max(4px, env(safe-area-inset-top));
-  z-index: 60; width: 36px; height: 36px; border-radius: 50%; padding: 0; font-size: 17px; line-height: 36px;
-  background: rgba(35, 28, 72, 0.85); border: 1px solid rgba(255, 255, 255, 0.25); color: #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+/* header: title · ? how to play · TH|EN · mute, all in one row, 44px touch targets, never on top of each other */
+header { flex-wrap: nowrap; padding-left: max(12px, env(safe-area-inset-left)); padding-right: max(12px, env(safe-area-inset-right)); }
+header > b { white-space: nowrap; }
+header small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+header .tut-open { white-space: nowrap; }
+header .lang { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); flex: none; }
+header .lang button { min-width: 44px; padding: 3px 8px; }
+header .lang button.on { background: var(--accent); color: #1a1420; border-color: transparent; }
+header .mute-btn { min-width: 44px; padding: 0 6px; font-size: 18px; line-height: 1; border-radius: 8px; flex: none; }
+header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
+@media (max-width: 420px) {
+  header { gap: 4px; }
+  header .lang button { padding: 3px 4px; }
+  header .tut-open { padding: 2px 8px; }
 }
 
 /* ===== generated art ===== */
@@ -699,3 +711,39 @@ button.info { min-width: 28px; padding: 2px 6px; font-weight: 700; }
 .mm-lbhead { display: block; width: 100%; max-height: 140px; object-fit: cover; border-radius: 14px; margin-bottom: 8px; }
 
 @media (max-width: 480px) { header small { display: none; } }
+
+/* touch screens: every button / chip is at least 44px tall (longer English labels may wrap, never shrink) */
+@media (pointer: coarse) {
+  #panel button:not(.tut-dot), #panel .chip, #panel a.mm-btn, .modal button, .tut-nav button { min-height: 44px; }
+  #panel button.small, #panel button.mv, #panel button.info { min-width: 44px; }
+  #panel .chip { display: inline-flex; align-items: center; gap: 4px; }
+}
+
+/* Landscape dashboard: each work area scrolls independently. */
+body { background: #17102f url('/assets/img/bg-home-wide.webp') center / cover fixed; }
+.skill-icon { width: 42px; height: 42px; object-fit: contain; flex: none; vertical-align: middle; }
+.synergy-icon { width: 22px; height: 22px; object-fit: contain; vertical-align: middle; }
+.rotate-hint { display: none; }
+@media (orientation: portrait) and (max-width: 700px) {
+ .rotate-hint { display: flex; align-items: center; gap: 8px; color: #ffdf9f; font-size: 13px; }
+ .rotate-hint img { width: 48px; height: 48px; object-fit: contain; }
+}
+@media (min-width: 1000px) and (min-height: 550px) {
+ body:has(.shopv) { height: 100dvh; overflow: hidden; background-image: url('/assets/img/bg-game-wide.webp'); }
+ body:has(.shopv) header { height: 46px; max-width: none; }
+ body:has(.shopv) #stage { position: absolute; left: 1%; top: 58px; width: 26%; max-width: none; }
+ body:has(.shopv) #panel { max-width: none; margin: 0 0 0 28%; height: calc(100dvh - 46px); padding: 4px 12px 10px 0; }
+ .shopv { height: 100%; display: grid; grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.15fr); grid-template-rows: auto auto minmax(0,1fr) auto; gap: 8px; background: transparent; padding: 0; }
+ .shopv > .sv-top, .shopv > .sv-sub, .shopv > .sv-fight { grid-column: 1 / -1; margin: 0; }
+ .shopv > .sv-sec { min-height: 0; overflow: auto; padding: 12px; margin: 0; border: 1px solid #796494; border-radius: 18px; background: linear-gradient(#211b40e8,#17102fe8),url('/assets/img/bg-panel.webp'); }
+ .shopv .shop { grid-template-columns: repeat(2,minmax(0,1fr)); }
+ .shopv .list-wrap { grid-template-columns: minmax(0,1fr); grid-template-areas: 'list' 'tl' 'panel'; }
+ .shopv .sv-fight { position: static; }
+ body:has(.mm-versus), body:has(.mm-result) { height: 100dvh; overflow: hidden; background-image: url('/assets/img/bg-game-wide.webp'); }
+ body:has(.mm-versus) header, body:has(.mm-result) header { height: 46px; max-width: none; }
+ body:has(.mm-versus) #stage, body:has(.mm-result) #stage { position: absolute; left: 1%; top: 58px; width: 47%; max-width: none; }
+ body:has(.mm-versus) #panel, body:has(.mm-result) #panel { margin: 0 1% 0 50%; max-width: none; height: calc(100dvh - 56px); overflow: auto; border-radius: 18px; background: #20183eea; padding: 12px 18px; }
+}
+.linkgap.on { color: #ffe9a6; text-shadow: 0 0 9px #ffdf68, 0 0 18px #ffac73; }
+.shopv .skillrow.drop-near { box-shadow: 0 0 0 2px #ffe066, 0 0 20px #ffd77b; }
+.shopv .skillrow.synergy-preview { box-shadow: 0 0 0 2px #ffed9c, 0 0 24px #ffca72; }
