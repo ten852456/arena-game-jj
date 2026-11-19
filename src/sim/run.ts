@@ -83,6 +83,10 @@ export interface RunState {
   log: LogEntry[];
   /** the player gave up this run */
   conceded?: boolean;
+  /** shop lock (GC1): locks[i] = offer i is kept through rerolls and into the next day (until bought or unlocked) */
+  locks?: boolean[];
+  /** moon wishes made today (the price goes up with each one) */
+  wishes?: number;
 }
 
 /** Grid grows with the day: 5×3 on day 1 up to 7×5 (+ bonus rows). */
@@ -150,6 +154,7 @@ export function beginDay(s: RunState) {
   s.lastIncome = inc;
   s.gold += inc.base + inc.bonus;
   s.rolls = 0;
+  s.wishes = 0;
   rollShop(s);
   s.phase = 'shop';
 }
@@ -170,14 +175,19 @@ function rollShop(s: RunState) {
   if (s.day <= 1) {
     const rng = new Rng(hashSeed(s.seed, 'day1'));
     s.shop = (HEROES_BY_ID[s.hero]?.day1 ?? []).slice(0, SHOP_SIZE).map((id) => rollOffer(rng, id, s.hero));
+    s.locks = [];
     return;
   }
+  // locked offers stay in their place (unless they no longer apply); the other places are rolled fresh.
+  // With no locks this is exactly the old roll, so bots and old runs are unchanged.
+  const kept = keptOffers(s);
+  const keptIds = new Set(kept.filter((o): o is Offer => !!o).map((o) => o.id));
   const rng = new Rng(hashSeed(s.seed, s.day, s.rolls));
   const owned = new Set(s.skills.map((k) => k.id));
-  const fresh = SKILL_LIST.filter((d) => (!d.hero || d.hero === s.hero) && !owned.has(d.id)).map((d) => d.id);
-  const ups = s.skills.filter((k) => lvOf(k.v) < MAX_LV).map((k) => k.id);
+  const fresh = SKILL_LIST.filter((d) => (!d.hero || d.hero === s.hero) && !owned.has(d.id) && !keptIds.has(d.id)).map((d) => d.id);
+  const ups = s.skills.filter((k) => lvOf(k.v) < MAX_LV && !keptIds.has(k.id)).map((k) => k.id);
   const picks: Offer[] = [];
-  while (picks.length < SHOP_SIZE && (fresh.length || ups.length)) {
+  while (picks.length < SHOP_SIZE - keptIds.size && (fresh.length || ups.length)) {
     const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < 0.5);
     if (takeUp) {
       const id = ups.splice(rng.int(ups.length), 1)[0];
@@ -185,7 +195,77 @@ function rollShop(s: RunState) {
       picks.push({ id, v: rng.pick(nextVariants(k.v)), shape: k.shape, bonus: [] });
     } else picks.push(rollOffer(rng, fresh.splice(rng.int(fresh.length), 1)[0], s.hero));
   }
-  s.shop = picks;
+  if (!keptIds.size) {
+    s.shop = picks;
+    s.locks = [];
+    return;
+  }
+  s.locks = kept.map((o) => !!o);
+  s.shop = kept.map((o) => o ?? picks.shift() ?? null);
+}
+
+// ---------- shop lock + พรจันทร์ (moon wish), same rules as the list version (GC1) ----------
+
+/** The locked offers that still apply, by shop place (null = roll this place fresh). */
+function keptOffers(s: RunState): (Offer | null)[] {
+  return Array.from({ length: SHOP_SIZE }, (_, i) => {
+    const o = s.locks?.[i] ? s.shop[i] : null;
+    return o && offerStillValid(s, o) ? o : null;
+  });
+}
+
+/** A new-skill offer you don't own yet, or an upgrade that still fits the skill you own. */
+function offerStillValid(s: RunState, o: Offer) {
+  return o.v === '' ? !s.skills.some((k) => k.id === o.id) : !!upgradeOf(s, o);
+}
+
+/** Lock / unlock shop offer i (free): a locked offer survives rerolls and comes back in the next day's shop. */
+export function toggleLock(s: RunState, i: number): string | null {
+  if (!s.shop[i]) return L('ไม่มีของ', 'Nothing there');
+  const locks = Array.from({ length: s.shop.length }, (_, k) => !!s.locks?.[k]);
+  locks[i] = !locks[i];
+  s.locks = locks;
+  return null;
+}
+export const isLocked = (s: RunState, i: number) => !!s.locks?.[i] && !!s.shop[i];
+
+/**
+ * พรจันทร์ (moon wish), the late-run gold sink: upgrade one random owned skill below Lv3 to one of its next
+ * branches (random); like a bought upgrade it keeps its shape and place and gains 1 connect bonus.
+ * Once every skill is Lv3 it carves a random mark into a random unmarked skill instead.
+ * Costs more than a normal upgrade because you don't choose, and +2 for every wish already made today.
+ * Deterministic from the run seed, day and wish count.
+ */
+export const WISH_BASE = 6;
+export const wishPrice = (s: RunState) => WISH_BASE + 2 * (s.wishes ?? 0);
+export type WishKind = 'upgrade' | 'mark' | null;
+export function wishKind(s: RunState): WishKind {
+  if (s.skills.some((k) => lvOf(k.v) < MAX_LV)) return 'upgrade';
+  if (s.skills.some((k) => !k.mark)) return 'mark';
+  return null;
+}
+export type WishResult = { err: string } | { idx: number; from: string; v?: string; mark?: Mark };
+export function wish(s: RunState): WishResult {
+  const kind = wishKind(s);
+  if (!kind) return { err: L('ทุก skill เต็มขั้นและมีตราแล้ว', 'Every skill is Lv3 and marked already') };
+  const price = wishPrice(s);
+  if (s.gold < price) return { err: L('เงินไม่พอ', 'Not enough gold') };
+  const rng = new Rng(hashSeed(s.seed, 'wish', s.day, s.wishes ?? 0));
+  const pool = s.skills.map((k, i) => ({ k, i })).filter(({ k }) => (kind === 'upgrade' ? lvOf(k.v) < MAX_LV : !k.mark));
+  const { k, i } = rng.pick(pool);
+  const from = k.v;
+  s.gold -= price;
+  s.wishes = (s.wishes ?? 0) + 1;
+  if (kind === 'upgrade') {
+    k.v = rng.pick(nextVariants(k.v));
+    if (k.bonus.length < MAX_BONUS) {
+      const b = rollBonus(rng, k.id, s.hero, k.bonus);
+      if (b) k.bonus.push(b);
+    }
+    return { idx: i, from, v: k.v };
+  }
+  k.mark = rng.pick(MARKS);
+  return { idx: i, from, mark: k.mark };
 }
 
 export function reroll(s: RunState): string | null {
@@ -228,6 +308,7 @@ export function buy(s: RunState, i: number): string | null {
   }
   s.gold -= price;
   s.shop[i] = null;
+  if (s.locks?.[i]) s.locks[i] = false;
   return null;
 }
 

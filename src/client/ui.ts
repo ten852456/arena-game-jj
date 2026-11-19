@@ -1,4 +1,4 @@
-import { autoArrange, randomAiBuild } from '../sim/bot';
+import { randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, fits, matches, type Offer } from '../sim/grid';
 import { HEROES, HEROES_BY_ID } from '../sim/heroes';
@@ -7,8 +7,12 @@ import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Build, CombatEvent, CombatResult, Rot, SkillInstance } from '../sim/types';
+import { afterRender as boardAfterRender, flash, initBoard, isDragging } from './shop/board';
+import { bonusPanelHTML, linkChips, ownedStates } from './shop/links';
+import { offerBest, placeBag, placeBest } from './shop/placement';
+import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
 import { memeGallery, renderChibi, rollLook } from './chibi';
-import { BONUS_ICON, bonusText, dropOrigin, footprintAt, gridHTML, installPatterns, pieceHTML } from './gridView';
+import { BONUS_ICON, bonusText, gridHTML, installPatterns, pieceHTML } from './gridView';
 import { api, type FightResponse, type ReplayRecord } from './api';
 import type { CombatScene } from './combatScene';
 import { BUILDINGS, BUILDING_BY_ID } from './townData';
@@ -242,6 +246,7 @@ function render() {
   playBlockAnims();
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'shop' && sel !== null) highlightFor('g:' + sel);
+  boardAfterRender();
   if (view === 'title') {
     const input = document.getElementById('name') as HTMLInputElement | null;
     input?.addEventListener('input', () => store(NAME_KEY, input.value.trim()));
@@ -316,11 +321,87 @@ function expandCard(r: R.RunState) {
   for (let y = 0; y < nh; y++)
     for (let x = 0; x < nw; x++) cells += `<i class="${x >= w || y >= h ? 'new' : ''}" style="left:${x * 9}px;top:${y * 9}px"></i>`;
   const why = !what ? L('ใหญ่สุดแล้ว', 'Max size') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
-  return `<div class="card offer expand" title="${L('ซื้อพื้นที่ตารางเพิ่ม ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', 'Buy more grid space for the rest of the run; the price goes up each time')}">
+  return `<div class="card offer gs-card extra expand" title="${L('ซื้อพื้นที่ตารางเพิ่ม ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', 'Buy more grid space for the rest of the run; the price goes up each time')}">
+    <div class="offer-name">${what ? L(`ตาราง +1 ${what === 'col' ? 'คอลัมน์' : 'แถว'}`, `Grid +1 ${what === 'col' ? 'column' : 'row'}`) : L('ตาราง 8×6 แล้ว', 'Grid is 8×6')}</div>
     <div class="offer-art"><div class="minigrid" style="width:${nw * 9}px;height:${nh * 9}px">${cells}</div></div>
-    <div class="offer-meta">${what ? L(`ขยายตาราง +1 ${what === 'col' ? 'คอลัมน์' : 'แถว'}`, `Grid +1 ${what === 'col' ? 'column' : 'row'}`) : L('ตาราง 8×6 แล้ว', 'Grid is 8×6')}</div>
-    <button data-a="expand" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} ${price}`}</button>
+    <div class="offer-desc">${L(`ถาวรทั้งรอบ · ตอนนี้ ${w}×${h}`, `For the whole run · now ${w}×${h}`)}</div>
+    <button class="gs-buy" data-a="expand" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
   </div>`;
+}
+
+/** Shop card for พรจันทร์ (moon wish): the late-run gold sink, a random upgrade (or a random mark once all are Lv3). */
+function wishCard(r: R.RunState) {
+  const kind = R.wishKind(r);
+  const price = R.wishPrice(r);
+  const why = !r.skills.length ? L('ยังไม่มี skill', 'No skills yet') : !kind ? L('ครบทุกอย่างแล้ว', 'Nothing left') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
+  const pool = kind === 'upgrade' ? r.skills.filter((k) => lvOf(k.v) < R.MAX_LV).length : r.skills.filter((k) => !k.mark).length;
+  const desc =
+    kind === 'mark'
+      ? L(`ทุกตัว Lv3 แล้ว: สุ่มใส่ <b>ตรา</b> ให้ 1 ใน ${pool} skill`, `All Lv3: a random <b>mark</b> on 1 of ${pool} skills`)
+      : kind
+        ? L(`สุ่มอัปเกรด 1 ใน ${pool} skill ขึ้นขั้นถัดไป (+1 🔗)`, `Upgrades 1 of ${pool} skills at random (+1 🔗)`)
+        : r.skills.length
+          ? L('ทุก skill Lv3 และมีตราแล้ว', 'Every skill is Lv3 and marked')
+          : L('สุ่มอัปเกรด skill ที่คุณมี 1 ตัว (ซื้อ skill ก่อน)', 'Upgrades one of your skills at random (buy a skill first)');
+  const tip = `<div class="tt-h"><b>🌙 ${L('พรจันทร์', 'Moon Wish')}</b></div><div class="desc">${L(
+    'ที่ใช้เงินเหลือ: จ่ายแพงกว่าการ์ดอัปเกรดปกติ แต่ไม่ต้องรอร้านสุ่มเจอ เกมเลือก skill และสายให้แบบสุ่ม (บล็อกใช้ที่เดิม ได้โบนัสติดกันใหม่ 1 อัน) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน',
+    'Somewhere to spend spare gold: costs more than a normal upgrade card, but you don’t wait for the shop. The game picks the skill and branch at random (same block and place, +1 new connect bonus) · once every skill is Lv3 it gives a random mark instead',
+  )} · ${L(`ราคาเริ่ม ${R.WISH_BASE} และแพงขึ้น +2 ทุกครั้งในวันเดียวกัน`, `starts at ${R.WISH_BASE}, +2 for each wish on the same day`)}</div>`;
+  return `<div class="card offer gs-card extra wish" data-ttxt="${esc(tip)}">
+    <div class="offer-name">🌙 ${L('พรจันทร์', 'Moon Wish')}</div>
+    <div class="offer-art gs-moon" aria-hidden="true"></div>
+    <div class="offer-desc">${desc}</div>
+    <button class="gs-buy" data-a="wish" ${why ? 'disabled' : ''}>${why || `${L('ขอพร', 'Wish')} <span class="coin">${price}</span>`}</button>
+  </div>`;
+}
+
+/** One shop offer: lock, level, tree, name, block, chips, link chips (what its bonuses need), best spot, buy. */
+function offerCard(r: R.RunState, o: Offer, i: number) {
+  const d = SKILLS[o.id];
+  const node = d.tree[o.v as Variant];
+  const up = R.upgradeOf(r, o);
+  const price = R.priceOf(o);
+  const stale = o.v !== '' && !up;
+  const why = stale ? L('ใช้ไม่ได้แล้ว', 'No longer usable') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
+  const branch = o.v ? d.tree[o.v[0] as 'a' | 'b'].style : '';
+  const look = up ? { ...up, v: o.v } : { ...o };
+  const locked = R.isLocked(r, i);
+  const lockBtn = `<button class="gs-lock${locked ? ' on' : ''}" data-a="lock" data-i="${i}" aria-pressed="${locked}"
+    aria-label="${locked ? L('ปลดล็อกการ์ดนี้', 'Unlock this card') : L('ล็อกการ์ดนี้ไว้ถึงพรุ่งนี้', 'Lock this card until tomorrow')}"
+    title="${locked ? L('ล็อกอยู่: การ์ดนี้จะอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน (กดเพื่อปลด)', 'Locked: stays through rerolls and into tomorrow (press to unlock)') : L('ล็อก: เก็บการ์ดนี้ไว้ถึงพรุ่งนี้ (ฟรี)', 'Lock: keep this card until tomorrow (free)')}">${locked ? '🔒' : '🔓'}</button>`;
+  let links = '';
+  let spot = '';
+  if (o.v === '') {
+    links = linkChips(o.bonus, 1, (bi) => (r.skills.some((k) => matches(o.bonus[bi].t, k)) ? 'can' : 'off'));
+    const best = offerBest(r, o);
+    spot = !best
+      ? `<div class="gs-spot none">${L('ไม่มีที่ว่าง: จะเข้ากระเป๋า', 'No room: goes to your bag')}</div>`
+      : best.score > 0
+        ? `<div class="gs-spot good">✨ ${L(`วางดีๆ ได้ +${best.score} 🔗`, `Best spot: +${best.score} 🔗`)}</div>`
+        : '';
+  } else if (up) spot = `<div class="gs-spot up">⬆ ${L('ที่เดิม · +1 🔗 ใหม่', 'Same place · +1 new 🔗')}</div>`;
+  return `<div class="card offer gs-card arch-${d.arch}${o.v ? ' upgrade' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}" data-card="${i}">
+    <div class="gs-ctop">${lockBtn}<span class="gs-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+    <div class="offer-name">${node.name}</div>
+    <div class="offer-art">${pieceHTML(look, { tip: `s:${i}` })}</div>
+    <div class="offer-meta">${o.v ? `<span class="up">⬆ ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="gs-arch">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}</div>
+    <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${links}</div>
+    ${spot}
+    <button class="gs-buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
+  </div>`;
+}
+
+/** Live preview while dragging: timeline + bonus panel for a layout that is not saved yet (null = the real one). */
+function previewLayout(skills: SkillInstance[] | null) {
+  const r = run;
+  if (!r || view !== 'shop') return;
+  const { w, h } = R.gridOf(r);
+  const list = skills ?? r.skills;
+  const tl = document.getElementById('gs-timeline');
+  if (tl) tl.innerHTML = timelineHTML({ hero: r.hero, w, h, skills: list });
+  const bp = document.getElementById('gs-bonus');
+  if (bp) bp.innerHTML = bonusPanelHTML(list, w, h);
+  document.querySelector('.gs-info')?.classList.toggle('previewing', !!skills);
 }
 
 function renderShop() {
@@ -329,76 +410,93 @@ function renderShop() {
   const hero = HEROES_BY_ID[r.hero];
   const { w, h } = R.gridOf(r);
   if (sel !== null && !r.skills[sel]) sel = null;
-  const shop = r.shop
-    .map((o, i) => {
-      if (!o) return `<div class="card empty">${L('ซื้อแล้ว', 'Sold')}</div>`;
-      const d = SKILLS[o.id];
-      const node = d.tree[o.v as Variant];
-      const up = R.upgradeOf(r, o);
-      const price = R.priceOf(o);
-      const stale = o.v !== '' && !up;
-      const why = stale ? L('ใช้ไม่ได้แล้ว', 'No longer usable') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
-      const disabled = !!why;
-      const branch = o.v ? d.tree[o.v[0] as 'a' | 'b'].style : '';
-      const look = up ? { ...up, v: o.v } : { ...o };
-      return `<div class="card offer${o.v ? ' upgrade' : ''}" data-tip="s:${i}">
-        <div class="offer-name">${node.name} <small>Lv${lvOf(o.v)}</small> ${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-        <div class="offer-art">${pieceHTML(look, { tip: `s:${i}` })}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">⬆ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : ''}${o.bonus.length && !o.v ? `<span class="bicons">${o.bonus.map((b) => BONUS_ICON[b.e]).join(' ')}</span>` : ''}${d.hero ? `<span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}</div>
-        <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}</div>
-        <button data-a="buy" data-i="${i}" ${disabled ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} ${price}`}</button>
-      </div>`;
-    })
-    .join('');
+  const act = activeBonuses(r.skills, w, h);
+  const shop = r.shop.map((o, i) => (o ? offerCard(r, o, i) : `<div class="card gs-card empty">${L('ซื้อแล้ว', 'Sold')}</div>`)).join('');
+  const bagged = R.bag(r);
   const bagItems = r.skills
-    .map((k, i) => (k.x < 0 ? `<div class="bagitem">${pieceHTML(k, { idx: i, tip: `g:${i}`, selected: sel === i })}</div>` : ''))
+    .map((k, i) =>
+      k.x < 0
+        ? `<div class="gs-bagitem${sel === i ? ' sel' : ''} arch-${SKILLS[k.id].arch}">${pieceHTML(k, { idx: i, tip: `g:${i}`, selected: sel === i })}
+          <div class="gs-bi-name">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small></div>${linkChips(k.bonus, lvOf(k.v), ownedStates(r.skills, i, act))}</div>`
+        : '',
+    )
     .join('');
-  const freeSlots = Math.max(0, R.BAG_MAX - R.bag(r).length);
-  let info = `<p class="muted">${L('ชี้เมาส์ที่ skill เพื่อดูรายละเอียด · ลากไปวาง · คลิกขวาหรือกด R เพื่อหมุน · ตัวที่เรืองแสง = โบนัสติดกันทำงาน', 'Hover a skill for details · drag to place · right-click or press R to rotate · glowing = a connect bonus is active')}</p>`;
-  if (sel !== null) {
-    const k = r.skills[sel];
-    info = `<div class="selinfo arch-${SKILLS[k.id].arch}">
-      ${tipBody(k, k.x >= 0 ? bonusState(r, sel) : null, k.x < 0 ? L('อยู่ในกระเป๋า: ไม่ได้ลงสู้', 'In your bag: not fighting') : '')}
-      <div class="actions">
-        ${treeBtn(k.id, k.v, null)}
-        <button class="small" data-a="rot">${L('หมุน', 'Rotate')} ⟳</button>
-        ${k.x >= 0 ? `<button class="small" data-a="bag">${L('เก็บเข้ากระเป๋า', 'Put in bag')}</button>` : ''}
-        <button class="small" data-a="sell" data-i="${sel}">${L('ขาย', 'Sell')} +${R.sellPrice(k)}</button>
-        <button class="small ghost" data-a="desel">${L('ยกเลิก', 'Cancel')}</button>
-      </div></div>`;
-  }
+  const freeSlots = Math.max(0, R.BAG_MAX - bagged.length);
+  const total = r.skills.reduce((n, k) => n + (k.x >= 0 ? k.bonus.length : 0), 0);
   const inc = r.lastIncome;
   const placed = r.skills.filter((k) => k.x >= 0).length;
-  return `
-  <div class="stats">
-    <span>${L('วันที่', 'Day')} <b>${r.day}</b></span>
-    <span>${L('เลือด', 'HP')} <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'Half-ghost')}</span>` : ''}</span>
-    <span>${L('ชนะ', 'Wins')} <b>${r.wins}</b>/${R.WIN_TARGET}</span>
-    <span>${L('เงิน', 'Gold')} <b>${r.gold}</b></span>
-    <span>${L('คะแนน build', 'Build rating')} <b>${r.rating}</b></span>
-    ${streakText(r.streak) ? `<span>${streakText(r.streak)}</span>` : ''}
+  const nLocked = r.shop.filter((_, i) => R.isLocked(r, i)).length;
+  const k = sel !== null ? r.skills[sel] : null;
+  const info = k
+    ? `<div class="selinfo gs-selinfo arch-${SKILLS[k.id].arch}">${tipBody(k, k.x >= 0 ? bonusState(r, sel!) : null, k.x < 0 ? L('อยู่ในกระเป๋า: ไม่ได้ลงสู้', 'In your bag: not fighting') : '')}
+        <div class="actions">${treeBtn(k.id, k.v, null)}</div></div>`
+    : '';
+  const bar = k
+    ? `<div class="gs-bar placing" role="region" aria-label="${L('กำลังวางบล็อก', 'Placing a block')}">
+        <div class="gs-pick"><span class="gs-pk">${k.x < 0 ? L('✋ กำลังวาง', '✋ Placing') : L('✋ ย้าย', '✋ Moving')}: <b>${nodeOf(k).name}</b> <small>Lv${lvOf(k.v)}</small></span>
+          ${linkChips(k.bonus, lvOf(k.v), ownedStates(r.skills, sel!, act))}</div>
+        <div id="gs-hintnote" class="gs-hintnote"></div>
+        <div class="gs-pbtns">
+          <button data-a="rot" aria-label="${L('หมุน', 'Rotate')}">⟳ ${L('หมุน', 'Rotate')}</button>
+          ${k.x >= 0 ? `<button data-a="bag">👜 ${L('เก็บ', 'To bag')}</button>` : ''}
+          <button class="gs-sell" data-a="sell" data-i="${sel}">${L('ขาย', 'Sell')} +${R.sellPrice(k)}</button>
+          <button class="gs-done" data-a="desel">✕ ${L('เสร็จ', 'Done')}</button>
+        </div>
+        <div class="gs-ptip">${L('แตะช่องในตารางเพื่อวาง · ลากก็ได้ · สองนิ้วแตะ = หมุน', 'Tap a grid cell to place · or drag · two-finger tap = rotate')}</div>
+      </div>`
+    : `<div class="gs-bar">
+        <span class="gs-pill gold"><small>${L('เงิน', 'Gold')}</small> <b>${r.gold}</b></span>
+        <button class="primary gs-fight" data-a="fight" ${busy || !placed ? 'disabled' : ''}>⚔ ${L(`สู้วันที่ ${r.day}`, `Fight day ${r.day}`)} <small>${L(`แพ้เสียเลือด ${R.damageFor(r.day)}`, `a loss costs ${R.damageFor(r.day)} HP`)}</small></button>
+        <button class="ghost gs-home" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
+      </div>`;
+  return `<div class="gs${k ? ' has-pick' : ''}">
+  <div class="gs-top">
+    <span class="gs-pill"><small>${L('วันที่', 'Day')}</small> <b>${r.day}</b></span>
+    <span class="gs-pill hp"><small>${L('เลือด', 'HP')}</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'Half-ghost')}</span>` : ''}</span>
+    <span class="gs-pill win"><small>${L('ชนะ', 'Wins')}</small> <b>${r.wins}</b>/${R.WIN_TARGET}</span>
+    <span class="gs-pill gold"><small>${L('เงิน', 'Gold')}</small> <b>${r.gold}</b></span>
+    <span class="gs-pill"><small>${L('คะแนน', 'Rating')}</small> <b>${r.rating}</b></span>
+    ${streakText(r.streak) ? `<span class="gs-pill streak">${streakText(r.streak)}</span>` : ''}
     <span class="stats-right">${concedeHTML()}</span>
   </div>
-  <p class="muted">${L('วันนี้ได้', 'Income today')} +${inc.base}${inc.bonus ? ` ${L('และโบนัส', 'and bonus')} +${inc.bonus}` : ''} · ${hero.name}: ${hero.passive}</p>
-  <h3>${L('ร้าน skill', 'Skill shop')} <button class="small" data-a="reroll" ${r.gold < R.REROLL ? 'disabled' : ''}>${L('สุ่มใหม่', 'Reroll')} (${R.REROLL})</button></h3>
-  <div class="shop">${shop}${expandCard(r)}</div>
-  <h3>${L('ตาราง skill', 'Skill grid')} ${w}×${h} <button class="small auto-btn" data-a="auto" ${r.skills.length ? '' : 'disabled'} title="${L('จัดบล็อกให้โบนัสติดกันทำงานมากที่สุด', 'Arrange blocks to turn on the most connect bonuses')}">✨ ${L('จัดอัตโนมัติ', 'Auto-arrange')}</button>
-    <small class="muted">${L('ทุกตัวนับคูลดาวน์พร้อมกัน · วางให้ติดกับตัวที่โบนัสต้องการ แล้วตัวนั้นจะเรืองแสง', 'All cooldowns count at the same time · place blocks next to what their bonus wants and they glow')}</small></h3>
-  <div class="pack">
-    ${gridHTML(r.skills, w, h, { interactive: true, selected: sel ?? undefined })}
-    <div class="side">
-      <div class="bag" data-drop="bag">
-        <div class="bag-h"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M8 7V5a4 4 0 0 1 8 0v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4" y="7" width="16" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 13h16" stroke="currentColor" stroke-width="2"/></svg>
-        ${L('กระเป๋าเก็บ skill', 'Skill bag')} <small class="muted">${R.bag(r).length}/${R.BAG_MAX} · ${L('ไม่ได้ลงสู้', 'not fighting')}</small></div>
-        <div class="bag-items">${bagItems}${'<div class="bagslot"></div>'.repeat(freeSlots)}</div>
+  <p class="gs-sub">${L('วันนี้ได้', 'Income today')} +${inc.base}${inc.bonus ? ` ${L('และโบนัส', 'and bonus')} +${inc.bonus}` : ''} · <b>${hero.name}</b>: ${hero.passive}</p>
+
+  <section class="gs-sec gs-shop">
+    <div class="gs-h"><h3>${L('ร้าน skill', 'Skill shop')}</h3>
+      <button class="gs-reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s fixed shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">🎲 ${L('สุ่มใหม่', 'Reroll')} <span class="coin">${R.REROLL}</span></button></div>
+    <p class="gs-note">🔓 ${L('กดกุญแจเพื่อ<b>ล็อกการ์ด</b>ไว้ (ฟรี): อยู่ต่อแม้สุ่มใหม่ และกลับมาพรุ่งนี้', 'Press the lock to <b>keep a card</b> (free): it stays through rerolls and comes back tomorrow')}${nLocked ? L(` · ล็อกอยู่ ${nLocked} ใบ`, ` · ${nLocked} locked`) : ''}
+      · ${L('แตะ/ชี้การ์ดเพื่อดูช่องที่เปิดโบนัสได้ (สีทอง)', 'Tap / hover a card to see where it switches bonuses on (gold cells)')}</p>
+    <div class="gs-cards">${shop}${expandCard(r)}${wishCard(r)}</div>
+  </section>
+
+  <section class="gs-sec gs-build">
+    <div class="gs-h"><h3>${L('ตาราง skill', 'Skill grid')} <span class="gs-count">${w}×${h}</span></h3>
+      <span class="gs-active">🔗 ${L(`โบนัสทำงาน ${act.length}/${total}`, `${act.length}/${total} bonuses on`)}</span></div>
+    <p class="gs-note">${L('ลากบล็อกไปวาง หรือแตะบล็อกแล้วแตะช่อง · ช่องสีทอง = ที่ที่เปิดโบนัสได้มากสุด · หมุน: ปุ่ม ⟳, R, คลิกขวา หรือสองนิ้วแตะ · บล็อกเรืองแสง = โบนัสทำงาน', 'Drag a block, or tap it and then tap a cell · gold cells = the spots that switch on the most bonuses · rotate: ⟳ button, R, right-click or two-finger tap · glowing = a bonus is on')}</p>
+    <div class="gs-pack">
+      <div class="gs-board">${gridHTML(r.skills, w, h, { interactive: true, selected: sel ?? undefined, labels: true })}</div>
+      <div class="gs-side">
+        <div class="bag gs-bag" data-drop="bag">
+          <div class="bag-h">👜 ${L('กระเป๋า', 'Bag')} <small class="muted">${bagged.length}/${R.BAG_MAX} · ${L('ไม่ได้ลงสู้', 'not fighting')}</small>
+            ${bagged.length ? `<button class="small gs-placebag" data-a="placeBag" title="${L('วางของในกระเป๋าลงที่ว่างที่ดีที่สุด บล็อกที่วางแล้วไม่ขยับ', 'Put bag blocks into the best free spots; placed blocks never move')}">📥 ${L('วางลงที่ว่าง', 'Place in free space')}</button>` : ''}</div>
+          <div class="gs-bagitems">${bagItems}${'<div class="gs-bagslot"></div>'.repeat(freeSlots)}</div>
+        </div>
+        <div class="sellzone gs-sellzone" data-drop="sell">💰 ${L('ลากมาที่นี่เพื่อขาย', 'Drag here to sell')}</div>
       </div>
-      <div class="sellzone" data-drop="sell">${L('ลากมาที่นี่เพื่อขาย', 'Drag here to sell')}</div>
     </div>
+    ${info}
+  </section>
+
+  <div class="gs-info">
+    <section class="gs-sec gs-bonus" aria-label="${L('โบนัสติดกันที่ทำงาน', 'Active connect bonuses')}"><div id="gs-bonus">${bonusPanelHTML(r.skills, w, h)}</div></section>
+    <section class="gs-sec tl" aria-label="${L('ลำดับการทำงาน', 'Firing timeline')}">
+      <div class="tl-h"><b>⏱ ${L(`ใครทำงานก่อน: ${TIMELINE_SECS} วิแรก`, `Who fires first: the first ${TIMELINE_SECS} s`)}</b>
+        <span class="tl-legend"><i class="tl-dot own"></i> ${L('ครบคูลดาวน์', 'cooldown')} <i class="tl-dot trig">⚡</i> ${L('ถูกสั่ง (โบนัส/เครื่องยนต์)', 'fired by a bonus / engine')}</span></div>
+      <div id="gs-timeline">${timelineHTML(R.toBuild(r))}</div>
+      <p class="tl-foot">${L('จำลองด้วยระบบสู้จริง กับหุ่นซ้อมที่ไม่ตีกลับ · อัปเดตสดตอนลากบล็อก · ถ้าศัตรูแช่แข็งหรือทำให้ช้า จะทำงานช้ากว่านี้', 'Run by the real fight engine vs a training dummy that does not hit back · updates live while you drag · enemy freezes and slows make it later')}</p>
+    </section>
   </div>
-  ${info}
-  <div class="actions">
-    <button class="primary" data-a="fight" ${busy || !placed ? 'disabled' : ''}>${L(`สู้วันที่ ${r.day} · ถ้าแพ้เสียเลือด ${R.damageFor(r.day)}`, `Fight day ${r.day} · a loss costs ${R.damageFor(r.day)} HP`)}</button>
-    <button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>
+  ${bar}
   </div>`;
 }
 
@@ -795,8 +893,46 @@ function onClick(ev: Event) {
     case 'enterArena':
       view = runActive() ? phaseView(run!) : 'title';
       break;
-    case 'buy':
-      err = R.buy(run!, n);
+    case 'buy': {
+      const r = run!;
+      const isNew = r.shop[n]?.v === '';
+      err = R.buy(r, n);
+      if (!err && isNew) {
+        // GC1: a new block goes to the free spot that switches on the most bonuses; placed blocks never move
+        const i = r.skills.length - 1;
+        if (placeBest(r, i)) toast = L(`วาง ${nodeOf(r.skills[i]).name} ลงที่ว่างที่ดีที่สุดแล้ว · ลากย้ายได้`, `${nodeOf(r.skills[i]).name} went to the best free spot · drag to move it`);
+        else toast = L(`${nodeOf(r.skills[i]).name} อยู่ในกระเป๋า (ตารางเต็ม)`, `${nodeOf(r.skills[i]).name} is in your bag (the grid is full)`);
+      }
+      break;
+    }
+    case 'lock':
+      err = R.toggleLock(run!, n);
+      break;
+    case 'wish': {
+      const w = R.wish(run!);
+      if ('err' in w) err = w.err;
+      else {
+        const k = run!.skills[w.idx];
+        toast = w.mark
+          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name}`, `🌙 Moon Wish: ${nodeOf(k).name} gets the ${R.MARK_INFO[w.mark].name} mark`)
+          : L(`🌙 พรจันทร์: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`, `🌙 Moon Wish: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`);
+      }
+      break;
+    }
+    case 'placeBag': {
+      flipFrom = blockRects();
+      const moved = placeBag(run!);
+      sel = null;
+      const left = R.bag(run!).length;
+      toast = moved
+        ? L(`วางลงตาราง ${moved} บล็อก${left ? ` · ไม่มีที่สำหรับอีก ${left}` : ''}`, `Placed ${moved} block${moved > 1 ? 's' : ''}${left ? ` · no room for ${left} more` : ''}`)
+        : L('ไม่มีที่ว่างพอ ขยายตารางหรือขายบางอย่างก่อน', 'Not enough free space: grow the grid or sell something first');
+      if (!moved) flipFrom = null;
+      break;
+    }
+    case 'pick':
+      if (!run?.skills[n]) return;
+      sel = n;
       break;
     case 'tree':
       if (!SKILLS[arg]) return;
@@ -823,16 +959,6 @@ function onClick(ev: Event) {
     case 'desel':
       sel = null;
       break;
-    case 'auto': {
-      flipFrom = blockRects();
-      const res = autoArrange(run!);
-      sel = null;
-      toast = !res.changed
-        ? L(`จัดดีที่สุดแล้ว · โบนัสทำงาน ${res.after} อัน`, `Already the best layout · ${res.after} bonuses active`)
-        : L(`จัดใหม่แล้ว · โบนัสทำงาน ${res.before} → ${res.after} อัน`, `Rearranged · bonuses active ${res.before} → ${res.after}`);
-      if (!res.changed) flipFrom = null;
-      break;
-    }
     case 'expand':
       err = R.buyExpand(run!);
       break;
@@ -956,7 +1082,7 @@ function highlightFor(key: string) {
   });
 }
 function onHover(ev: PointerEvent) {
-  if (ev.pointerType !== 'mouse' || drag?.moved) return;
+  if (ev.pointerType !== 'mouse' || isDragging()) return;
   const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
   if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
   const tt = (ev.target as Element).closest?.('[data-ttxt]') as HTMLElement | null;
@@ -964,30 +1090,6 @@ function onHover(ev: PointerEvent) {
   const el = (ev.target as Element).closest?.('[data-tip]') as HTMLElement | SVGElement | null;
   if (el && view === 'shop') showTip(el.dataset.tip!, ev.clientX, ev.clientY);
   else hideTip();
-}
-
-function onContextMenu(ev: MouseEvent) {
-  if (view !== 'shop' || !run) return;
-  if (drag?.moved) {
-    // right-click while dragging rotates the block in hand
-    ev.preventDefault();
-    drag.rot = ((drag.rot + 1) % 4) as Rot;
-    if (drag.ghost) {
-      drag.ghost.innerHTML = pieceHTML({ ...run.skills[drag.i], rot: drag.rot });
-      spin(drag.ghost.querySelector('.blk'));
-    }
-    return;
-  }
-  const el = (ev.target as Element).closest?.('[data-blk]') as HTMLElement | SVGElement | null;
-  if (!el) return;
-  ev.preventDefault();
-  const prev = sel;
-  sel = Number(el.dataset.blk);
-  toast = rotateSelected() ?? '';
-  if (prev !== sel && toast) sel = prev;
-  hideTip();
-  saveRun();
-  render();
 }
 
 // ---------- block animations ----------
@@ -1055,138 +1157,14 @@ function rotateSelected(): string | null {
   return L('หมุนแล้ว แต่ไม่มีที่ว่าง ย้ายไปไว้ในกระเป๋า ลากกลับมาวางได้', 'Rotated, but there was no room, so it went to your bag. Drag it back to place it');
 }
 
-/** Place block i so that it covers grid cell (gx, gy); tries every cell of the block as the anchor. */
-function placeCovering(i: number, gx: number, gy: number): string | null {
-  const r = run!;
-  const k = r.skills[i];
-  const { w, h } = R.gridOf(r);
-  const n = footprintAt(k, 0, 0).length;
-  for (let c = 0; c < n; c++) {
-    const [x, y] = dropOrigin(k, c, gx, gy);
-    if (fits(r.skills, w, h, i, x, y, k.rot)) return R.place(r, i, x, y, k.rot);
-  }
-  return L('วางตรงนี้ไม่ได้', 'Cannot place it here');
-}
-
-interface Drag {
-  i: number;
-  c: number;
-  sx: number;
-  sy: number;
-  moved: boolean;
-  /** rotation while dragging (R key); applied on drop */
-  rot: Rot;
-  ghost?: HTMLElement;
-}
-let drag: Drag | null = null;
-
-function elementAt(x: number, y: number) {
-  return document.elementFromPoint(x, y) as HTMLElement | null;
-}
-
-function clearPreview() {
-  document.querySelectorAll('.gc.ok, .gc.bad').forEach((el) => el.classList.remove('ok', 'bad'));
-}
-
+/** Touch: tap a keyword chip, a link chip or a chart bar to see its details (blocks are handled by shop/board.ts). */
 function onPointerDown(ev: PointerEvent) {
-  if (ev.pointerType !== 'mouse') {
-    // tap a keyword chip or a chart block to see its details
-    const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
-    if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
-    const tt = (ev.target as Element).closest?.('[data-ttxt]') as HTMLElement | null;
-    if (tt) return showTip('raw:' + tt.dataset.ttxt, ev.clientX, ev.clientY);
-    if (!(ev.target as Element).closest?.('[data-tip]')) hideTip();
-  }
-  if (view !== 'shop' || !run) return;
-  if (ev.button === 2) return;
-  const el = (ev.target as Element).closest('[data-blk]') as HTMLElement | SVGElement | null;
-  if (el) {
-    drag = { i: Number(el.dataset.blk), c: Number(((ev.target as Element).closest('[data-c]') as SVGElement | null)?.dataset.c ?? 0), sx: ev.clientX, sy: ev.clientY, moved: false, rot: run.skills[Number(el.dataset.blk)].rot };
-    return;
-  }
-  // tap on an empty grid cell moves the selected block there
-  const cell = (ev.target as HTMLElement).closest<HTMLElement>('[data-gx]');
-  if (cell && sel !== null) {
-    toast = placeCovering(sel, Number(cell.dataset.gx), Number(cell.dataset.gy)) ?? '';
-    saveRun();
-    render();
-  }
-}
-
-function onPointerMove(ev: PointerEvent) {
-  if (!drag || !run) return;
-  if (!drag.moved && Math.hypot(ev.clientX - drag.sx, ev.clientY - drag.sy) < 6) return;
-  const k = { ...run.skills[drag.i], rot: drag.rot };
-  if (!drag.moved) {
-    drag.moved = true;
-    const cs = getComputedStyle(document.querySelector('.grid.live') ?? document.body).getPropertyValue('--c');
-    const g = document.createElement('div');
-    g.className = 'drag-ghost';
-    if (cs) g.style.setProperty('--c', cs);
-    g.innerHTML = pieceHTML(k);
-    hideTip();
-    document.body.appendChild(g);
-    drag.ghost = g;
-  }
-  const size = drag.ghost!.querySelector('.bc')?.getBoundingClientRect().width ?? 40;
-  const [ox, oy] = dropOrigin(k, drag.c, 0, 0); // = minus the grabbed cell's offset
-  drag.ghost!.style.left = `${ev.clientX + (ox - 0.5) * size}px`;
-  drag.ghost!.style.top = `${ev.clientY + (oy - 0.5) * size}px`;
-  clearPreview();
-  const cell = elementAt(ev.clientX, ev.clientY)?.closest<HTMLElement>('[data-gx]');
-  if (cell) {
-    const [x, y] = dropOrigin(k, drag.c, Number(cell.dataset.gx), Number(cell.dataset.gy));
-    const { w, h } = R.gridOf(run);
-    const ok = fits(run.skills, w, h, drag.i, x, y, drag.rot);
-    for (const [fx, fy] of footprintAt(k, x, y))
-      document.querySelector(`[data-gx="${fx}"][data-gy="${fy}"]`)?.classList.add(ok ? 'ok' : 'bad');
-  }
-}
-
-function onPointerUp(ev: PointerEvent) {
-  const d = drag;
-  drag = null;
-  if (!d || !run) return;
-  d.ghost?.remove();
-  clearPreview();
-  let err: string | null = null;
-  if (!d.moved) {
-    sel = sel === d.i ? null : d.i;
-  } else {
-    const under = elementAt(ev.clientX, ev.clientY);
-    const cell = under?.closest<HTMLElement>('[data-gx]');
-    const drop = under?.closest<HTMLElement>('[data-drop]')?.dataset.drop;
-    const k = { ...run.skills[d.i], rot: d.rot };
-    if (cell) {
-      const [x, y] = dropOrigin(k, d.c, Number(cell.dataset.gx), Number(cell.dataset.gy));
-      err = R.place(run, d.i, x, y, d.rot);
-      sel = d.i;
-    } else if (drop === 'bag') err = R.unplace(run, d.i);
-    else if (drop === 'sell') {
-      R.sell(run, d.i);
-      sel = null;
-    }
-  }
-  if (err) toast = err;
-  saveRun();
-  render();
-}
-
-function onKey(ev: KeyboardEvent) {
-  if (view !== 'shop' || (ev.target as HTMLElement).tagName === 'INPUT') return;
-  if (ev.key !== 'r' && ev.key !== 'R') return;
-  if (drag?.moved && run) {
-    // rotate while dragging; the new rotation is used on drop
-    drag.rot = ((drag.rot + 1) % 4) as Rot;
-    if (drag.ghost) {
-      drag.ghost.innerHTML = pieceHTML({ ...run.skills[drag.i], rot: drag.rot });
-      spin(drag.ghost.querySelector('.blk'));
-    }
-    return;
-  }
-  toast = rotateSelected() ?? '';
-  saveRun();
-  render();
+  if (ev.pointerType === 'mouse') return;
+  const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
+  if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
+  const tt = (ev.target as Element).closest?.('[data-ttxt]') as HTMLElement | null;
+  if (tt) return showTip('raw:' + tt.dataset.ttxt, ev.clientX, ev.clientY);
+  if (!(ev.target as Element).closest?.('[data-tip]')) hideTip();
 }
 
 export function startUI(st: Stage) {
@@ -1210,11 +1188,23 @@ export function startUI(st: Stage) {
     }
   });
   $panel.addEventListener('pointerdown', onPointerDown);
-  window.addEventListener('pointermove', onPointerMove);
-  window.addEventListener('pointerup', onPointerUp);
-  window.addEventListener('keydown', onKey);
   window.addEventListener('pointermove', onHover);
-  $panel.addEventListener('contextmenu', onContextMenu);
+  initBoard($panel, {
+    run: () => run,
+    active: () => view === 'shop' && !!run && run.phase === 'shop',
+    sel: () => sel,
+    setSel: (i) => {
+      sel = i;
+    },
+    commit: () => {
+      saveRun();
+      render();
+    },
+    rotateSel: rotateSelected,
+    preview: previewLayout,
+    hideTip,
+    spin,
+  });
   $panel.addEventListener('pointerleave', hideTip);
   installPatterns();
   run = loadRun();
