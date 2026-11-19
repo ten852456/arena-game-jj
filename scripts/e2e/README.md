@@ -9,12 +9,11 @@ Playwright is not a project dependency (keeps the image small). Install it once 
 mkdir ../e2e-tools && cd ../e2e-tools && npm init -y && npm i playwright && npx playwright install chromium
 ```
 
-Then, with a server running (`npm run build && npm start`, or the live URL):
+Then copy `e2e.mjs` into that folder and, with a server running (`npm run build && npm start`, or the live URL):
 
 ```
-node ../e2e-tools/node_modules/.bin/../../e2e.mjs   # or copy e2e.mjs next to node_modules and run:
-node e2e.mjs http://localhost:8787 ./e2e-out
+cd ../e2e-tools && node e2e.mjs http://localhost:8787 ./e2e-out
 ```
 
-`e2e.mjs` looks for Chromium at `%LOCALAPPDATA%/ms-playwright/chromium-1248`; change `exe` if yours differs.
+Chromium is taken from `CHROME_PATH`, else `%LOCALAPPDATA%/ms-playwright/chromium-1248`.
 Exit code 0 = all checks passed; screenshots and `e2e.json` go to the output folder.
