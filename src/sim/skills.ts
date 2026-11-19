@@ -1,3 +1,4 @@
+import { T, onTuning } from './tuning';
 import type { Archetype, SkillInstance } from './types';
 
 /**
@@ -221,7 +222,8 @@ const E = (name: string, cdSecs: number, engine: Engine, fx: Effect[] = [], styl
 type Tree = Record<Variant, SkillNode>;
 const def = (id: string, arch: Archetype | 'none', tree: Tree, hero?: string): SkillDef => ({ id, arch, tree, name: tree[''].name, ...(hero ? { hero } : {}) });
 
-export const SKILL_LIST: SkillDef[] = [
+/** Base numbers (sim v10). The live numbers are these × the multipliers in tuning.ts, see SKILL_LIST below. */
+const BASE_LIST: SkillDef[] = [
   // ======================= burst =======================
   def('strike', 'burst', {
     '': N('ฟัน', 4.3, [hit(4)]),
@@ -229,7 +231,7 @@ export const SKILL_LIST: SkillDef[] = [
     a1: N('ฟันทะลวง', 5, [hit(20, { pierce: 1 })]),
     a2: N('ฟันประหาร', 5, [hit(19, { exec: [0.5, 1.6] })]),
     b: N('ฟันคู่', 4, [hit(4, { times: 2 })], 'ตีหลายครั้ง'),
-    b1: N('ฟันพายุ', 4, [hit(6, { times: 4 })]),
+    b1: N('ฟันพายุ', 4, [hit(4, { times: 4 })]), // v11: 6 → 4 (Lv3 rush on day 3, exploit report #2)
     b2: N('ฟันดูดเลือด', 4, [hit(9, { times: 2, leech: 0.3 })]),
   }),
   def('jab', 'burst', {
@@ -238,7 +240,7 @@ export const SKILL_LIST: SkillDef[] = [
     a1: N('แทงสายฟ้า', 2.1, [hit(7)]),
     a2: N('แทงพิษ', 2.7, [hit(5, { burn: [1, 3] })]),
     b: N('แทงจุดตาย', 3, [hit(6, { noShield: 1.5 })], 'ตีศัตรูไร้โล่'),
-    b1: N('แทงทะลุ', 3, [hit(12, { pierce: 1, noShield: 1.5 })]),
+    b1: N('แทงทะลุ', 3, [hit(10, { pierce: 1, noShield: 1.5 })]), // v11: 12 → 10
     b2: N('แทงสะกด', 3, [hit(6, { noShield: 1.5 }), { k: 'delay', secs: 0.5 }]),
   }),
   def('heavy', 'burst', {
@@ -376,17 +378,18 @@ export const SKILL_LIST: SkillDef[] = [
     a: E('เฟืองหนัก', 3, { kind: 'gear', power: 0.7 }, [], 'แรงขึ้น'),
     a1: E('เฟืองเหล็ก', 3, { kind: 'gear', power: 1 }),
     a2: E('เฟืองโล่', 3, { kind: 'gear', power: 0.7 }, [{ k: 'shield', n: 3 }]),
-    b: E('เฟืองไว', 2.4, { kind: 'gear', power: 0.5 }, [], 'ถี่ขึ้น'),
-    b1: E('เฟืองพายุ', 2, { kind: 'gear', power: 0.75 }),
+    b: E('เฟืองไว', 2.4, { kind: 'gear', power: 0.4 }, [], 'ถี่ขึ้น'), // v11: 0.5 → 0.4
+    b1: E('เฟืองพายุ', 2.4, { kind: 'gear', power: 0.75 }), // v11: cd 2 → 2.4
     b2: E('เฟืองคู่', 2.8, { kind: 'gear', power: 0.6, n: 2 }),
   }),
   def('overclock', 'none', {
     '': E('เร่งเครื่อง', 6, { kind: 'overclock', power: 0.85 }),
-    a: E('เร่งแรง', 6, { kind: 'overclock', power: 1.3 }, [], 'แรงขึ้น'),
-    a1: E('เร่งสุดขีด', 6, { kind: 'overclock', power: 1.6 }),
-    a2: E('เร่งแล้วตั้งรับ', 6, { kind: 'overclock', power: 1.3 }, [{ k: 'shield', n: 4 }]),
-    b: E('เร่งไว', 4.5, { kind: 'overclock', power: 1.1 }, [], 'ถี่ขึ้น'),
-    b1: E('เร่งถี่', 4, { kind: 'overclock', power: 1.25 }),
+    // v11: engine fires stay at or below ~100% (exploit report #1: overclock was in 88% of top builds, one-shots on day 9)
+    a: E('เร่งแรง', 6, { kind: 'overclock', power: 1 }, [], 'แรงขึ้น'),
+    a1: E('เร่งสุดขีด', 6, { kind: 'overclock', power: 1.15 }),
+    a2: E('เร่งแล้วตั้งรับ', 6, { kind: 'overclock', power: 1 }, [{ k: 'shield', n: 4 }]),
+    b: E('เร่งไว', 4.5, { kind: 'overclock', power: 0.9 }, [], 'ถี่ขึ้น'),
+    b1: E('เร่งถี่', 4, { kind: 'overclock', power: 1 }),
     b2: E('เร่งต่อเนื่อง', 4.5, { kind: 'overclock', power: 0.9, keep: true }),
   }),
   // ======================= hero uniques =======================
@@ -439,7 +442,9 @@ export const SKILL_LIST: SkillDef[] = [
     '': N('ระเบิดเพลิง', 6, [hit(2, { burnPct: 0.5, pierce: 1 })]),
     a: N('ระเบิดใหญ่', 6, [hit(2, { burnPct: 0.75, pierce: 1 })], 'จุดระเบิดไฟที่สะสม'),
     a1: N('ระเบิดมหันต์', 6, [hit(2, { burnPct: 0.95, pierce: 1 })]),
-    a2: N('ระเบิดลุกลาม', 6, [hit(2, { burnPct: 0.75, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }]),
+    // v11: ระเบิดลุกลาม burnPct 0.75 → 0.4 base (live 0.48 with uniq.pyro.lv3 1.2, every 4.8 s with cd.pyro 0.8:
+    // the same burn share per second as the exploit report's 0.6 every 6 s; it was 100% on day 12)
+    a2: N('ระเบิดลุกลาม', 6, [hit(2, { burnPct: 0.4, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }]),
     b: N('จุดระเบิด', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 1.5, secs: 6 }], 'สะสมไฟ'),
     b1: N('ระเบิดลาวา', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 3, secs: 6 }]),
     b2: N('ระเบิดควัน', 6, [hit(2, { burnPct: 0.5, pierce: 1 }), { k: 'burn', dps: 2, secs: 6 }, { k: 'slow', pct: 0.2, secs: 3 }]),
@@ -463,6 +468,62 @@ export const SKILL_LIST: SkillDef[] = [
     b2: N('เวลาแข็ง', 4.5, [hit(10), { k: 'freeze', secs: 1 }]),
   }, 'chrono'),
 ];
+
+// ---------------- tuning multipliers (tuning.ts) ----------------
+
+/** round to k steps per unit (k = 1: integers; 20: 0.05 steps) */
+const rnd = (x: number, k: number) => Math.round(x * k) / k;
+/** scale x by m; integers stay integers, fractions keep `k` steps per unit */
+const sc = (x: number, m: number, k = 20) => (m === 1 ? x : Number.isInteger(x) ? Math.round(x * m) : rnd(x * m, k));
+
+/** Power multiplier of a skill at a level: Lv1 and Lv3 from tuning.ts, Lv2 halfway. */
+function powerOf(d: SkillDef, lv: number): number {
+  const pre = d.hero ? `uniq.${d.hero}` : d.arch !== 'none' ? `arch.${d.arch}` : '';
+  if (!pre) return 1;
+  const a = T[`${pre}.lv1` as keyof typeof T] ?? 1;
+  const b = T[`${pre}.lv3` as keyof typeof T] ?? 1;
+  return lv === 1 ? a : lv === 3 ? b : (a + b) / 2;
+}
+
+function scaleEffect(e: Effect, m: number, ctl: number): Effect {
+  switch (e.k) {
+    case 'hit': {
+      const o: Extract<Effect, { k: 'hit' }> = { ...e, n: sc(e.n, m) };
+      if (e.shieldPct) o.shieldPct = sc(e.shieldPct, m);
+      if (e.thornsX) o.thornsX = sc(e.thornsX, m, 10);
+      if (e.burnPct) o.burnPct = sc(e.burnPct, m);
+      if (e.burn) o.burn = [sc(e.burn[0], m, 2), e.burn[1]];
+      return o;
+    }
+    case 'shield': case 'heal': return { ...e, n: sc(e.n, m) };
+    case 'burn': return { ...e, dps: sc(e.dps, m, 2) };
+    case 'charge': return m === 1 ? e : { ...e, mult: rnd(1 + (e.mult - 1) * m, 20) };
+    case 'freeze': case 'delay': return { ...e, secs: sc(e.secs, ctl) };
+    case 'slow': return { ...e, secs: sc(e.secs, ctl) };
+    default: return e;
+  }
+}
+
+const cloneNode = (n: SkillNode): SkillNode => ({ ...n, fx: n.fx.map((e) => ({ ...e })), ...(n.engine ? { engine: { ...n.engine } } : {}) });
+
+/** The live skills: BASE_LIST × tuning.ts. Rebuilt in place when the tuner changes the multipliers. */
+export const SKILL_LIST: SkillDef[] = BASE_LIST.map((d) => ({ ...d, tree: Object.fromEntries(VARIANTS.map((v) => [v, cloneNode(d.tree[v])])) as Tree }));
+
+function applyTuning() {
+  BASE_LIST.forEach((d, i) => {
+    for (const v of VARIANTS) {
+      const base = d.tree[v];
+      const m = powerOf(d, lvOf(v));
+      const node = SKILL_LIST[i].tree[v];
+      node.fx = base.fx.map((e) => scaleEffect(e, m, T.control));
+      const cdm = d.hero ? T[`cd.${d.hero}` as keyof typeof T] ?? 1 : 1;
+      node.cd = cdm === 1 ? base.cd : Math.round(base.cd * cdm);
+      if (base.engine) node.engine = { ...base.engine, power: sc(base.engine.power, T.engine) };
+    }
+  });
+}
+applyTuning();
+onTuning(applyTuning);
 
 export const SKILLS: Record<string, SkillDef> = Object.fromEntries(SKILL_LIST.map((d) => [d.id, d]));
 

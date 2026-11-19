@@ -10,7 +10,7 @@ import { ARCHES, type Bonus, type BonusKind, type SkillInstance } from './types'
 
 export const MAX_BONUS = 3;
 export const BONUS_KINDS: BonusKind[] = ['dmg', 'shield', 'haste', 'power', 'trigger'];
-export const POWER_BONUS = 0.25;
+export const POWER_BONUS = 0.15;
 export const HASTE_BONUS = 0.2;
 /** +damage per hit / +shield per fire, by level (Lv1–Lv3) */
 export const bonusValue = (e: BonusKind, lv: number) => (e === 'dmg' ? lv : e === 'shield' ? 1 + lv : 0);

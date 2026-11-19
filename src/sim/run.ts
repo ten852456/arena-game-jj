@@ -1,12 +1,14 @@
 import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID } from './heroes';
 import { rollBonuses } from './links';
+import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
 
 /** One run (รอบ) of the game: pick skills day by day until 10 wins or HP runs out. */
 
-export const START_HP = 20;
+/** HP at the start of a run (tuning.ts `run.startHp`) */
+export const START_HP = T['run.startHp'];
 export const WIN_TARGET = 10;
 export const SHOP_SIZE = 5;
 /** price by the level you buy: Lv1 skill, Lv2 upgrade, Lv3 upgrade (hero-unique skills +1) */
@@ -124,7 +126,7 @@ export const sellPrice = (k: SkillInstance) => lvOf(k.v);
  * (≈ day 13–16) survives 3–4 defeats, plus the last chance.
  */
 export const LOSS_CAP = 5;
-export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / 3));
+export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / T['run.lossEvery']));
 
 /** Win streak bonus is clearly bigger than the loss-streak comeback money. */
 export function incomeFor(day: number, streak: number) {
@@ -135,7 +137,7 @@ export function incomeFor(day: number, streak: number) {
 
 export function newRun(hero: string, seed: number, id: string): RunState {
   const s: RunState = {
-    v: 7, id, seed, hero, day: 1, hp: START_HP, wins: 0, losses: 0, gold: 0, streak: 0,
+    v: 7, id, seed, hero, day: 1, hp: T['run.startHp'], wins: 0, losses: 0, gold: 0, streak: 0,
     lastIncome: { base: 0, bonus: 0 }, bonusSlots: 0, slotBuys: 0, skills: [], shop: [], rolls: 0,
     ghost: false, pendingMark: null, phase: 'shop', rating: 1000, log: [],
   };
