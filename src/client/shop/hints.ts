@@ -40,17 +40,20 @@ let shown = -1;
 export function showHints(root: HTMLElement, r: RunState | null, i: number) {
   if (i === shown) return;
   shown = i;
-  root.querySelectorAll('.skillrow.hl').forEach((el) => el.classList.remove('hl'));
+  root.querySelectorAll('.skillrow.hl').forEach((el) => el.classList.remove('hl', 'up-pulse'));
   root.querySelectorAll('.sk-hint').forEach((el) => el.remove());
   root.querySelectorAll('.card.offer.hinting').forEach((el) => el.classList.remove('hinting'));
   showPutHere(root, r, i);
   const o = i >= 0 ? r?.shop[i] : null;
   if (!r || !o) return;
   root.querySelector(`.card.offer[data-tip="s:${i}"]`)?.classList.add('hinting');
+  const up = upgradeOf(r, o);
   for (const [idx, labels] of hintsFor(r, o)) {
     const row = root.querySelector<HTMLElement>(`.skillrow[data-i="${idx}"]`);
     if (!row) continue;
     row.classList.add('hl');
+    // an upgrade card: the skill it levels up pulses gold
+    if (up && r.skills[idx] === up) row.classList.add('up-pulse');
     const tag = document.createElement('div');
     tag.className = 'sk-hint';
     tag.innerHTML = labels.map(esc).join('<br>');

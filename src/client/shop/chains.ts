@@ -11,7 +11,7 @@
 import { L } from '../../i18n';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusValue, matches, type ActiveBonus } from '../../sim/links';
 import { ARCH_NAME, SKILLS, lvOf, nodeOf } from '../../sim/skills';
-import type { Offer, RunState } from '../../sim/run';
+import { slotsOf, type Offer, type RunState } from '../../sim/run';
 import type { Bonus, SkillInstance } from '../../sim/types';
 import { ARCH_COLORS, archIcon, skillIcon, type ArchIconId } from '../assets';
 import { linkChime } from '../audio';
@@ -178,30 +178,76 @@ export function bestSlot(r: RunState, o: Offer): { pos: number; gain: number } |
   return best;
 }
 
-/** Ghost "put it here" marker in the list for shop card i (removes the old one). */
-export function showPutHere(root: HTMLElement, r: RunState | null, i: number) {
-  root.querySelectorAll('.put-here').forEach((el) => el.remove());
-  const o = i >= 0 ? r?.shop[i] : null;
-  if (!r || !o) return;
-  const best = bestSlot(r, o);
-  if (!best) return;
-  const list = root.querySelector<HTMLElement>('.skilllist');
-  if (!list) return;
-  const li = document.createElement('li');
-  li.className = 'put-here';
-  li.setAttribute('aria-hidden', 'true');
-  const name = esc(SKILLS[o.id].name);
-  const end = best.pos === r.skills.length;
-  li.innerHTML = `<img class="ph-ico" src="${skillIcon(o.id)}" alt=""><span class="ph-t"><b>✨ ${L(`วาง ${name} ตรงนี้`, `Put ${name} here`)}</b>` +
-    `<small>${L(`+${best.gain} โซ่`, `+${best.gain} chain${best.gain > 1 ? 's' : ''}`)} · ${end ? L('ซื้อแล้วจะลงช่องนี้พอดี', 'buying puts it right here') : L('ซื้อแล้วลาก ⠿ มาวางตรงนี้', 'buy it, then drag ⠿ here')}</small></span>`;
-  const row = list.querySelector(`.skillrow[data-i="${best.pos}"]`);
-  if (row) list.insertBefore(li, row);
-  else {
-    const rows = list.querySelectorAll('.skillrow[data-i]');
-    const lastRow = rows[rows.length - 1];
-    if (lastRow) lastRow.after(li);
-    else list.prepend(li);
+/** Where a new offer lands when bought with the button: the best chain spot, else the end of the list. */
+export function defaultSlot(r: RunState, o: Offer) {
+  return bestSlot(r, o)?.pos ?? r.skills.length;
+}
+
+/** Links the new skill would make sitting at `pos`: label + whether the partner is above or below. */
+export function linksAt(r: RunState, o: Offer, pos: number) {
+  const me: SkillInstance = { id: o.id, v: '', bonus: o.bonus ?? [] };
+  const list = [...r.skills.slice(0, pos), me, ...r.skills.slice(pos)];
+  const out: { up: boolean; text: string }[] = [];
+  for (const a of activeBonuses(list)) {
+    if (a.from === pos)
+      for (const j of a.to) out.push({ up: j < pos, text: `${nodeOf(me).name} ${bonusShort(a.b, 1)}` });
+    else if (a.to.includes(pos)) out.push({ up: a.from < pos, text: `${nodeOf(list[a.from]).name} ${bonusShort(a.b, lvOf(list[a.from].v))}` });
   }
+  return out;
+}
+
+/**
+ * Ghost row for a new offer at list position `pos`: a 40% copy of the skill row, dashed chain lines to the
+ * neighbours it links with, and "+Chain" labels at full strength. mode: hover (where the Buy button puts it),
+ * drag (the gap under the cursor), pick (tap-to-place: tapping it confirms).
+ */
+export function ghostLi(r: RunState, o: Offer, pos: number, mode: 'hover' | 'drag' | 'pick', price = 0) {
+  const li = document.createElement('li');
+  const links = linksAt(r, o, pos);
+  const up = links.some((l) => l.up);
+  const down = links.some((l) => !l.up);
+  li.className = `put-here mode-${mode}${up ? ' link-up' : ''}${down ? ' link-down' : ''}${links.length ? ' links' : ''}`;
+  li.dataset.pos = String(pos);
+  li.setAttribute('aria-hidden', mode === 'pick' ? 'false' : 'true');
+  const name = esc(SKILLS[o.id].name);
+  const tag = links.length
+    ? links.map((l) => `<span class="ph-link">${l.up ? '▲' : '▼'} ${L('+โซ่', '+Chain')}: ${esc(l.text)}</span>`).join('')
+    : `<span class="ph-link none">${L('ยังไม่ต่อโซ่ตรงนี้', 'No chain here')}</span>`;
+  const head =
+    mode === 'pick'
+      ? L(`แตะเพื่อวาง ${name} ตรงนี้`, `Tap to put ${name} here`)
+      : mode === 'drag'
+        ? L(`ปล่อยเพื่อซื้อ ${name} ตรงนี้`, `Drop to buy ${name} here`)
+        : L(`✨ ซื้อแล้ว ${name} จะลงตรงนี้`, `✨ Buying puts ${name} here`);
+  li.innerHTML =
+    `<span class="ph-ghost"><img class="ph-ico" src="${skillIcon(o.id)}" alt="" draggable="false"><b class="ph-nm">${name} <small>Lv1</small></b></span>` +
+    `<span class="ph-t"><b>${head}</b><span class="ph-links">${tag}</span></span>` +
+    (price ? `<span class="ph-price"><i class="coin-ico" aria-hidden="true"></i>${price}</span>` : '');
+  return li;
+}
+
+/** Put `li` into the list just above row `pos` (or after the last row). */
+export function insertAtRow(list: HTMLElement, li: HTMLElement, pos: number) {
+  const row = list.querySelector(`.skillrow[data-i="${pos}"]`);
+  if (row) {
+    // keep it above the connector that belongs to the row before
+    list.insertBefore(li, row);
+    return;
+  }
+  const rows = list.querySelectorAll('.skillrow[data-i]');
+  const lastRow = rows[rows.length - 1];
+  if (lastRow) lastRow.after(li);
+  else list.prepend(li);
+}
+
+/** Ghost row for shop card i at the spot the Buy button would use (removes the old one). */
+export function showPutHere(root: HTMLElement, r: RunState | null, i: number) {
+  root.querySelectorAll('.put-here.mode-hover').forEach((el) => el.remove());
+  const o = i >= 0 ? r?.shop[i] : null;
+  if (!r || !o || o.v !== '' || r.skills.some((k) => k.id === o.id) || r.skills.length >= slotsOf(r)) return;
+  const list = root.querySelector<HTMLElement>('.skilllist');
+  if (!list || list.querySelector('.put-here.mode-pick, .put-here.mode-drag')) return;
+  insertAtRow(list, ghostLi(r, o, defaultSlot(r, o), 'hover'), defaultSlot(r, o));
 }
 
 // ---------- 3. drag preview ----------

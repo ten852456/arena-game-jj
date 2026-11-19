@@ -18,7 +18,10 @@ import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
 import { resetHints, showHints } from './shop/hints';
 import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
-import { bindChainResize, chainDirs, chainPanelHTML, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, type Dir } from './shop/chains';
+import { bindChainResize, chainDirs, chainPanelHTML, defaultSlot, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, type Dir } from './shop/chains';
+import { COIN as COIN_I, coinFly, coinHTML, goldPillHTML, hudAfterRender, hudHTML, popRow } from './shop/hud';
+import { initShopDrag, shopDragging } from './shop/shopdrag';
+import { clearPick, goToPick, picked, setPick } from './shop/pick';
 import { music, sfx, voice } from './audio';
 import { IMAGES, skillIcon, archIcon } from './assets';
 import { L } from '../i18n';
@@ -169,7 +172,9 @@ function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
 function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
   const mark = k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : '';
-  return `<span class="nm">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small>${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
+  const lv = lvOf(k.v);
+  const pips = `<i class="lvpips" aria-hidden="true">${Array.from({ length: R.MAX_LV }, (_, j) => `<i class="${j < lv ? 'on' : ''}"></i>`).join('')}</i>`;
+  return `<span class="nm">${nodeOf(k).name} <small>Lv${lv}</small>${pips}${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
 }
 
 // ---------- connect bonuses ----------
@@ -292,6 +297,30 @@ function buildList(b: Build) {
     .join('')}</ol>`;
 }
 
+/** Upgrade tooltip header: what changes, old → new (new numbers in green), chip by chip. */
+function upDeltaHTML(owned: SkillInstance, v: string) {
+  const next = { ...owned, v };
+  const a = chipsOf(nodeOf(owned), cdTicks(owned)).map((c) => ({ kw: c.kw, t: chipText(c.text) }));
+  const b = chipsOf(nodeOf(next), cdTicks(next)).map((c) => ({ kw: c.kw, t: chipText(c.text) }));
+  const used = new Set<number>();
+  const lines: string[] = [];
+  for (const nb of b) {
+    const j = a.findIndex((x, k) => !used.has(k) && x.kw === nb.kw);
+    if (j < 0) {
+      lines.push(`<li><span class="d-new">＋ ${esc(nb.t)}</span></li>`);
+      continue;
+    }
+    used.add(j);
+    if (a[j].t !== nb.t) lines.push(`<li><span class="d-old">${esc(a[j].t)}</span> <i>→</i> <b class="d-new">${esc(nb.t)}</b></li>`);
+  }
+  a.forEach((x, k) => {
+    if (!used.has(k)) lines.push(`<li><s class="d-old">${esc(x.t)}</s></li>`);
+  });
+  return `<div class="tt-delta"><div class="td-h">▲ ${esc(nodeOf(owned).name)} Lv${lvOf(owned.v)} → <b>${esc(nodeOf(next).name)} Lv${lvOf(v)}</b></div>${
+    lines.length ? `<ul>${lines.join('')}</ul>` : `<div class="muted small">${L('ตัวเลขเท่าเดิม แต่ได้ความสามารถใหม่', 'Same numbers, new effect')}</div>`
+  }</div>`;
+}
+
 function tipFor(key: string): string {
   const r = run;
   if (!r) return '';
@@ -304,7 +333,7 @@ function tipFor(key: string): string {
     const o = r.shop[n];
     if (!o) return '';
     const owned = R.upgradeOf(r, o);
-    if (owned) return tipBody(
+    if (owned) return upDeltaHTML(owned, o.v) + tipBody(
         { ...owned, v: o.v },
         L(
           `อัปเกรดจาก ${nodeOf(owned).name} Lv${lvOf(owned.v)} (ใช้ช่องเดิม และโบนัสเชื่อมต่อเดิม)`,
@@ -358,10 +387,19 @@ function render() {
     replayDone: renderReplayDone,
   }[view]();
   hideTip();
+  // shop → shop: keep each panel's inner scroll (buying or selling must not jump the lists back to the top)
+  const keep = view === 'shop' && $panel.querySelector('.shopv') ? [...$panel.querySelectorAll<HTMLElement>('.sv-sec, .sv-side')].map((e) => e.scrollTop) : null;
   $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML();
   toast = '';
-  if (view === 'shop' && run) syncChains($panel, run);
-  else resetChains();
+  if (keep) $panel.querySelectorAll<HTMLElement>('.sv-sec, .sv-side').forEach((e, k) => (e.scrollTop = keep[k] ?? 0));
+  clearPick($panel);
+  if (view === 'shop' && run) {
+    syncChains($panel, run);
+    hudAfterRender($panel, run);
+  } else resetChains();
+  const fx = afterRender;
+  afterRender = null;
+  if (view === 'shop') fx?.();
   setView(view);
   if (view === 'shop') mountScout();
   // selected skill (tap on mobile) shows the same colour highlight as hover
@@ -463,16 +501,22 @@ function renderTitle() {
   </div>`;
 }
 
+/** Buy-button label: "Buy (coin) 3"; when it can't be bought, the reason, plus the price in red if gold is short. */
+function buyLabel(why: string, verb: string, price: number, poor: boolean) {
+  if (!why) return `${verb} ${coinHTML(price)}`;
+  return poor ? `<span class="why">${why}</span> ${coinHTML(price, true)}` : why;
+}
+
 /** Shop card that sells +1 skill slot. */
 function slotCard(r: R.RunState) {
   const price = R.slotPrice(r);
   const maxed = R.slotsOf(r) >= R.MAX_SLOTS;
   const why = maxed ? L('เต็มแล้ว', 'Maxed') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
-  return `<div class="card offer expand extra" title="${L('ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', '+1 skill slot for the whole run; the price goes up each time')}">
+  return `<div class="card offer expand extra${!maxed && r.gold < price ? ' poor' : ''}" title="${L('ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', '+1 skill slot for the whole run; the price goes up each time')}">
     <div class="offer-art" aria-hidden="true">＋</div>
     <div class="offer-name">${L('ช่อง skill +1', '+1 skill slot')}</div>
     <div class="offer-desc">${maxed ? L(`มีครบ ${R.MAX_SLOTS} ช่องแล้ว`, `All ${R.MAX_SLOTS} slots owned`) : L(`ถาวรทั้งรอบ · ตอนนี้ ${R.slotsOf(r)}/${R.MAX_SLOTS} ช่อง`, `For the whole run · now ${R.slotsOf(r)}/${R.MAX_SLOTS} slots`)}</div>
-    <button class="buy" data-a="slot" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
+    <button class="buy" data-a="slot" ${why ? 'disabled' : ''}>${buyLabel(why, L('ซื้อ', 'Buy'), price, !maxed && r.gold < price)}</button>
   </div>`;
 }
 
@@ -494,11 +538,11 @@ function wishCard(r: R.RunState) {
     It picks the skill and branch at random (same slot, same connect bonuses) · once every skill is Lv3 it adds a random mark instead
     · starts at ${R.WISH_BASE} and costs +2 more each time on the same day`,
   )}</div>`;
-  return `<div class="card offer extra wish" data-ttxt="${esc(tip)}">
+  return `<div class="card offer extra wish${kind && r.skills.length && r.gold < price ? ' poor' : ''}" data-ttxt="${esc(tip)}">
     <div class="offer-art" aria-hidden="true">🌙</div>
     <div class="offer-name">${L('พรจันทร์', 'Moon Wish')}</div>
     <div class="offer-desc">${kind || !r.skills.length ? desc : L('ทุก skill Lv3 และมีตราแล้ว', 'Every skill is Lv3 and marked')}</div>
-    <button class="buy" data-a="wish" ${why ? 'disabled' : ''}>${why || `${L('ขอพร', 'Wish')} <span class="coin">${price}</span>`}</button>
+    <button class="buy" data-a="wish" ${why ? 'disabled' : ''}>${buyLabel(why, L('ขอพร', 'Wish'), price, !!kind && r.skills.length > 0 && r.gold < price)}</button>
   </div>`;
 }
 
@@ -510,6 +554,54 @@ function previewOrder(order: number[]) {
   const skills = order.map((i) => r.skills[i]).slice(0, R.slotsOf(r));
   el.innerHTML = timelineHTML(skills, r.hero);
   dragPreview($panel, r, order);
+}
+
+/** one-shot effects to play right after the next render (coins flying, a row popping) */
+let afterRender: (() => void) | null = null;
+const goldPillRect = () => $panel.querySelector('.gold-pill')?.getBoundingClientRect() ?? null;
+
+/** Why shop offer i can't be bought right now ('' = it can). Same checks as run.buy, for the UI. */
+function offerWhy(r: R.RunState, i: number) {
+  const o = r.shop[i];
+  if (!o) return L('ซื้อแล้ว', 'Bought');
+  if (o.v !== '' && !R.upgradeOf(r, o)) return L('ใช้ไม่ได้แล้ว', 'No longer fits');
+  if (r.gold < R.priceOf(o)) return L('เงินไม่พอ', 'Not enough gold');
+  if (o.v === '' && r.skills.length >= R.slotsOf(r)) return L('ช่องเต็ม', 'Slots full');
+  return '';
+}
+
+/**
+ * Buy shop offer i through run.buy (the same rule the server re-checks at fight time). A new skill then moves from
+ * the end of the list to `pos` (null = the ghost's spot: the best chain spot, else the end); an upgrade stays put.
+ */
+function buyOffer(i: number, pos: number | null): string | null {
+  const r = run!;
+  const o = r.shop[i];
+  if (!o) return R.buy(r, i);
+  const up = R.upgradeOf(r, o);
+  const upIdx = up ? r.skills.indexOf(up) : -1;
+  const at = o.v === '' ? Math.max(0, Math.min(r.skills.length, pos ?? defaultSlot(r, o))) : upIdx;
+  const from = $panel.querySelector(`.card.offer[data-tip="s:${i}"]`)?.getBoundingClientRect() ?? null;
+  const err = R.buy(r, i);
+  if (err) return err;
+  if (o.v === '') for (let k = r.skills.length - 1; k > at; k--) R.moveSkill(r, k, -1);
+  afterRender = () => {
+    coinFly(goldPillRect(), from);
+    popRow($panel.querySelector<HTMLElement>(`.skillrow[data-i="${at}"]`), upIdx >= 0);
+  };
+  return null;
+}
+
+/** Sell skill i (button or the coin jar): coins fly back into the gold pill. */
+function sellSkill(i: number, from: DOMRect | null) {
+  const r = run;
+  if (!r || view !== 'shop' || !r.skills[i]) return;
+  R.sell(r, i);
+  afterRender = () => coinFly(from, goldPillRect());
+  sfx('sell');
+  saveRun();
+  render();
+  scene.react('sell');
 }
 
 /** Drop from the drag: move skill `from` to position `to`. */
@@ -543,12 +635,17 @@ function renderShop() {
       const locked = R.isLocked(r, i);
       const lockBtn = `<button class="lock${locked ? ' on' : ''}" data-a="lock" data-i="${i}" aria-pressed="${locked}"
         aria-label="${locked ? L('ปลดล็อกการ์ดนี้', 'Unlock this card') : L('ล็อกการ์ดนี้ไว้ถึงพรุ่งนี้', 'Lock this card until tomorrow')}" title="${locked ? L('ล็อกอยู่: การ์ดนี้จะอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน (กดเพื่อปลด)', 'Locked: this card stays through rerolls and the next day (press to unlock)') : L('ล็อก: เก็บการ์ดนี้ไว้ถึงพรุ่งนี้ (ฟรี)', 'Lock: keep this card until tomorrow (free)')}">${locked ? '🔒' : '🔓'}</button>`;
-      return `<div class="card offer arch-${d.arch}${o.v ? ' upgrade' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}">
-        <div class="offer-top">${lockBtn}<span class="offer-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="">${node.name}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">⬆ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}</div>
+      const poor = !stale && r.gold < price;
+      const isUp = !!up;
+      const badge = isUp
+        ? `<span class="up-badge" aria-label="${L(`อัปเกรดเป็น Lv${lvOf(o.v)}`, `Upgrades to Lv${lvOf(o.v)}`)}">▲ Lv${lvOf(o.v)}</span><span class="up-shine" aria-hidden="true"></span>`
+        : '';
+      return `<div class="card offer arch-${d.arch}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
+        ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${node.name}</div>
+        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}</div>
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
-        <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
+        <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy'), price, poor)}</button>
       </div>`;
     })
     .join('');
@@ -556,7 +653,7 @@ function renderShop() {
   const rows = r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i, act);
-      const row = `<li class="skillrow arch-${SKILLS[k.id].arch}" data-tip="g:${i}" data-i="${i}">
+      const row = `<li class="skillrow arch-${SKILLS[k.id].arch}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
         <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}</div>
@@ -576,35 +673,28 @@ function renderShop() {
   const nLocked = r.shop.filter((_, i) => R.isLocked(r, i)).length;
   resetHints();
   return `<div class="shopv">
-  <div class="sv-top">
-    <span class="pill"><small>${L('วันที่', 'Day')}</small> <b>${r.day}</b></span>
-    <span class="pill hp"><small>${L('เลือด', 'HP')}</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'half-spirit')}</span>` : ''}</span>
-    <span class="pill win"><small>${L('ชนะ', 'Wins')}</small> <b>${r.wins}</b>/${R.WIN_TARGET}</span>
-    <span class="pill gold"><small>${L('เงิน', 'Gold')}</small> <b>${r.gold}</b></span>
-    <span class="pill"><small>${L('คะแนน', 'Rating')}</small> <b>${r.rating}</b></span>
-    ${streakText(r.streak) ? `<span class="pill streak">${streakText(r.streak)}</span>` : ''}
-    <span class="stats-right">${concedeHTML()}</span>
-  </div>
+  ${hudHTML(r, streakText(r.streak), concedeHTML())}
   <aside class="sv-side">
     ${stageSlot(true, 'sv-slot')}
     <div class="sv-hero glass">
       <div class="svh-name"><b>${hero.name}</b> <span class="tag">${ARCH_NAME[hero.arch]}</span></div>
-      <div class="svh-hp" aria-label="${L('เลือด', 'HP')} ${r.hp}/${R.START_HP}"><span>${L('เลือด', 'HP')}</span><i class="svh-bar"><i style="width:${Math.max(0, Math.min(100, (r.hp / R.START_HP) * 100))}%"></i></i><b>${r.hp}/${R.START_HP}</b></div>
-      <div class="svh-wins" aria-label="${L(`ชนะ ${r.wins} จาก ${R.WIN_TARGET}`, `${r.wins} of ${R.WIN_TARGET} wins`)}">${Array.from({ length: R.WIN_TARGET }, (_, i) => `<i class="${i < r.wins ? 'on' : ''}"></i>`).join('')}</div>
       <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · ${hero.passive}</p>
     </div>
     <div class="mm-scout-slot sv-scout"></div>
   </aside>
 
   <section class="sv-sec sv-shop">
-    <div class="sv-h"><h3>${L('ร้าน skill', 'Skill shop')}</h3>
-      <button class="reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} <span class="coin">${R.REROLL}</span></button></div>
-    <p class="sv-note">🔓 ${L(
-      'กดรูปกุญแจเพื่อ<b>ล็อกการ์ด</b>ไว้ (ฟรี): การ์ดที่ล็อกจะอยู่ต่อแม้กดสุ่มใหม่ และกลับมาในร้านพรุ่งนี้',
-      'Press the padlock to <b>lock a card</b> (free): a locked card stays through rerolls and comes back tomorrow',
-    )}${nLocked ? L(` · ล็อกอยู่ ${nLocked} ใบ`, ` · ${nLocked} locked`) : ''}
-      · ${L('ชี้ (หรือแตะ) การ์ดเพื่อดูว่าควรวางติดกับ skill ไหน', 'point at (or tap) a card to see which skill it should sit next to')}</p>
+    <div class="sv-h">${goldPillHTML(r.gold)}<h3>${L('ร้าน skill', 'Skill shop')}</h3>
+      <button class="reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} ${coinHTML(R.REROLL)}</button></div>
+    <p class="sv-note">${L(
+      '<b>ลากการ์ด</b>ไปวางในรายการ skill ของคุณ (หรือแตะการ์ด แล้วแตะ <b>+</b> ตรงที่อยากวาง) · การ์ด <b>▲</b> = อัปเกรด skill ที่มีอยู่',
+      '<b>Drag a card</b> into your skill list (or tap a card, then tap <b>+</b> where you want it) · a <b>▲</b> card levels up a skill you own',
+    )} · 🔓 ${L('ล็อกการ์ดไว้ถึงพรุ่งนี้ได้ฟรี', 'lock a card until tomorrow for free')}${nLocked ? L(` (ล็อกอยู่ ${nLocked})`, ` (${nLocked} locked)`) : ''}</p>
     <div class="shop">${shop}${slotCard(r)}${wishCard(r)}</div>
+    <div class="sell-jar" aria-label="${L('โหลขาย: ลาก skill มาวางที่นี่เพื่อขาย', 'Sell jar: drag a skill here to sell it')}">
+      <span class="jar-ico" aria-hidden="true"><i class="coin-ico"></i><i class="coin-ico"></i><i class="coin-ico"></i></span>
+      <span class="jar-t">${L('ลาก skill มาที่โหลนี้เพื่อขาย', 'Drag a skill into this jar to sell it')}</span><b class="jar-amt"></b>
+    </div>
   </section>
 
   <section class="sv-sec sv-mine">
@@ -630,7 +720,7 @@ function renderShop() {
   </section>
 
   <div class="sv-fight">
-    <span class="pill gold"><small>${L('เงินเหลือ', 'Gold left')}</small> <b>${r.gold}</b></span>
+    <span class="pill gold"><small>${L('เงินเหลือ', 'Gold left')}</small> ${COIN_I}<b class="gold-n">${r.gold}</b></span>
     <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ ${L('สู้วันที่', 'Fight day')} ${r.day} <small>${L('แพ้เสียเลือด', 'a loss costs')} ${R.damageFor(r.day)}${L('', ' HP')}</small></button>
     <button class="ghost" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
   </div>
@@ -1215,6 +1305,21 @@ function playReplay() {
 
 function onClick(ev: Event) {
   const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-a]');
+  // shop: tap (or click) a card to select it → ghost + "+" targets in the list; tap elsewhere to let go
+  if (view === 'shop' && run && !el) {
+    const card = (ev.target as HTMLElement).closest<HTMLElement>('.card.offer[data-tip^="s:"]');
+    if (card) {
+      const i = Number(card.dataset.tip!.slice(2));
+      if (picked === i) clearPick($panel);
+      else {
+        setPick($panel, run, i, offerWhy(run, i));
+        // a new skill: the ghost and the + targets matter more than the tooltip (an upgrade keeps its old → new tip)
+        if (run.shop[i]?.v === '' && (ev as PointerEvent).pointerType !== 'mouse') hideTip();
+      }
+      return;
+    }
+    if (picked >= 0) clearPick($panel);
+  }
   if (!el || (el as HTMLButtonElement).disabled) return;
   const a = el.dataset.a!;
   // the tree window closes from its button or a click on the dark backdrop, not from clicks inside it
@@ -1251,14 +1356,22 @@ function onClick(ev: Event) {
       view = runActive() ? phaseView(run!) : 'title';
       break;
     case 'buy':
-      err = R.buy(run!, n);
+      err = buyOffer(n, null);
       break;
+    case 'pickGo':
+      goToPick($panel);
+      return;
+    case 'buyAt': {
+      const pos = Number(el.dataset.pos);
+      err = buyOffer(n, pos >= 0 ? pos : null);
+      break;
+    }
     case 'reroll':
       err = R.reroll(run!);
       break;
     case 'sell':
-      R.sell(run!, n);
-      break;
+      sellSkill(n, el.getBoundingClientRect());
+      return;
     case 'up':
     case 'down':
       R.moveSkill(run!, n, a === 'up' ? -1 : 1);
@@ -1358,15 +1471,17 @@ function onClick(ev: Event) {
     default:
       return;
   }
-  if (err) toast = runErr(err);
-  else if (a === 'buy' || a === 'reroll' || a === 'sell' || a === 'wish') sfx(a);
+  if (err) {
+    toast = runErr(err);
+    afterRender = null;
+  } else if (a === 'buy' || a === 'buyAt') sfx('buy');
+  else if (a === 'reroll' || a === 'wish') sfx(a);
   else if (a === 'lock') sfx('lock');
   saveRun();
   render();
   // the hero in the shop arena reacts (happy hop on a buy, sad wobble on a sell)
   if (!err && view === 'shop') {
-    if (a === 'buy' || a === 'wish' || a === 'slot') scene.react('buy');
-    else if (a === 'sell') scene.react('sell');
+    if (a === 'buy' || a === 'buyAt' || a === 'wish' || a === 'slot') scene.react('buy');
     else if (a === 'reroll') scene.react('reroll');
   }
 }
@@ -1414,12 +1529,13 @@ function hideTip() {
 function offerHints(ev: PointerEvent) {
   if (view !== 'shop') return;
   const card = (ev.target as Element).closest?.('.card.offer[data-tip^="s:"]') as HTMLElement | null;
-  showHints($panel, run, card ? Number(card.dataset.tip!.slice(2)) : -1);
+  // with a card selected (tap-to-place) its hints stay on while the pointer is elsewhere
+  showHints($panel, run, card ? Number(card.dataset.tip!.slice(2)) : picked);
 }
 
 function onHover(ev: PointerEvent) {
   if (ev.pointerType !== 'mouse') return;
-  if (dragging) return hideTip();
+  if (dragging || shopDragging) return hideTip();
   offerHints(ev);
   // a keyword chip explains its keyword (anywhere: shop, lists, hero hall)
   const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
@@ -1457,12 +1573,41 @@ export function startUI(st: Stage) {
     if (e.key === 'Escape' && treeOpen) {
       treeOpen = null;
       render();
+    } else if (e.key === 'Escape' && picked >= 0) {
+      clearPick($panel);
+      showHints($panel, run, -1);
     }
   });
   $panel.addEventListener('pointerdown', onPointerDown);
   $panel.addEventListener('pointerover', onPreview);
   $panel.addEventListener('focusin', onPreview);
-  initDrag($panel, { onPreview: previewOrder, onDrop: dropSkill });
+  initDrag($panel, {
+    onPreview: previewOrder,
+    onDrop: dropSkill,
+    onSell: (i) => sellSkill(i, document.querySelector('.sell-jar')?.getBoundingClientRect() ?? null),
+  });
+  initShopDrag($panel, {
+    run: () => (view === 'shop' ? run : null),
+    why: (i) => (run && view === 'shop' ? offerWhy(run, i) : '-'),
+    onStart: () => {
+      hideTip();
+      clearPick($panel);
+      showHints($panel, run, -1);
+      sfx('pickup');
+    },
+    onBuy: (i, pos) => {
+      if (!run || view !== 'shop') return;
+      const err = buyOffer(i, pos);
+      if (err) {
+        toast = runErr(err);
+        afterRender = null;
+      }
+      sfx(err ? 'click' : 'buy');
+      saveRun();
+      render();
+      if (!err) scene.react('buy');
+    },
+  });
   bindChainResize($panel);
   window.addEventListener('pointermove', onHover);
   $panel.addEventListener('pointerleave', hideTip);

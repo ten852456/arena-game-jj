@@ -9,6 +9,8 @@
 export interface DragHooks {
   onPreview(order: number[]): void;
   onDrop(from: number, to: number): void;
+  /** dropped on the coin jar (.sell-jar): sell skill `from` */
+  onSell?(from: number): void;
 }
 
 /** true while a drag is in progress (ui.ts hides tooltips then) */
@@ -36,7 +38,7 @@ export function initDrag(root: HTMLElement, hooks: DragHooks) {
 function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: DragHooks) {
   const rows = [...list.querySelectorAll<HTMLElement>('.skillrow[data-i]')];
   const from = rows.indexOf(row);
-  if (from < 0 || rows.length < 2) return;
+  if (from < 0) return;
   const pid = ev.pointerId;
   const y0 = ev.clientY;
   const scroll0 = window.scrollY;
@@ -50,7 +52,12 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
   let active = false;
   let to = from;
   let lastY = ev.clientY;
+  let lastX = ev.clientX;
   let raf = 0;
+  let overSell = false;
+  let outside = false;
+  let float: HTMLElement | null = null;
+  const sellN = row.dataset.sell ?? '';
   let line: HTMLElement | null = null;
 
   const placeLine = () => {
@@ -81,6 +88,31 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
       rows.forEach((r, i) => r.classList.toggle('drop-near', i === to && i !== from));
     }
     placeLine();
+    // the coin jar: drop here to sell. Outside the skills panel a small chip follows the pointer (the row itself
+    // can't leave its scrolling panel)
+    const jar = document.querySelector<HTMLElement>('.sell-jar');
+    const jb = jar?.getBoundingClientRect();
+    overSell = !!jb && jb.width > 0 && lastX >= jb.left - 8 && lastX <= jb.right + 8 && lastY >= jb.top - 8 && lastY <= jb.bottom + 8;
+    jar?.classList.toggle('over', overSell);
+    row.classList.toggle('to-sell', overSell);
+    const sb = (scroller ?? list).getBoundingClientRect();
+    outside = lastX < sb.left || lastX > sb.right || lastY < sb.top || lastY > sb.bottom;
+    if (outside && !float) {
+      float = document.createElement('div');
+      float.className = 'sell-float';
+      float.setAttribute('aria-hidden', 'true');
+      const ic = row.querySelector<HTMLImageElement>('.skill-icon');
+      if (ic) float.appendChild(ic.cloneNode());
+      const b = document.createElement('b');
+      float.appendChild(b);
+      document.body.appendChild(float);
+    }
+    if (float) {
+      float.style.display = outside ? '' : 'none';
+      float.style.transform = `translate(${lastX - 24}px, ${lastY - 24}px)`;
+      float.classList.toggle('over', overSell);
+      float.querySelector('b')!.textContent = overSell ? `+${sellN}` : '';
+    }
   };
   const tick = () => {
     raf = 0;
@@ -109,13 +141,16 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
   const move = (e: PointerEvent) => {
     if (e.pointerId !== pid) return;
     lastY = e.clientY;
+    lastX = e.clientX;
     if (!active) {
       if (Math.abs(e.clientY - y0) < START_PX) return;
       active = true;
       dragging = true;
       row.classList.add('lifted');
       list.classList.add('dragging');
-      document.body.classList.add('no-select');
+      document.body.classList.add('no-select', 'skill-dragging');
+      const amt = document.querySelector('.sell-jar .jar-amt');
+      if (amt) amt.textContent = `+${sellN}`;
       line = document.createElement('div');
       line.className = 'drop-line';
       line.setAttribute('aria-hidden', 'true');
@@ -138,7 +173,9 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
     if (!active) return;
     active = false;
     dragging = false;
-    document.body.classList.remove('no-select');
+    document.body.classList.remove('no-select', 'skill-dragging');
+    float?.remove();
+    document.querySelector('.sell-jar')?.classList.remove('over');
     // swallow the click that follows a drag
     const stop = (c: Event) => {
       c.stopPropagation();
@@ -146,9 +183,14 @@ function start(ev: PointerEvent, row: HTMLElement, list: HTMLElement, hooks: Dra
     };
     window.addEventListener('click', stop, { capture: true, once: true });
     setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 50);
-    if (e.type === 'pointercancel' || to === from) {
+    if (e.type !== 'pointercancel' && overSell && hooks.onSell) {
+      line?.remove();
+      hooks.onSell(from);
+      return;
+    }
+    if (e.type === 'pointercancel' || to === from || outside) {
       row.style.transform = '';
-      row.classList.remove('lifted');
+      row.classList.remove('lifted', 'to-sell');
       list.classList.remove('dragging');
       rows.forEach((r) => r.classList.remove('drop-near'));
       line?.remove();
