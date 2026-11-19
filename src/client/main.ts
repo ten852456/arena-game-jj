@@ -9,8 +9,11 @@ import { getLang, L } from '../i18n';
 import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMuted } from './audio';
 import './style.css';
 import './chain.css';
+import './layout.css';
+import { initLayout, setGameRefresh } from './layout';
 
 initLang();
+initLayout();
 // voice lines follow the game language (English UI → English announcer)
 setVoiceLang(getLang());
 onLang((l) => setVoiceLang(l));
@@ -56,8 +59,13 @@ async function boot() {
     height: H * ZOOM,
     backgroundColor: '#231c48',
     antialias: true,
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER }, // #stage always has the game's aspect (layout.ts)
     scene: [TownScene, CombatScene], // both start; the UI keeps one awake and sleeps the other
+  });
+  // re-read #stage's size first: refresh() alone would scale to the stale parent size
+  setGameRefresh(() => {
+    game.scale.getParentBounds();
+    game.scale.refresh();
   });
   const [town, combat] = await Promise.all([townReady, sceneReady]);
   const stage: Stage = {

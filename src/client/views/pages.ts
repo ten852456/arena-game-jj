@@ -85,7 +85,8 @@ export function runOverPage(d: OverData) {
       }</div>`
     : '';
   const pips = Array.from({ length: d.winTarget }, (_, i) => `<i class="${i < d.wins ? 'on' : ''}"></i>`).join('');
-  return `<section class="mm-over ${d.won ? 'won' : 'lost'}">
+  return `<div class="over-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="over-box">
+  <section class="mm-over ${d.won ? 'won' : 'lost'}">
     ${sky()}
     <div class="mm-banner" style="background-image:url('${d.won ? IMAGES.bannerVictory : IMAGES.bannerDefeat}')"><h2 class="mm-over-title">${title}</h2></div>
     <div class="mm-over-hero">${d.heroArt}</div>
@@ -98,17 +99,20 @@ export function runOverPage(d: OverData) {
       <div><b>${d.rating}</b><span>${L('คะแนน build', 'Build rating')}</span></div>
     </div>
     ${reward}
+    <div class="actions mm-actions">
+      <button class="primary" data-a="home">${L('เล่นอีกรอบ', 'Play again')}</button>
+      <button data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button>
+      <button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>
+    </div>
   </section>
+  <div class="over-detail">
   ${best}
   <h3>${L('build สุดท้าย', 'Final build')} · ${esc(heroName(d.hero))}</h3>
   ${d.buildHTML}
   <h3>${L('ทุกไฟต์ในรอบนี้', 'Every fight of this run')}</h3>
   ${d.historyHTML}
-  <div class="actions mm-actions">
-    <button class="primary" data-a="home">${L('เล่นอีกรอบ', 'Play again')}</button>
-    <button data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button>
-    <button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>
-  </div>`;
+  </div>
+  </div></div>`;
 }
 
 /** Fights of a run as tappable rows (replay links), phone friendly. */
@@ -130,15 +134,15 @@ export function historyList(log: { day: number; won: boolean; opp: string; ai: b
 // ---------- profile ----------
 
 export function profilePage(p: Profile | null, name: string, loading: boolean) {
-  const head = `<div class="actions"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button></div>`;
-  if (!p) return `${head}<section class="mm-card">${sky()}<h2>${L('โปรไฟล์', 'Profile')}</h2><p class="muted">${loading ? L('กำลังโหลด…', 'Loading…') : L('ยังไม่มีข้อมูล', 'No data yet')}</p></section>`;
+  const head = `<div class="actions page-nav"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button></div>`;
+  if (!p) return `<div class="page page-profile"><div class="page-side">${head}<section class="mm-card">${sky()}<h2>${L('โปรไฟล์', 'Profile')}</h2><p class="muted">${loading ? L('กำลังโหลด…', 'Loading…') : L('ยังไม่มีข้อมูล', 'No data yet')}</p></section></div></div>`;
   const runRow = (r: RunSummary) => `<li>
       <div class="mm-run-main"><b>${esc(heroName(r.hero))}</b> <span class="${r.wins >= 8 ? 'win' : ''}">${L('ชนะ', 'Wins')} ${r.wins}</span> <span class="muted">${L('แพ้', 'losses')} ${r.losses} · ${r.days} ${L('วัน', 'days')}${r.conceded ? L(' · ยอมแพ้', ' · gave up') : ''}</span>
         ${r.stardust !== undefined ? `<span class="mm-chipdust">✦ ${r.stardust}</span>` : ''}</div>
       ${runBestText(r) ? `<div class="muted small">${esc(runBestText(r)!)}</div>` : ''}
       ${r.bestFightId ? `<a class="mm-btn ghost small" href="${replayHref(r.bestFightId)}">${L('▶ replay ไฟต์เด่น', '▶ Best fight replay')}</a>` : ''}
     </li>`;
-  return `${head}
+  return `<div class="page page-profile"><div class="page-side">${head}
   <section class="mm-card mm-profile">
     ${sky()}
     <h2>${esc(displayName(p.name ?? name))}</h2>
@@ -151,8 +155,11 @@ export function profilePage(p: Profile | null, name: string, loading: boolean) {
     </div>
   </section>
   ${p.best ? `<h3>${L('รอบที่ดีที่สุด', 'Best run')}</h3><ul class="mm-runs best">${runRow(p.best)}</ul>` : ''}
+  </div>
+  <section class="page-main glass">
   <h3>${L('รอบล่าสุด', 'Recent runs')}</h3>
-  ${p.last.length ? `<ul class="mm-runs">${p.last.slice(0, 10).map(runRow).join('')}</ul>` : `<p class="muted">${L('ยังไม่มีรอบที่จบ ลองเข้าสนามประลองดูสิ', 'No finished runs yet: try the Arena!')}</p>`}`;
+  ${p.last.length ? `<ul class="mm-runs">${p.last.slice(0, 10).map(runRow).join('')}</ul>` : `<p class="muted">${L('ยังไม่มีรอบที่จบ ลองเข้าสนามประลองดูสิ', 'No finished runs yet: try the Arena!')}</p>`}
+  </section></div>`;
 }
 
 // ---------- leaderboard ----------
@@ -180,13 +187,15 @@ export function leaderboardPage(period: Period, lb: Leaderboard | null, loading:
         : ''
     }`;
   }
-  return `
-  <img class="mm-lbhead" src="${IMAGES.headerLeaderboard}" alt="" aria-hidden="true"><div class="actions"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button></div>
+  return `<div class="page page-lb"><div class="page-side">
+  <div class="actions page-nav"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button></div>
+  <img class="mm-lbhead" src="${IMAGES.headerLeaderboard}" alt="" aria-hidden="true">
   <section class="mm-card">${sky()}<h2>${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</h2>
     <p class="muted small">${lb?.scoreLabel ? esc(lb.scoreLabel) : L('จัดอันดับนักสู้โมจิบนดวงจันทร์', 'Ranking the mochi fighters of the moon')}</p>
     <div class="mm-tabs" role="group" aria-label="${L('ช่วงเวลา', 'Period')}">${tabs}</div>
   </section>
-  ${body}`;
+  </div>
+  <section class="page-main glass">${body}</section></div>`;
 }
 
 // ---------- scouting chip (shop, above the fight button) ----------

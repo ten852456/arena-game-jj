@@ -719,31 +719,9 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
   #panel .chip { display: inline-flex; align-items: center; gap: 4px; }
 }
 
-/* Landscape dashboard: each work area scrolls independently. */
-body { background: #17102f url('/assets/img/bg-home-wide.webp') center / cover fixed; }
+/* Screen layouts (landscape one-screen dashboard, phones, the arena canvas slot): see layout.css */
 .skill-icon { width: 42px; height: 42px; object-fit: contain; flex: none; vertical-align: middle; }
 .synergy-icon { width: 22px; height: 22px; object-fit: contain; vertical-align: middle; }
-.rotate-hint { display: none; }
-@media (orientation: portrait) and (max-width: 700px) {
- .rotate-hint { display: flex; align-items: center; gap: 8px; color: #ffdf9f; font-size: 13px; }
- .rotate-hint img { width: 48px; height: 48px; object-fit: contain; }
-}
-@media (min-width: 1000px) and (min-height: 550px) {
- body:has(.shopv) { height: 100dvh; overflow: hidden; background-image: url('/assets/img/bg-game-wide.webp'); }
- body:has(.shopv) header { height: 46px; max-width: none; }
- body:has(.shopv) #stage { position: absolute; left: 1%; top: 58px; width: 26%; max-width: none; }
- body:has(.shopv) #panel { max-width: none; margin: 0 0 0 28%; height: calc(100dvh - 46px); padding: 4px 12px 10px 0; }
- .shopv { height: 100%; display: grid; grid-template-columns: minmax(300px, 1fr) minmax(360px, 1.15fr); grid-template-rows: auto auto minmax(0,1fr) auto; gap: 8px; background: transparent; padding: 0; }
- .shopv > .sv-top, .shopv > .sv-sub, .shopv > .sv-fight { grid-column: 1 / -1; margin: 0; }
- .shopv > .sv-sec { min-height: 0; overflow: auto; padding: 12px; margin: 0; border: 1px solid #796494; border-radius: 18px; background: linear-gradient(#211b40e8,#17102fe8),url('/assets/img/bg-panel.webp'); }
- .shopv .shop { grid-template-columns: repeat(2,minmax(0,1fr)); }
- .shopv .list-wrap { grid-template-columns: minmax(0,1fr); grid-template-areas: 'list' 'tl' 'panel'; }
- .shopv .sv-fight { position: static; }
- body:has(.mm-versus), body:has(.mm-result) { height: 100dvh; overflow: hidden; background-image: url('/assets/img/bg-game-wide.webp'); }
- body:has(.mm-versus) header, body:has(.mm-result) header { height: 46px; max-width: none; }
- body:has(.mm-versus) #stage, body:has(.mm-result) #stage { position: absolute; left: 1%; top: 58px; width: 47%; max-width: none; }
- body:has(.mm-versus) #panel, body:has(.mm-result) #panel { margin: 0 1% 0 50%; max-width: none; height: calc(100dvh - 56px); overflow: auto; border-radius: 18px; background: #20183eea; padding: 12px 18px; }
-}
 .linkgap.on { color: #ffe9a6; text-shadow: 0 0 9px #ffdf68, 0 0 18px #ffac73; }
 .shopv .skillrow.drop-near { box-shadow: 0 0 0 2px #ffe066, 0 0 20px #ffd77b; }
 .shopv .skillrow.synergy-preview { box-shadow: 0 0 0 2px #ffed9c, 0 0 24px #ffca72; }
