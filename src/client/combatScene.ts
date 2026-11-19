@@ -50,6 +50,10 @@ export class CombatScene extends Phaser.Scene {
   private skillText!: Phaser.GameObjects.Text;
   private clockText!: Phaser.GameObjects.Text;
   private banner!: Phaser.GameObjects.Text;
+  /** big status over each fighter's head: frozen / cooldowns pushed back / never fired a skill */
+  private lockTexts!: Phaser.GameObjects.Text[];
+  private casts = [0, 0];
+  private delayUntil = [0, 0];
   /** buff / debuff chips under each HP bar */
   private chips: Phaser.GameObjects.Text[][] = [[], []];
   private fx: (Fx | null)[] = [null, null];
@@ -96,6 +100,15 @@ export class CombatScene extends Phaser.Scene {
     this.skillText = txt(W / 2, 100, 26);
     this.clockText = txt(W / 2, 24, 14, '#bbbbbb');
     this.banner = txt(W / 2, 170, 48);
+    this.lockTexts = [0, 1].map((i) =>
+      this.add
+        .text(POS[i], GROUND - HERO_H - 16, '', {
+          fontFamily: FONT, fontSize: '15px', color: '#dff4ff', backgroundColor: '#1d3a5ccc', padding: { x: 6, y: 2 },
+          stroke: '#0b1830', strokeThickness: 3,
+        })
+        .setOrigin(0.5)
+        .setVisible(false),
+    );
     for (const s of [0, 1])
       for (let i = 0; i < 8; i++)
         this.chips[s].push(
@@ -125,6 +138,9 @@ export class CombatScene extends Phaser.Scene {
     this.fx = [null, null];
     this.chips.forEach((row) => row.forEach((c) => c.setVisible(false)));
     this.nameTexts.forEach((t) => t.setText(''));
+    this.lockTexts?.forEach((t) => t.setVisible(false));
+    this.casts = [0, 0];
+    this.delayUntil = [0, 0];
     this.fighters.forEach((f, i) => {
       f.setAngle(0).setAlpha(1).clearTint().setX(POS[i]).setVisible(false);
       this.keys[i] = null;
@@ -189,6 +205,7 @@ export class CombatScene extends Phaser.Scene {
     while (this.ei < this.evs.length && this.evs[this.ei].t <= this.clock) this.handle(this.evs[this.ei++]);
     this.drawQueue();
     this.drawChips();
+    this.drawLocks();
     const lastT = this.evs.at(-1)?.t ?? 0;
     this.clockText.setText((Math.min(this.clock, lastT) / 10).toFixed(1) + ' วิ');
     const now = this.time.now;
@@ -250,6 +267,7 @@ export class CombatScene extends Phaser.Scene {
     switch (e.type) {
       case 'cast': {
         const d = SKILLS[e.skill];
+        if (!e.echo) this.casts[e.side]++;
         this.glow[e.side].set(e.idx, e.t + 5);
         if (!this.quiet) {
           const f = this.fighters[e.side];
@@ -300,7 +318,9 @@ export class CombatScene extends Phaser.Scene {
         };
         const [txt, col] = map[e.status] ?? [e.status, '#ffffff'];
         this.float(e.side, txt, col, -24);
-        if (e.status === 'freeze' && e.value > 0) this.frozenUntil[e.side] = e.t + e.value;
+        if (e.status === 'freeze' && e.value > 0) this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
+        if (e.status === 'cleanse' && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
+        if (e.status === 'delay' && e.value > 0) this.delayUntil[e.side] = e.t + Math.max(8, Math.min(20, e.value));
         break;
       }
       case 'fatigue':
@@ -326,6 +346,34 @@ export class CombatScene extends Phaser.Scene {
     }
     this.drawBars();
     this.onEvent?.(e);
+  }
+
+  /** Frozen / pushed-back label over a fighter, and "no skill fired" once the fight is over. */
+  private drawLocks() {
+    const tick = Math.max(0, Math.min(this.lastTick, Math.floor(this.clock)));
+    const over = this.ei >= this.evs.length;
+    for (const s of [0, 1]) {
+      const t = this.lockTexts[s];
+      const frozen = this.trace ? this.trace.fr[s][tick] === 1 : this.clock < this.frozenUntil[s];
+      let label = '';
+      let bg = '#1d3a5ccc';
+      if (over && this.casts[s] === 0 && this.evs.length) {
+        label = 'ไม่ได้ใช้ skill เลย';
+        bg = '#4a1f3acc';
+      } else if (frozen && !this.dead[s]) {
+        const left = Math.max(0, this.frozenUntil[s] - this.clock) / 10;
+        label = `❄ โดนแช่แข็ง${left > 0.05 ? ` ${left.toFixed(1)}` : ''}`;
+      } else if (this.clock < this.delayUntil[s] && !this.dead[s]) {
+        label = '⏪ คูลดาวน์ถอยหลัง';
+        bg = '#33275ccc';
+      }
+      if (!label) {
+        t.setVisible(false);
+        continue;
+      }
+      if (t.text !== label) t.setText(label).setBackgroundColor(bg);
+      t.setVisible(true);
+    }
   }
 
   private drawBars() {
