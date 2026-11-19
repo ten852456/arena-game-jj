@@ -2,7 +2,7 @@
 
 Proof of concept for the async auto-battler in the vision doc: pick a hero, buy skills day by day into a
 vertical skill list (every skill runs its own cooldown in parallel), fight other players' saved builds from the same day,
-win 8 before HP 20 runs out. Full combat design: see the combat doc and `docs/ROADMAP.md`.
+win 10 before HP 17 runs out. Full combat design: see the combat doc and `docs/ROADMAP.md`.
 
 Repository: **https://github.com/JaJoJi/arena-game**
 
@@ -139,7 +139,7 @@ A replay link stores builds and seed, and any client re-simulates the exact same
 
 ## What's in the POC (from the vision doc)
 
-- Run loop: 20 HP, a loss costs 2–5 HP by day (capped), 10 wins ends run, win-streak bonus > loss-streak comeback money
+- Run loop: 17 HP, a loss costs 2–5 HP by day (capped), 10 wins ends run, win-streak bonus > loss-streak comeback money
 - Day 1: a fixed 5-skill shop per hero (same every run) and 7 gold for two buys; random shops from day 2
 - Shop: 5 offers (new Lv1 skills + random next-variant upgrades of skills you own), reroll, +1 skill slot;
   Lv1 3 gold, Lv2 upgrade 4, Lv3 upgrade 5 (hero skills +1); max Lv3
