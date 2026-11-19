@@ -1,7 +1,7 @@
-import { combatSfx } from './audio';
+import { combatSfx, voice } from './audio';
 import Phaser from 'phaser';
 import { ZOOM } from './view';
-import { SKILLS, lvOf, nodeOf } from '../sim/skills';
+import { SKILLS, nodeOf } from '../sim/skills';
 import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '../sim/types';
 import { hashSeed } from '../sim/rng';
 import { CHIBI_ORIGIN_Y, chibiScale, ensureChibi } from './chibi';
@@ -9,6 +9,9 @@ import { drawArenaBackdrop } from './townArt';
 import { L } from '../i18n';
 import { chainPopup } from './fightChain';
 import { ArenaLife, HeroIdle } from './idle';
+import { SKILL_ICON_IDS, skillIcon } from './assets';
+import { FxLayer, fxPlan } from './fx';
+import { ARCH_HEX, SkillStrip, type StripState } from './skillStrip';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -18,13 +21,12 @@ export const H = 300;
 const GROUND = 250;
 const POS = [205, 435];
 const FONT = 'Kanit, sans-serif';
-const ARCH_COLOR: Record<string, number> = {
-  tank: 0x5aa0e6, burst: 0xe65a5a, scaling: 0xe6b45a, control: 0x7fe0f0, none: 0xaaaaaa,
-};
 const SIDE_COLOR = ['#9fd3ff', '#ffaaaa'];
 /** chibi height in world units, feet to the top of the art */
 const HERO_H = 116;
 const HERO_S = chibiScale(HERO_H);
+/** a fighter's chest height, where skill effects play */
+const CHEST = GROUND - Math.round(HERO_H * 0.45);
 
 /** Look seed of a fighter: the one saved in the build, else one made from the player name (old builds, AI). */
 /** seedName (the untranslated name) keeps a look stable when the language changes */
@@ -49,7 +51,13 @@ export class CombatScene extends Phaser.Scene {
   private poseUntil = [0, 0];
   private poseKind: ('cast' | 'hit' | null)[] = [null, null];
   private bars!: Phaser.GameObjects.Graphics;
-  private queue!: Phaser.GameObjects.Graphics;
+  /** skill icons with cooldown wipes on the floor (skillStrip.ts) and the skill effects (fx.ts) */
+  private strip!: SkillStrip;
+  private fxl!: FxLayer;
+  private stripState!: StripState;
+  private slowed = [false, false];
+  /** voice cues already played this fight (one of each, so the announcer does not chatter) */
+  private said = new Set<string>();
   private nameTexts!: Phaser.GameObjects.Text[];
   private hpTexts!: Phaser.GameObjects.Text[];
   private skillText!: Phaser.GameObjects.Text;
@@ -95,6 +103,11 @@ export class CombatScene extends Phaser.Scene {
     super({ key: 'combat', active: true });
   }
 
+  preload() {
+    // round skill badges for the in-fight skill strip and the cast pop
+    for (const id of SKILL_ICON_IDS) this.load.image(`sk_${id}`, skillIcon(id));
+  }
+
   create() {
     this.cameras.main.setOrigin(0, 0).setZoom(ZOOM);
     this.drawBackground();
@@ -103,16 +116,31 @@ export class CombatScene extends Phaser.Scene {
       this.add.image(POS[i], GROUND, '__DEFAULT').setOrigin(0.5, CHIBI_ORIGIN_Y).setScale(HERO_S).setFlipX(i === 1).setVisible(false),
     );
     this.bars = this.add.graphics();
-    this.queue = this.add.graphics();
+    this.strip = new SkillStrip(this, GROUND + 22);
+    this.fxl = new FxLayer(this);
+    const trace = () => this.trace;
+    const tickNow = () => Math.max(0, Math.min(this.lastTick, Math.floor(this.clock)));
+    this.stripState = {
+      clock: 0,
+      ratio: (s, i) => {
+        const tr = trace();
+        return tr ? tr.p[s][tickNow() * tr.n[s] + i] / 255 : 0;
+      },
+      glow: this.glow,
+      chainFlash: this.chainFlash,
+      frozen: [false, false],
+      slowed: this.slowed,
+      dead: this.dead,
+    };
     const txt = (x: number, y: number, size: number, color = '#ffffff') =>
       this.add
         .text(x, y, '', { fontFamily: FONT, fontSize: size + 'px', color, stroke: '#000000', strokeThickness: 4 })
         .setOrigin(0.5);
     this.nameTexts = [txt(145, 48, 16, SIDE_COLOR[0]), txt(495, 48, 16, SIDE_COLOR[1])];
     this.hpTexts = [txt(145, 24, 14), txt(495, 24, 14)];
-    this.skillText = txt(W / 2, 100, 26);
+    this.skillText = txt(W / 2, 100, 26).setDepth(20);
     this.clockText = txt(W / 2, 24, 14, '#bbbbbb');
-    this.banner = txt(W / 2, 170, 48);
+    this.banner = txt(W / 2, 170, 48).setDepth(22);
     this.lockTexts = [0, 1].map((i) =>
       this.add
         .text(POS[i], GROUND - HERO_H - 16, '', {
@@ -120,6 +148,7 @@ export class CombatScene extends Phaser.Scene {
           stroke: '#0b1830', strokeThickness: 3,
         })
         .setOrigin(0.5)
+        .setDepth(20)
         .setVisible(false),
     );
     for (const s of [0, 1])
@@ -153,7 +182,8 @@ export class CombatScene extends Phaser.Scene {
     this.skillText.setText('');
     this.clockText.setText('');
     this.bars.clear();
-    this.queue.clear();
+    this.strip.setBuilds(null);
+    this.fxl.clear();
     this.hpTexts.forEach((t) => t.setText(''));
     this.fx = [null, null];
     this.chips.forEach((row) => row.forEach((c) => c.setVisible(false)));
@@ -210,6 +240,8 @@ export class CombatScene extends Phaser.Scene {
     this.idle(null);
     this.fighters.forEach((f) => f.setFlipX(f === this.fighters[1]));
     this.builds = [data.left.build, data.right.build];
+    this.strip.setBuilds([data.left.build, data.right.build]);
+    this.said = new Set();
     [data.left, data.right].forEach((side, i) => {
       this.show(i, side.build.hero, lookSeed(side), POS[i]);
       this.nameTexts[i].setText(side.name);
@@ -221,6 +253,8 @@ export class CombatScene extends Phaser.Scene {
     this.fxT = [0, 0];
     this.glow = [new Map(), new Map()];
     this.chainFlash = [[], []];
+    this.stripState.glow = this.glow;
+    this.stripState.chainFlash = this.chainFlash;
     this.frozenUntil = [0, 0];
     this.evs = data.result.events;
     this.trace = data.result.trace;
@@ -241,11 +275,15 @@ export class CombatScene extends Phaser.Scene {
     while (this.ei < this.evs.length) this.handle(this.evs[this.ei++]);
     this.quiet = false;
     this.clock = this.evs.at(-1)?.t ?? 0;
+    this.fxl.clear();
+    const end = this.evs.at(-1);
+    if (end?.type === 'end') combatSfx(end, 0); // skipped to the end: still play the KO and the result jingle
   }
 
   update(_t: number, delta: number) {
     const t = this.time.now;
     this.life.update(t, delta);
+    this.fxl.update(t, delta);
     if (!this.playing) {
       this.heroIdle.update(t, delta);
       return;
@@ -302,7 +340,8 @@ export class CombatScene extends Phaser.Scene {
       .text(POS[side] + Phaser.Math.Between(-24, 24), GROUND - 110 + dy, text, {
         fontFamily: FONT, fontSize: '20px', color, stroke: '#000000', strokeThickness: 4,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setDepth(21);
     this.tweens.add({ targets: t, y: t.y - 40, alpha: 0, duration: this.dur(900), onComplete: () => t.destroy() });
   }
 
@@ -331,6 +370,8 @@ export class CombatScene extends Phaser.Scene {
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, delay: this.dur(500), duration: this.dur(400) });
           if (e.from !== undefined) this.chain(e.side, e.from, e.idx, e.t);
+          if (e.from !== undefined && e.side === 0) this.say('combo');
+          this.castFx(e);
         }
         break;
       }
@@ -342,6 +383,9 @@ export class CombatScene extends Phaser.Scene {
           this.flashUntil[e.side] = this.time.now + 70;
           if (e.src !== 'fatigue' && e.src !== 'burn') this.pose(e.side, 'hit');
           if (e.amount >= 10) this.cameras.main.shake(140, 0.008);
+          if (e.amount >= 18 && e.side === 1 && e.src !== 'thorns') this.say('critical');
+          if ((e.src === 'burn' || e.src === 'thorns') && this.fxl.allow(e.side, e.src === 'burn' ? 260 : 120))
+            this.fxl.tick(e.src, POS[e.side], CHEST, this.fxLife());
         }
         break;
       }
@@ -368,7 +412,10 @@ export class CombatScene extends Phaser.Scene {
         };
         const [txt, col] = map[e.status] ?? [e.status, '#ffffff'];
         this.float(e.side, txt, col, -24);
-        if (e.status === 'freeze' && e.value > 0) this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
+        if (e.status === 'freeze' && e.value > 0) {
+          this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
+          if (e.side === 1 && e.value >= 15) this.say('frozen');
+        }
         if (e.status === 'cleanse' && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
         if (e.status === 'delay' && e.value > 0) this.delayUntil[e.side] = e.t + Math.max(8, Math.min(20, e.value));
         break;
@@ -493,54 +540,56 @@ export class CombatScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Each fighter's skill list beside them, top to bottom: a colour chip per skill and a cooldown bar
-   * that fills as the cooldown runs. A skill flashes white when it fires; bars turn ice-blue while frozen.
-   */
+  /** Skill icons on the floor under each fighter (skillStrip.ts): cooldown wipe, fire pop, frozen / slowed tint. */
   private drawQueue() {
-    const g = this.queue.clear();
-    const rowH = 13;
-    const barW = 54;
+    const st = this.stripState;
     const tick = Math.max(0, Math.min(this.lastTick, Math.floor(this.clock)));
-    for (const s of [0, 1]) {
-      const b = this.builds[s];
-      if (!b || !b.skills.length) continue;
-      const n = b.skills.length;
-      const w = 14 + barW;
-      const ox = s === 0 ? 12 : W - 12 - w;
-      const oy = GROUND - 8 - n * rowH;
-      g.fillStyle(0x0b0e13, 0.82).fillRoundedRect(ox - 4, oy - 4, w + 8, n * rowH + 6, 4);
-      g.lineStyle(1, 0x3a424d).strokeRoundedRect(ox - 4, oy - 4, w + 8, n * rowH + 6, 4);
-      const frozen = this.trace ? this.trace.fr[s][tick] === 1 : false;
-      b.skills.forEach((k, i) => {
-        const y = oy + i * rowH;
-        const color = ARCH_COLOR[SKILLS[k.id]?.arch ?? 'none'];
-        const lit = (this.glow[s].get(i) ?? -1) >= this.clock;
-        g.fillStyle(lit ? 0xffffff : color, 1).fillRect(ox, y, 10, 10);
-        // level pips under the chip
-        g.fillStyle(0xffffff, 0.85);
-        for (let l = 0; l < lvOf(k.v); l++) g.fillRect(ox + l * 3, y + 10, 2, 1);
-        const bx = ox + 14;
-        g.fillStyle(0x000000, 0.6).fillRect(bx, y + 2, barW, 6);
-        const ratio = lit ? 1 : this.trace ? this.trace.p[s][tick * this.trace.n[s] + i] / 255 : 0;
-        if (ratio > 0.01) {
-          g.fillStyle(lit ? 0xffffff : frozen && k.mark !== 'steadfast' ? 0x8fd8ff : ratio > 0.9 ? 0xffffff : color, 1);
-          g.fillRect(bx, y + 2, Math.round(barW * ratio), 6);
-        }
-      });
-      if (frozen) g.lineStyle(2, 0x8fd8ff, 0.9).strokeRect(ox - 2, oy - 2, w + 4, n * rowH + 2);
-      // chain links that just fired: a gold bracket joining the two rows, fading out
-      for (const f of this.chainFlash[s]) {
-        const left = f.until - this.clock;
-        if (left <= 0 || !b.skills[f.a] || !b.skills[f.b]) continue;
-        const k = Math.min(1, left / 8);
-        const [y1, y2] = [oy + Math.min(f.a, f.b) * rowH + 5, oy + Math.max(f.a, f.b) * rowH + 5];
-        const bx = s === 0 ? ox - 7 : ox + w + 7;
-        const d = s === 0 ? 5 : -5;
-        g.lineStyle(6, 0xffb86b, 0.4 * k).lineBetween(bx, y1, bx, y2);
-        g.lineStyle(2.5, 0xffe2a0, k).lineBetween(bx + d, y1, bx, y1).lineBetween(bx, y1, bx, y2).lineBetween(bx, y2, bx + d, y2);
-        g.lineStyle(1.5, 0xffe2a0, k).strokeRect(ox - 1, oy + f.a * rowH - 1, 12, 12).strokeRect(ox - 1, oy + f.b * rowH - 1, 12, 12);
-      }
+    st.clock = this.clock;
+    for (let s = 0; s < 2; s++) {
+      st.frozen[s] = this.trace ? this.trace.fr[s][tick] === 1 : this.clock < this.frozenUntil[s];
+      const f = this.fx[s];
+      this.slowed[s] = !!f && f.sl > 0 && f.slt - Math.max(0, this.clock - this.fxT[s]) > 0;
     }
+    this.strip.draw(st);
+  }
+
+  /** life multiplier for effects at the current fight speed (4x plays them faster) */
+  private fxLife() {
+    return 1 / Math.max(1, this.speed * 0.5);
+  }
+
+  /**
+   * A skill fired: its icon bursts above the caster, then the skill's effects (fx.ts table) play on the caster and
+   * on the target, bigger for bigger hits. Fast forward thins the particles out.
+   */
+  private castFx(e: Extract<CombatEvent, { type: 'cast' }>) {
+    const inst = this.builds[e.side]?.skills[e.idx];
+    if (!inst || !SKILLS[inst.id]) return;
+    const foe = (1 - e.side) as Side;
+    const lm = this.fxLife();
+    const arch = SKILLS[inst.id].arch;
+    // at the caster's hand, on the side facing the enemy (clear of the skill name and the damage numbers)
+    this.fxl.burstIcon(e.side, inst.id, POS[e.side] + (e.side === 0 ? 1 : -1) * 66, GROUND - Math.round(HERO_H * 0.62), ARCH_HEX[arch] ?? 0xffffff, this.dur(950), 40);
+    // damage this cast deals (the events right after it, same tick, until the next cast)
+    let dmg = 0;
+    for (let j = this.ei; j < this.evs.length; j++) {
+      const n = this.evs[j];
+      if (n.t !== e.t || n.type === 'cast' || n.type === 'end') break;
+      if (n.type === 'damage' && n.side === foe && n.src === inst.id) dmg += n.amount + n.blocked;
+    }
+    if (!this.fxl.allow(e.side, this.speed >= 4 ? 150 : this.speed >= 2 ? 70 : 0)) return;
+    const k = dmg > 0 ? Math.max(0.75, Math.min(1.7, 0.7 + dmg / 14)) : 1;
+    const cm = this.speed >= 4 ? 0.55 : 1;
+    const plan = fxPlan(inst);
+    const dir = e.side === 0 ? 1 : -1;
+    for (const kind of plan.c) this.fxl.play(kind, POS[e.side], CHEST, dir, 1, lm, cm);
+    for (const kind of plan.t) this.fxl.play(kind, POS[foe], CHEST, dir, k, lm, cm);
+  }
+
+  /** One announcer line per kind per fight, never while skipping. */
+  private say(key: 'combo' | 'critical' | 'frozen') {
+    if (this.quiet || this.said.has(key)) return;
+    this.said.add(key);
+    voice(key);
   }
 }

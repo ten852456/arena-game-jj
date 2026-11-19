@@ -138,7 +138,7 @@ export function profilePage(p: Profile | null, name: string, loading: boolean) {
   if (!p) return `<div class="page page-profile"><div class="page-side">${head}<section class="mm-card">${sky()}<h2>${L('โปรไฟล์', 'Profile')}</h2><p class="muted">${loading ? L('กำลังโหลด…', 'Loading…') : L('ยังไม่มีข้อมูล', 'No data yet')}</p></section></div></div>`;
   const runRow = (r: RunSummary) => `<li>
       <div class="mm-run-main"><b>${esc(heroName(r.hero))}</b> <span class="${r.wins >= 8 ? 'win' : ''}">${L('ชนะ', 'Wins')} ${r.wins}</span> <span class="muted">${L('แพ้', 'losses')} ${r.losses} · ${r.days} ${L('วัน', 'days')}${r.conceded ? L(' · ยอมแพ้', ' · gave up') : ''}</span>
-        ${r.stardust !== undefined ? `<span class="mm-chipdust">✦ ${r.stardust}</span>` : ''}</div>
+        ${r.stardust !== undefined ? `<span class="mm-chipdust"><img src="${IMAGES.stardust}" alt="${L('ผงดาว', 'stardust')}" width="18" height="18"> ${r.stardust}</span>` : ''}</div>
       ${runBestText(r) ? `<div class="muted small">${esc(runBestText(r)!)}</div>` : ''}
       ${r.bestFightId ? `<a class="mm-btn ghost small" href="${replayHref(r.bestFightId)}">${L('▶ replay ไฟต์เด่น', '▶ Best fight replay')}</a>` : ''}
     </li>`;
@@ -151,7 +151,7 @@ export function profilePage(p: Profile | null, name: string, loading: boolean) {
       <div><b>${p.runs}</b><span>${L('รอบที่เล่น', 'Runs')}</span></div>
       <div><b>${p.wins}</b><span>${L('ชนะรวม', 'Total wins')}</span></div>
       <div><b>${p.bestWins}</b><span>${L('ชนะสูงสุดใน 1 รอบ', 'Best run (wins)')}</span></div>
-      <div><b>✦ ${p.stardust}</b><span>${L('ผงดาว', 'Stardust')}</span></div>
+      <div><b class="mm-dustn"><img src="${IMAGES.stardust}" alt="" aria-hidden="true" width="22" height="22"> ${p.stardust}</b><span>${L('ผงดาว', 'Stardust')}</span></div>
     </div>
   </section>
   ${p.best ? `<h3>${L('รอบที่ดีที่สุด', 'Best run')}</h3><ul class="mm-runs best">${runRow(p.best)}</ul>` : ''}

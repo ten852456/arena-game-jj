@@ -75,6 +75,8 @@ let replay: ReplayRecord | null = null;
 let busy = false;
 // ---------- audio cues (music per screen, one-shot voice/sfx when a screen is entered) ----------
 let shownView: View | null = null;
+/** the last fight was close (winner at ≤10% HP): the result screen says so out loud */
+let lastClose = false;
 let lastShopDay = 0;
 let welcomed = false;
 let heroPrompted = false;
@@ -99,6 +101,7 @@ function onEnterView(v: View) {
     }
   } else if (v === 'result') {
     if (last?.won) music('victory');
+    if (lastClose) voice('close_fight');
   } else if (v === 'lastchance') {
     sfx('last_chance');
     voice('last_chance');
@@ -854,6 +857,7 @@ function noteFight(r: R.RunState, f: FightResponse, build: Build, day: number) {
   const en = withLang('en', line);
   const x = th.x;
   const comeback = x.moments.some((y) => y.kind === 'comeback' && y.side === 0);
+  lastClose = x.close;
   const score = (f.won ? 50 : 0) + (x.close ? 30 : 0) + (comeback ? 40 : 0) + day;
   M.addFightNote(r.id, { day, won: f.won, opp: f.opponent.name, fightId: f.fightId, close: x.close, score, text: th.text, textEn: en.text });
 }
