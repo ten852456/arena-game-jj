@@ -48,13 +48,14 @@ Two Claude sub-agents were still running in git worktrees of the main repo `C:/U
 (`git worktree list` shows them under `.claude/worktrees/`). They may have committed, half-finished, or nothing:
 - **LI** `agent-a21357200f95d11ca` (branch `worktree-agent-a21357200f95d11ca`): port the grid's Thai/English switch to the **list**
   (src/i18n.ts, client/lang.ts, i18n_en.ts, wrap every UI string in `L()`, header TH/EN switch, voice follows language).
-- **D2** `agent-a9230cd191db33b97` (branch `worktree-agent-a9230cd191db33b97`): Codex art for the redesign: `img/bg-home-wide`,
-  `img/bg-game-wide`, `img/bg-panel`, `img/rotate-phone`, `img/skills/<id>.webp` (26 skill icons), `img/arch/<arch>.webp`, typed paths in `src/client/assets.ts`.
+- **D2** (art) is **done and merged** into `ten852456/mochi-list-v2`: `img/bg-home-wide`, `img/bg-game-wide`, `img/bg-panel`,
+  `img/rotate-phone`, `img/skills/<id>.webp` (26), `img/arch/<arch>.webp` (5); `src/client/assets.ts` has `IMAGES.bgHomeWide`,
+  `IMAGES.bgGameWide`, `IMAGES.bgPanel`, `IMAGES.rotatePhone`, `skillIcon(id)`, `archIcon(arch)`, `ARCH_COLORS`. Not used by the UI yet.
 For each: `git -C <worktree> log --oneline -3` and `git -C <worktree> status`. If committed and checks pass, merge into
 `ten852456/mochi-list-v2`. If unfinished, finish the task yourself from the description above.
 
 ## Next work, in order
-1. **Finish/merge LI (i18n for list) and D2 (art).**
+1. **Finish/merge LI (i18n for list).** D2 art is merged; use it in step 2 (and copy `src/client/public/assets/img/{skills,arch}` + the bg images to the grid branch).
 2. **UI redesign from the product owner's feedback (list first, then port to grid).** His words, summarised:
    - The current UI does not work. On **PC it must not be a single vertical column**: design a **landscape, one-screen layout with no page
      scrolling** (e.g. arena/fight canvas + my skill list/build + shop + timeline/bonus panel side by side; panels may scroll inside if needed).
