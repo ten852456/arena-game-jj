@@ -9,8 +9,9 @@ import { SKILLS, nodeOf } from '../../sim/skills';
 import type { Offer, RunState } from '../../sim/run';
 import { upgradeOf } from '../../sim/run';
 import type { Bonus } from '../../sim/types';
+import { showPutHere } from './chains';
 
-const ICON: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '▲', trigger: '⚡' };
+const ICON: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '✦', trigger: '⚡' };
 
 /** row index → labels for offer o */
 export function hintsFor(r: RunState, o: Offer): Map<number, string[]> {
@@ -42,6 +43,7 @@ export function showHints(root: HTMLElement, r: RunState | null, i: number) {
   root.querySelectorAll('.skillrow.hl').forEach((el) => el.classList.remove('hl'));
   root.querySelectorAll('.sk-hint').forEach((el) => el.remove());
   root.querySelectorAll('.card.offer.hinting').forEach((el) => el.classList.remove('hinting'));
+  showPutHere(root, r, i);
   const o = i >= 0 ? r?.shop[i] : null;
   if (!r || !o) return;
   root.querySelector(`.card.offer[data-tip="s:${i}"]`)?.classList.add('hinting');

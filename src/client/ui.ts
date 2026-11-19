@@ -18,6 +18,7 @@ import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
 import { resetHints, showHints } from './shop/hints';
 import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
+import { bindChainResize, chainDirs, chainPanelHTML, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, type Dir } from './shop/chains';
 import { music, sfx, voice } from './audio';
 import { IMAGES, skillIcon, archIcon } from './assets';
 import { L } from '../i18n';
@@ -162,13 +163,13 @@ function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
 }
 
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
-function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, on: Set<number> | null = null, haste = 0) {
+function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
   const mark = k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : '';
-  return `<span class="nm">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small>${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on)}`;
+  return `<span class="nm">${nodeOf(k).name} <small>Lv${lvOf(k.v)}</small>${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
 }
 
 // ---------- connect bonuses ----------
-const BONUS_ICON: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '▲', trigger: '⚡' };
+const BONUS_ICON: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '✦', trigger: '⚡' };
 const targetName = (t: string) =>
   t.startsWith('arch:') ? L(`skill สาย${ARCH_NAME[t.slice(5) as 'tank']}`, `a ${ARCH_NAME[t.slice(5) as 'tank']} skill`) : SKILLS[t]?.name ?? t;
 function bonusEffect(b: Bonus, lv: number) {
@@ -190,7 +191,7 @@ const bonusText = (b: Bonus, lv: number) =>
  * Small chips for connect bonuses. on = active ones (null = not in the list yet).
  * can = for shop offers: bonuses an owned skill could switch on.
  */
-function bonusChips(bonus: Bonus[], lv: number, on: Set<number> | null, can: Set<number> | null = null) {
+function bonusChips(bonus: Bonus[], lv: number, on: Set<number> | null, can: Set<number> | null = null, dir: (bi: number) => Dir = () => 'any') {
   if (!bonus.length) return '';
   return `<span class="bonus-row">${bonus
     .map((b, bi) => {
@@ -202,35 +203,18 @@ function bonusChips(bonus: Bonus[], lv: number, on: Set<number> | null, can: Set
             ? `<div class="muted small">${L('คุณมี skill ที่เปิดโบนัสนี้ได้ วางให้ติดกัน', 'You own a skill that switches this on: put them next to each other')}</div>`
             : `<div class="muted small">${L('ยังไม่ทำงาน: วาง skill ที่ตรงเงื่อนไขไว้ช่องบนหรือล่าง', 'Not active: put a matching skill in the slot above or below')}</div>`
       }`;
-      return `<span class="bchip ${st}" data-ttxt="${esc(tip)}">🔗${BONUS_ICON[b.e]} ${esc(targetName(b.t))}</span>`;
+      return partnerChip(b, lv, st, st === 'on' ? dir(bi) : 'any', tip);
     })
     .join('')}</span>`;
 }
 
-/** Panel listing every connect bonus that is on right now: which skill, from which neighbour, what it adds. */
-function bonusPanel(skills: SkillInstance[], act: ReturnType<typeof activeBonuses>) {
-  const total = skills.reduce((n, k) => n + (k.bonus?.length ?? 0), 0);
-  const where = (from: number, to: number) => (to < from ? L('ช่องบน', 'above') : L('ช่องล่าง', 'below'));
-  const items = act
-    .map((a) => {
-      const k = skills[a.from];
-      const lv = lvOf(k.v);
-      const by = a.to.map((j) => `<b>${nodeOf(skills[j]).name}</b> <small class="muted">(${where(a.from, j)})</small>`).join(L(' และ ', ' and '));
-      return `<li class="bp-item bp-${a.b.e}">
-        <span class="bp-icon" aria-hidden="true">${BONUS_ICON[a.b.e]}</span>
-        <span class="bp-text"><b>${nodeOf(k).name}</b> <small>Lv${lv}</small>: ${bonusEffect(a.b, lv)}<br><small class="muted">${L('เปิดโดย', 'switched on by')} ${by}</small></span>
-      </li>`;
-    })
-    .join('');
-  return `<aside class="bonus-panel" aria-label="${L('โบนัสเชื่อมต่อที่ทำงาน', 'Active connect bonuses')}">
-    <div class="bp-h">${L('🔗 โบนัสเชื่อมต่อที่ทำงาน', '🔗 Active connect bonuses')} <span class="bp-count">${act.length}/${total}</span></div>
-    ${act.length ? `<ul class="bp-list">${items}</ul>` : `<p class="muted small">${L(
-      'ยังไม่มีโบนัสทำงาน · ดูชิป 🔗 ใต้แต่ละ skill แล้วลาก ⠿ (หรือกด ▲▼) จัดให้ skill ที่ตรงเงื่อนไขอยู่ติดกัน (ช่องบนหรือล่าง)',
-      'No bonus is active yet · check the 🔗 chips under each skill, then drag ⠿ (or press ▲▼) so matching skills sit next to each other (above or below)',
-    )}</p>`}
-    ${act.length && total > act.length ? `<p class="muted small">${L(`อีก ${total - act.length} โบนัสยังไม่ทำงาน`, `${total - act.length} more bonuses are not active`)}</p>` : ''}
-  </aside>`;
-}
+/** tooltip of an offer's own connect bonus (shop card "pairs with" chips) */
+const offerTip = (b: Bonus, owned: boolean) =>
+  `<div class="tt-h"><b>${L('🔗 โบนัสเชื่อมต่อ', '🔗 Connect bonus')}</b></div><div class="desc">${bonusText(b, 1)}</div>${
+    owned
+      ? `<div class="ok">${L('✓ คุณมี skill ที่เปิดโบนัสนี้ได้ วางให้ติดกัน', '✓ You own a skill that switches this on: put them next to each other')}</div>`
+      : `<div class="muted small">${L('ยังไม่มี skill ที่ตรงเงื่อนไข', 'You don’t own a matching skill yet')}</div>`
+  }`;
 
 // ---------- skill tree window ----------
 function treeNode(id: string, v: Variant, cur: string | null, offer: string | null) {
@@ -299,7 +283,7 @@ function buildList(b: Build) {
   return `<ol class="build readonly">${b.skills
     .map((k, i) => {
       const t = bonusTotals(b.skills, i, act);
-      return `<li class="arch-${SKILLS[k.id].arch}"><img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste)}</div></li>`;
+      return `<li class="arch-${SKILLS[k.id].arch}"><img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(b.skills, i, act))}</div></li>`;
     })
     .join('')}</ol>`;
 }
@@ -368,6 +352,8 @@ function render() {
   hideTip();
   $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML();
   toast = '';
+  if (view === 'shop' && run) syncChains($panel, run);
+  else resetChains();
   if (view === 'shop') mountScout();
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'title') {
@@ -501,17 +487,7 @@ function previewOrder(order: number[]) {
   if (!r || !el) return;
   const skills = order.map((i) => r.skills[i]).slice(0, R.slotsOf(r));
   el.innerHTML = timelineHTML(skills, r.hero);
-  const lifted = $panel.querySelector<HTMLElement>('.skillrow.lifted');
-  const dragged = lifted ? Number(lifted.dataset.i) : -1;
-  const position = order.indexOf(dragged);
-  const neighbours = new Set<number>();
-  for (const link of activeBonuses(skills)) {
-    if (link.from === position) link.to.forEach((i) => neighbours.add(order[i]));
-    else if (link.to.includes(position)) neighbours.add(order[link.from]);
-  }
-  $panel.querySelectorAll<HTMLElement>('.skillrow[data-i]').forEach((row) => {
-    row.classList.toggle('synergy-preview', neighbours.has(Number(row.dataset.i)));
-  });
+  dragPreview($panel, r, order);
 }
 
 /** Drop from the drag: move skill `from` to position `to`. */
@@ -549,21 +525,19 @@ function renderShop() {
         <div class="offer-top">${lockBtn}<span class="offer-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="">${node.name}</div>
         <div class="offer-meta">${o.v ? `<span class="up">⬆ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}</div>
-        <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${o.v ? '' : bonusChips(o.bonus ?? [], 1, null, can)}</div>
+        <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
       </div>`;
     })
     .join('');
   const act = activeBonuses(r.skills);
-  /** is there an active bonus between row i and row i+1 (either direction)? */
-  const linked = (i: number) => act.some((a) => (a.from === i && a.to.includes(i + 1)) || (a.from === i + 1 && a.to.includes(i)));
   const rows = r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i, act);
       const row = `<li class="skillrow arch-${SKILLS[k.id].arch}" data-tip="g:${i}" data-i="${i}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
-        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste)}</div>
+        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}</div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
@@ -571,7 +545,7 @@ function renderShop() {
           <button class="sell" data-a="sell" data-i="${i}">${L('ขาย', 'Sell')} +${R.sellPrice(k)}</button>
         </div>
       </li>`;
-      const gap = i < r.skills.length - 1 ? `<li class="linkgap${linked(i) ? ' on' : ''}" aria-hidden="true">${linked(i) ? L('🔗 เชื่อมต่อ', '🔗 linked') : ''}</li>` : '';
+      const gap = i < r.skills.length - 1 ? gapHTML(r.skills, i, act) : '';
       return row + gap;
     })
     .join('');
@@ -605,6 +579,7 @@ function renderShop() {
   <section class="sv-sec">
     <div class="sv-h"><h3>${L('skill ของคุณ', 'Your skills')} <span class="sv-count">${r.skills.length}/${slots}</span></h3>
       <span class="sv-hint">${L(`โบนัสเชื่อมต่อทำงาน ${act.length} อัน`, `${act.length} connect bonuses active`)}</span></div>
+    ${chainPanelHTML(r.skills, act)}
     <p class="sv-note">${L(
       'ลาก <b>⠿</b> เพื่อจัดลำดับ (หรือกด ▲▼): skill ที่อยู่ติดกัน (บน/ล่าง) เปิด 🔗 โบนัสเชื่อมต่อของกันและกัน · ถ้าครบเวลาพร้อมกัน ตัวบนทำงานก่อน',
       'Drag <b>⠿</b> to reorder (or press ▲▼): skills next to each other (above/below) switch on each other’s 🔗 connect bonuses · when two are ready at once, the upper one goes first',
@@ -620,7 +595,6 @@ function renderShop() {
           'Run by the real fight engine against a dummy that never hits back · enemy freezes and slows make skills fire later than this',
         )}</p>
       </div>
-      ${bonusPanel(r.skills, act)}
     </div>
   </section>
 
@@ -1405,6 +1379,7 @@ export function startUI(st: Stage) {
   });
   $panel.addEventListener('pointerdown', onPointerDown);
   initDrag($panel, { onPreview: previewOrder, onDrop: dropSkill });
+  bindChainResize($panel);
   window.addEventListener('pointermove', onHover);
   $panel.addEventListener('pointerleave', hideTip);
   // language switch: re-label the fighters, re-render the panel, and re-write the fight log in the new language

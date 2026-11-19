@@ -8,6 +8,7 @@ import { initLang, mountLangSwitch, onLang } from './lang';
 import { getLang, L } from '../i18n';
 import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMuted } from './audio';
 import './style.css';
+import './chain.css';
 
 initLang();
 // voice lines follow the game language (English UI → English announcer)
