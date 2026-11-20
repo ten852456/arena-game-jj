@@ -1,7 +1,8 @@
-// scratch: prints the 8-line skill tables (live numbers) as markdown for docs/SKILL_TREE.md
-import { HEROES } from '../../src/sim/heroes';
-import { LINE_ICON, LINE_NAME, SKILL_LIST, SKILL_ROLE, chipsOf, type Variant } from '../../src/sim/skills';
-import { LINES } from '../../src/sim/types';
+// Prints the 8-line skill tables, hero passives and ultimates (live numbers) as markdown for docs/SKILL_TREE.md.
+// npx tsx scripts/skill-doc.ts
+import { HEROES } from '../src/sim/heroes';
+import { LINE_ICON, LINE_NAME, SKILL_LIST, SKILL_ROLE, chipsOf, type Variant } from '../src/sim/skills';
+import { LINES } from '../src/sim/types';
 
 const chip = (id: string, v: Variant) => {
   const d = SKILL_LIST.find((x) => x.id === id)!;

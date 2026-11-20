@@ -39,7 +39,7 @@ export const MAX_TICKS = 90 * TPS;
  * Base HP per day, tuned with `npm run balance` so fights last ≈10–13s on days 1–3,
  * 15–22s on days 4–7 and 23–30s on day 8+ (bot damage per second grows about linearly with the day).
  */
-const HP_BY_DAY = [15, 20, 28, 44, 57, 68, 80, 127, 135, 156, 176, 198, 220];
+const HP_BY_DAY = [15, 20, 26, 44, 57, 68, 80, 127, 135, 156, 176, 198, 220];
 /** HP added per day after the table */
 const HP_LATE_STEP = 60;
 /** tuning.ts multiplier of the base HP on a day */
@@ -154,7 +154,7 @@ interface Fighter {
   /** ultimate: level from the build, fired yet, trigger counters */
   ultLv: number;
   ultDone: boolean;
-  /** shield gained this fight (not the start shield) */
+  /** shield gained this fight (the start shield counts) */
   shieldGot: number;
   /** direct hits taken (landed) */
   hitsTaken: number;
@@ -228,12 +228,13 @@ const emptyStat = (): BlockStat => ({ c: 0, tc: 0, d: 0, bd: 0, bf: 0, h: 0, sh:
 function makeFighter(b: Build, side: Side, day: number): Fighter {
   const hooks = HEROES_BY_ID[b.hero]?.hooks ?? {};
   const maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
+  const start = hooks.startShield ? hooks.startShield(0, maxHp) : 0;
   return {
     side, hero: b.hero, hooks, blocks: makeBlocks(b),
-    hp: maxHp, maxHp, shield: hooks.startShield ? hooks.startShield(0, maxHp) : 0,
+    hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
     burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
-    ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
+    ultLv: ultLevel(b), ultDone: false, shieldGot: start, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
     freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat),
     immuneUntil: 0, pendingReact: [], lastFire: 0,

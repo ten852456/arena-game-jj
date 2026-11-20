@@ -324,10 +324,10 @@ const BASE_LIST: SkillDef[] = [
   }),
   // tech: answers 🔥 ☠ (shakes off a burn / poison stack)
   def('sidestep', 'dodge', {
-    '': N('ก้าวหลบ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 1, dot: true }, hit(3)]),
-    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 2, dot: true }, hit(3)], 'ล้างดีบัฟ'),
+    '': N('ก้าวหลบ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(3)]),
+    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(3)], 'ล้างดีบัฟ'),
     a1: N('สะบัดหมด', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
-    a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 2, dot: true }, { k: 'heal', n: 4 }]),
+    a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, { k: 'heal', n: 4 }]),
     b: N('เงาลวง', 6, [{ k: 'dodge', n: 2 }, hit(4)], 'หลบมาก'),
     b1: N('ร่างเงา', 6, [{ k: 'dodge', n: 2 }, hit(7)]),
     b2: N('เงาสวน', 6, [{ k: 'dodge', n: 2 }, hit(3, { perDodge: 2 })]),
@@ -366,13 +366,13 @@ const BASE_LIST: SkillDef[] = [
   // ======================= ❤ heal =======================
   // core: heal + grow
   def('feast', 'heal', {
-    '': N('กินฟื้นแรง', 5, [{ k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
-    a: N('กินอิ่ม', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
-    a1: N('งานเลี้ยง', 5.5, [{ k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
-    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
-    b: N('กินโต', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
-    b1: N('กินไม่หยุด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 3 }, hit(3)]),
-    b2: N('กินเลือด', 5.5, [{ k: 'heal', n: 2 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
+    '': N('กินฟื้นแรง', 5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
+    a: N('กินอิ่ม', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
+    a1: N('งานเลี้ยง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
+    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
+    b: N('กินโต', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
+    b1: N('กินไม่หยุด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 3 }, hit(3)]),
+    b2: N('กินเลือด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
   }),
   // payoff: the longer it lasts, the harder it hits
   def('train', 'heal', {
@@ -417,10 +417,10 @@ const BASE_LIST: SkillDef[] = [
   }),
   // tech: answers ❤ (cuts healing) and 🌪 (many small stacks: a cleanse removes only one)
   def('scorch', 'burn', {
-    '': N('ไฟแผดเผา', 6, [{ k: 'burn', dps: 1, secs: 5, stacks: 2 }, { k: 'wound', pct: 0.5, secs: 5 }]),
-    a: N('ไฟเผาแผล', 6, [{ k: 'burn', dps: 2, secs: 5, stacks: 2 }, { k: 'wound', pct: 0.5, secs: 6 }], 'ตัดการฟื้น'),
-    a1: N('ไฟต้องสาป', 6, [{ k: 'burn', dps: 2, secs: 6, stacks: 2 }, { k: 'wound', pct: 0.7, secs: 6 }]),
-    a2: N('ไฟซึม', 6, [{ k: 'burn', dps: 1, secs: 8, stacks: 3 }, { k: 'wound', pct: 0.5, secs: 6 }]),
+    '': N('ไฟแผดเผา', 6, [{ k: 'burn', dps: 1, secs: 5, stacks: 2 }, { k: 'wound', pct: 0.3, secs: 5 }]),
+    a: N('ไฟเผาแผล', 6, [{ k: 'burn', dps: 2, secs: 5, stacks: 2 }, { k: 'wound', pct: 0.35, secs: 6 }], 'ตัดการฟื้น'),
+    a1: N('ไฟต้องสาป', 6, [{ k: 'burn', dps: 2, secs: 6, stacks: 2 }, { k: 'wound', pct: 0.5, secs: 6 }]),
+    a2: N('ไฟซึม', 6, [{ k: 'burn', dps: 1, secs: 8, stacks: 3 }, { k: 'wound', pct: 0.35, secs: 6 }]),
     b: N('ไฟกระจาย', 5, [{ k: 'burn', dps: 1, secs: 4, stacks: 3 }], 'กองเล็กหลายกอง'),
     b1: N('ทะเลเพลิง', 5, [{ k: 'burn', dps: 1, secs: 5, stacks: 4 }]),
     b2: N('ไฟลามทุ่ง', 5, [{ k: 'burn', dps: 2, secs: 4, stacks: 3 }]),
@@ -549,13 +549,13 @@ const BASE_LIST: SkillDef[] = [
   }),
   // ======================= hero uniques (count for their hero's line) =======================
   def('execute', 'hit', {
-    '': N('ปลิดชีพ', 5, [hit(10, { exec: [0.5, 1.5] })]),
-    a: N('ประหาร', 5, [hit(11, { exec: [0.5, 1.6] })], 'ปิดเกม'),
-    a1: N('เพชฌฆาต', 5, [hit(11, { exec: [0.35, 2.2] })]),
-    a2: N('ประหารทะลุ', 5, [hit(11, { exec: [0.5, 1.5], pierce: 1 })]),
-    b: N('เชือดเร็ว', 4, [hit(8, { exec: [0.5, 1.4] })], 'ใช้บ่อย'),
-    b1: N('เชือดไว', 3, [hit(7, { exec: [0.5, 1.4] })]),
-    b2: N('เชือดดูดเลือด', 4, [hit(8, { exec: [0.5, 1.4], leech: 0.3 })]),
+    '': N('ปลิดชีพ', 5, [hit(10, { sure: true, exec: [0.5, 1.5] })]),
+    a: N('ประหาร', 5, [hit(11, { sure: true, exec: [0.5, 1.6] })], 'ปิดเกม'),
+    a1: N('เพชฌฆาต', 5, [hit(11, { sure: true, exec: [0.35, 2.2] })]),
+    a2: N('ประหารทะลุ', 5, [hit(11, { sure: true, exec: [0.5, 1.5], pierce: 1 })]),
+    b: N('เชือดเร็ว', 4, [hit(8, { sure: true, exec: [0.5, 1.4] })], 'ใช้บ่อย'),
+    b1: N('เชือดไว', 3, [hit(7, { sure: true, exec: [0.5, 1.4] })]),
+    b2: N('เชือดดูดเลือด', 4, [hit(8, { sure: true, exec: [0.5, 1.4], leech: 0.3 })]),
   }, 'assassin'),
   def('flurry', 'dodge', {
     '': N('พายุดาบ', 5, [hit(2, { times: 3 })]),

@@ -164,7 +164,7 @@ export const HEROES: HeroDef[] = [
     hooks: { maxHp: hpOf('knight'), startShield: (n, max) => n + Math.round(max * T['knight.shield']) },
     ult: {
       name: 'ป้อมจันทรา',
-      get trigger() { return both((lv) => `ได้โล่รวม ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
+      get trigger() { return both((lv) => `ได้โล่รวม (นับโล่เริ่มต้น) ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
       get effect() { return both((lv) => `ตีแรงเท่าโล่ที่มี ×${r1(ultPow('knight', lv))} (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) หลบไม่ได้ (โล่ไม่หาย)`); },
     },
   },

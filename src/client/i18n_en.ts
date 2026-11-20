@@ -153,7 +153,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     style: 'Shield wall: stack a thick shield, then Shield Slam hits back harder the more shield you have',
     ult: {
       name: 'Moon Fortress',
-      get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield`); },
+      get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield (start shield counts)`); },
       get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
     },
   },

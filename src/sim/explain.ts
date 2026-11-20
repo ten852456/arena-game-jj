@@ -316,7 +316,7 @@ export function explain(
     if (!best || best.total <= 0) return '';
     const parts = [
       best.reflect ? L(`สะท้อนหนาม ${best.reflect}`, `thorns ${best.reflect}`) : '',
-      best.burn ? L(`ไฟ ${best.burn}`, `burn ${best.burn}`) : '',
+      best.burn ? L(`ไฟ/พิษ ${best.burn}`, `burn/poison ${best.burn}`) : '',
     ].filter(Boolean);
     return `${best.name} ${best.total} (${pct(best.total, total)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
   };
@@ -349,6 +349,8 @@ export function explain(
       : (r.sides?.[s].ultLv ?? 0) > 0
         ? L(`${N[s]} ปลดแล้วแต่ไม่ได้ใช้`, `${N[s]} unlocked but did not fire`)
         : '';
+  /** the effect text of side s's ultimate at the level it fired */
+  const ultEffect = (s: Side) => (HEROES_BY_ID[builds[s].hero]?.ult.effect ?? '').split(' · Lv2 ')[T[s].ultLv >= 2 ? 1 : 0] ?? '';
   const ults = [ultTxt(me), ultTxt(foe)].filter(Boolean);
   if (ults.length) fact('ult', L(`ท่าไม้ตาย: ${ults.join(' · ')}`, `Ultimates: ${ults.join(' · ')}`));
   if (my.dodged || their.dodged)
@@ -524,8 +526,8 @@ export function explain(
       add(
         12,
         L(
-          `${N[foe]}ใช้ท่าไม้ตาย ${ultName(foe)} ที่ ${sec(their.ultT)} วิ (${HEROES_BY_ID[builds[foe].hero]?.ult.effect ?? ''})`,
-          `${N[foe]}fired the ultimate ${ultName(foe)} at ${sec(their.ultT)}s (${HEROES_BY_ID[builds[foe].hero]?.ult.effect ?? ''})`,
+          `${N[foe]}ใช้ท่าไม้ตาย ${ultName(foe)} ที่ ${sec(their.ultT)} วิ (${ultEffect(foe)})`,
+          `${N[foe]}fired the ultimate ${ultName(foe)} at ${sec(their.ultT)}s (${ultEffect(foe)})`,
         ),
         'ult',
       );
