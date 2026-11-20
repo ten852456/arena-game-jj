@@ -576,6 +576,7 @@ export class CombatScene extends Phaser.Scene {
           rage: [L('คลั่ง!', 'Rage!'), '#ff4444'],
           dodge: [`${L('หลบ', 'Dodge')} ${e.value}`, '#b6f0c8'],
           evade: [L('หลบได้!', 'Dodged!'), '#b6f0c8'],
+          sure: [L('👁 หลบไม่ได้!', '👁 Undodgeable!'), '#ffe08a'],
           poison: [L('ติดพิษ', 'Poisoned'), '#c49cff'],
           haste: [`${L('เร่ง', 'Haste')} +${e.value}%`, '#ffd166'],
           wound: [L('แผลลึก', 'Wounded'), '#ff7b5c'],

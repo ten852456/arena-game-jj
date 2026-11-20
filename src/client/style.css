@@ -65,6 +65,9 @@ button.on { border-color: var(--accent); color: var(--accent); }
 .tag { font-size: 12px; color: var(--muted); }
 .desc { font-size: 13px; color: #c9d1d9; }
 .mark { font-size: 11px; background: #3b2f5c; color: #d9c8ff; padding: 1px 6px; border-radius: 10px; font-weight: 400; }
+.mark.ult-piece { background: #ffe08a; color: #4a3200; font-weight: 700; margin-left: 4px; }
+.mark.ult-piece.ult-up { background: #ffb347; }
+.mark.ult-aff { margin-left: 4px; opacity: 0.85; }
 .combo { font-size: 12px; color: var(--accent); }
 
 .arch-tank { border-left-color: var(--tank) !important; }

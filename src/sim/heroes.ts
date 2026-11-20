@@ -295,6 +295,18 @@ export function inLine(hero: string, id: string): boolean {
   const line = HEROES_BY_ID[hero]?.line;
   return !!d && !!line && d.line === line && (!d.hero || d.hero === hero);
 }
+/**
+ * What buying a shop offer does to the ultimate: pieces gained (0 / 1) and the ult level after it.
+ * A new skill of the line is +1; an upgrade to Lv3 is +1 only while no line skill is Lv3 yet. (shop labels, play CLI)
+ */
+export function ultGain(b: Pick<Build, 'hero' | 'skills'>, offer: { id: string; v: string }): { pieces: number; lv: number } {
+  if (!inLine(b.hero, offer.id)) return { pieces: 0, lv: ultLevel(b) };
+  const after = offer.v === ''
+    ? [...b.skills, { id: offer.id, v: '' }]
+    : b.skills.map((k) => (k.id === offer.id ? { ...k, v: offer.v } : k));
+  const next = { hero: b.hero, skills: after };
+  return { pieces: ultPieces(next) - ultPieces(b), lv: ultLevel(next) };
+}
 /** 0 = locked, 1 = 3 pieces, 2 = 5 pieces */
 export const ultLevel = (b: Pick<Build, 'hero' | 'skills'>) => {
   const p = ultPieces(b);

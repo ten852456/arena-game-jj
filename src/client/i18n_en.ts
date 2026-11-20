@@ -274,7 +274,7 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
     title: 'Pick 1 of 3 heroes',
     body: [
       'Skills come in 8 lines: <b>⚔ Hit · 💨 Dodge · 🛡 Shield · ❤ Heal · 🔥 Burn · ☠ Poison · ❄ Ice · 🌪 Wind</b>. Each line beats 2 lines and loses to 2 (a small edge, not a lock), e.g. shields block hits, but burn and poison ignore shields',
-      'Each hero has one main line · 3 pieces of it unlock the hero’s <b>★ Ultimate</b> (5 pieces = Lv2 · a Lv3 skill counts as 2), which fires by itself once per fight',
+      'Each hero has one main line · 3 pieces of it unlock the hero’s <b>★ Ultimate</b> (5 pieces = Lv2 · your first Lv3 skill of the line counts +1), which fires by itself once per fight · skills of your main line are also stronger (line mastery)',
       'See every hero in the <b>Hero Hall</b> in town',
     ],
   },

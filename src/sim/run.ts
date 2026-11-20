@@ -62,7 +62,7 @@ export interface LogEntry {
   fightId?: string;
 }
 
-/** Saved-run format version: runs saved with another version are dropped by the client (v8 = sim v12 lines). */
+/** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
 export const RUN_VERSION = 9;
 
 export interface RunState {

@@ -567,6 +567,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           foe.hooks.onDodge?.(hookApi(foe));
           return -1;
         }
+        if (o.sure && foe.dodge > 0) emit({ type: 'status', side: foe.side, status: 'sure', value: foe.dodge });
         f.bigHit = Math.max(f.bigHit, dmg);
         foe.hitsTaken++;
         f.hooks.onLanded?.(hookApi(f));

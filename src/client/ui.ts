@@ -1,6 +1,7 @@
 import { randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
-import { HEROES, HEROES_BY_ID, ULT_PIECES, ultLevel, ultPieces } from '../sim/heroes';
+import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultGain, ultLevel, ultPieces } from '../sim/heroes';
+import { T as TUNE } from '../sim/tuning';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
 import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
@@ -167,7 +168,18 @@ const playerName = () => (fetchStore(NAME_KEY) || 'ผู้เล่น').slice
 // ---------- helpers ----------
 /** "★ ท่าไม้ตาย เงาจันทร์: when · what" for hero cards */
 function ultHTML(h: (typeof HEROES)[number]) {
-  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · Lv3 นับ 2`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · a Lv3 skill counts 2`)}): ${h.ult.trigger} → ${h.ult.effect}`;
+  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · skill สายนี้ Lv3 ตัวแรกนับ +1 · skill สายนี้แรงขึ้น ${Math.round((TUNE['line.affinity'] - 1) * 100)}% (ถนัดสาย)`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · your first Lv3 skill of this line counts +1 · skills of this line are ${Math.round((TUNE['line.affinity'] - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
+}
+/** shop card tag: "★ +1 ชิ้น" when the offer is an ult piece ("ปลด Lv1!" when it unlocks a level), "ถนัด" for other in-line cards */
+function ultTagHTML(r: R.RunState, o: R.Offer) {
+  if (!inLine(r.hero, o.id)) return '';
+  const b = R.toBuild(r);
+  const g = ultGain(b, o);
+  const aff = `${L('ถนัดสาย', 'line mastery')} +${Math.round((TUNE['line.affinity'] - 1) * 100)}%`;
+  if (!g.pieces) return `<span class="mark ult-aff" title="${esc(aff)}">${L('ถนัด', 'mastery')}</span>`;
+  const up = g.lv > ultLevel(b);
+  const txt = up ? L(`★ +1 ชิ้น · ปลด Lv${g.lv}!`, `★ +1 piece · ult Lv${g.lv}!`) : L('★ +1 ชิ้น', '★ +1 piece');
+  return `<span class="mark ult-piece${up ? ' ult-up' : ''}" title="${esc(`${L('ชิ้นท่าไม้ตาย', 'ultimate piece')} · ${aff}`)}">${txt}</span>`;
 }
 /** shop: "★ เงาจันทร์ 2/3" ult piece counter for the run's build */
 function ultProgressHTML(r: R.RunState) {
@@ -269,7 +281,7 @@ function treeHTML() {
   const { id, cur, offer } = treeOpen;
   const d = SKILLS[id];
   const branch = (b: 'a' | 'b') => `<div class="tbranch">
-      <div class="tb-h">${L('สาย', 'Branch')} ${b.toUpperCase()}: ${d.tree[b].style ?? ''}</div>
+      <div class="tb-h">${L('ทาง', 'Branch')} ${b.toUpperCase()}: ${d.tree[b].style ?? ''}</div>
       <div class="tb-row">${treeNode(id, b, cur, offer)}<span class="tarrow" aria-hidden="true">→</span>
         <div class="tleaves">${treeNode(id, `${b}1` as Variant, cur, offer)}${treeNode(id, `${b}2` as Variant, cur, offer)}</div></div>
     </div>`;
@@ -277,7 +289,7 @@ function treeHTML() {
     <div class="modal-h"><b>${L('ต้นไม้ skill', 'Skill tree')}: ${d.name}</b> <span class="muted small">${lineLabel(d.line)}${d.hero ? L(' · เฉพาะฮีโร่', ' · hero only') : ''}</span>
       <button class="small ghost" data-a="treeClose">${L('ปิด ✕', 'Close ✕')}</button></div>
     <p class="muted small">${L(
-      'Lv1 → เลือกได้ 1 ใน 2 สายที่ Lv2 → แต่ละสายแยกอีก 2 ทางที่ Lv3 · ร้านจะสุ่มเสนอ 1 ทางของขั้นถัดไปให้ ซื้อแล้วย้อนกลับไม่ได้',
+      'Lv1 → เลือกได้ 1 ใน 2 ทางที่ Lv2 → แต่ละทางแยกอีก 2 ทางที่ Lv3 · ร้านจะสุ่มเสนอ 1 ทางของขั้นถัดไปให้ ซื้อแล้วย้อนกลับไม่ได้',
       'Lv1 → pick 1 of 2 branches at Lv2 → each branch splits into 2 more at Lv3 · the shop offers 1 random step of the next level; once bought, there is no going back',
     )}</p>
     <div class="tree">
@@ -304,7 +316,7 @@ function tipBody(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, note = '
   const branch = k.v.length >= 1 ? d.tree[k.v[0] as 'a' | 'b'].style : '';
   return `<div class="tt-h line-${d.line}"><b>${node.name}</b> <small>Lv${lvOf(k.v)}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}
       ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}</div>
-    <div class="muted small">${lineLabel(d.line)}${SKILL_ROLE[d.id] ? ` · ${ROLE_NAME[SKILL_ROLE[d.id]]}` : ''}${branch ? L(` · สาย${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
+    <div class="muted small">${lineLabel(d.line)}${SKILL_ROLE[d.id] ? ` · ${ROLE_NAME[SKILL_ROLE[d.id]]}` : ''}${branch ? L(` · ทาง${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
     ${simpleTipHTML(k, on)}<div class="info-det">
     <div>${chipsHTML(k)}</div>
     <ul class="kwlist">${kws.map((kw) => `<li><b>${KEYWORDS[kw].icon} ${KEYWORDS[kw].name}</b> ${KEYWORDS[kw].desc}</li>`).join('')}</ul>
@@ -575,10 +587,10 @@ function wishCard(r: R.RunState) {
   const desc =
     kind === 'mark'
       ? L(`ทุกตัว Lv3 แล้ว: สุ่มใส่ <b>ตรา</b> ให้ 1 ใน ${pool} skill ที่ยังไม่มีตรา`, `All Lv3: adds a random <b>mark</b> to 1 of ${pool} unmarked skills`)
-      : L(`สุ่มอัปเกรด 1 ใน ${pool} skill ที่ยังไม่ Lv3 ขึ้นขั้นถัดไป (สุ่มสาย)`, `Upgrades 1 of ${pool} skills below Lv3 to the next level (random branch)`);
+      : L(`สุ่มอัปเกรด 1 ใน ${pool} skill ที่ยังไม่ Lv3 ขึ้นขั้นถัดไป (สุ่มทาง)`, `Upgrades 1 of ${pool} skills below Lv3 to the next level (random branch)`);
   const tip = `<div class="tt-h"><b>${L('🌙 พรจันทร์', '🌙 Moon Wish')}</b></div><div class="desc">${L(
     `ที่ใช้เงินเหลือ: จ่ายแพงกว่าการ์ดอัปเกรดปกติ แต่ไม่ต้องรอร้านสุ่มเจอ
-    เลือก skill และสายให้แบบสุ่ม (ช่องเดิม โบนัสเชื่อมต่อเดิม) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน
+    เลือก skill และทางอัปให้แบบสุ่ม (ช่องเดิม โบนัสเชื่อมต่อเดิม) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน
     · ราคาเริ่ม ${R.WISH_BASE} และแพงขึ้น +2 ทุกครั้งในวันเดียวกัน`,
     `For spare gold: costs more than a normal upgrade card, but you don't have to wait for the shop to roll one.
     It picks the skill and branch at random (same slot, same connect bonuses) · once every skill is Lv3 it adds a random mark instead
@@ -689,7 +701,7 @@ function renderShop() {
       return `<div class="card offer line-${d.line}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
         ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${node.name}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}</div>
+        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}${ultTagHTML(r, o)}</div>
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy'), price, poor)}</button>
       </div>`;
@@ -702,7 +714,7 @@ function renderShop() {
       const row = `<li class="skillrow line-${SKILLS[k.id].line}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
-        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}</div>
+        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L('skill สายหลักของฮีโร่: ตัวเลขทั้งหมดแรงขึ้น', 'a skill of your hero’s main line: all its numbers are stronger'))}">${L('ถนัด', 'mastery')} +${Math.round((TUNE['line.affinity'] - 1) * 100)}%</span>` : ''}</div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
@@ -1105,7 +1117,7 @@ function renderLastChance() {
     'You become a <b>half-spirit</b>: you come back with 1 HP, and one more loss ends the run. Pick one power',
   )}</p>
   <div class="heroes">
-    <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span class="lc-count">${awakenCount()}</span><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
+    <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span class="lc-count">${awakenCount()}</span><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มทาง A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
     <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Get 1 of 4 random marks, then pick a skill for it')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for a build with a clear main skill')}</span></button>
     <button class="hero" data-a="lc" data-i="supply"><b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${L('เงิน 8 และช่อง skill +1 ถาวร', '8 gold and +1 skill slot for good')}</span><span class="muted">${L('เหมาะกับ build ที่ยังขาดชิ้นสำคัญ', 'Good for a build still missing a key piece')}</span></button>
   </div>
@@ -1376,6 +1388,8 @@ function describe(e: CombatEvent): string | null {
           return `${who(e.side)} <b>${L('คลั่ง!', 'Rage!')}</b> ${L('พลังโจมตี', 'attack power')} +${e.value}`;
         case 'evade':
           return `&nbsp;&nbsp;${who(e.side)} ${L('หลบการตีได้', vb(e.side, 'dodges the hit', 'dodge the hit'))} 💨 (${L('เหลือ', 'left')} ${e.value})`;
+        case 'sure':
+          return `&nbsp;&nbsp;${who(e.side)} ${L('หลบไม่ได้: การตีนี้ไม่พลาด', vb(e.side, "can't dodge: this hit never misses", "can't dodge: this hit never misses"))} 👁`;
         case 'dodge':
           return `&nbsp;&nbsp;${who(e.side)} ${L('ได้แต้มหลบ', vb(e.side, 'has dodge', 'have dodge'))} 💨${e.value}`;
         case 'poison':

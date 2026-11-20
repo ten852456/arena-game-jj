@@ -56,6 +56,7 @@ export type StatusKind =
   | 'delay' // side = target, value = cooldown ticks pushed back (0 = resisted)
   | 'dodge' // side = self, value = dodge charges now (after gaining)
   | 'evade' // side = the fighter that dodged a hit, value = dodge charges left
+  | 'sure' // side = a fighter holding dodge charges hit by a 👁 hit that can't be dodged, value = dodge charges kept (sim v13)
   | 'poison' // side = target, value = total poison per second
   | 'haste' // side = self, value = percent faster cooldowns
   | 'wound'; // side = target, value = percent less healing
