@@ -4,6 +4,29 @@ Notes from research on 18 Nov 2026. Sources at the bottom.
 
 **Project name: Mochi Moon** (decided 19 Nov 2026). Art style: the mochi chibi critters from the layered template (mix-and-match parts, recolour by palette).
 
+## Game design and pitch (JaJoJi, 18 Nov 2026)
+
+Full documents: [onchain game design](hackathon/onchain-game-design.pdf) (14 pages) and [pitch deck](hackathon/pitch.pdf) (16 slides).
+
+**Pitch:** "Forge a build in ranked PvP, seal it onchain, and earn every time it carries someone else through a raid or the tower."
+A fully onchain GameFi auto-battler on Solana with MagicBlock Ephemeral Rollups (every shop roll and fight onchain, no gas, session keys, VRF seeds).
+
+**Direction (owner, 20 Nov 2026):** GameFi on the blockchain first. Real-money (USDC) flows are the plan; legal is not a blocker for design work.
+
+The loop:
+1. **Ranked Arena** (the game today, made ranked + onchain): pick 1 of 3 heroes, shop/fight days, season rank (Bronze → Legend). Doc draft: 8 wins / 20 HP (the live list build uses 10 wins).
+2. **Seal** a run with ≥3 wins: $1 USDC → a **Build Card** (hero, skills, variants, marks, record, author wallet; links to the run's onchain history; non-transferable in v1). Seal fee: 70% season pool, 30% treasury.
+3. **Save slots**: 3 free, 20 with the Premium Pass ($4.99/month; room and cosmetics, never power).
+4. **Build Library**: anyone borrows a sealed build for one raid attack or one tower climb. Protocol-set use fee by tier ($0.05 for 3–5 wins, $0.10 for 6–7, $0.25 full clear, ×2 for top-100 authors). Split 70% author / 20% raid+tower pools / 10% treasury. Anti-abuse: wash renting loses 30%, no re-sealing borrowed builds, rate limits, a build only in content at least as hard as its forge day, weekly payouts above a threshold.
+5. **Raid Boss** (weekly): shared HP, parties of 3 builds fight one after another, weekly rule twists, phases at 75/50/25%. 3 free attacks a day, then Raid Tickets.
+6. **Endless Tower**: party of 3 in relay, HP carries between floors (rest every 5), +6% per floor, mini-boss every 10, floors built from real ranked builds. 1 free climb a day, then Tower Keys.
+7. **Season prizes** (USDC, top 100 of Raid and Tower, funded only by fees): 15 / 10 / 7%, 3% each for 4–10, 0.6% for 11–50, 0.46% for 51–100; paid 7 days after the season after a bot check.
+8. **Farm + ticket market**: idle heroes on town landmarks (lumber, mine, shrine, ~8 h timers) → resources (account-bound) → craft Raid Tickets / Tower Keys (onchain tokens, 4 a day cap, expire each season) → sell for USDC (5% fee; sellers need Silver rank and a 7-day-old account).
+
+**4-week sprint:** W1 runs on an Ephemeral Rollup + session keys + VRF; W2 ranked matchmaking + Build Cards; W3 Build Library with paid use + Endless Tower 1–30; W4 public playtest + pitch. Before the sprint: port the combat sim to Rust and prove it matches TypeScript on thousands of fights; measure a fight's compute cost. After: Raid Boss, Farm, ticket market, Solana Mobile, mainnet.
+
+**Open team decisions (from the doc):** seal price and fee splits; Build Cards tradable later?; pass price and slot counts; ticket rules; prize split; tower relay (one after another vs all 3 at once); list or grid goes onchain; sprint start date (late Jan–Feb 2027).
+
 ## Goal
 
 Enter **Colosseum Eternal**, Colosseum's perpetual hackathon (https://colosseum.com/eternal), with this game.
