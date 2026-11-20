@@ -34,6 +34,9 @@ Matchmaking:
 2. Rating window ±200, then ±350, then ±500; the first window with candidates wins; random pick among the 5 closest.
 3. No candidates → AI opponent with a tier: days 1–2 `easy`; then `hard` on a 3+ win streak or rating ≥ 1120;
    `easy` on a 2+ loss streak or rating < 940; else `normal`.
+4. Guided tutorial: `"tutorial": true` on **day 1 of a run the server has never seen**, once per `playerId`, skips
+   matchmaking and fights a training AI (an `easy` bot cut to one skill; the server tries a few bots/seeds and keeps
+   the first fight the player wins). The response then has `"tutorial": true`. Any other case ignores the flag.
 
 Response:
 

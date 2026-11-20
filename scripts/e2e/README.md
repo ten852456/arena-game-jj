@@ -21,3 +21,11 @@ Exit code 0 = all checks passed; screenshots and `e2e.json` go to the output fol
 `e2e.mjs` also checks the one-screen layout: at 1440×900, 1280×720 and phone landscape 844×390 the town, hero pick,
 shop, fight, result and run-over screens must not scroll the page (`scrollHeight <= innerHeight + 2`); upright
 390×844 is checked for every screen except the shop (the shop may scroll there). Screenshots: `layout-*.png`.
+
+## Guided tutorial
+
+`e2e-guide.mjs` (same setup, `node e2e-guide.mjs <baseUrl> <outDir>`) plays the guided tutorial end to end at 1280x720,
+phone landscape 844x390 and portrait 390x844 (touch), screenshots every step (`guide-*.png`), checks the click
+blocking, the server-side training fight (a win) and the "why you won" step, skips it (button and Esc) and checks the
+clickable town map (drag is not a tap, tapping the selected arena enters it). `ONLY=<regex>` runs some parts only.
+`e2e.mjs` skips the guide on its first screen.

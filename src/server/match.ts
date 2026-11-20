@@ -1,5 +1,7 @@
 // Matchmaking: same day, closest rating, no repeat opponents within a run, AI with a difficulty tier as the fallback.
+import { randomInt } from 'node:crypto';
 import { randomAiBuild } from '../sim/bot';
+import { simulate } from '../sim/combat';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { SKILLS } from '../sim/skills';
 import { ARCHES, type Archetype, type Build } from '../sim/types';
@@ -82,3 +84,20 @@ export function candidates(q: MatchQuery): { pool: Snapshot[]; window: number | 
 }
 
 export const closest = (pool: Snapshot[]) => pool.slice(0, POOL);
+
+/**
+ * Training opponent for the guided tutorial's first fight: an easy day-1 bot cut down to its first skill.
+ * Tries a few bots and fight seeds and keeps the first fight the player wins (the last one tried otherwise),
+ * so a new player's first game is a win without changing any combat rule.
+ */
+export function tutorialOpponent(player: Build, day: number, tries = 24) {
+  let last!: { build: Build; seed: number; result: ReturnType<typeof simulate> };
+  for (let k = 0; k < tries; k++) {
+    const full = randomAiBuild(day, randomInt(0, 2 ** 32 - 1), 'easy');
+    const build: Build = { ...full, skills: full.skills.slice(0, 1) };
+    const seed = randomInt(0, 2 ** 32 - 1);
+    last = { build, seed, result: simulate(player, build, seed, day) };
+    if (last.result.winner === 0) break;
+  }
+  return last;
+}

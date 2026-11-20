@@ -1261,7 +1261,8 @@ async function doFight() {
   let res: FightResponse;
   try {
     // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
-    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId() };
+    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}) };
+    tutorialFight = false;
     res = await api.fight(body as Parameters<typeof api.fight>[0]);
     M.rememberFromFight(res);
     if (import.meta.env.DEV) {
@@ -1641,6 +1642,12 @@ export function startUI(st: Stage) {
       goHome();
     }
   });
+  // tapping the selected arena (or its "Enter" bubble) on the town map = the "Enter the Arena" button
+  st.town.onEnter = (id) => {
+    if (view !== 'town' || id !== 'arena' || busy) return;
+    view = runActive() ? phaseView(run!) : 'title';
+    render();
+  };
   st.town.onSelect = (id) => {
     selected = id;
     if (view === 'town') render();
@@ -1706,3 +1713,29 @@ export function startUI(st: Stage) {
   view = 'town';
   render();
 }
+
+// ---------- hooks for the guided tutorial (src/client/guide.ts) ----------
+/** the next fight asks the server for the tutorial's training opponent (day 1 of a new run only; the server decides) */
+let tutorialFight = false;
+export const guideHooks = {
+  view: (): string => view,
+  run: (): Readonly<R.RunState> | null => run,
+  runActive,
+  /** result of the fight on screen (null before any fight) */
+  lastWon: () => last?.won ?? null,
+  setTutorialFight(on: boolean) {
+    tutorialFight = on;
+  },
+  /** Go to the town with the arena selected and in view. `seed` (no run active only) decides the heroes offered next. */
+  goTown(seed?: number) {
+    if (view === 'fighting' || view === 'replay') return;
+    if (seed !== undefined && !runActive()) nextSeed = seed;
+    if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
+    treeOpen = null;
+    selected = 'arena';
+    view = 'town';
+    render();
+    stage.town.focus('arena');
+  },
+  town: () => stage.town,
+};

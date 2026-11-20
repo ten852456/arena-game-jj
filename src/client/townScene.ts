@@ -3,6 +3,7 @@ import { HEROES } from '../sim/heroes';
 import { drawTownBackdrop, FOLK_COLORS, makeTownArt, R, RABBIT } from './townArt';
 import { BUILDINGS, BUILDING_BY_ID, RABBIT_X, WORLD_W } from './townData';
 import { ZOOM } from './view';
+import { L } from '../i18n';
 
 let resolveTown!: (s: TownScene) => void;
 export const townReady = new Promise<TownScene>((r) => (resolveTown = r));
@@ -21,6 +22,14 @@ const MY = 300 - MH - 4; // bottom strip, below the road, so tall buildings' lab
 /** Side-scrolling town: drag left/right, tap a landmark. */
 export class TownScene extends Phaser.Scene {
   onSelect?: (id: string) => void;
+  /** the arena was tapped while selected, or its "Enter" bubble was tapped */
+  onEnter?: (id: string) => void;
+  /** big "Enter the arena ▶" bubble over the arena while it is selected */
+  private bubble!: Phaser.GameObjects.Container;
+  private bubbleText!: Phaser.GameObjects.Text;
+  private bubbleBg!: Phaser.GameObjects.Graphics;
+  private bubbleW = 0;
+  private bubbleH = 0;
   private images = new Map<string, Phaser.GameObjects.Image>();
   private labels = new Map<string, Phaser.GameObjects.Text>();
   private selected: string | null = null;
@@ -64,8 +73,15 @@ export class TownScene extends Phaser.Scene {
         .setScale(1 / R)
         .setDepth(2)
         .setInteractive({ useHandCursor: true });
-      img.on('pointerover', () => img.setTint(0xfff1c8));
-      img.on('pointerout', () => img.clearTint());
+      // desktop hover: warm tint + soft glow (glow needs WebGL; canvas renderer just tints)
+      img.on('pointerover', () => {
+        img.setTint(0xfff1c8);
+        if (b.open && !img.preFX?.list.length) img.preFX?.addGlow(0xffd56b, 3, 0, false, 0.1, 12);
+      });
+      img.on('pointerout', () => {
+        img.clearTint();
+        img.preFX?.clear();
+      });
       const label = this.add
         .text(b.x, img.y - img.displayHeight - 6, b.name, {
           fontFamily: FONT, fontSize: '16px', color: '#ffffff', stroke: '#1d1612', strokeThickness: 5,
@@ -94,6 +110,14 @@ export class TownScene extends Phaser.Scene {
     this.arrow.setVisible(false);
 
     this.mini = this.add.graphics().setScrollFactor(0).setDepth(10);
+
+    this.bubbleBg = this.add.graphics();
+    this.bubbleText = this.add
+      .text(0, 0, '', { fontFamily: FONT, fontSize: '17px', color: '#2a1a08', fontStyle: 'bold' })
+      .setOrigin(0.5, 0.5);
+    this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setDepth(9).setVisible(false);
+    this.paintBubble();
+    this.tweens.add({ targets: this.bubble, scale: 1.07, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // ---- input: drag to scroll, tap to select, minimap to jump ----
     // pointer x/y are canvas pixels; divide by ZOOM to get view units
@@ -212,27 +236,73 @@ export class TownScene extends Phaser.Scene {
 
   private tap(p: Phaser.Input.Pointer) {
     const wp = this.cameras.main.getWorldPoint(p.x, p.y);
+    if (this.bubble.visible && this.bubbleBounds().contains(wp.x, wp.y)) return this.onEnter?.('arena');
     for (const b of [...BUILDINGS].reverse()) {
       const img = this.images.get(b.id)!;
       const lbl = this.labels.get(b.id)!;
       if (img.getBounds().contains(wp.x, wp.y) || lbl.getBounds().contains(wp.x, wp.y)) {
-        this.setSelected(b.id);
+        // the arena: first tap selects it and shows the "Enter" bubble, the next tap goes in
+        if (b.id === 'arena' && this.selected === 'arena') return this.onEnter?.('arena');
+        this.focus(b.id);
         this.onSelect?.(b.id);
         return;
       }
     }
   }
 
+  private paintBubble() {
+    this.bubbleText.setText(L('เข้าอารีน่า ▶', 'Enter arena ▶'));
+    const w = Math.ceil(this.bubbleText.width) + 28;
+    const h = 34;
+    this.bubbleBg
+      .clear()
+      .fillStyle(0x1d1612, 0.35)
+      .fillRoundedRect(-w / 2 + 2, -h / 2 + 3, w, h, 14)
+      .fillStyle(0xffd56b)
+      .fillRoundedRect(-w / 2, -h / 2, w, h, 14)
+      .lineStyle(2, 0x2f2538)
+      .strokeRoundedRect(-w / 2, -h / 2, w, h, 14)
+      .fillStyle(0xffd56b)
+      .fillTriangle(-8, h / 2 - 1, 8, h / 2 - 1, 0, h / 2 + 9);
+    this.bubbleW = w;
+    this.bubbleH = h;
+  }
+
+  /** the Enter bubble in world units (a container has no reliable bounds for its graphics) */
+  private bubbleBounds() {
+    const k = this.bubble.scale;
+    return new Phaser.Geom.Rectangle(this.bubble.x - (this.bubbleW * k) / 2, this.bubble.y - (this.bubbleH * k) / 2, this.bubbleW * k, (this.bubbleH + 10) * k);
+  }
+
+  /**
+   * Screen (CSS px, viewport) rectangle of a building, or of the arena's Enter bubble ('bubble').
+   * Used by the guided tutorial to spotlight canvas objects. Null when not on screen.
+   */
+  screenRect(id: string): DOMRect | null {
+    const img = this.images.get(id);
+    const b = id === 'bubble' ? (this.bubble.visible ? this.bubbleBounds() : null) : img?.getBounds();
+    if (!b || !this.sys.isActive()) return null;
+    const cr = this.game.canvas.getBoundingClientRect();
+    if (!cr.width) return null;
+    const k = cr.width / this.scale.width;
+    const cam = this.cameras.main;
+    const x = cr.left + (b.x - cam.scrollX) * cam.zoom * k;
+    const y = cr.top + (b.y - cam.scrollY) * cam.zoom * k;
+    return new DOMRect(x, y, b.width * cam.zoom * k, b.height * cam.zoom * k);
+  }
+
   /** Re-draw the building labels after a language change. */
   refreshLabels() {
     for (const b of BUILDINGS) this.labels.get(b.id)?.setText(b.name);
+    this.paintBubble();
   }
 
   /** Highlight a building without moving the camera. */
   setSelected(id: string | null) {
     this.selected = id;
     for (const [bid, lbl] of this.labels) lbl.setColor(bid === id ? '#ffd56b' : '#ffffff');
-    this.arrow.setVisible(!!id);
+    this.arrow.setVisible(!!id && id !== 'arena');
+    this.bubble.setVisible(id === 'arena');
   }
 
   /** Scroll smoothly to a building and select it. */
@@ -262,6 +332,7 @@ export class TownScene extends Phaser.Scene {
     if (this.selected) {
       const lbl = this.labels.get(this.selected)!;
       this.arrow.setPosition(lbl.x, lbl.y - lbl.height - 14 + Math.sin(time / 180) * 3);
+      if (this.selected === 'arena') this.bubble.setPosition(lbl.x, Math.max(24, lbl.y - lbl.height - 26));
     }
     this.drawMini();
   }
