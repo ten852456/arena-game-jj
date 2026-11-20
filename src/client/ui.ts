@@ -13,7 +13,7 @@ import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
-import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
+import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
@@ -169,6 +169,20 @@ const playerName = () => (fetchStore(NAME_KEY) || 'ผู้เล่น').slice
 /** "★ ท่าไม้ตาย เงาจันทร์: when · what" for hero cards */
 function ultHTML(h: (typeof HEROES)[number]) {
   return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · skill สายนี้ Lv3 ตัวแรกนับ +1 · skill สายนี้แรงขึ้น ${Math.round((TUNE['line.affinity'] - 1) * 100)}% (ถนัดสาย)`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · your first Lv3 skill of this line counts +1 · skills of this line are ${Math.round((TUNE['line.affinity'] - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
+}
+/** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
+function upDiffHTML(owned: SkillInstance, o: R.Offer) {
+  const diff = upgradeDiff(nodeOf(owned), nodeOf({ id: o.id, v: o.v }));
+  if (!diff.length) return '';
+  return `<div class="up-diff">${diff.map((d) => `<span class="${d.worse ? 'worse' : 'better'}">${d.icon}${+d.from.toFixed(2)}→<b>${+d.to.toFixed(2)}</b>${d.worse ? '▼' : ''}</span>`).join(' ')}</div>`;
+}
+/** selling list skill i lowers the ultimate: "★ Lv2 → Lv1" (empty when it doesn't) */
+function sellDrop(r: R.RunState, i: number) {
+  const b = R.toBuild(r);
+  const now = ultLevel(b);
+  const after = ultLevel({ hero: b.hero, skills: r.skills.filter((_, j) => j !== i).slice(0, R.slotsOf(r)) });
+  if (after >= now) return '';
+  return L(`★ ท่าไม้ตาย Lv${now} → ${after ? `Lv${after}` : 'ล็อก'}`, `★ ult Lv${now} → ${after ? `Lv${after}` : 'locked'}`);
 }
 /** shop card tag: "★ +1 ชิ้น" when the offer is an ult piece ("ปลด Lv1!" when it unlocks a level), "ถนัด" for other in-line cards */
 function ultTagHTML(r: R.RunState, o: R.Offer) {
@@ -698,10 +712,11 @@ function renderShop() {
       const badge = isUp
         ? `<span class="up-badge" aria-label="${L(`อัปเกรดเป็น Lv${lvOf(o.v)}`, `Upgrades to Lv${lvOf(o.v)}`)}">▲ Lv${lvOf(o.v)}</span><span class="up-shine" aria-hidden="true"></span>`
         : '';
-      return `<div class="card offer line-${d.line}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
+      return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
         ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${node.name}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}${ultTagHTML(r, o)}</div>
+        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${ultTagHTML(r, o)}</div>
+        ${up ? upDiffHTML(up, o) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy'), price, poor)}</button>
       </div>`;
@@ -719,7 +734,7 @@ function renderShop() {
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
           <button class="ghost mv" data-a="down" data-i="${i}" ${i === r.skills.length - 1 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ลง`, `Move ${nodeOf(k).name} down`)}">▼</button>
-          <button class="sell" data-a="sell" data-i="${i}">${L('ขาย', 'Sell')} +${R.sellPrice(k)}</button>
+          <button class="sell${sellDrop(r, i) ? ' sell-warn' : ''}" data-a="sell" data-i="${i}"${sellDrop(r, i) ? ` title="${esc(sellDrop(r, i))}"` : ''}>${L('ขาย', 'Sell')} +${R.sellPrice(k)}${sellDrop(r, i) ? ` <small>${esc(sellDrop(r, i))}</small>` : ''}</button>
         </div>
       </li>`;
       const gap = i < r.skills.length - 1 ? gapHTML(r.skills, i, act) : '';

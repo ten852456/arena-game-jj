@@ -68,6 +68,12 @@ button.on { border-color: var(--accent); color: var(--accent); }
 .mark.ult-piece { background: #ffe08a; color: #4a3200; font-weight: 700; margin-left: 4px; }
 .mark.ult-piece.ult-up { background: #ffb347; }
 .mark.ult-aff { margin-left: 4px; opacity: 0.85; }
+.card.offer.uniq { box-shadow: 0 0 0 2px #e8b84a, 0 0 10px rgba(232, 184, 74, 0.45); }
+.mark.uniq-tag { background: #e8b84a; color: #3a2600; font-weight: 700; }
+.up-diff { font-size: 11px; margin: 2px 0; display: flex; flex-wrap: wrap; gap: 4px; }
+.up-diff .better b { color: #2e8b3a; }
+.up-diff .worse { color: #c62828; font-weight: 700; }
+.sell.sell-warn small { display: block; font-size: 10px; color: #c62828; }
 .combo { font-size: 12px; color: var(--accent); }
 
 .arch-tank { border-left-color: var(--tank) !important; }

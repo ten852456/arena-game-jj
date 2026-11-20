@@ -290,10 +290,10 @@ export function explain(
   let tiebreak: string | undefined;
   if (bothDown)
     tiebreak = L(
-      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกาตัดสินจากเลือดที่ติดลบน้อยกว่า: ${N[me]} ${endHp[me]} · ${N[foe]} ${endHp[foe]}${
+      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ใครทำดาเมจรวมทั้งการสู้มากกว่าชนะ (เท่ากันดูเลือดที่ติดลบน้อยกว่า): ดาเมจ ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? ` เท่ากันพอดีจึง${drawWord}` : ` → ${N[r.winner as Side]} ชนะ`
       }`,
-      `Both sides ran out of HP in the same second (${sec(len)}s); the rule picks the side less below zero: ${N[me]} ${endHp[me]} · ${N[foe]} ${endHp[foe]}${
+      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: whoever dealt more damage over the whole fight wins (a tie goes to the side less below zero): damage ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? `, exactly equal, so it is a ${drawWord}` : ` → ${N[r.winner as Side]} wins`
       }`,
     );
@@ -410,6 +410,18 @@ export function explain(
   const slowed = r.events.some((e) => e.type === 'status' && e.side === me && e.status === 'slow' && e.value > 0);
   const lockedTicks = myWin.reduce((n, w) => n + (w[1] - w[0]), 0);
   const ownIdx = (id: string) => mySkills.findIndex((k) => k.id === id);
+  /** HP of both sides when fatigue started (or at the end) */
+  const fatE = r.events.find((e) => e.type === 'fatigue');
+  const fatHp = (fatE?.s.hp ?? endHp).map((h) => Math.max(0, h)) as [number, number];
+  /** the enemy's นักรบคลั่ง ult saved it from a killing blow */
+  const survived = builds[foe].hero === 'berserker' && their.ultT >= 0;
+  /** what to level up when the enemy out-damaged you: name the top skill, or say it is maxed */
+  const topTip = (() => {
+    const b = dmg[me].reduce<SkillDamage | null>((x, y) => (!x || y.total > x.total ? y : x), null);
+    const k = b && b.idx >= 0 ? mySkills[b.idx] : null;
+    if (k && lvOf(k.v) < 3) return { th: `อัป ${b!.name} (skill ทำดาเมจมากสุด, Lv${lvOf(k.v)}) หรือซื้อช่อง skill เพิ่มในร้าน`, en: `level up ${b!.name} (your top damage skill, Lv${lvOf(k.v)}), or buy another skill slot in the shop` };
+    return { th: 'skill หลักเต็มขั้นแล้ว: ซื้อช่อง skill เพิ่ม หรือเพิ่ม skill สายหลักให้ปลดท่าไม้ตาย', en: 'your main skill is maxed: buy another skill slot, or add line skills toward the ultimate' };
+  })();
   /** the build already deals burn / poison (don't tell it to "use burn") */
   const myDot = mySkills.some((k) => nodeOf(k).fx.some((e) => e.k === 'burn' || e.k === 'poison' || (e.k === 'hit' && (!!e.burn || !!e.poison))));
   const dotOpts = (o: [string, string][]) => (myDot ? o.filter(([id]) => id !== 'ignite' && id !== 'venom') : o);
@@ -573,6 +585,15 @@ export function explain(
         'growth',
       );
     }
+    if (fatigued && my.dealt >= their.dealt)
+      add(
+        30,
+        L(
+          `แพ้ช่วงเหนื่อยล้า: ตั้งแต่ ${sec(fStart)} วิ ทั้งสองฝ่ายเสียเลือดเท่ากันและแรงขึ้นทุกวิ ใครเลือดเหลือน้อยกว่าก็ล้มก่อน · ตอนเริ่มเหนื่อยล้า${N[me]}เหลือ ${fatHp[me]} ·${N[foe]}เหลือ ${fatHp[foe]} · ${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}มีเลือดสูงสุด ${r.maxHp[foe]} (ของ${N[me]} ${r.maxHp[me]}) ฟื้น ${their.healed} โล่ ${their.shielded}${survived ? ` และ ${ultName(foe)} รอดด้วย 1 เลือด` : ''} → ทำดาเมจให้จบก่อน ${sec(fStart)} วิ หรือเพิ่มการฟื้น/โล่`,
+          `Lost in fatigue: from ${sec(fStart)}s both sides lose the same HP, more every second, so whoever has less HP left falls first · when fatigue started${N[me]}had ${fatHp[me]} and${N[foe]}${fatHp[foe]} ·${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}had ${r.maxHp[foe]} max HP (${N[me]}: ${r.maxHp[me]}), healed ${their.healed} and shielded ${their.shielded}${survived ? `, and ${ultName(foe)} survived on 1 HP` : ''} → end it before ${sec(fStart)}s, or add healing / shield`,
+        ),
+        'fatigue',
+      );
     if (fatigued && my.dealt < their.dealt)
       add(
         30,
@@ -597,8 +618,8 @@ export function explain(
       add(
         1,
         L(
-          `${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → อัปเลเวล skill ที่ทำดาเมจมากสุด หรือซื้อช่อง skill เพิ่มในร้าน`,
-          `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → level up your top damage skill, or buy another skill slot in the shop`,
+          `${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → ${topTip.th}`,
+          `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → ${topTip.en}`,
         ),
         'damage',
       );
@@ -606,8 +627,8 @@ export function explain(
       add(
         1,
         L(
-          `${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}อึดกว่า (โล่ ${their.shielded} ฟื้นเลือด ${their.healed}) → เพิ่มการทะลุโล่${myDot ? "" : " ไฟ/พิษ"} หรือแผลลึก`,
-          `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}lasted longer (shield ${their.shielded}, healing ${their.healed}) → add pierce${myDot ? "" : ", burn/poison"} or wounds`,
+          `${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}อึดกว่า (เลือดสูงสุด ${r.maxHp[foe]} ต่อ ${r.maxHp[me]} · โล่ ${their.shielded} · ฟื้นเลือด ${their.healed}${survived ? ` · ${ultName(foe)} รอดด้วย 1 เลือด` : ''}) → เพิ่มการทะลุโล่${myDot ? '' : ' ไฟ/พิษ'} หรือแผลลึก`,
+          `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}lasted longer (max HP ${r.maxHp[foe]} vs ${r.maxHp[me]} · shield ${their.shielded} · healing ${their.healed}${survived ? ` · ${ultName(foe)} survived on 1 HP` : ''}) → add pierce${myDot ? '' : ', burn/poison'} or wounds`,
         ),
         'defence',
       );
@@ -631,8 +652,14 @@ export function explain(
     if (my.dodged >= 3) add(my.dodged * 5, L(`${N[me]}หลบการตีได้ ${my.dodged} ครั้ง`, `${N[me]}dodged ${my.dodged} hits`), 'dodge');
     if (my.growth >= 8) add(my.growth * 2, L(`${N[me]}สะสมพลังโจมตีได้ถึง +${my.growth} ต่อการตี`, `${N[me]}stacked attack power up to +${my.growth} per hit`), 'growth');
     const best = dmg[me].reduce<SkillDamage | null>((b, x) => (!b || x.total > b.total ? x : b), null);
-    const total = dmg[me].reduce((n, x) => n + x.total, 0);
-    if (best && pct(best.total, total) >= 40)
+    // "of all the damage" includes the ultimate; when the ultimate out-damaged every skill, it is the one named
+    const total = dmg[me].reduce((n, x) => n + x.total, 0) + my.ultDealt;
+    if (my.ultDealt > (best?.total ?? 0) && pct(my.ultDealt, total) >= 40)
+      add(
+        pct(my.ultDealt, total),
+        L(`ท่าไม้ตาย ${ultName(me)} ของ${N[me]}ทำดาเมจ ${pct(my.ultDealt, total)}% ของทั้งหมด`, `The ultimate ${ultName(me)} of${N[me]}dealt ${pct(my.ultDealt, total)}% of all the damage`), 'ult',
+      );
+    else if (best && pct(best.total, total) >= 40)
       add(
         pct(best.total, total),
         L(`${best.name} ของ${N[me]}ทำดาเมจ ${pct(best.total, total)}% ของทั้งหมด`, `${best.name} of${N[me]}dealt ${pct(best.total, total)}% of all the damage`), 'damage',
@@ -640,7 +667,7 @@ export function explain(
     if (bothDown)
       add(
         50,
-        L(`ล้มพร้อมกัน แต่${N[me]}เลือดติดลบน้อยกว่า (${endHp[me]} ต่อ ${endHp[foe]})`, `Both fell at once, but${N[me]}${was(me)} less below zero (${endHp[me]} vs ${endHp[foe]})`), 'ko',
+        L(`ล้มพร้อมกัน แต่${N[me]}ทำดาเมจรวมมากกว่า (${my.dealt} ต่อ ${their.dealt})`, `Both fell at once, but${N[me]}dealt more damage in total (${my.dealt} vs ${their.dealt})`), 'ko',
       );
     if (!out.length) {
       if (my.dealt >= their.dealt) add(1, L(`${N[me]}ทำดาเมจได้มากกว่า (${my.dealt} ต่อ ${their.dealt})`, `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt})`), 'damage');

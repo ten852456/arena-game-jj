@@ -72,7 +72,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
     desc: "Pushes all the enemy's cooldowns back N seconds · shares the cap with freeze · afterwards the enemy resists control for 1.5s",
   },
   grow: { name: 'Power', desc: 'Every hit of every skill deals +X damage until the fight ends' },
-  charge: { name: 'Charge', desc: 'Your next hit (from any skill) is ×N stronger' },
+  charge: { name: 'Charge', desc: `Your next hit of ${T['charge.min']}+ damage (from any skill) is ×N stronger (smaller hits don’t use it up)` },
   thorns: {
     name: 'Thorns',
     desc: 'Each time you are hit, reflect damage equal to your thorns (max 75% of the hit) · while you have thorns, the enemy heals only half',

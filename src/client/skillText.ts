@@ -70,8 +70,8 @@ function simpleEffect(e: Effect): string {
     case 'grow': return L(`ทุกการตี +${e.n} ถาวร`, `All hits +${e.n} for good`);
     case 'charge':
       return e.hits && e.hits > 1
-        ? L(`${e.hits} การตีถัดไป ×${e.mult}`, `Next ${e.hits} hits ×${e.mult}`)
-        : L(`การตีถัดไป ×${e.mult}`, `Next hit ×${e.mult}`);
+        ? L(`${e.hits} การตีแรงถัดไป ×${e.mult}`, `Next ${e.hits} big hits ×${e.mult}`)
+        : L(`การตีแรงถัดไป ×${e.mult}`, `Next big hit ×${e.mult}`);
     case 'thorns':
       return L(`สะท้อนดาเมจ ${e.n}`, `Reflects ${e.n}`) + (e.perm ? L(' ถาวร', ' for good') : '') +
         (e.heal !== undefined ? L(' · ศัตรูฟื้นน้อยลง', ' · cuts enemy healing') : '');
@@ -79,7 +79,7 @@ function simpleEffect(e: Effect): string {
       return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
         (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
     case 'cleanse':
-      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`ล้างไฟ/พิษ ${e.n} กอง`, `−${e.n} burn/poison`);
+      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`ล้างไฟ/พิษ ${e.n} กอง${e.lineAll ? ' (ถนัด: หมด)' : ''}`, `−${e.n} burn/poison${e.lineAll ? ' (mastery: all)' : ''}`);
       return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
     case 'dispel':
       return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +
@@ -172,7 +172,7 @@ function effectDetail(e: Effect): string {
     case 'slow': return L(`🐌 คูลดาวน์ศัตรูเดินช้าลง ${pct(e.pct)} นาน ${num(e.secs)} วิ`, `🐌 enemy cooldowns run ${pct(e.pct)} slower for ${num(e.secs)}s`);
     case 'delay': return L(`⏪ ดึงคูลดาวน์ศัตรูถอย ${Math.round(e.secs * 10)} tick`, `⏪ pushes enemy cooldowns back ${Math.round(e.secs * 10)} ticks`);
     case 'grow': return L(`💪 +${e.n} ต่อการตีทุกครั้ง จนจบการสู้`, `💪 +${e.n} on every hit until the fight ends`);
-    case 'charge': return L(`⚡ การตี ${e.hits ?? 1} ครั้งถัดไป ×${e.mult}`, `⚡ next ${e.hits ?? 1} hit(s) ×${e.mult}`);
+    case 'charge': return L(`⚡ การตี ${e.hits ?? 1} ครั้งถัดไปที่แรง ${T['charge.min']}+ ×${e.mult} (ตีเบากว่านั้นไม่ใช้รวมพลัง)`, `⚡ next ${e.hits ?? 1} hit(s) of ${T['charge.min']}+ ×${e.mult} (smaller hits don’t use it)`);
     case 'thorns':
       return L(
         `🌵 ${e.n}${e.perm ? ' ถาวร' : ''} · สะท้อนไม่เกิน ${pct(THORNS_MAX)} ของดาเมจ · ศัตรูฟื้น ×${e.heal ?? 0.5}`,

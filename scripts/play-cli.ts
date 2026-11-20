@@ -13,15 +13,16 @@ import { detailLines, simpleBonus, simpleText } from '../src/client/skillText';
 import { randomAiBuild, type BotTier } from '../src/sim/bot';
 import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
-import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultGain, ultLevel, ultPieces } from '../src/sim/heroes';
+import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLevel, ultPieces } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
-import { SKILLS, VARIANTS, lvOf, nodeOf } from '../src/sim/skills';
+import { SKILLS, VARIANTS, lvOf, nodeOf, upgradeDiffText } from '../src/sim/skills';
 import type { Build, CombatEvent } from '../src/sim/types';
 
 type CliTier = BotTier | 'auto';
-interface Save { s?: R.RunState; seed: number; tier: CliTier; choices?: string[]; opp?: { day: number; build: Build; tier: BotTier }; history: string[] }
+/** the next opponent is not stored (the save file would leak it): only its day and tier; the build is regenerated from the seed */
+interface Save { s?: R.RunState; seed: number; tier: CliTier; choices?: string[]; opp?: { day: number; tier: BotTier }; history: string[] }
 
 const [file, cmd, ...args] = process.argv.slice(2);
 if (!file || !cmd) {
@@ -44,12 +45,11 @@ const lv = (v: string) => lvOf(v);
 /** the server's AI tier rule (src/server/match.ts tierFor) without a rating: easy on days 1–2 or after 2 losses in a row, hard after 3 wins in a row */
 const autoTier = (s: R.RunState): BotTier => (s.day <= 2 || s.streak <= -2 ? 'easy' : s.streak >= 3 ? 'hard' : 'normal');
 function oppFor(s: R.RunState): Build {
-  if (!save.opp || save.opp.day !== s.day) {
-    const tier = save.tier === 'auto' ? autoTier(s) : save.tier;
-    save.opp = { day: s.day, tier, build: randomAiBuild(s.day, hashSeed(save.seed, 'opp', s.day, s.wins, s.losses), tier) };
-  }
-  return save.opp.build;
+  if (!save.opp || save.opp.day !== s.day) save.opp = { day: s.day, tier: save.tier === 'auto' ? autoTier(s) : save.tier };
+  // like the server: no mirror match on days 1–2
+  return randomAiBuild(s.day, hashSeed(save.seed, 'opp', s.day, s.wins, s.losses), save.opp.tier, s.day <= 2 ? s.hero : undefined);
 }
+const markText = (m?: string) => (m ? ` mark ${R.MARK_INFO[m as keyof typeof R.MARK_INFO].name} (${R.MARK_INFO[m as keyof typeof R.MARK_INFO].desc})` : '');
 /** ult in words at the level it has now */
 function ultText(hero: string, lv: number) {
   const u = HEROES_BY_ID[hero].ult;
@@ -59,7 +59,7 @@ function ultText(hero: string, lv: number) {
 
 function describeBuild(b: Build, title: string) {
   p(`${title}: ${HEROES_BY_ID[b.hero].name} (${b.hero}, line ${heroLine(b.hero)})`);
-  b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}${k.mark ? ' mark:' + k.mark : ''}] ${simpleText(k)}`));
+  b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${markText(k.mark)} ${simpleText(k)}`));
 }
 
 function show(s: R.RunState) {
@@ -75,7 +75,9 @@ function show(s: R.RunState) {
   p(`List (${s.skills.length}/${slots} slots; top to bottom, neighbours can switch on connect bonuses):`);
   s.skills.forEach((k, i) => {
     const bon = (k.bonus ?? []).map((b) => simpleBonus(b, lv(k.v))).join(' | ');
-    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}${k.mark ? ' mark:' + k.mark : ''}]${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((T['line.affinity'] - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
+    const after = ultLevel({ hero: s.hero, skills: s.skills.filter((_, j) => j !== i).slice(0, slots) });
+    const drop = after < ulv ? ` (selling it drops the ult Lv${ulv} → ${after ? 'Lv' + after : 'locked'})` : '';
+    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
     p(`Shop (reroll ${R.REROLL}g · slot ${R.slotPrice(s)}g · wish ${R.wishPrice(s)}g):`);
@@ -86,7 +88,8 @@ function show(s: R.RunState) {
       const bon = (o.bonus ?? []).map((b) => simpleBonus(b, lv(o.v))).join(' | ');
       const g = ultGain(b0, o);
       const tag = g.pieces ? ` ★ +1 ult piece${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
-      p(`   ${i}. ${up ? 'UPGRADE → ' : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
+      const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k)) : '';
+      p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff} (▼ = worse)` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
     const ob = oppFor(s);
@@ -103,8 +106,9 @@ function fightSummary(ev: CombatEvent[], names: [string, string], builds: [Build
   for (const e of ev) {
     const t = (e.t / 10).toFixed(1) + 's';
     if (lines.length >= 400) break;
-    if (e.type === 'ult') lines.push(`  ${t} ★ ${names[e.side]} ULTIMATE ${ultText(builds[e.side].hero, e.lv)} (Lv${e.lv})  HP ${e.s.hp.join('/')}`);
-    else if (e.type === 'cast') lines.push(`  ${t} ${names[e.side]} ${e.skill} Lv${e.lv}${e.from !== undefined ? ' (set off)' : ''}${e.react ? ' (react)' : ''}${e.echo ? ' (echo)' : ''}  HP ${e.s.hp.join('/')} SH ${e.s.sh.join('/')}`);
+    const hp = `HP ${names[0]} ${e.s.hp[0]} · ${names[1]} ${e.s.hp[1]}`;
+    if (e.type === 'ult') lines.push(`  ${t} ★ ${names[e.side]} ULTIMATE ${ultText(builds[e.side].hero, e.lv)} (Lv${e.lv})  ${hp}`);
+    else if (e.type === 'cast') lines.push(`  ${t} ${names[e.side]} ${e.skill} Lv${e.lv}${e.from !== undefined ? ' (set off)' : ''}${e.react ? ' (react)' : ''}${e.echo ? ' (echo)' : ''}  ${hp} · shield ${names[0]} ${e.s.sh[0]} · ${names[1]} ${e.s.sh[1]}`);
     else if (e.type === 'damage' && e.src === 'ult') lines.push(`  ${t}   ${names[e.side]} takes ${e.amount} from the ultimate`);
     else if (e.type === 'status' && e.status === 'evade') lines.push(`  ${t}   ${names[e.side]} DODGES a hit (${e.value} dodge left)`);
     else if (e.type === 'status' && e.status === 'sure') lines.push(`  ${t}   ${names[e.side]} can't dodge: an undodgeable 👁 hit`);
@@ -131,10 +135,11 @@ switch (cmd) {
     break;
   }
   case 'heroes':
+    p(`All ${HEROES.length} heroes (each run offers only ${R.HERO_CHOICES} of them: see \`new\`):`);
     for (const h of HEROES) p(` - ${h.id}: ${h.name} (line ${heroLine(h.id)}) — ${h.style}\n     passive: ${h.passive}`);
     break;
   case 'pick': {
-    if (!save.choices?.includes(args[0])) fail(`pick one of ${save.choices?.join(', ')}`);
+    if (!save.choices?.includes(args[0])) fail(`this run offers only ${R.HERO_CHOICES} heroes: ${save.choices?.join(', ')} (\`heroes\` lists all of them, but a run starts with one of its ${R.HERO_CHOICES})`);
     save.s = R.newRun(args[0], save.seed, 'cli');
     show(save.s);
     break;
@@ -164,7 +169,9 @@ switch (cmd) {
     else if (cmd === 'slot') err = R.buySlot(st);
     else if (cmd === 'wish') {
       const w = R.wish(st);
-      p('wish: ' + JSON.stringify(w));
+      if ('err' in w) err = w.err;
+      else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]))})`);
+      else p(`wish: ${nodeOf(st.skills[w.idx]).name} got the mark${markText(w.mark)}`);
     } else if (cmd === 'chance') R.chooseLastChance(st, args[0] as R.LastChanceOption);
     else if (cmd === 'mark') R.applyMark(st, n(args[0]));
     else if (cmd === 'fight') {

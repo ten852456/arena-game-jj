@@ -25,7 +25,7 @@ export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: strin
   slow: { icon: '🐌', name: 'ช้า', desc: 'คูลดาวน์ทุกตัวของศัตรูเดินช้าลง X% · มีเพดานต่อการสู้' },
   delay: { icon: '⏪', name: 'ถ่วงเวลา', desc: 'ดึงคูลดาวน์ทุกตัวของศัตรูถอยหลัง N วิ · ใช้เพดานร่วมกับแช่แข็ง · โดนแล้วต้านการคุมได้ 1.5 วิ' },
   grow: { icon: '💪', name: 'พลัง', desc: 'ทุกการตีของทุก skill ทำดาเมจเพิ่ม +X จนจบการสู้' },
-  charge: { icon: '⚡', name: 'รวมพลัง', desc: 'การตีครั้งถัดไปของคุณ (skill ไหนก็ได้) แรง ×N' },
+  charge: { icon: '⚡', name: 'รวมพลัง', desc: `การตีครั้งถัดไปของคุณ (skill ไหนก็ได้) ที่ตีแรง ${T['charge.min']} ขึ้นไป แรง ×N (ตีเบากว่านั้นไม่ใช้รวมพลัง)` },
   thorns: { icon: '🌵', name: 'หนาม', desc: 'ทุกครั้งที่โดนตี สะท้อนดาเมจเท่าหนาม (ไม่เกิน 75% ของดาเมจที่โดน) · ระหว่างมีหนาม ศัตรูฟื้นเลือดได้ครึ่งเดียว' },
   dodge: { icon: '💨', name: 'หลบ', desc: `ได้แต้มหลบ (เก็บได้ 1 · ฮีโร่สายหลบเก็บได้ 2) · การตีครั้งถัดไปที่โดนแค่เฉียด: เข้าแค่ ${Math.round(T['dodge.graze'] * 100)}% ไม่ติดผลเสริม ใช้ 1 แต้ม (ไม่สุ่ม) · ไฟ พิษ หนาม และความเหนื่อยล้าหลบไม่ได้ · การตีที่มี 👁 ไม่พลาด · หลบการตีของ skill ที่แช่แข็ง/ถ่วงเวลา = การคุมนั้นไม่ติดด้วย` },
   poison: { icon: '☠', name: 'พิษ', desc: `ศัตรูเสียเลือด X ต่อวินาที นาน N วิ · ไม่สนโล่ หลบไม่ได้ · ซ้อนกันได้ · เบากว่าไฟแต่นานกว่า · ระหว่างติดพิษ ฟื้นเลือดได้น้อยลง ${Math.round((1 - T['poison.heal']) * 100)}% และได้โล่น้อยลง ${Math.round((1 - T['burn.shield']) * 100)}%` },
@@ -727,6 +727,32 @@ export function mainNumbers(n: SkillNode): Partial<Record<MainKey, number>> {
   o.cd = n.cd / 10;
   return o;
 }
+
+const MAIN_ICON: Record<MainKey, string> = {
+  hit: '⚔', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', dodge: '💨', grow: '💪', thorns: '🌵', freeze: '❄', delay: '⏪',
+  charge: '⚡×', engine: '⚙', cd: '⏱',
+};
+/**
+ * Before → after of an upgrade, number by number (upgrade cards, play CLI). worse = this number got worse
+ * (lower, or a longer cooldown). A number the new level drops entirely shows as → 0.
+ */
+export function upgradeDiff(from: SkillNode, to: SkillNode): { key: MainKey; icon: string; from: number; to: number; worse: boolean }[] {
+  const a = mainNumbers(from);
+  const b = mainNumbers(to);
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])] as MainKey[];
+  const order = Object.keys(MAIN_ICON) as MainKey[];
+  keys.sort((x, y) => order.indexOf(x) - order.indexOf(y));
+  return keys
+    .map((key) => {
+      const f = a[key] ?? 0;
+      const t = b[key] ?? 0;
+      return { key, icon: MAIN_ICON[key], from: f, to: t, worse: key === 'cd' ? t > f + 1e-9 : t < f - 1e-9 };
+    })
+    .filter((d) => d.from !== d.to);
+}
+/** "⚔4→9 ⏱4.3→5▼" (▼ = got worse) */
+export const upgradeDiffText = (from: SkillNode, to: SkillNode) =>
+  upgradeDiff(from, to).map((d) => `${d.icon}${+d.from.toFixed(2)}→${+d.to.toFixed(2)}${d.worse ? '▼' : ''}`).join(' ');
 
 export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
 
