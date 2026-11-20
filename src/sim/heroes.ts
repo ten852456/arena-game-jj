@@ -98,7 +98,7 @@ export const ULT_LV2_TRIG = 0.75;
 /** Lv2 effect power × this */
 export const ULT_LV2_POW = 1.3;
 /** pieces needed for ult Lv1 / Lv2 */
-export const ULT_PIECES = [3, 5] as const;
+export const ULT_PIECES = [4, 5] as const;
 const r1 = (x: number) => +x.toFixed(1);
 /** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
 const TRIG_BELOW = ['assassin'];

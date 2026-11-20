@@ -259,7 +259,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   let t = 0;
 
   const fx = (f: Fighter): Fx => ({
-    g: sum(f.growth),
+    g: Math.round(sum(f.growth)),
     c: f.charge,
     th: sum(f.thorns),
     sf: f.ctlKeep < 1 ? 1 : 0,
@@ -550,6 +550,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const thornsUntil = () => t + (f.hooks.thornsSecs ? f.hooks.thornsSecs * TPS : THORNS_TICKS);
     const ctx: Ctx = {
       inLine: inLine(f.hero, inst.id),
+      power,
       v: (n) => Math.max(1, Math.round(n * power)),
       get me() { return view(f); },
       get foe() { return view(foe); },
@@ -700,7 +701,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       },
       grow(n) {
         f.growth.push({ v: n, idx: blk.idx });
-        emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
+        emit({ type: 'status', side: f.side, status: 'grow', value: Math.round(sum(f.growth)) });
       },
       charge(m, hits) {
         const mult = f.hooks.chargeMult ? f.hooks.chargeMult(m) : m;

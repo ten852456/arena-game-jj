@@ -194,6 +194,8 @@ export interface Ctx {
   cleanse(n: number, dotOnly?: boolean): number;
   /** this skill is one of its owner's line pieces */
   readonly inLine: boolean;
+  /** cast power (engines and echo fire below 1, connect power bonuses above) */
+  readonly power: number;
   /** returns buffs removed */
   dispel(n: number, shield: number, steal: boolean): number;
   leech(pct: number): void;
@@ -203,6 +205,9 @@ export interface Ctx {
  * Run one skill variant. A skill whose hits were all dodged also loses the freeze / delay that rides on them
  * (dodging an ice ball means the freeze does not land); control placed before any hit always lands.
  */
+/** a skill fired at less than this power (engine, echo) gives no dodge charge */
+export const DODGE_MIN_POWER = 0.75;
+
 export function execNode(node: SkillNode, c: Ctx) {
   let removed = 0;
   let hitsTried = 0;
@@ -246,14 +251,16 @@ export function execNode(node: SkillNode, c: Ctx) {
       case 'freeze': if (!missed()) c.freeze(e.secs); break;
       case 'slow': c.slow(e.pct, e.secs); break;
       case 'delay': if (!missed()) c.delay(e.secs); break;
-      case 'grow': c.grow(c.v(e.n)); break;
+      // พลัง from a part-power fire (engine, echo) is that part, not a whole point (sim v14: before, any fire gave ≥ 1)
+      case 'grow': c.grow(+(e.n * c.power).toFixed(2)); break;
       case 'charge': c.charge(e.mult, e.hits ?? 1); break;
       case 'thorns': c.thorns(c.v(e.n), !!e.perm, e.heal); break;
       case 'steadfast': c.steadfast(e.keep ?? 0.4, !!e.ignoreFreeze); break;
       case 'cleanse': removed = c.cleanse(e.lineAll && c.inLine ? 99 : e.n, !!e.dot); break;
       case 'dispel': removed = c.dispel(e.n, e.shield ?? 0.2, !!e.steal); break;
       case 'leech': c.leech(e.pct); break;
-      case 'dodge': c.dodge(c.v(e.n)); break;
+      // a dodge charge only comes from a fire of at least DODGE_MIN_POWER (an engine tick at 55% gives none)
+      case 'dodge': if (c.power >= DODGE_MIN_POWER) c.dodge(Math.max(1, Math.round(e.n * Math.min(1, c.power)))); break;
       case 'haste': c.haste(e.pct, e.secs); break;
       case 'wound': c.wound(e.pct, e.secs); break;
     }
@@ -380,10 +387,10 @@ const BASE_LIST: SkillDef[] = [
   def('train', 'heal', {
     '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(3)]),
     a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(3)], 'พลังก้อนใหญ่'),
-    a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 4 }, hit(3)]),
+    a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
     a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
     b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(3)], 'พลังถี่'),
-    b1: N('ฝึกไม่หยุด', 2.5, [{ k: 'grow', n: 1 }, hit(3)]),
+    b1: N('ฝึกไม่หยุด', 3.2, [{ k: 'grow', n: 1 }, hit(4)]),
     b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(3, { leech: 0.3 })]),
   }),
   // tech: answers ⚔ ❄ (heals when controlled, shield vs big hits)
@@ -631,15 +638,17 @@ const rnd = (x: number, k: number) => Math.round(x * k) / k;
 /** scale x by m; integers stay integers, fractions keep `k` steps per unit */
 const sc = (x: number, m: number, k = 20) => (m === 1 ? x : Number.isInteger(x) ? Math.round(x * m) : rnd(x * m, k));
 
-/** Power multiplier of a skill at a level: Lv1 and Lv3 from tuning.ts, Lv2 halfway. */
+/** Lv2 sits this share of the way from the Lv1 to the Lv3 multiplier (sim v14: 0.25, was 0.5), so the Lv3 knob shapes the late game and barely the mid game */
+const LV2_SHARE = 0.25;
+/** Power multiplier of a skill at a level: Lv1 and Lv3 from tuning.ts, Lv2 in between (never below Lv1). */
 function powerOf(d: SkillDef, lv: number): number {
   const pre = d.hero ? `uniq.${d.hero}` : d.line !== 'none' ? `line.${d.line}` : '';
   if (!pre) return 1;
   const a = T[`${pre}.lv1` as keyof typeof T] ?? 1;
   const b = T[`${pre}.lv3` as keyof typeof T] ?? 1;
-  // never weaker with a level (sim v14): Lv2 = halfway, but at least Lv1; Lv3 at least Lv2
+  // never weaker with a level (sim v14): Lv3 at least Lv1, Lv2 in between
   const b2 = Math.max(a, b);
-  return lv === 1 ? a : lv === 3 ? b2 : (a + b2) / 2;
+  return lv === 1 ? a : lv === 3 ? b2 : a + (b2 - a) * LV2_SHARE;
 }
 
 function scaleEffect(e: Effect, m: number, ctl: number): Effect {
