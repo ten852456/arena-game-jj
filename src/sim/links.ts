@@ -1,10 +1,10 @@
 import { Rng } from './rng';
 import { SKILLS, SKILL_LIST, hits, lvOf } from './skills';
-import { ARCHES, type Bonus, type BonusKind, type SkillInstance } from './types';
+import { LINES, type Bonus, type BonusKind, type SkillInstance } from './types';
 
 /**
  * Connect bonuses for the skill list. Pure and deterministic: runs on server and browser.
- * Each bought copy rolls 1–2 bonuses with a condition (a skill, or a skill type). A bonus is active when the skill
+ * Each bought copy rolls 1–2 bonuses with a condition (a skill, or a line: 'line:<line>'). A bonus is active when the skill
  * right above OR right below it in the list matches the condition, so the order of the list is now part of the build.
  */
 
@@ -15,9 +15,9 @@ export const HASTE_BONUS = 0.2;
 /** +damage per hit / +shield per fire, by level (Lv1–Lv3) */
 export const bonusValue = (e: BonusKind, lv: number) => (e === 'dmg' ? lv : e === 'shield' ? 1 + lv : 0);
 
-/** Does skill k satisfy condition t ('strike' or 'arch:control')? */
+/** Does skill k satisfy condition t ('strike' or 'line:ice')? */
 export function matches(t: string, k: Pick<SkillInstance, 'id'>): boolean {
-  return t === k.id || t === 'arch:' + SKILLS[k.id]?.arch;
+  return t === k.id || t === 'line:' + SKILLS[k.id]?.line;
 }
 
 /** The list neighbours of skill i: the one above and the one below. */
@@ -68,14 +68,14 @@ const targetsFor = (id: string, hero: string) =>
   SKILL_LIST.filter((d) => d.id !== id && (!d.hero || d.hero === hero)).map((d) => d.id);
 
 export const validTarget = (t: string, hero: string) =>
-  ARCHES.some((a) => t === 'arch:' + a) || SKILL_LIST.some((d) => d.id === t && (!d.hero || d.hero === hero));
+  LINES.some((a) => t === 'line:' + a) || SKILL_LIST.some((d) => d.id === t && (!d.hero || d.hero === hero));
 
 export function rollBonus(rng: Rng, id: string, hero: string, existing: Bonus[]): Bonus | null {
   for (let tries = 0; tries < 10; tries++) {
     const r = rng.next();
     const e: BonusKind = r < 0.3 ? 'dmg' : r < 0.45 ? 'shield' : r < 0.6 ? 'haste' : r < 0.75 ? 'power' : 'trigger';
     if (e === 'dmg' && !canHit(id)) continue; // skills that never hit roll another effect
-    const t = rng.next() < 0.6 ? rng.pick(targetsFor(id, hero)) : 'arch:' + rng.pick(ARCHES);
+    const t = rng.next() < 0.6 ? rng.pick(targetsFor(id, hero)) : 'line:' + rng.pick(LINES);
     if (!existing.some((b) => b.t === t && b.e === e)) return { t, e };
   }
   return null;

@@ -1,5 +1,10 @@
-export type Archetype = 'tank' | 'burst' | 'scaling' | 'control';
-export const ARCHES: Archetype[] = ['tank', 'burst', 'scaling', 'control'];
+/**
+ * The 8 lines (สาย): the identity system of skills and heroes. Each line beats 2 others and loses to 2 (softly,
+ * through mechanics: shields block hits, burn/poison ignore shields and cannot be dodged, dodge negates hits,
+ * heal out-sustains DoT, wind cleanses DoT, ice stops fast and healing cooldowns). docs/DESIGN_LINES_ULT.md.
+ */
+export type Line = 'hit' | 'dodge' | 'shield' | 'heal' | 'burn' | 'poison' | 'ice' | 'wind';
+export const LINES: Line[] = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind'];
 
 export type Mark = 'burn' | 'echo' | 'quick' | 'steadfast';
 
@@ -11,7 +16,7 @@ export type Mark = 'burn' | 'echo' | 'quick' | 'steadfast';
  */
 export type BonusKind = 'dmg' | 'shield' | 'haste' | 'power' | 'trigger';
 
-/** Active when the skill right above or right below matches t: a skill id, or 'arch:<archetype>'. */
+/** Active when the skill right above or right below matches t: a skill id, or 'line:<line>'. */
 export interface Bonus {
   t: string;
   e: BonusKind;
@@ -49,7 +54,12 @@ export type StatusKind =
   | 'amplify' // side = self
   | 'cleanse' // side = self, value = debuffs removed
   | 'dispel' // side = target, value = buffs removed
-  | 'delay'; // side = target, value = cooldown ticks pushed back (0 = resisted)
+  | 'delay' // side = target, value = cooldown ticks pushed back (0 = resisted)
+  | 'dodge' // side = self, value = dodge charges now (after gaining)
+  | 'evade' // side = the fighter that dodged a hit, value = dodge charges left
+  | 'poison' // side = target, value = total poison per second
+  | 'haste' // side = self, value = percent faster cooldowns
+  | 'wound'; // side = target, value = percent less healing
 
 /** Buffs and debuffs on one fighter right after an event (for the status UI). */
 export interface Fx {
@@ -68,6 +78,13 @@ export interface Fx {
   /** slow percent (0 = not slowed) and ticks left */
   sl: number;
   slt: number;
+  /** dodge charges (added in sim v12) */
+  dg: number;
+  /** total poison per second */
+  p: number;
+  /** haste percent (0 = none) and ticks left */
+  hs: number;
+  hst: number;
 }
 
 /** Per-block stats for the post-fight breakdown. Index = build.skills index. */
@@ -110,6 +127,8 @@ export type EventBody =
   | { type: 'heal'; side: Side; amount: number }
   | { type: 'status'; side: Side; status: StatusKind; value: number }
   | { type: 'fatigue'; amount: number }
+  /** the hero's ultimate fired (once per fight at most); its effects follow as normal events */
+  | { type: 'ult'; side: Side; hero: string; lv: number }
   | { type: 'end'; winner: Side | -1 };
 
 /** t = tick (10 ticks per second). s = HP/shield snapshot AFTER the event. */
@@ -131,6 +150,12 @@ export interface SideStat {
   ctl: number;
   /** control effects resisted (control cap, the control-immunity window, ใจเหล็ก's ignore) */
   resisted: number;
+  /** ultimate level unlocked by the build (0 = none; added in sim v12) */
+  ultLv?: number;
+  /** tick the ultimate fired, -1 = it did not */
+  ult?: number;
+  /** hits this side dodged */
+  dodged?: number;
 }
 
 export interface CombatResult {

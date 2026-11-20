@@ -3,8 +3,8 @@ import { randomInt, randomUUID } from 'node:crypto';
 import { SIM_VERSION, simulate } from '../sim/combat';
 import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
-import { ARCHES, type Archetype, type Build } from '../sim/types';
-import { aiBuildFor, archetypeOf, candidates, closest, streakOf, tierFor, tutorialOpponent } from './match';
+import { LINES, type Build, type Line } from '../sim/types';
+import { aiBuildFor, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild } from './validate';
 
@@ -164,7 +164,7 @@ export function handleFight(body: any): Res {
       name,
       opponent: {
         name: opp.name, ai: opp.ai, ...(opp.tier ? { tier: opp.tier } : {}),
-        arch: archetypeOf(opp.build), build: opp.build, rating: opp.rating,
+        line: lineOf(opp.build), build: opp.build, rating: opp.rating,
       },
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
@@ -173,7 +173,7 @@ export function handleFight(body: any): Res {
   };
 }
 
-/** Today's arena: archetype mix of the builds this run could meet (no builds, no names). */
+/** Today's arena: line mix of the builds this run could meet (no builds, no names). */
 export function handleScout(q: URLSearchParams): Res {
   const day = intIn(Number(q.get('day')), 1, MAX_DAY);
   const runId = q.get('runId') ? cleanId(q.get('runId')) : '';
@@ -182,11 +182,11 @@ export function handleScout(q: URLSearchParams): Res {
   const rating = cleanRating(q.get('rating'));
   const prev = runId ? db.tracks[runId] : undefined;
   const { pool, window } = candidates({ day, rating, runId, playerId, track: prev });
-  const counts = Object.fromEntries(ARCHES.map((a) => [a, 0])) as Record<Archetype, number>;
-  for (const s of pool) counts[archetypeOf(s.build)]++;
+  const counts = Object.fromEntries(LINES.map((a) => [a, 0])) as Record<Line, number>;
+  for (const s of pool) counts[lineOf(s.build)]++;
   const total = pool.length;
-  const pct = Object.fromEntries(ARCHES.map((a) => [a, total ? Math.round((100 * counts[a]) / total) : 0])) as Record<Archetype, number>;
-  const top = total ? ARCHES.reduce((b, a) => (counts[a] > counts[b] ? a : b)) : null;
+  const pct = Object.fromEntries(LINES.map((a) => [a, total ? Math.round((100 * counts[a]) / total) : 0])) as Record<Line, number>;
+  const top = total ? LINES.reduce((b, a) => (counts[a] > counts[b] ? a : b)) : null;
   return {
     status: 200,
     json: {

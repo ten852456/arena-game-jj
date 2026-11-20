@@ -32,6 +32,14 @@ export type Job =
 export interface MatchRes {
   score: Record<string, number>;
   count: Record<string, number>;
+  /** hero `a`'s ultimate: fights where it was unlocked, fired, fire tick / fight ticks of each fire */
+  ultOn: number;
+  ultFired: number;
+  ultAt: number[];
+  /** points scored with the ult unlocked / locked, and fights of each */
+  ultScore: number;
+  lockScore: number;
+  lockN: number;
   /** sides of hero `a` that cast 0 skills / were controlled, over all its fights */
   zero: number;
   sides: number;
@@ -85,11 +93,11 @@ export function runJob(j: Job): unknown {
     case 'builds': {
       const h = HEROES_BY_ID[j.hero];
       const out: Build[] = [];
-      for (let i = j.from; i < j.to; i++) out.push(aiBuild(h.id, j.day, [h.arch], hashSeed(c.seed, 'bal', h.id, j.day, i), tierOf(c, 'bal', h.id, j.day, i)));
+      for (let i = j.from; i < j.to; i++) out.push(aiBuild(h.id, j.day, [h.line], hashSeed(c.seed, 'bal', h.id, j.day, i), tierOf(c, 'bal', h.id, j.day, i)));
       return out;
     }
     case 'match': {
-      const r: MatchRes = { score: {}, count: {}, zero: 0, sides: 0, ctl: 0, ticks: 0 };
+      const r: MatchRes = { score: {}, count: {}, zero: 0, sides: 0, ctl: 0, ticks: 0, ultOn: 0, ultFired: 0, ultAt: [], ultScore: 0, lockScore: 0, lockN: 0 };
       const A = j.builds[j.a];
       for (const B of HEROES) {
         let s = 0;
@@ -109,6 +117,21 @@ export function runJob(j: Job): unknown {
             r.ctl += f1.ctl[0] + f2.ctl[1];
             r.sides += 2;
             r.ticks += r1.ticks + r2.ticks;
+            for (const [res, side] of [[r1, 0], [r2, 1]] as const) {
+              const sd = res.sides?.[side];
+              const p = pts(res.winner, side);
+              if (!sd?.ultLv) {
+                r.lockScore += p;
+                r.lockN++;
+                continue;
+              }
+              r.ultOn++;
+              r.ultScore += p;
+              if ((sd.ult ?? -1) >= 0) {
+                r.ultFired++;
+                r.ultAt.push(sd.ult! / res.ticks);
+              }
+            }
           }
         }
         r.score[B.id] = s;
@@ -129,7 +152,7 @@ export function runJob(j: Job): unknown {
       const out: Build[] = [];
       for (let i = 0; i < j.size; i++) {
         const h = HEROES[i % HEROES.length];
-        out.push(aiBuild(h.id, j.day, [h.arch], hashSeed(c.seed, 'pool', j.day, i), tierOf(c, 'pool', j.day, i)));
+        out.push(aiBuild(h.id, j.day, [h.line], hashSeed(c.seed, 'pool', j.day, i), tierOf(c, 'pool', j.day, i)));
       }
       return out;
     }
@@ -141,8 +164,8 @@ export function runJob(j: Job): unknown {
         const rng = new Rng(hashSeed(c.seed, 'tier-h', j.day, i));
         const ha = rng.pick(HEROES);
         const hb = rng.pick(HEROES);
-        const sa = aiRun(ha.id, j.day, [ha.arch], hashSeed(c.seed, 'tier-a', j.day, i), j.x);
-        const sb = aiRun(hb.id, j.day, [hb.arch], hashSeed(c.seed, 'tier-b', j.day, i), j.y);
+        const sa = aiRun(ha.id, j.day, [ha.line], hashSeed(c.seed, 'tier-a', j.day, i), j.x);
+        const sb = aiRun(hb.id, j.day, [hb.line], hashSeed(c.seed, 'tier-b', j.day, i), j.y);
         const a = toBuild(sa);
         const b = toBuild(sb);
         const seed = hashSeed(c.seed, 'tier', j.day, i);
@@ -169,7 +192,7 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
   const sk = (id: string) => (res.skills[id] ??= { own8: 0, ownAll: 0, fights: 0, wins: 0, share: 0, shareN: 0 });
   for (let r = j.from; r < j.to; r++) {
     const tier = tierOf(c, 'run', h.id, r);
-    const rules = botRules([h.arch], tier);
+    const rules = botRules([h.line], tier);
     const s = newRun(h.id, hashSeed(c.seed, 'run', h.id, r), `bot-${r}`);
     const rng = new Rng(hashSeed(c.seed, 'opp', h.id, r));
     const met: Record<number, number> = {};

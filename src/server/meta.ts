@@ -2,7 +2,7 @@
 // playerId is a random id the client keeps: it is untrusted and works like a password, so it is never returned in lists.
 import { HEROES_BY_ID } from '../sim/heroes';
 import { WIN_TARGET } from '../sim/run';
-import { archetypeOf } from './match';
+import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
 import { MAX_DAY, cleanId, cleanName, intIn, validateBuild } from './validate';
 import type { Res } from './fight';
@@ -25,7 +25,7 @@ const publicPlayer = (p: Player) => ({
   name: p.name, stardust: p.stardust, runs: p.runs, wins: p.wins, losses: p.losses, best: p.best ?? null,
 });
 const runRow = (r: FinishedRun) => ({
-  runId: r.runId, name: r.name, hero: r.hero, arch: r.arch, wins: r.wins, losses: r.losses, day: r.day,
+  runId: r.runId, name: r.name, hero: r.hero, line: r.line ?? null, wins: r.wins, losses: r.losses, day: r.day,
   stardust: r.stardust, season: r.season, finishedAt: r.finishedAt,
 });
 const better = (a: Pick<FinishedRun, 'wins' | 'losses' | 'day'>, b: Pick<FinishedRun, 'wins' | 'losses' | 'day'>) =>
@@ -79,7 +79,7 @@ export function handleFinish(body: any): Res {
   const name = cleanName(body?.name, playerId);
   const player = (db.players[playerId] ??= newPlayer(playerId, name));
   const run: FinishedRun = {
-    runId, playerId, name, hero, arch: archetypeOf(build), wins: countedWins, losses: countedLosses, day, build,
+    runId, playerId, name, hero, line: lineOf(build), wins: countedWins, losses: countedLosses, day, build,
     stardust: reward.stardust, ...(capped ? { capped } : {}), season: SEASON, finishedAt: Date.now(),
   };
   db.runs.push(run);

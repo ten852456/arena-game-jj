@@ -3,7 +3,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
-import type { Archetype, Build } from '../sim/types';
+import type { Build, Line } from '../sim/types';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -72,7 +72,8 @@ export interface FinishedRun {
   playerId: string;
   name: string;
   hero: string;
-  arch: Archetype;
+  /** main line of the build (runs finished before sim v12 have an old `arch` field instead and no line) */
+  line?: Line;
   wins: number;
   losses: number;
   day: number;

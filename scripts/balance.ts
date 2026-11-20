@@ -6,7 +6,7 @@ import { aiBuild, randomAiBuild } from '../src/sim/bot';
 import { TPS, fatigueStart, simulate } from '../src/sim/combat';
 import { HEROES } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
-import { ARCHES, type Build } from '../src/sim/types';
+import { LINES, type Build } from '../src/sim/types';
 
 const args = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const STRICT = process.argv.includes('--strict');
@@ -51,7 +51,7 @@ for (let day = 1; day <= 13 && !process.argv.includes('--no-len'); day++) {
 // ---------------- matchup matrices ----------------
 for (const DAY of DAYS) {
   const builds: Record<string, Build[]> = {};
-  for (const h of HEROES) builds[h.id] = Array.from({ length: N }, (_, i) => aiBuild(h.id, DAY, [h.arch], hashSeed('bal', h.id, DAY, i)));
+  for (const h of HEROES) builds[h.id] = Array.from({ length: N }, (_, i) => aiBuild(h.id, DAY, [h.line], hashSeed('bal', h.id, DAY, i)));
 
   /** score[a][b] = wins of hero a vs hero b, n[a][b] = fights */
   const score: Record<string, Record<string, number>> = {};
@@ -86,13 +86,13 @@ for (const DAY of DAYS) {
 
   // archetype matrix: sum hero pairs by archetype (mirror pairs of the same hero are skipped off-diagonal)
   console.log('\nArchetype (row = win rate vs column)\n');
-  console.log('        ' + ARCHES.map((a) => a.padStart(7)).join(''));
-  for (const a of ARCHES) {
-    const row = ARCHES.map((b) => {
+  console.log('        ' + LINES.map((a) => a.padStart(7)).join(''));
+  for (const a of LINES) {
+    const row = LINES.map((b) => {
       let s = 0;
       let n = 0;
-      for (const A of HEROES.filter((h) => h.arch === a))
-        for (const B of HEROES.filter((h) => h.arch === b)) {
+      for (const A of HEROES.filter((h) => h.line === a))
+        for (const B of HEROES.filter((h) => h.line === b)) {
           s += score[A.id][B.id];
           n += count[A.id][B.id];
         }

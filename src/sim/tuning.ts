@@ -3,12 +3,12 @@
  * `npm run tune -- --apply` rewrites the numbers between the <tuned> markers below.
  *
  * - skills.ts scales its base numbers (the literals in SKILL_LIST) by the skill multipliers when it loads:
- *   hits, shields, heals, burns and charge get `arch.*` (shared skills) or `uniq.*` (hero-unique skills),
+ *   hits, shields, heals, burns, poisons and charge get `line.*` (shared skills) or `uniq.*` (hero-unique skills),
  *   interpolated by level (Lv2 = halfway between Lv1 and Lv3); freeze / slow / delay seconds get `control`,
  *   engine power gets `engine`, hero-unique cooldowns get `cd.<hero>`. Scaled values are rounded (integers stay integers), so the UI shows the real numbers.
  * - heroes.ts reads the hero HP and passive values; combat.ts the HP curve and chain decay; run.ts the run HP and loss.
  *
- * All values at 1 / their v10 numbers reproduce sim v10 exactly. Change a value → bump SIM_VERSION in combat.ts.
+ * Change a value → bump SIM_VERSION in combat.ts.
  * Pure data, no imports (safe for server, browser and worker threads).
  */
 
@@ -33,15 +33,23 @@ export const TUNING = {
   'engine': 1,
   /** freeze / slow / delay seconds of every skill × this */
   'control': 1.05,
-  // ---- shared skills of each archetype: power multiplier at Lv1 and Lv3 ----
-  'arch.tank.lv1': 1,
-  'arch.tank.lv3': 1,
-  'arch.burst.lv1': 1,
-  'arch.burst.lv3': 1,
-  'arch.scaling.lv1': 1,
-  'arch.scaling.lv3': 1,
-  'arch.control.lv1': 1,
-  'arch.control.lv3': 1,
+  // ---- shared skills of each line: power multiplier at Lv1 and Lv3 ----
+  'line.hit.lv1': 1,
+  'line.hit.lv3': 1,
+  'line.dodge.lv1': 1,
+  'line.dodge.lv3': 1,
+  'line.shield.lv1': 1,
+  'line.shield.lv3': 1,
+  'line.heal.lv1': 1,
+  'line.heal.lv3': 1,
+  'line.burn.lv1': 1,
+  'line.burn.lv3': 1,
+  'line.poison.lv1': 1,
+  'line.poison.lv3': 1,
+  'line.ice.lv1': 1,
+  'line.ice.lv3': 1,
+  'line.wind.lv1': 1,
+  'line.wind.lv3': 1,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 1,
   'uniq.knight.lv3': 1,
@@ -82,14 +90,54 @@ export const TUNING = {
   'knight.shield': 0.1,
   /** นักฆ่า: the first hit of the fight × this */
   'assassin.first': 1.6,
-  /** นักดาบคู่: every 3rd hit + this share (at least +1) */
-  'duelist.third': 0.3,
   /** นักรบคลั่ง: +1 พลัง per this many hits taken */
   'berserker.hits': 6,
   /** นักเวทเพลิง: burns last × this */
   'pyro.burn': 1.3,
   /** แม่มดน้ำแข็ง: freezes last + this many seconds */
   'witch.freeze': 0.3,
+  /** นักดาบคู่: +1 dodge charge every this many hits landed */
+  'duelist.every': 3,
+  /** นักรบหนาม: each hit taken poisons the attacker 1/s for this many seconds */
+  'thornguard.poison': 2,
+  // ---- new mechanics (sim v12) ----
+  /** most dodge charges a fighter can hold */
+  'dodge.cap': 3,
+  /** a poisoned fighter's healing × this */
+  'poison.heal': 0.6,
+  /** most haste a fighter can have (share faster) */
+  'haste.cap': 0.6,
+  // ---- ultimates: trigger amount (Lv1; Lv2 needs 30% less) and effect power (Lv1; Lv2 ×1.4) ----
+  /** นักฆ่า: enemy HP below this share */
+  'ult.assassin.trig': 0.4,
+  /** นักฆ่า: hit = this × your biggest hit so far (ignores shield, can't be dodged) */
+  'ult.assassin.pow': 1.5,
+  /** นักดาบคู่: hits dodged */
+  'ult.duelist.trig': 4,
+  /** นักดาบคู่: haste share for 3 s (+2 dodge) */
+  'ult.duelist.pow': 0.5,
+  /** อัศวิน: shield gained, share of max HP */
+  'ult.knight.trig': 0.6,
+  /** อัศวิน: hit = shield × this (the shield stays) */
+  'ult.knight.pow': 1.5,
+  /** นักรบคลั่ง: survives a killing blow (no trigger amount); heals this share of max HP */
+  'ult.berserker.pow': 0.2,
+  /** นักเวทเพลิง: burn stacks on the enemy */
+  'ult.pyro.trig': 4,
+  /** นักเวทเพลิง: deals the burn still to come × this right away */
+  'ult.pyro.pow': 1.3,
+  /** นักรบหนาม: direct hits taken */
+  'ult.thornguard.trig': 12,
+  /** นักรบหนาม: seconds of poison thorns */
+  'ult.thornguard.pow': 4,
+  /** แม่มดน้ำแข็ง: ice skill casts */
+  'ult.witch.trig': 3,
+  /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
+  'ult.witch.pow': 2,
+  /** จอมเวทลม: slows / delays landed */
+  'ult.chrono.trig': 4,
+  /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
+  'ult.chrono.pow': 0.3,
 };
 // </tuned>
 

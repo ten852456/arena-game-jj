@@ -1,12 +1,12 @@
-import { HEROES, HEROES_BY_ID } from './heroes';
+import { HEROES, HEROES_BY_ID, ULT_PIECES, ultPieces } from './heroes';
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
   MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
-import { SKILLS, SKILL_LIST, lvOf, nodeOf, type Effect, type SkillNode, type Variant } from './skills';
-import { ARCHES, type Archetype, type Build, type SkillInstance } from './types';
+import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, type Effect, type SkillNode, type Variant } from './skills';
+import { LINES, type Build, type Line, type SkillInstance } from './types';
 
 /**
  * Rule-based bot (no LLM). Plays through the same run API as a human.
@@ -15,17 +15,18 @@ import { ARCHES, type Archetype, type Build, type SkillInstance } from './types'
  *
  * Difficulty tiers:
  * - easy:   no rerolls, noisy picks, sometimes leaves a slot empty on days 1–3, keeps the list in buy order.
- * - normal: the original bot (archetype / hero preference, 2 rerolls a day, sorts the list for connect bonuses).
+ * - normal: line / hero preference, 2 rerolls a day, sorts the list for connect bonuses, buys toward the ultimate.
  * - hard:   values skills by their numbers, buys for connect bonuses, finishes upgrade branches that fit the build,
- *           buys anti-control when its archetype has none, spends its gold (rerolls, slots).
+ *           buys toward the ultimate (3 / 5 pieces), likes its line's tech skill, buys anti-control when its line has
+ *           none, spends its gold (rerolls, slots).
  * Every tier makes sure the build owns at least one damage skill with a short cooldown, so it always casts early.
  */
 export type BotTier = 'easy' | 'normal' | 'hard';
 export const BOT_TIERS: BotTier[] = ['easy', 'normal', 'hard'];
 
 export interface BotRules {
-  /** archetypes in priority order */
-  prefer: Archetype[];
+  /** lines in priority order */
+  prefer: Line[];
   /** gold to keep after rerolling */
   reserve: number;
   maxRerolls: number;
@@ -34,7 +35,7 @@ export interface BotRules {
 }
 
 /** Default rules for a tier. */
-export function botRules(prefer: Archetype[], tier: BotTier = 'normal'): BotRules {
+export function botRules(prefer: Line[], tier: BotTier = 'normal'): BotRules {
   if (tier === 'easy') return { prefer, reserve: 0, maxRerolls: 0, tier };
   if (tier === 'hard') return { prefer, reserve: 0, maxRerolls: 8, tier };
   return { prefer, reserve: 0, maxRerolls: 2, tier };
@@ -55,8 +56,8 @@ const ANTI_CONTROL = new Set<Effect['k']>(['cleanse', 'steadfast']);
 const nodeAntiControl = (n: SkillNode) => n.fx.some((e) => ANTI_CONTROL.has(e.k));
 /** Lv1 of this skill already removes or reduces control. */
 export const isAntiControl = (id: string) => !!SKILLS[id] && nodeAntiControl(SKILLS[id].tree['']);
-/** An archetype is weak to control when none of its own skills answer it at Lv1. */
-export const weakToControl = (arch: Archetype) => !SKILL_LIST.some((d) => d.arch === arch && isAntiControl(d.id));
+/** A line is weak to control when none of its own skills answer it at Lv1. */
+export const weakToControl = (line: Line) => !SKILL_LIST.some((d) => d.line === line && isAntiControl(d.id));
 
 /** Rough strength of one variant per second of cooldown (hard bot only; tuning numbers, not game rules). */
 function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
@@ -68,6 +69,9 @@ function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
         if (e.shieldPct) d += e.shieldPct * (has.has('shield') ? 10 : 4);
         if (e.thornsX) d += e.thornsX * (has.has('thorns') ? 3 : 1.5);
         if (e.burnPct) d += e.burnPct * (has.has('burn') ? 10 : 3);
+        if (e.poisonPct) d += e.poisonPct * (has.has('poison') ? 12 : 3);
+        if (e.perBurn) d += e.perBurn * (has.has('burn') ? 2 : 0.5);
+        if (e.perDodge) d += e.perDodge * (has.has('dodge') ? 1.5 : 0.3);
         d *= e.times ?? 1;
         if (e.pierce) d *= 1 + 0.25 * e.pierce;
         if (e.exec) d *= 1 + (e.exec[1] - 1) * 0.35;
@@ -76,13 +80,19 @@ function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
         if (e.ifSlowed) d *= has.has('slow') ? 0.8 : 0.2;
         if (e.leech) d *= 1 + e.leech;
         if (e.burn) d += e.burn[0] * e.burn[1];
+        if (e.poison) d += e.poison[0] * e.poison[1] * 0.7;
+        if (e.sure) d *= 1.05;
         if (e.perRemoved) d += e.perRemoved * 0.5;
         v += d;
         break;
       }
       case 'shield': v += e.n * 0.7; break;
       case 'heal': v += e.n * 0.8; break;
-      case 'burn': v += e.dps * e.secs * 0.8 + (e.growthHalf && has.has('grow') ? 4 : 0); break;
+      case 'burn': v += (e.dps * e.secs * 0.8 + (e.growthHalf && has.has('grow') ? 4 : 0)) * (e.stacks ?? 1); break;
+      case 'poison': v += e.dps * e.secs * 0.7 * (e.stacks ?? 1); break;
+      case 'dodge': v += e.n * 3; break;
+      case 'haste': v += e.pct * e.secs * 6; break;
+      case 'wound': v += e.pct * e.secs * 1.5; break;
       case 'freeze': v += e.secs * 6; break;
       case 'slow': v += e.pct * e.secs * 8; break;
       case 'delay': v += e.secs * 5; break;
@@ -92,7 +102,6 @@ function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
       case 'steadfast': v += 3; break;
       case 'cleanse': v += 2; break;
       case 'dispel': v += 3; break;
-      case 'amplify': v += has.has('grow') || has.has('thorns') || has.has('charge') ? 6 : 1; break;
       case 'leech': v += e.pct * 8; break;
     }
   }
@@ -202,14 +211,17 @@ export function botShopTurn(s: RunState, rules: BotRules) {
   const easy = tier === 'easy';
   let rerolls = 0;
   const want = HEROES_BY_ID[s.hero]?.botWant ?? [];
+  const line = HEROES_BY_ID[s.hero]?.line;
   /** how much the bot likes a skill (0 = not at all) */
   const like = (id: string) => {
     const d = SKILLS[id];
     let score = 0;
-    const pi = rules.prefer.indexOf(d.arch as Archetype);
+    const pi = rules.prefer.indexOf(d.line as Line);
     if (pi >= 0) score += 3 - pi;
     if (d.hero) score += 3;
     if (!easy && want.includes(id)) score += 2;
+    // buying toward the ultimate: one more line skill is worth a bit more while the ult is still locked
+    if (!easy && d.line === line && ultPieces(s) < ULT_PIECES[0]) score += 1;
     return score;
   };
   /** value of an owned skill when deciding what to sell; the last early hitter is never sold */
@@ -231,6 +243,8 @@ export function botShopTurn(s: RunState, rules: BotRules) {
       if (offer.v !== '') {
         if (!upgradeOf(s, offer) || lazy) return; // lazy easy bots do not upgrade early either
         score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
+        // a Lv3 on a line skill is one more ult piece (5 pieces = ult Lv2)
+        if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultPieces(s) < ULT_PIECES[1]) score += 1;
       } else {
         if (s.skills.some((k) => k.id === id)) return;
         score = full ? 1 : 2; // a free slot is worth filling with anything
@@ -278,12 +292,16 @@ export function botShopTurn(s: RunState, rules: BotRules) {
 function hardShopTurn(s: RunState, rules: BotRules) {
   const hero = HEROES_BY_ID[s.hero];
   const want = hero?.botWant ?? [];
-  const arch = hero?.arch ?? rules.prefer[0];
-  const needAnti = weakToControl(arch) && s.day >= 4;
+  const line = hero?.line ?? rules.prefer[0];
+  const needAnti = weakToControl(line) && s.day >= 4;
   const pref = (id: string) => {
     const d = SKILLS[id];
-    const pi = rules.prefer.indexOf(d.arch as Archetype);
-    return (pi >= 0 ? 2 - pi * 0.5 : 0) + (d.hero ? 2.5 : 0) + (want.includes(id) ? 1.5 : 0);
+    const pi = rules.prefer.indexOf(d.line as Line);
+    let v = (pi >= 0 ? 2 - pi * 0.5 : 0) + (d.hero ? 2.5 : 0) + (want.includes(id) ? 1.5 : 0);
+    // toward the ultimate while it is locked; the line's tech skill (answers the lines it loses to) from day 3
+    if (d.line === line && ultPieces(s) < ULT_PIECES[0]) v += 1.5;
+    if (d.line === line && SKILL_ROLE[id] === 'tech' && s.day >= 3) v += 1;
+    return v;
   };
   // the list's effect kinds, recomputed only when the list changes (version)
   let version = 0;
@@ -312,7 +330,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
       if (!owned) return 0;
       const gain = nodeValue(nodeOf({ id: o.id, v: o.v }), has) - nodeValue(nodeOf(owned), has);
       // finishing a branch (Lv2 → Lv3) on a skill that fits the build is worth more than spreading gold thin
-      const branch = lvOf(owned.v) === 2 ? 1.5 : 0.5;
+      const branch = lvOf(owned.v) === 2 ? (SKILLS[o.id].line === line && ultPieces(s) < ULT_PIECES[1] ? 2.5 : 1.5) : 0.5;
       // a Lv2 variant whose Lv3 children suit the build (best child value) is a coherent branch to start
       const kids = lvOf(o.v) === 2 ? Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (o.v + c) as Variant }), has))) * 0.2 : 0;
       if (gain + kids <= 0) return 0;
@@ -391,12 +409,12 @@ export function botDay(s: RunState, rules: BotRules) {
 }
 
 /** Build a bot's build as of `day`, by running its shop turns day by day. */
-export function aiBuild(hero: string, day: number, prefer: Archetype[], seed: number, tier: BotTier = 'normal'): Build {
+export function aiBuild(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal'): Build {
   return toBuild(aiRun(hero, day, prefer, seed, tier));
 }
 
 /** The bot's run state after its shop on `day` (aiBuild without the toBuild; the simulator reads its unspent gold). */
-export function aiRun(hero: string, day: number, prefer: Archetype[], seed: number, tier: BotTier = 'normal'): RunState {
+export function aiRun(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal'): RunState {
   const s = newRun(hero, seed, 'ai');
   const rules = botRules(prefer, tier);
   for (let d = 1; d <= day; d++) {
@@ -415,6 +433,6 @@ export function aiRun(hero: string, day: number, prefer: Archetype[], seed: numb
 export function randomAiBuild(day: number, seed: number, tier: BotTier = 'normal'): Build {
   const rng = new Rng(seed);
   const hero = rng.pick(HEROES);
-  const second = rng.pick(ARCHES.filter((a) => a !== hero.arch));
-  return aiBuild(hero.id, day, [hero.arch, second], hashSeed(seed, 'ai'), tier);
+  const second = rng.pick(LINES.filter((a) => a !== hero.line));
+  return aiBuild(hero.id, day, [hero.line, second], hashSeed(seed, 'ai'), tier);
 }

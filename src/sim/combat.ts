@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, type CombatHooks, type HookFighter } from './heroes';
+import { HEROES_BY_ID, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
@@ -25,10 +25,14 @@ import type {
  *   to freeze and delay for CTL_IMMUNE ticks;
  * - skills with ✨ ชำระ or 🗿 ใจเหล็ก react: when control lands on their owner they fire right away
  *   (at most once per their cooldown, and their cooldown restarts).
+ *
+ * Lines (sim v12): dodge charges negate whole direct hits (not burn, poison, thorns, fatigue or ultimates); poison is a
+ * long, weak DoT that ignores shields and cuts healing; haste speeds up your own cooldowns. Each hero's ultimate is
+ * unlocked by the build (heroes.ts ultLevel) and fires at most once per fight when its trigger is met.
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 11;
+export const SIM_VERSION = 12;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -136,7 +140,32 @@ interface Fighter {
   /** block that set the current charge (credit for buff damage) */
   chargeIdx: number;
   thorns: Stack[];
-  burns: { dps: number; t: number; idx: number }[];
+  burns: Dot[];
+  poisons: Dot[];
+  /** dodge charges, and hits dodged this fight */
+  dodge: number;
+  dodges: number;
+  /** haste share and ticks left */
+  hasteP: number;
+  hasteT: number;
+  /** healing cut share and ticks left */
+  woundP: number;
+  woundT: number;
+  /** ultimate: level from the build, fired yet, trigger counters */
+  ultLv: number;
+  ultDone: boolean;
+  /** shield gained this fight (not the start shield) */
+  shieldGot: number;
+  /** direct hits taken (landed) */
+  hitsTaken: number;
+  /** casts of this hero's line skills */
+  lineCasts: number;
+  /** slows / delays this fighter landed on the enemy */
+  ctlLanded: number;
+  /** biggest single hit this fighter dealt */
+  bigHit: number;
+  /** นักรบหนาม ult: poison thorns active until this tick */
+  ultUntil: number;
   freezeN: number;
   /** share of control (freeze / slow / delay) that still lands on this fighter: 1 = all, 0.4 = ใจเหล็ก */
   ctlKeep: number;
@@ -159,7 +188,17 @@ interface Fighter {
   side_: SideStat;
 }
 
+interface Dot {
+  dps: number;
+  /** ticks left */
+  t: number;
+  idx: number;
+}
+
 const sum = (xs: Stack[]) => xs.reduce((n, x) => n + x.v, 0);
+const dps = (xs: Dot[]) => xs.reduce((n, x) => n + x.dps, 0);
+/** damage still to come from a list of DoT stacks */
+const dotLeft = (xs: Dot[]) => xs.reduce((n, b) => n + b.dps * Math.ceil(b.t / TPS), 0);
 
 /** haste = cooldown cut from connect bonuses (0.2 per haste bonus, at most halved) */
 export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0): number {
@@ -193,10 +232,12 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
     side, hero: b.hero, hooks, blocks: makeBlocks(b),
     hp: maxHp, maxHp, shield: hooks.startShield ? hooks.startShield(0, maxHp) : 0,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
-    burns: [], freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
+    burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
+    ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
+    freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat),
     immuneUntil: 0, pendingReact: [], lastFire: 0,
-    side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0 },
+    side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0, ultLv: ultLevel(b), ult: -1, dodged: 0 },
   };
 }
 
@@ -211,10 +252,14 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     c: f.charge,
     th: sum(f.thorns),
     sf: f.ctlKeep < 1 ? 1 : 0,
-    b: f.burns.reduce((n, x) => n + x.dps, 0),
+    b: dps(f.burns),
     fr: f.frozen,
     sl: f.slowT > 0 ? Math.round(f.slowPct * 100) : 0,
     slt: f.slowT,
+    dg: f.dodge,
+    p: dps(f.poisons),
+    hs: f.hasteT > 0 ? Math.round(f.hasteP * 100) : 0,
+    hst: f.hasteT,
   });
   const snap = (): Snap => ({ hp: [F[0].hp, F[1].hp], sh: [F[0].shield, F[1].shield], fx: [fx(F[0]), fx(F[1])] });
   const emit = (e: EventBody) => {
@@ -222,7 +267,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   };
   const view = (x: Fighter): FighterView => ({
     hp: x.hp, maxHp: x.maxHp, shield: x.shield, frozen: x.frozen > 0, slowed: x.slowT > 0, hero: x.hero,
-    thorns: sum(x.thorns), growth: sum(x.growth), burnLeft: x.burns.reduce((n, b) => n + b.dps * Math.ceil(b.t / TPS), 0),
+    thorns: sum(x.thorns), growth: sum(x.growth), burnLeft: dotLeft(x.burns), burnStacks: x.burns.length,
+    poisonLeft: dotLeft(x.poisons), dodge: x.dodge,
   });
   const hookApi = (f: Fighter): HookFighter => ({
     get hero() { return f.hero; },
@@ -239,10 +285,17 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     },
     addShield(n) {
       f.shield += n;
+      f.shieldGot += n;
       emit({ type: 'shield', side: f.side, amount: n });
     },
     status(kind: StatusKind, value: number) {
       emit({ type: 'status', side: f.side, status: kind, value });
+    },
+    dodge(n) {
+      addDodge(f, n);
+    },
+    poisonFoe(d, secs) {
+      addPoison(F[1 - f.side], d, secs, -1);
     },
   });
   const init = snap();
@@ -286,13 +339,141 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       st.d += amount;
       st.bd += Math.min(amount, bonusPart);
     }
+    // นักรบคลั่ง's ultimate: a killing blow leaves 1 HP instead (once per fight)
+    const undying = target.hp <= 0 && target.hero === 'berserker' && target.ultLv > 0 && !target.ultDone;
+    if (undying) target.hp = 1;
     emit({ type: 'damage', side: target.side, amount: amount - blocked, blocked, src });
+    if (undying) fireUlt(target);
     target.hooks.onDamaged?.(hookApi(target), amount - blocked, src);
   }
 
-  function addBurn(foe: Fighter, dps: number, secs: number, idx: number) {
-    foe.burns.push({ dps, t: secs * TPS, idx });
-    emit({ type: 'status', side: foe.side, status: 'burn', value: foe.burns.reduce((n, x) => n + x.dps, 0) });
+  function addBurn(foe: Fighter, d: number, secs: number, idx: number) {
+    foe.burns.push({ dps: d, t: secs * TPS, idx });
+    emit({ type: 'status', side: foe.side, status: 'burn', value: dps(foe.burns) });
+  }
+  function addPoison(foe: Fighter, d: number, secs: number, idx: number) {
+    if (foe.hp <= 0) return;
+    foe.poisons.push({ dps: d, t: Math.round(secs * TPS), idx });
+    emit({ type: 'status', side: foe.side, status: 'poison', value: dps(foe.poisons) });
+  }
+  function addDodge(f: Fighter, n: number) {
+    f.dodge = Math.min(T['dodge.cap'], f.dodge + n);
+    emit({ type: 'status', side: f.side, status: 'dodge', value: f.dodge });
+  }
+  function addHaste(f: Fighter, pct: number, secs: number) {
+    f.hasteP = Math.min(T['haste.cap'], f.hasteT > 0 ? Math.max(f.hasteP, pct) : pct);
+    f.hasteT = Math.max(f.hasteT, Math.round(secs * TPS));
+    emit({ type: 'status', side: f.side, status: 'haste', value: Math.round(f.hasteP * 100) });
+  }
+  function addWound(foe: Fighter, pct: number, secs: number) {
+    foe.woundP = foe.woundT > 0 ? Math.max(foe.woundP, pct) : pct;
+    foe.woundT = Math.max(foe.woundT, Math.round(secs * TPS));
+    emit({ type: 'status', side: foe.side, status: 'wound', value: Math.round(foe.woundP * 100) });
+  }
+  /** remove up to n burn / poison stacks, strongest first (burn wins ties) */
+  function removeDots(f: Fighter, n: number) {
+    let removed = 0;
+    for (let r = 0; r < n && (f.burns.length || f.poisons.length); r++) {
+      const all = [...f.burns.map((x) => ({ x, list: f.burns })), ...f.poisons.map((x) => ({ x, list: f.poisons }))];
+      let k = 0;
+      all.forEach((y, i) => { if (y.x.dps > all[k].x.dps) k = i; });
+      const { x, list } = all[k];
+      list.splice(list.indexOf(x), 1);
+      removed++;
+    }
+    return removed;
+  }
+
+  // ---------------- ultimates ----------------
+  /** Fire f's ultimate now (its trigger was met). */
+  function fireUlt(f: Fighter) {
+    const foe = F[1 - f.side];
+    f.ultDone = true;
+    f.side_.ult = t;
+    emit({ type: 'ult', side: f.side, hero: f.hero, lv: f.ultLv });
+    const pow = ultPow(f.hero, f.ultLv);
+    switch (f.hero) {
+      case 'assassin':
+        deal(foe, Math.max(1, Math.round(pow * f.bigHit)), false, 'ult');
+        break;
+      case 'duelist':
+        addHaste(f, pow, 3);
+        addDodge(f, 2);
+        break;
+      case 'knight':
+        deal(foe, Math.max(1, Math.round(pow * f.shield)), true, 'ult');
+        break;
+      case 'berserker': {
+        const h = Math.min(f.maxHp - f.hp, Math.round(pow * f.maxHp));
+        if (h > 0) {
+          f.hp += h;
+          emit({ type: 'heal', side: f.side, amount: h });
+        }
+        const g = f.ultLv >= 2 ? 3 : 2;
+        f.growth.push({ v: g, idx: -1 });
+        emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
+        break;
+      }
+      case 'pyro':
+        deal(foe, Math.max(1, Math.round(pow * dotLeft(foe.burns))), false, 'ult');
+        break;
+      case 'thornguard':
+        f.ultUntil = t + Math.round(pow * TPS);
+        addWound(foe, 1, pow);
+        break;
+      case 'witch': {
+        // no diminishing returns and no immunity window, but still under the control cap (and ใจเหล็ก)
+        let ticks = Math.round(pow * TPS * foe.ctlKeep);
+        ticks = Math.max(0, Math.min(ticks, ctlRoom(foe) + foe.frozen));
+        if (ticks > foe.frozen) {
+          foe.frozenTotal += ticks - foe.frozen;
+          foe.frozen = ticks;
+          emit({ type: 'status', side: foe.side, status: 'freeze', value: ticks });
+          if (ticks >= REACT_MIN) controlled(foe);
+        } else {
+          foe.side_.resisted++;
+          emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
+        }
+        const m = f.ultLv >= 2 ? 2.4 : 2;
+        if (m >= f.charge) {
+          f.charge = m;
+          f.chargeIdx = -1;
+          f.chargeHits = 1;
+        }
+        emit({ type: 'status', side: f.side, status: 'charge', value: m });
+        break;
+      }
+      case 'chrono': {
+        for (const b of f.blocks) b.prog = Math.max(b.prog, b.cd);
+        let n = removeDots(f, 99);
+        if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
+        if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
+        if (f.woundT > 0) { f.woundT = 0; n++; }
+        emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
+        addHaste(f, pow, 3);
+        break;
+      }
+    }
+  }
+  /** Has f's trigger been met? (นักรบคลั่ง's fires inside deal) */
+  function ultReady(f: Fighter): boolean {
+    if (f.ultLv <= 0 || f.ultDone || f.hp <= 0) return false;
+    const foe = F[1 - f.side];
+    if (foe.hp <= 0) return false;
+    const need = ultTrig(f.hero, f.ultLv);
+    switch (f.hero) {
+      case 'assassin': return f.bigHit > 0 && foe.hp < foe.maxHp * need;
+      case 'duelist': return f.dodges >= need;
+      case 'knight': return f.shieldGot >= f.maxHp * need && f.shield > 0;
+      case 'pyro': return foe.burns.length >= need;
+      case 'thornguard': return f.hitsTaken >= need;
+      case 'witch': return f.lineCasts >= need;
+      case 'chrono': return f.ctlLanded >= need;
+      default: return false;
+    }
+  }
+  function ultCheck() {
+    for (const f of F) if (ultReady(f)) fireUlt(f);
   }
 
   /** power = cast power (connect bonus × echo); bonusDmg = + damage per hit from connect bonuses */
@@ -330,6 +511,22 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         const mult = f.charge;
         let dmg = Math.round((n + sum(f.growth) + bonusDmg) * mult);
         if (f.hooks.onHit) dmg = Math.max(0, Math.round(f.hooks.onHit(hookApi(f), dmg)));
+        if (!o.sure && foe.dodge > 0) {
+          // dodged: the whole hit misses (a charge is spent on it too), no thorns, no leech
+          if (f.chargeHits > 1) f.chargeHits--;
+          else {
+            f.charge = 1;
+            f.chargeIdx = -1;
+            f.chargeHits = 0;
+          }
+          foe.dodge--;
+          foe.dodges++;
+          foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
+          emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
+          return -1;
+        }
+        f.bigHit = Math.max(f.bigHit, dmg);
+        foe.hitsTaken++;
         // credit for connect bonuses: the +damage bonus plus the share added by power bonuses
         const fromPower = blk.power > 1 ? n - n / blk.power : 0;
         const bonusPart = Math.round((bonusDmg + fromPower) * mult);
@@ -353,16 +550,23 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         let th = Math.min(sum(foe.thorns), Math.ceil(dmg * THORNS_MAX));
         if (foe.hooks.thornsReflect) th = foe.hooks.thornsReflect(th, sum(foe.thorns), dmg);
         if (th > 0 && f.hp > 0) deal(f, th, true, 'thorns', foe.thorns[0]?.idx ?? -1);
+        // นักรบหนาม's ultimate: poison thorns
+        if (foe.ultUntil > t && f.hp > 0) for (let i = 0; i < 2; i++) addPoison(f, 1, 4, -1);
         return dealt;
       },
       shield(n) {
         f.shield += n;
+        f.shieldGot += n;
         st.sh += n;
         emit({ type: 'shield', side: f.side, amount: n });
       },
       heal(n) {
-        // the enemy's thorns also wound: healing is reduced while they have any
-        if (foe.thorns.length) n = Math.max(1, Math.round(n * foe.thornsHeal));
+        // the enemy's thorns, poison on you and wounds all cut healing
+        let m = 1;
+        if (foe.thorns.length) m *= foe.thornsHeal;
+        if (f.poisons.length) m *= T['poison.heal'];
+        if (f.woundT > 0) m *= 1 - f.woundP;
+        if (m < 1) n = m > 0 ? Math.max(1, Math.round(n * m)) : 0;
         const h = Math.min(n, f.maxHp - f.hp);
         if (h > 0) {
           f.hp += h;
@@ -370,7 +574,11 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           emit({ type: 'heal', side: f.side, amount: h });
         }
       },
-      burn(dps, secs) { addBurn(foe, dps, f.hooks.burnSecs ? f.hooks.burnSecs(secs) : secs, blk.idx); },
+      burn(d, secs) { addBurn(foe, d, f.hooks.burnSecs ? f.hooks.burnSecs(secs) : secs, blk.idx); },
+      poison(d, secs) { addPoison(foe, d, secs, blk.idx); },
+      dodge(n) { addDodge(f, n); },
+      haste(pct, secs) { addHaste(f, pct * Math.min(1, power), secs); },
+      wound(pct, secs) { addWound(foe, pct, secs * ctl); },
       freeze(secs) {
         if (!canControl(foe)) {
           emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
@@ -410,6 +618,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           return;
         }
         foe.slowT += add;
+        if (add > 0) f.ctlLanded++;
         emit({ type: 'status', side: foe.side, status: 'slow', value: Math.round(p * 100) });
         if (add >= REACT_MIN && p >= 0.3) controlled(foe);
       },
@@ -428,6 +637,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           st.fz += ticks;
           for (const b of foe.blocks) b.prog = Math.max(0, b.prog - ticks);
           foe.immuneUntil = t + CTL_IMMUNE;
+          f.ctlLanded++;
         } else foe.side_.resisted++;
         emit({ type: 'status', side: foe.side, status: 'delay', value: ticks });
         if (ticks >= REACT_MIN) controlled(foe);
@@ -457,25 +667,10 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         if (f.frozen > 0) f.frozen = Math.max(1, Math.round(f.frozen * keep));
         emit({ type: 'status', side: f.side, status: 'steadfast', value: 1 });
       },
-      amplify(cap0) {
-        const cap = Math.max(1, Math.round(cap0 * ctl));
-        const g = Math.min(cap, sum(f.growth));
-        const th = Math.min(cap, sum(f.thorns));
-        if (g > 0) f.growth.push({ v: g, idx: blk.idx });
-        if (th > 0) f.thorns.push({ v: th, idx: blk.idx, until: thornsUntil() });
-        if (f.charge > 1) f.charge = 1 + Math.min(cap, (f.charge - 1) * 2);
-        emit({ type: 'status', side: f.side, status: 'amplify', value: g + th });
-        return g + th;
-      },
       cleanse(stacks) {
-        let n = 0;
-        // remove the strongest burn stacks
-        for (let r = 0; r < stacks && f.burns.length; r++) {
-          let k = 0;
-          f.burns.forEach((x, i) => { if (x.dps > f.burns[k].dps) k = i; });
-          f.burns.splice(k, 1);
-          n++;
-        }
+        // the strongest burn / poison stacks, then slow, freeze and wounds
+        let n = removeDots(f, stacks);
+        if (f.woundT > 0) { f.woundT = 0; f.woundP = 0; n++; }
         if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
         if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
         emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
@@ -544,6 +739,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
     f.side_.casts++;
     f.lastFire = t;
+    if (SKILLS[inst.id].line === HEROES_BY_ID[f.hero]?.line) f.lineCasts++;
     emit({
       type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx,
       ...(q.from !== undefined ? { from: f.blocks[q.from].idx } : {}),
@@ -554,6 +750,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (blk.shieldOnFire > 0 && f.hp > 0) {
       const n = Math.max(1, Math.round(blk.shieldOnFire * q.mult));
       f.shield += n;
+      f.shieldGot += n;
       st.sh += n;
       emit({ type: 'shield', side: f.side, amount: n });
     }
@@ -625,7 +822,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       f.side_.fr++;
       if (f.frozen === 0) f.immuneUntil = t + CTL_IMMUNE;
     }
-    const rate = f.slowT > 0 ? 1 - f.slowPct : 1;
+    const rate = (f.slowT > 0 ? 1 - f.slowPct : 1) * (f.hasteT > 0 ? 1 + f.hasteP : 1);
     if (f.slowT > 0) f.side_.ctl += f.slowPct;
     const ready: number[] = [];
     f.blocks.forEach((blk, bi) => {
@@ -647,6 +844,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       act(F[s]);
       reactAll(F[1 - s]);
       reactAll(F[s]);
+      ultCheck();
     }
     record();
     for (const f of F) {
@@ -655,6 +853,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         f.slowTotal++;
         f.side_.sl++;
       }
+      if (f.hasteT > 0) f.hasteT--;
+      if (f.woundT > 0) f.woundT--;
       if (t % FREEZE_DR_DECAY === 0 && f.freezeN > 0) f.freezeN--;
       if (t % FREEZE_DR_DECAY === 0 && f.delayN > 0) f.delayN--;
       if (f.thorns.some((x) => x.until !== undefined && x.until <= t)) {
@@ -665,14 +865,20 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
 
     if (t % TPS === 0) {
       for (const f of F) {
-        if (!f.burns.length || f.hp <= 0) continue;
-        // credit each burn stack's owner, then tick them down
-        const total = f.burns.reduce((n, x) => n + x.dps, 0);
+        // credit each burn / poison stack's owner, then tick them down
         const foeStats = F[1 - f.side].stats;
-        for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
-        deal(f, total, false, 'burn');
-        f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        if (f.burns.length && f.hp > 0) {
+          for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
+          deal(f, dps(f.burns), false, 'burn');
+          f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        }
+        if (f.poisons.length && f.hp > 0) {
+          for (const x of f.poisons) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
+          deal(f, dps(f.poisons), false, 'poison');
+          f.poisons = f.poisons.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        }
       }
+      ultCheck();
     }
 
     if (t >= fStart && (t - fStart) % TPS === 0) {

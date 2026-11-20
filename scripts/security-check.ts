@@ -3,7 +3,7 @@ import { aiBuild, botShopTurn } from '../src/sim/bot';
 import { newRun, recordResult, toBuild, chooseLastChance, applyMark } from '../src/sim/run';
 const BASE = process.env.BASE ?? 'http://localhost:8787';
 const post = async (u: string, b: unknown) => { const r = await fetch(BASE + u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }); return [r.status, await r.json()] as const; };
-const build = aiBuild('knight', 1, ['tank'], 7);
+const build = aiBuild('knight', 1, ['shield'], 7);
 const check = (name: string, ok: boolean, info = '') => console.log(`${ok ? '✔' : '✘'} ${name} ${info}`);
 // 1 no playerId
 check('fight without playerId → 400', (await post('/api/fight', { runId: 'sec-a', day: 1, rating: 1000, build }))[0] === 400);

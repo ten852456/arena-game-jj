@@ -2,7 +2,7 @@
 // All candidates of one call share the same seeds (common random numbers), so they are compared fairly.
 import { HEROES } from '../../src/sim/heroes';
 import { TPS } from '../../src/sim/combat';
-import { ARCHES, type Build } from '../../src/sim/types';
+import { LINES, type Build } from '../../src/sim/types';
 import { MAX_DAY, type Ctx, type Job, type MatchRes, type RunsRes } from '../sim/jobs';
 import { healthSummary, mergeHealth, newHealth, type Health } from '../sim/metrics';
 import { lengthTarget } from '../sim/targets';
@@ -178,13 +178,13 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
       }
       m.pairWorst[day] = pw;
       let aw = { r: 0, a: '', b: '' };
-      for (const a of ARCHES)
-        for (const b of ARCHES) {
+      for (const a of LINES)
+        for (const b of LINES) {
           if (a === b) continue;
           let s = 0;
           let n = 0;
-          for (const A of HEROES.filter((h) => h.arch === a))
-            for (const B of HEROES.filter((h) => h.arch === b)) {
+          for (const A of HEROES.filter((h) => h.line === a))
+            for (const B of HEROES.filter((h) => h.line === b)) {
               s += res[A.id].score[B.id];
               n += res[A.id].count[B.id];
             }

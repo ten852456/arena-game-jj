@@ -34,17 +34,14 @@ export interface Offer {
 export const HERO_CHOICES = 3;
 
 /**
- * The heroes a run may start with: `n` heroes from different archetypes, rolled from the seed.
+ * The heroes a run may start with: `n` different heroes (so `n` different lines), rolled from the seed.
  * Same seed → same choices, so the server can check the pick later (Phase 2).
  */
 export function heroChoices(seed: number, n = HERO_CHOICES): string[] {
   const rng = new Rng(hashSeed(seed, 'heroes'));
-  const arches = [...new Set(HEROES.map((h) => h.arch))];
+  const pool = HEROES.map((h) => h.id);
   const out: string[] = [];
-  while (out.length < n && arches.length) {
-    const arch = arches.splice(rng.int(arches.length), 1)[0];
-    out.push(rng.pick(HEROES.filter((h) => h.arch === arch)).id);
-  }
+  while (out.length < n && pool.length) out.push(pool.splice(rng.int(pool.length), 1)[0]);
   return out;
 }
 
@@ -65,8 +62,11 @@ export interface LogEntry {
   fightId?: string;
 }
 
+/** Saved-run format version: runs saved with another version are dropped by the client (v8 = sim v12 lines). */
+export const RUN_VERSION = 8;
+
 export interface RunState {
-  v: 7;
+  v: typeof RUN_VERSION;
   id: string;
   seed: number;
   hero: string;
@@ -137,7 +137,7 @@ export function incomeFor(day: number, streak: number) {
 
 export function newRun(hero: string, seed: number, id: string): RunState {
   const s: RunState = {
-    v: 7, id, seed, hero, day: 1, hp: T['run.startHp'], wins: 0, losses: 0, gold: 0, streak: 0,
+    v: RUN_VERSION, id, seed, hero, day: 1, hp: T['run.startHp'], wins: 0, losses: 0, gold: 0, streak: 0,
     lastIncome: { base: 0, bonus: 0 }, bonusSlots: 0, slotBuys: 0, skills: [], shop: [], rolls: 0,
     ghost: false, pendingMark: null, phase: 'shop', rating: 1000, log: [],
   };

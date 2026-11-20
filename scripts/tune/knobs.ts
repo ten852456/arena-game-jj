@@ -2,7 +2,7 @@
 // Bounds are deliberately tight (≈ ±25%): the tuner nudges the design, it does not redesign it.
 import { TUNING, type TuningKey } from '../../src/sim/tuning';
 import { HEROES } from '../../src/sim/heroes';
-import { ARCHES } from '../../src/sim/types';
+import { LINES } from '../../src/sim/types';
 
 export interface Knob {
   key: TuningKey;
@@ -27,9 +27,9 @@ export const KNOBS: Knob[] = [
   { key: 'chainDecay', lo: 0.6, hi: 0.85, step: 0.05, why: 'trigger-chain power' },
   { key: 'engine', lo: 0.8, hi: 1.2, step: 0.05, why: 'engine skills power' },
   { key: 'control', lo: 0.8, hi: 1.2, step: 0.05, why: 'freeze / slow / delay length (0-skill, control heroes)' },
-  ...ARCHES.flatMap((a) => [
-    { key: `arch.${a}.lv1` as TuningKey, lo: 0.8, hi: 1.25, step: 0.05, why: `${a} shared skills, early (Lv1)` },
-    { key: `arch.${a}.lv3` as TuningKey, lo: 0.8, hi: 1.25, step: 0.05, why: `${a} shared skills, late (Lv3)` },
+  ...LINES.flatMap((a) => [
+    { key: `line.${a}.lv1` as TuningKey, lo: 0.8, hi: 1.25, step: 0.05, why: `${a} line shared skills, early (Lv1)` },
+    { key: `line.${a}.lv3` as TuningKey, lo: 0.8, hi: 1.25, step: 0.05, why: `${a} line shared skills, late (Lv3)` },
   ]),
   ...HEROES.flatMap((h) => [
     { key: `uniq.${h.id}.lv1` as TuningKey, lo: 0.75, hi: 1.4, step: 0.05, why: `${h.id} unique skill Lv1 (early curve)` },
@@ -42,7 +42,9 @@ export const KNOBS: Knob[] = [
   }),
   around('knight.shield', 0.5, 0.02, 'knight start shield'),
   { key: 'assassin.first', lo: 1.3, hi: 2, step: 0.1, why: 'assassin first-hit burst (early)' },
-  { key: 'duelist.third', lo: 0.2, hi: 0.45, step: 0.05, why: 'duelist every-3rd-hit bonus' },
+  { key: 'duelist.every', lo: 2, hi: 5, step: 1, why: 'duelist hits per +1 dodge' },
+  { key: 'thornguard.poison', lo: 1, hi: 4, step: 1, why: 'thornguard poison seconds per hit taken' },
+  { key: 'poison.heal', lo: 0.4, hi: 0.8, step: 0.05, why: 'healing while poisoned' },
   { key: 'berserker.hits', lo: 4, hi: 6, step: 1, why: 'berserker hits taken per +1 พลัง (late)' },
   { key: 'pyro.burn', lo: 1.1, hi: 1.6, step: 0.1, why: 'pyro burn length' },
   { key: 'witch.freeze', lo: 0.1, hi: 0.6, step: 0.1, why: 'witch freeze bonus (s)' },

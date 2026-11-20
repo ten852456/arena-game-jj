@@ -21,7 +21,7 @@ for (let d = 1; d <= MAX_DAY; d++) {
   pool[d] = [];
   for (let i = 0; i < POOL; i++) {
     const h = HEROES[i % HEROES.length];
-    pool[d].push(aiBuild(h.id, d, [h.arch], hashSeed('pool', d, i)));
+    pool[d].push(aiBuild(h.id, d, [h.line], hashSeed('pool', d, i)));
   }
 }
 
@@ -35,7 +35,7 @@ for (const h of HEROES) {
       if (s.phase === 'lastchance') chooseLastChance(s, (['awaken', 'supply', 'mark'] as const)[r % 3]);
       if (s.phase === 'mark') applyMark(s, 0);
       if (s.phase !== 'shop') break;
-      botShopTurn(s, { prefer: [h.arch], reserve: 0, maxRerolls: 2 });
+      botShopTurn(s, { prefer: [h.line], reserve: 0, maxRerolls: 2 });
       const opp = rng.pick(pool[Math.min(s.day, MAX_DAY)]);
       const fight = simulate(toBuild(s), opp, rng.int(2 ** 31), s.day);
       recordResult(s, fight.winner === 0, { opp: 'bot', ai: true });

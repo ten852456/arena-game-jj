@@ -4,7 +4,7 @@ import { randomAiBuild } from '../sim/bot';
 import { simulate } from '../sim/combat';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { SKILLS } from '../sim/skills';
-import { ARCHES, type Archetype, type Build } from '../sim/types';
+import { LINES, type Build, type Line } from '../sim/types';
 import { db, type BotTier, type RunTrack, type Snapshot } from './store';
 
 /** Rating windows tried in order: low-rated builds never get matched against far stronger ones. */
@@ -12,15 +12,15 @@ export const RATING_WINDOWS = [200, 350, 500];
 /** pick at random among this many closest candidates */
 const POOL = 5;
 
-/** Main archetype of a build: its skills' archetypes, with the hero's archetype counted 1.5×. */
-export function archetypeOf(b: Build): Archetype {
+/** Main line of a build: its skills' lines, with the hero's line counted 1.5×. */
+export function lineOf(b: Build): Line {
   const hero = HEROES_BY_ID[b.hero];
-  const n: Record<string, number> = { [hero.arch]: 1.5 };
+  const n: Record<string, number> = { [hero.line]: 1.5 };
   for (const s of b.skills) {
-    const a = SKILLS[s.id]?.arch;
+    const a = SKILLS[s.id]?.line;
     if (a && a !== 'none') n[a] = (n[a] ?? 0) + 1;
   }
-  return ARCHES.reduce((best, a) => ((n[a] ?? 0) > (n[best] ?? 0) ? a : best), hero.arch);
+  return LINES.reduce((best, a) => ((n[a] ?? 0) > (n[best] ?? 0) ? a : best), hero.line);
 }
 
 /** Current streak from a run's per-day results: +n wins in a row, -n losses in a row. */
