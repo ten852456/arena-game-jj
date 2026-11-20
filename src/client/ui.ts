@@ -445,7 +445,7 @@ function renderTown() {
     }
     detail = `<div class="bcard"><h3>${b.name}${b.open ? '' : ` <span class="mark">${L('เร็วๆ นี้', 'soon')}</span>`}</h3>${body}</div>`;
   }
-  return `${stageSlot(true, 'town-slot bleed')}
+  return `${stageSlot(false, 'town-slot')}
   <section class="town-card glass">
     <h2 class="town-h">${L('เมืองของคุณ', 'Your town')}</h2>
     <p class="town-hint">${L(
@@ -460,7 +460,7 @@ function renderTown() {
 function renderTitle() {
   const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
   if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
-  if (scene) scene.idle(previewHero, runActive() ? R.lookOf(run!) : 0);
+  if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : R.lookFor(nextSeed!, previewHero));
   const resume = runActive()
     ? `<button class="primary" data-a="resume">${L(
         `เล่นต่อ: ${HEROES_BY_ID[run!.hero].name} วันที่ ${run!.day} (ชนะ ${run!.wins})`,
@@ -489,7 +489,7 @@ function renderTitle() {
     )}</p>`}
     <div class="heroes pick3">${offered.map(
       (h) => `<button class="hero arch-${h.arch}${h.id === previewHero ? ' previewing' : ''}" data-a="start" data-i="${h.id}">
-        ${heroArt(h.id)}
+        ${heroArt(h.id, '', R.lookFor(nextSeed!, h.id))}
         <b class="hero-nm">${h.name}</b><span class="tag">${ARCH_NAME[h.arch]}</span>
         <span class="hero-style">${h.style}</span>
         <span class="hero-passive">${h.passive}</span>
@@ -1493,7 +1493,7 @@ function onPreview(ev: Event) {
   const id = card?.dataset.i;
   if (!id || id === previewHero) return;
   previewHero = id;
-  scene.idle(id, 0);
+  scene.idle(id, nextSeed != null ? R.lookFor(nextSeed, id) : 0);
   scene.react('pick');
   $panel.querySelectorAll('[data-a="start"]').forEach((b) => b.classList.toggle('previewing', b === card));
 }

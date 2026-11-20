@@ -301,7 +301,9 @@ export function moveSkill(s: RunState, i: number, dir: -1 | 1) {
 }
 
 /** Each run rolls a fresh look for its hero (cosmetic only); derived from the run seed so old saves get one too. */
-export const lookOf = (s: RunState) => hashSeed(s.seed, 'look') || 1;
+/** Each run rolls a fresh look for its hero (cosmetic only), from the run seed and the hero, so the hero pick can show it. */
+export const lookFor = (seed: number, hero: string) => hashSeed(seed, 'look', hero) || 1;
+export const lookOf = (s: RunState) => lookFor(s.seed, s.hero);
 
 export const toBuild = (s: RunState): Build => ({
   hero: s.hero,

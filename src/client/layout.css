@@ -105,12 +105,11 @@ input:focus { outline: 2px solid var(--moon); outline-offset: 1px; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, -8px); } }
 @keyframes toast-out { to { opacity: 0; visibility: hidden; } }
 
-/* ================= TOWN: the canvas fills the screen, menus are cards over it ================= */
-body[data-view='town'] #panel { pointer-events: none; }
-body[data-view='town'] #panel > :not(.stage-slot) { pointer-events: auto; }
-.town-slot { position: absolute; inset: 0; }
+/* ================= TOWN: menu card on the left, the town in a gold frame beside it (not full-bleed) ================= */
+body[data-view='town'] #panel { display: flex; align-items: center; gap: var(--gap); padding-left: 16px; padding-right: 16px; }
+.town-slot { order: 2; flex: 1 1 0; align-self: stretch; margin: 2% 1%; max-height: 100%; }
 .town-card {
-  position: absolute; left: 16px; top: 14px; width: clamp(300px, 29vw, 430px); max-height: calc(100% - 28px); overflow: auto;
+  order: 1; position: relative; flex: none; width: clamp(280px, 27vw, 400px); max-height: 100%; overflow: auto;
   padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px;
 }
 .town-h { margin: 0; font-size: 22px; }
@@ -341,7 +340,10 @@ body.tab-hidden #ambient *, body.tab-hidden .hero-art svg, body.tab-hidden .rota
   h3 { font-size: 15px; margin: 8px 0 4px; }
   .glass, .sv-sec, .mm-card, .mm-result, .over-detail { border-radius: 14px; }
 
-  .town-card { left: 8px; top: 8px; width: 290px; max-height: calc(100% - 16px); padding: 8px 10px 10px; gap: 4px; }
+  .town-card { width: 310px; padding: 8px 10px 10px; gap: 4px; }
+  .town-card .chips { gap: 4px; }
+  .town-card .actions .primary { font-size: 15px; padding: 6px 16px; }
+  .town-slot { margin: 0; }
   .town-h { font-size: 17px; }
   .town-hint { display: none; }
   .town-card .chip { padding: 2px 10px; font-size: 12.5px; }
@@ -443,9 +445,9 @@ body.tab-hidden #ambient *, body.tab-hidden .hero-art svg, body.tab-hidden .rota
 @media (max-aspect-ratio: 1/1) {
   :root { --hh: 50px; --gap: 8px; --pad: 8px; }
   #panel { padding: var(--pad); }
-  body[data-view='town'] #panel { display: flex; flex-direction: column; gap: 8px; }
-  .town-slot { position: relative; inset: auto; flex: none; height: 40%; margin: calc(-1 * var(--pad)) calc(-1 * var(--pad)) 0; }
-  .town-card { position: relative; left: auto; top: auto; width: auto; max-height: none; flex: 1 1 auto; min-height: 0; }
+  body[data-view='town'] #panel { flex-direction: column; align-items: stretch; gap: 8px; padding: var(--pad); }
+  .town-slot { order: 0; flex: none; height: 34%; margin: 0; }
+  .town-card { order: 1; width: auto; max-height: none; flex: 1 1 auto; min-height: 0; }
 
   .pick { display: flex; flex-direction: column; gap: 8px; }
   .pick-side { flex: none; }

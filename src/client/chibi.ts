@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { L as tr } from '../i18n';
 
 /**
  * Mochi chibi heroes, built from layered SVG parts (ported from the chibi template).
@@ -37,6 +38,8 @@ export interface Look {
   hero: string;
   parts: Record<Slot, string>;
   pal: Pal;
+  /** meme face (replaces eyes + mouth) and prop; normal odds like every other part */
+  meme?: { face?: string; extra?: string };
 }
 
 // ---------------------------------------------------------------- parts
@@ -219,6 +222,94 @@ const EARS = ['bunny', 'perky', 'tipped', 'floppy'];
 const EYES = ['dot', 'sparkle', 'brave', 'happy', 'sleepy'];
 const MOUTHS = ['smile', 'cat', 'open', 'fang'];
 
+// ---------------------------------------------------------------- meme faces and props
+// Meme-style expressions and props, drawn in our own mochi style (no copied meme characters or images).
+
+const W_MOUTH = `<path d="M92 113 Q96 119 100 114 Q104 119 108 113" fill="none" ${st(3.4)}/>`;
+const D_MOUTH = `<path d="M87 109 Q100 134 113 109 Z" fill="#c2566a" ${st(3)}/><path d="M93 121 Q100 127 107 121" fill="#ff9fb0"/>`;
+const BLUSH_LINES = both(`<path d="M54 112 l4 -6 M61 113 l4 -6 M68 114 l4 -6" stroke="#ff6f8f" stroke-width="2.6" stroke-linecap="round"/>`);
+const EYE_X = [78, 122];
+const heart = (x: number, y: number, r: number) =>
+  `<path d="M${x} ${y + r * 0.8} C ${x - r * 1.4} ${y - r * 0.2} ${x - r * 0.9} ${y - r * 1.3} ${x} ${y - r * 0.45} C ${x + r * 0.9} ${y - r * 1.3} ${x + r * 1.4} ${y - r * 0.2} ${x} ${y + r * 0.8} Z" fill="#ff4d6d" ${st(2.6)}/>`;
+const star5 = (x: number, y: number, r: number, fill: string) => {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r * 0.45 : r;
+    d += (i ? 'L' : 'M') + (x + rr * Math.cos(a)).toFixed(1) + ' ' + (y + rr * Math.sin(a)).toFixed(1) + ' ';
+  }
+  return `<path d="${d}Z" fill="${fill}" ${st(2.4)}/>`;
+};
+
+/** Meme faces: replace the eyes and mouth. */
+const MEME_FACE: Record<string, () => string> = {
+  uwu: () => EYE_X.map((x) => `<path d="M${x - 7} 94 L${x - 7} 100 Q${x} 110 ${x + 7} 100 L${x + 7} 94" fill="none" ${st(4)}/>`).join('') + W_MOUTH + BLUSH_LINES,
+  owo: () => EYE_X.map((x) => `<circle cx="${x}" cy="101" r="9.5" fill="#fff" ${st(3.5)}/><circle cx="${x}" cy="102" r="4.8" fill="${L}"/>`).join('') + W_MOUTH,
+  smug: () =>
+    EYE_X.map((x) => `<path d="M${x - 6} 98 Q${x} 108 ${x + 6} 98 Z" fill="${L}"/><path d="M${x - 10} 97 L${x + 10} 97" fill="none" ${st(4)}/>`).join('') +
+    `<path d="M68 86 Q78 79 88 85" fill="none" ${st(3.2)}/><path d="M93 115 Q104 118 111 108" fill="none" ${st(3.4)}/>`,
+  sideeye: () =>
+    EYE_X.map((x) => `<ellipse cx="${x}" cy="102" rx="9.5" ry="7" fill="#fff" ${st(3)}/><circle cx="${x + 5}" cy="103" r="4.2" fill="${L}"/><path d="M${x - 11} 96 L${x + 11} 96" fill="none" ${st(4)}/>`).join('') +
+    `<path d="M94 116 L107 115" fill="none" ${st(3.4)}/>`,
+  cry: () =>
+    EYE_X.map((x) => `<path d="M${x - 8} 103 Q${x} 92 ${x + 8} 103" fill="none" ${st(4)}/>`).join('') +
+    both(`<path d="M69 104 Q60 118 64 134" stroke="#7fd3ff" stroke-width="5.5" fill="none" stroke-linecap="round"/>`) + D_MOUTH,
+  hearts: () => EYE_X.map((x) => heart(x, 101, 10)).join('') + `<path d="M91 111 Q100 124 109 111 Z" fill="#c2566a" ${st(3)}/>`,
+  derp: () =>
+    `<circle cx="76" cy="100" r="11" fill="#fff" ${st(3)}/><circle cx="72" cy="96" r="4" fill="${L}"/>` +
+    `<circle cx="124" cy="103" r="6" fill="#fff" ${st(3)}/><circle cx="126" cy="105" r="2.6" fill="${L}"/>` +
+    `<path d="M91 113 Q100 118 109 113" fill="none" ${st(3.4)}/><path d="M101 115 q1 11 8 8 q4 -4 -2 -9z" fill="#ff8fa3" ${st(2.4)}/>`,
+  xd: () => EYE_X.map((x) => `<path d="M${x - 7} 94 L${x + 7} 108 M${x + 7} 94 L${x - 7} 108" fill="none" ${st(4)}/>`).join('') + D_MOUTH,
+  lenny: () =>
+    EYE_X.map((x) => `<path d="M${x - 10} 91 Q${x} 81 ${x + 10} 91" fill="none" ${st(3)}/><path d="M${x - 8} 103 Q${x} 96 ${x + 8} 103" fill="none" ${st(3.4)}/><circle cx="${x}" cy="102" r="2.6" fill="${L}"/>`).join('') +
+    `<path d="M88 115 Q94 121 100 115 M100 115 Q106 121 112 115 M100 115 Q99 120 103 122" fill="none" ${st(3)}/>`,
+  stars: () => EYE_X.map((x) => star5(x, 101, 11, '#ffd95e')).join('') + `<path d="M92 112 Q100 121 108 112" fill="none" ${st(3.4)}/>`,
+  sweat: () =>
+    EYE_X.map((x) => `<ellipse cx="${x}" cy="101" rx="5.5" ry="7" fill="${L}"/><circle cx="${x - 1.6}" cy="98.4" r="2" fill="#fff"/>`).join('') +
+    `<path d="M91 116 Q95.5 112 100 116 Q104.5 120 109 116" fill="none" ${st(3.4)}/><path d="M146 90 Q138 104 146 110 Q154 104 146 90 Z" fill="#a8e4ff" ${st(2.6)}/>`,
+  shock: () => EYE_X.map((x) => `<circle cx="${x}" cy="100" r="9" fill="#fff" ${st(3)}/><circle cx="${x}" cy="100" r="2.2" fill="${L}"/>`).join('') + `<ellipse cx="100" cy="119" rx="5.5" ry="7.5" fill="#5a2a3a" ${st(3)}/>`,
+};
+
+/** Props on the face, drawn over the headgear. */
+const MEME_PROP: Record<string, () => string> = {
+  shades: () => {
+    const lens = (x0: number) => `<path d="M${x0} 93 h32 v8 h-4 v4 h-4 v4 h-8 v-4 h-4 v-4 h-4 v-4 h-4 v-4 h-4 Z" fill="#141018"/>`;
+    return `<rect x="40" y="93" width="120" height="5" fill="#141018"/>${lens(62)}${lens(106)}` +
+      `<rect x="66" y="96" width="4" height="4" fill="#fff"/><rect x="70" y="100" width="4" height="4" fill="#fff"/><rect x="110" y="96" width="4" height="4" fill="#fff"/><rect x="114" y="100" width="4" height="4" fill="#fff"/>`;
+  },
+  monocle: () => `<circle cx="122" cy="101" r="13" fill="rgba(200,240,255,.25)" stroke="#e9b949" stroke-width="3.5"/><path d="M133 108 C 146 120 140 138 152 150" fill="none" stroke="#e9b949" stroke-width="2.2" stroke-dasharray="3 3"/>`,
+  mustache: () => both(`<path d="M100 110 C 93 104 82 104 77 111 C 73 117 66 114 68 108 C 69 115 78 117 85 113 C 91 109 96 111 100 114 Z" fill="#4a3328" ${st(2.2)}/>`),
+  bandage: () => `<g transform="rotate(-22 62 118)"><rect x="50" y="113" width="25" height="10" rx="4" fill="#f5d0a9" ${st(2.4)}/><rect x="58" y="113" width="9" height="10" fill="#ecc092"/><circle cx="60.5" cy="116.5" r="1" fill="#b8865c"/><circle cx="64.5" cy="119.5" r="1" fill="#b8865c"/></g>`,
+  clown: () => `<circle cx="100" cy="109" r="7" fill="#ff3b4f" ${st(2.6)}/><circle cx="97.5" cy="106.5" r="2" fill="#fff"/>`,
+  bubble: () => `<circle cx="112" cy="112" r="11" fill="rgba(170,225,255,.45)" stroke="#7fbfe6" stroke-width="2.5"/><circle cx="108" cy="108" r="3" fill="#fff" opacity=".9"/>`,
+  nerd: () => EYE_X.map((x) => `<circle cx="${x}" cy="101" r="13" fill="rgba(255,255,255,.18)" stroke="${L}" stroke-width="3.8"/>`).join('') +
+    `<path d="M91 100 L109 100" stroke="${L}" stroke-width="3.8"/><rect x="95" y="96" width="10" height="8" rx="1.5" fill="#fff" ${st(2)}/>` +
+    `<path d="M65 99 L42 95 M135 99 L158 95" stroke="${L}" stroke-width="3.5" stroke-linecap="round"/>`,
+};
+
+/** Share of looks with a prop (the rest have none); each of the 7 props is equally likely. */
+export const PROP_CHANCE = 0.5;
+
+export const MEME_NAMES: Record<string, () => string> = {
+  uwu: () => 'UwU', owo: () => 'OwO', smug: () => tr('หน้ากวน', 'Smug face'), sideeye: () => tr('มองค้อน', 'Side-eye'),
+  cry: () => tr('ขำทั้งน้ำตา', 'Crying laughing'), hearts: () => tr('ตาหัวใจ', 'Heart eyes'), derp: () => tr('หน้าเอ๋อ', 'Derp face'),
+  xd: () => 'XD', lenny: () => tr('หน้าเลนนี่', 'Lenny face'), stars: () => tr('ตาวิบวับ', 'Star eyes'), sweat: () => tr('เหงื่อตก', 'Nervous sweat'),
+  shock: () => tr('ช็อก', 'Shocked'),
+  shades: () => tr('แว่นเท่ (Deal with it)', 'Deal-with-it shades'), monocle: () => tr('แว่นข้างเดียว', 'Monocle'), mustache: () => tr('หนวดผู้ดี', 'Fancy mustache'),
+  bandage: () => tr('พลาสเตอร์แปะแก้ม', 'Cheek bandage'), clown: () => tr('จมูกตัวตลก', 'Clown nose'), bubble: () => tr('ฟองน้ำมูก', 'Snot bubble'),
+  nerd: () => tr('แว่นเนิร์ด', 'Nerd glasses'),
+};
+
+/** Every meme face and prop on one hero, for the dev gallery (?looks). */
+export function memeGallery(hero = 'knight') {
+  const base = rollLook(hero, 0);
+  const cell = (look: Look, name: string) => `<figure style="margin:0;text-align:center;width:120px">${renderChibi(look, 'idle', 120)}<figcaption class="small">${name}</figcaption></figure>`;
+  return [
+    ...Object.keys(MEME_FACE).map((f) => cell({ ...base, meme: { face: f } }, MEME_NAMES[f]())),
+    ...Object.keys(MEME_PROP).map((e) => cell({ ...base, meme: { extra: e } }, MEME_NAMES[e]())),
+  ].join('');
+}
+
 /** mulberry32 */
 function rng(seed: number) {
   let a = seed >>> 0;
@@ -229,7 +320,8 @@ function rng(seed: number) {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  return <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)];
+  const pick = <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)];
+  return Object.assign(pick, { next });
 }
 
 /** The look for a hero and look seed. Seed 0 = the designed default; any other seed rolls everything non-iconic. */
@@ -252,7 +344,16 @@ export function rollLook(hero: string, seed: number): Look {
     fx: pick(c.fx),
     ...c.icon,
   };
-  return { hero, parts, pal: { body: pick(BODY), inner: pick(INNER), outfit, trim, metal: pick(METAL), accent: c.accent } };
+  const pal: Pal = { body: pick(BODY), inner: pick(INNER), outfit, trim, metal: pick(METAL), accent: c.accent };
+  // Face: the 5 normal eyes and the 12 meme faces are one pool, every face equally likely.
+  // Uses its own random stream so the parts above keep their odds.
+  const rr = rng(seed ^ 0x9e3779b9);
+  const faces = Object.keys(MEME_FACE);
+  const meme: NonNullable<Look['meme']> = {};
+  const fi = Math.floor(rr.next() * (EYES.length + faces.length));
+  if (fi >= EYES.length) meme.face = faces[fi - EYES.length];
+  if (rr.next() < PROP_CHANCE) meme.extra = rr(Object.keys(MEME_PROP));
+  return { hero, parts, pal, ...(meme.face || meme.extra ? { meme } : {}) };
 }
 
 // ---------------------------------------------------------------- render
@@ -271,14 +372,19 @@ export function renderChibi(look: Look, pose: ChibiPose = 'idle', size?: number)
   const hit = pose === 'hit';
   const part = (k: Slot) => (P[k][q[k]] ?? P[k][Object.keys(P[k])[0]]).d(p);
   const ear = P.ears[q.ears] ?? P.ears.bunny;
+  // a meme face keeps its own eyes and mouth in every pose but 'hit' (no blink/happy frames for it)
+  const face = look.meme?.face && MEME_FACE[look.meme.face];
   const eyes = hit
     ? `<path d="M70 94 L84 101 L70 108 M130 94 L116 101 L130 108" fill="none" ${st(4)}/>`
-    : pose === 'blink'
-      ? [78, 122].map((x) => `<path d="M${x - 7} 101 Q${x} 105 ${x + 7} 101" fill="none" ${st(4)}/>`).join('')
-      : pose === 'happy'
-        ? P.eyes.happy.d(p)
-        : part('eyes');
-  const mouth = hit ? P.mouth.wobble.d(p) : pose === 'happy' ? P.mouth.open.d(p) : part('mouth');
+    : face
+      ? face()
+      : pose === 'blink'
+        ? [78, 122].map((x) => `<path d="M${x - 7} 101 Q${x} 105 ${x + 7} 101" fill="none" ${st(4)}/>`).join('')
+        : pose === 'happy'
+          ? P.eyes.happy.d(p)
+          : part('eyes');
+  const mouth = hit ? P.mouth.wobble.d(p) : face ? '' : pose === 'happy' ? P.mouth.open.d(p) : part('mouth');
+  const extra = look.meme?.extra && MEME_PROP[look.meme.extra] ? MEME_PROP[look.meme.extra]() : '';
   const layers = [
     part('back'),
     ear.front ? '' : ear.d(p),
@@ -286,7 +392,7 @@ export function renderChibi(look: Look, pose: ChibiPose = 'idle', size?: number)
     part('outfit'),
     `<path d="${HEAD}" fill="${p.body}" ${st()}/>` + (ear.front ? ear.d(p) : ''),
     `<ellipse cx="63" cy="116" rx="9.5" ry="5.5" fill="${p.inner}" opacity=".8"/><ellipse cx="137" cy="116" rx="9.5" ry="5.5" fill="${p.inner}" opacity=".8"/>` + eyes + mouth,
-    part('headgear'),
+    part('headgear') + extra,
     part('weapon') + `<ellipse cx="142" cy="166" rx="12" ry="11" fill="${p.body}" ${st()}/>`,
     `<ellipse cx="58" cy="166" rx="12" ry="11" fill="${p.body}" ${st()}/>`,
     part('offhand'),
