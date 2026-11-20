@@ -120,7 +120,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'เงาจันทร์',
       get trigger() { return both((lv) => `ศัตรูเลือดต่ำกว่า ${pc(ultTrig('assassin', lv))}%`); },
-      get effect() { return both((lv) => `ตีทันที ×${r1(ultPow('assassin', lv))} ของการตีที่แรงสุดในการสู้นี้ ไม่สนโล่ หลบไม่ได้`); },
+      get effect() { return both((lv) => `ตีทันที ×${r1(ultPow('assassin', lv))} ของการตีที่แรงสุดในการสู้นี้ (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) ไม่สนโล่ หลบไม่ได้`); },
     },
   },
   // ---------------- 💨 dodge ----------------
@@ -158,7 +158,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'ป้อมจันทรา',
       get trigger() { return both((lv) => `ได้โล่รวม ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
-      get effect() { return both((lv) => `ตีแรงเท่าโล่ที่มี ×${r1(ultPow('knight', lv))} หลบไม่ได้ (โล่ไม่หาย)`); },
+      get effect() { return both((lv) => `ตีแรงเท่าโล่ที่มี ×${r1(ultPow('knight', lv))} (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) หลบไม่ได้ (โล่ไม่หาย)`); },
     },
   },
   // ---------------- ❤ heal ----------------
@@ -197,7 +197,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'สุริยะดับ',
       get trigger() { return both((lv) => `ไฟบนศัตรูครบ ${ultTrig('pyro', lv)} กอง`); },
-      get effect() { return both((lv) => `ระเบิดไฟที่ยังเหลือทันที ×${r1(ultPow('pyro', lv))} (ไม่สนโล่)`); },
+      get effect() { return both((lv) => `ไฟที่ยังเหลือทั้งหมดระเบิดทันที ×${r1(ultPow('pyro', lv))} (ไม่สนโล่ ไฟกองนั้นหมดไป)`); },
     },
   },
   // ---------------- ☠ poison ----------------

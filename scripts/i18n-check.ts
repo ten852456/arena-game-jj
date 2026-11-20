@@ -1,13 +1,13 @@
 // English coverage check: every skill / variant / keyword / hero / mark / building / slide has English text,
 // and skill chips have no Thai left in English. Run: npm run i18n (also part of npm test).
 import { setLangValue } from '../src/i18n';
-import { ARCH_EN, BUILDINGS_EN, HEROES_EN, KEYWORDS_EN, MARKS_EN, SKILLS_EN, SLIDES_EN } from '../src/client/i18n_en';
+import { BUILDINGS_EN, LINE_EN, ROLE_EN, HEROES_EN, KEYWORDS_EN, MARKS_EN, SKILLS_EN, SLIDES_EN } from '../src/client/i18n_en';
 import { chipText, withLang } from '../src/client/lang';
 import { BUILDINGS } from '../src/client/townData';
 import { SLIDES } from '../src/client/tutorialSlides';
 import { HEROES } from '../src/sim/heroes';
 import { MARK_INFO } from '../src/sim/run';
-import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf } from '../src/sim/skills';
+import { KEYWORDS, LINE_NAME, ROLE_NAME, SKILLS, chipsOf } from '../src/sim/skills';
 
 const THAI = /[฀-๿]/;
 const bad: string[] = [];
@@ -19,7 +19,9 @@ for (const d of Object.values(SKILLS))
   }
 for (const k of Object.keys(KEYWORDS)) if (!KEYWORDS_EN[k]) bad.push(`keyword ${k}`);
 for (const h of HEROES) if (!HEROES_EN[h.id]) bad.push(`hero ${h.id}`);
-for (const k of Object.keys(ARCH_NAME)) if (!ARCH_EN[k]) bad.push(`arch ${k}`);
+for (const k of Object.keys(LINE_NAME)) if (!LINE_EN[k]) bad.push(`line ${k}`);
+for (const k of Object.keys(ROLE_NAME)) if (!ROLE_EN[k]) bad.push(`role ${k}`);
+for (const h of HEROES) if (!HEROES_EN[h.id]?.ult?.name) bad.push(`hero ult ${h.id}`);
 for (const k of Object.keys(MARK_INFO)) if (!MARKS_EN[k]) bad.push(`mark ${k}`);
 for (const b of BUILDINGS) if (!BUILDINGS_EN[b.id] || !!b.future !== !!BUILDINGS_EN[b.id].future) bad.push(`building ${b.id}`);
 if (SLIDES.length !== SLIDES_EN.length) bad.push(`slides: ${SLIDES.length} Thai vs ${SLIDES_EN.length} English`);

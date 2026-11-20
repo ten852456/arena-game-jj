@@ -10,10 +10,10 @@
  */
 import { L } from '../../i18n';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusValue, matches, type ActiveBonus } from '../../sim/links';
-import { ARCH_NAME, SKILLS, lvOf, nodeOf } from '../../sim/skills';
+import { LINE_NAME, SKILLS, lvOf, nodeOf } from '../../sim/skills';
 import { slotsOf, type Offer, type RunState } from '../../sim/run';
 import type { Bonus, SkillInstance } from '../../sim/types';
-import { ARCH_COLORS, archIcon, skillIcon, type ArchIconId } from '../assets';
+import { LINE_COLORS, lineIcon, skillIcon, type LineIconId } from '../assets';
 import { linkChime } from '../audio';
 
 /** where the partner sits: above, below, both, or not placed yet (either works) */
@@ -24,13 +24,13 @@ export const BONUS_GLYPH: Record<Bonus['e'], string> = { dmg: '⚔', shield: '�
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const isArch = (t: string) => t.startsWith('arch:');
-const archOf = (t: string) => t.slice(5) as ArchIconId;
+const isArch = (t: string) => t.startsWith('line:');
+const archOf = (t: string) => t.slice(5) as LineIconId;
 /** picture for a bonus condition: the skill's badge, or the archetype emblem */
-export const targetIcon = (t: string) => (isArch(t) ? archIcon(archOf(t)) : skillIcon(t));
+export const targetIcon = (t: string) => (isArch(t) ? lineIcon(archOf(t)) : skillIcon(t));
 /** words for a bonus condition */
 export const targetWords = (t: string) =>
-  isArch(t) ? L(`skill สาย${ARCH_NAME[archOf(t)]}`, `any ${ARCH_NAME[archOf(t)]} skill`) : (SKILLS[t]?.name ?? t);
+  isArch(t) ? L(`skill สาย${LINE_NAME[archOf(t)]}`, `any ${LINE_NAME[archOf(t)]} line skill`) : (SKILLS[t]?.name ?? t);
 
 /** "+2⚔", "-20%»", "+15%✦", "⚡" */
 export function bonusShort(b: Bonus, lv: number) {
@@ -60,7 +60,7 @@ export function bonusWords(b: Bonus, lv: number) {
 }
 
 const ico = (src: string, cls: string, t?: string) =>
-  `<img class="${cls}" src="${src}" alt=""${t && isArch(t) ? ` style="--ring:${ARCH_COLORS[archOf(t)]}"` : ''} draggable="false">`;
+  `<img class="${cls}" src="${src}" alt=""${t && isArch(t) ? ` style="--ring:${LINE_COLORS[archOf(t)]}"` : ''} draggable="false">`;
 
 // ---------- 1. partner chips ----------
 const DIR_GLYPH: Record<Dir, string> = { up: '▲', down: '▼', both: '▲▼', any: '⇅' };

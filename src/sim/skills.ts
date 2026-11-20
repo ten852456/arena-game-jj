@@ -482,7 +482,7 @@ const BASE_LIST: SkillDef[] = [
     '': N('ธารน้ำแข็ง', 6.5, [{ k: 'freeze', secs: 0.8 }, hit(5, { pierce: 1 })]),
     a: N('ธารเยือก', 6.5, [{ k: 'freeze', secs: 1.2 }, hit(5, { pierce: 1 })], 'แช่ไม่พลาด'),
     a1: N('ธารนิรันดร์', 6.5, [{ k: 'freeze', secs: 1.6 }, hit(6, { pierce: 1 })]),
-    a2: N('ธารสลายโล่', 6.5, [{ k: 'freeze', secs: 1.2 }, { k: 'dispel', n: 1, shield: 0.4 }, hit(5, { pierce: 1 })]),
+    a2: N('ธารสลายโล่', 6.5, [{ k: 'freeze', secs: 1.2 }, { k: 'dispel', n: 1, shield: 0.4 }, hit(5)]),
     b: N('ธารคม', 6, [{ k: 'freeze', secs: 0.8 }, hit(8, { pierce: 1, sure: true })], 'ทะลวง'),
     b1: N('ธารแหลม', 6, [{ k: 'freeze', secs: 0.8 }, hit(12, { pierce: 1, sure: true })]),
     b2: N('ธารแตก', 6, [{ k: 'freeze', secs: 0.8 }, hit(5, { pierce: 1, sure: true, times: 2 })]),

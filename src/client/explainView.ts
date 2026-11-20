@@ -14,7 +14,7 @@ const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const KIND_ICON: Record<LineKind, string> = {
   damage: '⚔️', hit: '💥', defence: '🛡️', burn: '🔥', control: '❄️', chain: '🔗', speed: '⏱️',
-  thorns: '🌵', heal: '💚', growth: '📈', fatigue: '⏳', ko: '💀', idle: '💤',
+  thorns: '🌵', heal: '💚', growth: '📈', fatigue: '⏳', ko: '💀', idle: '💤', poison: '☠', dodge: '💨', ult: '★',
 };
 
 /** status word → css class; Thai words match anywhere, English ones on letter boundaries, any case */
@@ -55,7 +55,7 @@ function skillTokens(): Tok[] {
     .map(([name, id]) => ({
       re: exact(name),
       html: (m: string) =>
-        `<span class="xv-sk xv-a-${SKILLS[id].arch}">${icons.has(id) ? `<img src="${skillIcon(id)}" alt="">` : ''}${esc(m)}</span>`,
+        `<span class="xv-sk xv-a-${SKILLS[id].line}">${icons.has(id) ? `<img src="${skillIcon(id)}" alt="">` : ''}${esc(m)}</span>`,
     }));
 }
 

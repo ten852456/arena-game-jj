@@ -60,7 +60,7 @@ export function timelineHTML(skills: SkillInstance[], hero: string): string {
         .join('');
       const n = mine.filter((f) => !f.echo).length;
       const trig = mine.filter((f) => f.from !== undefined).length;
-      return `<div class="tl-lane arch-${SKILLS[k.id].arch}">
+      return `<div class="tl-lane line-${SKILLS[k.id].line}">
         <span class="tl-name"><span class="tl-no">${i + 1}</span><img class="tl-ico" src="${skillIcon(k.id)}" alt="">${esc(name(i))}</span>
         <div class="tl-track">${dots}</div>
         <span class="tl-n" title="${L(`ทำงานกี่ครั้งใน ${TIMELINE_SECS} วิแรก`, `Fires in the first ${TIMELINE_SECS}s`)}">×${n}${trig ? `<small>⚡${trig}</small>` : ''}</span>

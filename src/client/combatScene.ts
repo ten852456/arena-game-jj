@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { DangerVignette } from './danger';
 import { confetti, drawPlate } from './winFx';
 import { ZOOM } from './view';
+import { HEROES_BY_ID } from '../sim/heroes';
 import { SKILLS, nodeOf } from '../sim/skills';
 import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '../sim/types';
 import { hashSeed } from '../sim/rng';
@@ -14,7 +15,7 @@ import { ArenaLife, HeroIdle } from './idle';
 import { SKILL_ICON_IDS, skillIcon } from './assets';
 import { FxLayer, fxPlan, reducedMotion } from './fx';
 import { FighterFx, type FighterState } from './fighterFx';
-import { ARCH_HEX, SkillStrip, type StripState } from './skillStrip';
+import { LINE_HEX, SkillStrip, type StripState } from './skillStrip';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -573,7 +574,11 @@ export class CombatScene extends Phaser.Scene {
           thorns: [L('หนาม', 'Thorns'), '#c9a0ff'],
           steadfast: [L('ใจเหล็ก', 'Iron Will'), '#ffffff'],
           rage: [L('คลั่ง!', 'Rage!'), '#ff4444'],
-          amplify: [e.value > 0 ? L('บัฟ x2!', 'Buffs x2!') : L('ยังไม่มีบัฟ', 'No buffs yet'), '#ffd166'],
+          dodge: [`${L('หลบ', 'Dodge')} ${e.value}`, '#b6f0c8'],
+          evade: [L('หลบได้!', 'Dodged!'), '#b6f0c8'],
+          poison: [L('ติดพิษ', 'Poisoned'), '#c49cff'],
+          haste: [`${L('เร่ง', 'Haste')} +${e.value}%`, '#ffd166'],
+          wound: [L('แผลลึก', 'Wounded'), '#ff7b5c'],
           cleanse: [e.value > 0 ? `${L('ชำระล้าง', 'Cleansed')} ${e.value}` : L('ไม่มีดีบัฟ', 'No debuffs'), '#aaffcc'],
           dispel: [e.value > 0 ? `${L('สลายบัฟ', 'Dispelled')} ${e.value}!` : L('ไม่มีบัฟให้ลบ', 'Nothing to dispel'), '#c9a0ff'],
           delay: [e.value > 0 ? `${L('ถอยเวลา', 'Delayed')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : L('ต้านได้', 'Resisted'), '#b8a0ff'],
@@ -592,6 +597,18 @@ export class CombatScene extends Phaser.Scene {
       case 'fatigue':
         if (!this.quiet) this.skillText.setText(`${L('เหนื่อยล้า', 'Fatigue')} -${e.amount}`).setColor('#cccccc').setAlpha(1);
         break;
+      case 'ult': {
+        // simple ultimate banner in the cast-label spot (gold, bigger, stays a little longer)
+        const h = HEROES_BY_ID[e.hero];
+        if (!this.quiet && h) {
+          this.skillText.setText(`★ ${h.ult.name} Lv${e.lv} ★`).setColor('#ffd166').setAlpha(1).setScale(1.25);
+          this.tweens.killTweensOf(this.skillText);
+          this.tweens.add({ targets: this.skillText, alpha: 0, scale: 1, delay: this.dur(900), duration: this.dur(500) });
+          this.pose(e.side, 'cast');
+          this.float(e.side, L('ท่าไม้ตาย!', 'Ultimate!'), '#ffd166');
+        }
+        break;
+      }
       case 'end': {
         const w = e.winner;
         this.endWinner = w;
@@ -786,6 +803,9 @@ export class CombatScene extends Phaser.Scene {
         if (f.b > 0) list.push([`${L('ไฟ', 'Burn')} ${f.b}${L('/วิ', '/s')}`, '#ff7b5c']);
         if (fr > 0) list.push([`${L('แช่แข็ง', 'Frozen')} ${(fr / 10).toFixed(1)}`, '#8fd8ff']);
         if (f.sl > 0 && slt > 0) list.push([`${L('ช้า', 'Slow')} ${f.sl}%`, '#8fd8ff']);
+        if (f.dg > 0) list.push([`💨${L('หลบ', 'Dodge')} ${f.dg}`, '#ffd166']);
+        if (f.hs > 0 && f.hst - since > 0) list.push([`⏩${L('เร่ง', 'Haste')} ${f.hs}%`, '#ffd166']);
+        if (f.p > 0) list.push([`☠${L('พิษ', 'Poison')} ${f.p}${L('/วิ', '/s')}`, '#c49cff']);
       }
       let x = s === 0 ? 20 : 370;
       let y = 62;
@@ -832,8 +852,8 @@ export class CombatScene extends Phaser.Scene {
     if (!inst || !SKILLS[inst.id]) return;
     const foe = (1 - e.side) as Side;
     const lm = this.fxLife();
-    const arch = SKILLS[inst.id].arch;
-    const color = ARCH_HEX[arch] ?? 0xffffff;
+    const line = SKILLS[inst.id].line;
+    const color = LINE_HEX[line] ?? 0xffffff;
     const dir = e.side === 0 ? 1 : -1;
     const hs = this.hs();
     // at the caster's hand, on the side facing the enemy (clear of the skill name and the damage numbers)

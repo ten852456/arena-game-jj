@@ -181,7 +181,10 @@ function ensureHitter(s: RunState, keep: (k: SkillInstance) => number): boolean 
     s.shop.forEach((o, i) => {
       if (!o || o.v !== '' || priceOf(o) > s.gold + (s.skills.length >= slotsOf(s) ? minSell(s, keep) : 0)) return;
       if (s.skills.some((k) => k.id === o.id) || !isEarlyHitter({ id: o.id, v: '' })) return;
-      if (pick < 0 || priceOf(o) < priceOf(s.shop[pick]!)) pick = i;
+      // the hitter the bot likes most (its line / its unique), cheaper on a tie
+      const v = keep({ id: o.id, v: '' });
+      const pv = pick < 0 ? -Infinity : keep({ id: s.shop[pick]!.id, v: '' });
+      if (pick < 0 || v > pv || (v === pv && priceOf(o) < priceOf(s.shop[pick]!))) pick = i;
     });
     if (pick >= 0) {
       if (s.skills.length >= slotsOf(s)) sell(s, weakest(s, keep));

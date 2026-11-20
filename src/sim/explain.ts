@@ -37,10 +37,11 @@ export interface Explanation {
 
 /** Topic of one explanation line. Reasons put "what to try" after " → ". */
 export type LineKind =
-  | 'damage' | 'hit' | 'defence' | 'burn' | 'control' | 'chain' | 'speed' | 'thorns' | 'heal' | 'growth' | 'fatigue' | 'ko' | 'idle';
+  | 'damage' | 'hit' | 'defence' | 'burn' | 'control' | 'chain' | 'speed' | 'thorns' | 'heal' | 'growth' | 'fatigue' | 'ko' | 'idle'
+  | 'poison' | 'dodge' | 'ult';
 
 export interface Moment {
-  kind: 'hit' | 'chain' | 'comeback' | 'lock';
+  kind: 'hit' | 'chain' | 'comeback' | 'lock' | 'ult';
   icon: string;
   title: string;
   text: string;
@@ -87,6 +88,12 @@ interface SideTotals {
   thornsTaken: number;
   burnTaken: number;
   fatigueTaken: number;
+  poisonTaken: number;
+  /** enemy hits this side dodged */
+  dodged: number;
+  /** this side's ultimate: tick it fired (-1 = no) and its level */
+  ultT: number;
+  ultLv: number;
   healed: number;
   shielded: number;
   bigHit: number;
@@ -99,7 +106,8 @@ interface SideTotals {
 const sec = (ticks: number) => (ticks / TPS).toFixed(1);
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const skillName = (id: string) =>
-  id === 'thorns' ? L('หนาม', 'Thorns') : id === 'burn' ? L('ไฟ', 'Burn') : id === 'fatigue' ? L('ความเหนื่อยล้า', 'Fatigue') : SKILLS[id]?.name ?? id;
+  id === 'thorns' ? L('หนาม', 'Thorns') : id === 'burn' ? L('ไฟ', 'Burn') : id === 'poison' ? L('พิษ', 'Poison') : id === 'ult' ? L('ท่าไม้ตาย', 'Ultimate')
+    : id === 'fatigue' ? L('ความเหนื่อยล้า', 'Fatigue') : SKILLS[id]?.name ?? id;
 const hasFx = (k: Pick<SkillInstance, 'id' | 'v'>, kind: string) => nodeOf(k).fx.some((e) => e.k === kind);
 
 /**
@@ -125,7 +133,7 @@ export function reflectEvents(events: CombatEvent[]): Set<CombatEvent> {
 function totals(r: CombatResult): [SideTotals, SideTotals] {
   const refl = reflectEvents(r.events);
   const t = [0, 1].map(() => ({
-    dealt: 0, blockedByFoe: 0, thornsTaken: 0, burnTaken: 0, fatigueTaken: 0, healed: 0, shielded: 0,
+    dealt: 0, blockedByFoe: 0, thornsTaken: 0, burnTaken: 0, fatigueTaken: 0, poisonTaken: 0, dodged: 0, ultT: -1, ultLv: 0, healed: 0, shielded: 0,
     bigHit: 0, bigHitSrc: '', bigHitT: 0, casts: 0, growth: 0,
   })) as [SideTotals, SideTotals];
   for (const e of r.events) {
@@ -135,16 +143,22 @@ function totals(r: CombatResult): [SideTotals, SideTotals] {
       if (e.src === 'fatigue') victim.fatigueTaken += e.amount;
       else if (refl.has(e)) victim.thornsTaken += e.amount + e.blocked;
       else if (e.src === 'burn') victim.burnTaken += e.amount;
+      else if (e.src === 'poison') victim.poisonTaken += e.amount;
       if (e.src !== 'fatigue') {
         attacker.dealt += e.amount + e.blocked;
         attacker.blockedByFoe += e.blocked;
-        if (e.src !== 'burn' && !refl.has(e) && e.amount + e.blocked > attacker.bigHit) {
+        if (e.src !== 'burn' && e.src !== 'poison' && !refl.has(e) && e.amount + e.blocked > attacker.bigHit) {
           attacker.bigHit = e.amount + e.blocked;
           attacker.bigHitSrc = e.src;
           attacker.bigHitT = e.t;
         }
       }
     } else if (e.type === 'heal') t[e.side].healed += e.amount;
+    else if (e.type === 'status' && e.status === 'evade') t[e.side].dodged++;
+    else if (e.type === 'ult') {
+      t[e.side].ultT = e.t;
+      t[e.side].ultLv = e.lv;
+    }
     else if (e.type === 'shield') t[e.side].shielded += e.amount;
     else if (e.type === 'cast' && !e.echo) t[e.side].casts++;
   }
@@ -172,11 +186,10 @@ export function skillDamage(r: CombatResult, b: Build, s: Side): SkillDamage[] {
   }
   const st = r.stats[s];
   const fires = (i: number) => (st[i]?.c ?? 0) + (st[i]?.tc ?? 0);
-  // who gave thorns: skills with a thorns effect (perm stacks count double), amplify (doubles stacks), the thorns hero
+  // who gave thorns: skills with a thorns effect (perm stacks count double), the thorns hero
   const weight = b.skills.map((k, i) => {
     const th = nodeOf(k).fx.find((e) => e.k === 'thorns') as { n: number; perm?: boolean } | undefined;
     if (th) return th.n * (th.perm ? 2 : 1) * fires(i);
-    if (hasFx(k, 'amplify') && b.skills.some((x) => hasFx(x, 'thorns'))) return fires(i);
     return 0;
   });
   const heroThorns = HEROES_BY_ID[b.hero]?.hooks.thornsSecs ? 3 : 0;
@@ -328,6 +341,18 @@ export function explain(
     const hits = `${N[me]} ${my.bigHit}${my.bigHitSrc ? ` (${srcName(me, my.bigHitSrc)})` : ''} · ${N[foe]} ${their.bigHit}${their.bigHitSrc ? ` (${srcName(foe, their.bigHitSrc)})` : ''}`;
     fact('hit', L(`ตีแรงสุด: ${hits}`, `Biggest hit: ${hits}`));
   }
+  // ultimates (sim v12): who fired theirs, when
+  const ultName = (s: Side) => HEROES_BY_ID[builds[s].hero]?.ult.name ?? '';
+  const ultTxt = (s: Side) =>
+    T[s].ultT >= 0
+      ? L(`${N[s]} ${ultName(s)} Lv${T[s].ultLv} ที่ ${sec(T[s].ultT)} วิ`, `${N[s]} ${ultName(s)} Lv${T[s].ultLv} at ${sec(T[s].ultT)}s`)
+      : (r.sides?.[s].ultLv ?? 0) > 0
+        ? L(`${N[s]} ปลดแล้วแต่ไม่ได้ใช้`, `${N[s]} unlocked but did not fire`)
+        : '';
+  const ults = [ultTxt(me), ultTxt(foe)].filter(Boolean);
+  if (ults.length) fact('ult', L(`ท่าไม้ตาย: ${ults.join(' · ')}`, `Ultimates: ${ults.join(' · ')}`));
+  if (my.dodged || their.dodged)
+    fact('dodge', L(`หลบการตีได้: ${N[me]} ${my.dodged} ครั้ง · ${N[foe]} ${their.dodged} ครั้ง`, `Hits dodged: ${N[me]} ${my.dodged} · ${N[foe]} ${their.dodged}`));
   if (fatigued)
     fact(
       'fatigue',
@@ -474,6 +499,37 @@ export function explain(
         'heal',
       );
     }
+    if (pct(my.poisonTaken, lostHp) >= 25) {
+      const tip = advise(
+        [['tailwind', L('พัดไฟ/พิษทิ้ง', 'blows burn/poison away')], ['cleanse', L('ลบพิษกองที่แรงสุด', 'removes the strongest poison')]],
+        L('ตีให้จบเร็วก่อนพิษซ้อน', 'end it before the poison stacks up'),
+      );
+      add(
+        pct(my.poisonTaken, lostHp),
+        L(`พิษทำดาเมจ${N[me]} ${my.poisonTaken} (ไม่สนโล่ หลบไม่ได้ และลดการฟื้น) → ${tip}`, `Poison dealt ${my.poisonTaken} to${N[me]}(it ignores shields, can't be dodged and cuts healing) → ${tip}`),
+        'poison',
+      );
+    }
+    if (their.dodged >= 3) {
+      const tip = advise(
+        [['heavy', L('สาย ทุบแม่น ตีไม่พลาด', 'the Sure Smash branch never misses')], ['ignite', L('ไฟหลบไม่ได้', "burn can't be dodged")], ['venom', L('พิษหลบไม่ได้', "poison can't be dodged")]],
+      );
+      add(
+        their.dodged * 6,
+        L(`${N[foe]}หลบการตีของ${N[me]}ได้ ${their.dodged} ครั้ง → ใช้ไฟ/พิษ หรือการตีที่หลบไม่ได้ (👁) · ${tip}`, `${N[foe]}dodged ${their.dodged} hits from${N[me]}→ use burn/poison or hits that can't be dodged (👁) · ${tip}`),
+        'dodge',
+      );
+    }
+    if (their.ultT >= 0) {
+      add(
+        12,
+        L(
+          `${N[foe]}ใช้ท่าไม้ตาย ${ultName(foe)} ที่ ${sec(their.ultT)} วิ (${HEROES_BY_ID[builds[foe].hero]?.ult.effect ?? ''})`,
+          `${N[foe]}fired the ultimate ${ultName(foe)} at ${sec(their.ultT)}s (${HEROES_BY_ID[builds[foe].hero]?.ult.effect ?? ''})`,
+        ),
+        'ult',
+      );
+    }
     if (pct(my.burnTaken, lostHp) >= 25) {
       const tip = advise([['cleanse', L('ลบไฟกองที่แรงสุด', 'removes the strongest burn')]], L('เร่งดาเมจให้จบก่อนไฟซ้อน', 'end the fight before burns stack up'));
       add(
@@ -537,6 +593,8 @@ export function explain(
         pct(their.thornsTaken, r.maxHp[foe]),
         L(`หนามของ${N[me]}สะท้อนใส่${N[foe]} ${their.thornsTaken}`, `The thorns of${N[me]}reflected ${their.thornsTaken} onto${N[foe]}`), 'thorns',
       );
+    if (my.ultT >= 0) add(15, L(`${N[me]}ใช้ท่าไม้ตาย ${ultName(me)} Lv${my.ultLv} ที่ ${sec(my.ultT)} วิ`, `${N[me]}fired the ultimate ${ultName(me)} Lv${my.ultLv} at ${sec(my.ultT)}s`), 'ult');
+    if (my.dodged >= 3) add(my.dodged * 5, L(`${N[me]}หลบการตีได้ ${my.dodged} ครั้ง`, `${N[me]}dodged ${my.dodged} hits`), 'dodge');
     if (my.growth >= 8) add(my.growth * 2, L(`${N[me]}สะสมพลังโจมตีได้ถึง +${my.growth} ต่อการตี`, `${N[me]}stacked attack power up to +${my.growth} per hit`), 'growth');
     const best = dmg[me].reduce<SkillDamage | null>((b, x) => (!b || x.total > b.total ? x : b), null);
     const total = dmg[me].reduce((n, x) => n + x.total, 0);
@@ -648,6 +706,12 @@ export function explain(
         ),
       });
   }
+  for (const s of [me, foe])
+    if (T[s].ultT >= 0)
+      moments.push({
+        kind: 'ult', icon: '★', title: L('ท่าไม้ตาย', 'Ultimate'), side: s, t: T[s].ultT,
+        text: L(`${N[s]} ${ultName(s)} Lv${T[s].ultLv} ที่ ${sec(T[s].ultT)} วิ`, `${N[s]} ${ultName(s)} Lv${T[s].ultLv} at ${sec(T[s].ultT)}s`),
+      });
   for (const s of [me, foe]) {
     const w = longest(s);
     if (w && w[1] - w[0] >= 3 * TPS)

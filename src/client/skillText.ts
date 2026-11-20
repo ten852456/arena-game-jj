@@ -30,10 +30,13 @@ function simpleHit(e: Hit): string {
   if (e.shieldPct) add.push(L('แรงจากโล่', 'shield'));
   if (e.thornsX) add.push(L('แรงจากหนาม', 'thorns'));
   if (e.burnPct) add.push(L('ระเบิดไฟ', 'burn left'));
+  if (e.poisonPct) add.push(L('ระเบิดพิษ', 'poison left'));
+  if (e.perBurn) add.push(L(`${e.perBurn} ต่อกองไฟ`, `${e.perBurn} per burn`));
+  if (e.perDodge) add.push(L(`${e.perDodge} ต่อแต้มหลบ`, `${e.perDodge} per dodge`));
   if (e.perRemoved) add.push(L(`${e.perRemoved} ต่อของที่ลบได้`, `${e.perRemoved} per removed`));
   let s: string;
   if (e.n > 0) s = L(`ตี ${e.n}`, `Hits ${e.n}`) + add.map((a) => ` + ${a}`).join('');
-  else s = L(`ตีด้วย${add.join(' + ')}`, `Hits = your ${add.join(' + ')}`);
+  else s = L(`ตีด้วย${add.join(' + ')}`, `Hits = ${add.join(' + ')}`);
   if (e.times && e.times > 1) s += L(` · ${e.times} ที`, ` ×${e.times}`);
   if (e.ifSlowed) s = L(`ถ้าศัตรูช้า: ${s}`, `If slowed: ${s.replace(/^Hits/, 'hits')}`);
   const tail: string[] = [];
@@ -43,6 +46,8 @@ function simpleHit(e: Hit): string {
   if (e.noShield) tail.push(L('แรงขึ้นถ้าศัตรูไม่มีโล่', 'stronger vs no shield'));
   if (e.leech) tail.push(L('ดูดเลือด', 'drains HP'));
   if (e.burn) tail.push(L(`ติดไฟ ${s1(e.burn[1])} วิ`, `burns ${s1(e.burn[1])}s`));
+  if (e.poison) tail.push(L(`ติดพิษ ${s1(e.poison[1])} วิ`, `poisons ${s1(e.poison[1])}s`));
+  if (e.sure) tail.push(L('หลบไม่ได้', "can't be dodged"));
   return [s, ...tail].join(' · ');
 }
 
@@ -53,7 +58,12 @@ function simpleEffect(e: Effect): string {
     case 'heal': return L(`ฟื้น ${e.n}`, `Heal ${e.n}`);
     case 'burn':
       return L(`ติดไฟ ${num(e.dps)}/วิ ${s1(e.secs)} วิ`, `Burns ${num(e.dps)}/s for ${s1(e.secs)}s`) +
-        (e.growthHalf ? L(' (แรงขึ้นตามพลัง)', ' (+power)') : '');
+        (e.stacks && e.stacks > 1 ? ` ×${e.stacks}` : '') + (e.growthHalf ? L(' (แรงขึ้นตามพลัง)', ' (+power)') : '');
+    case 'poison':
+      return L(`ติดพิษ ${num(e.dps)}/วิ ${s1(e.secs)} วิ`, `Poisons ${num(e.dps)}/s for ${s1(e.secs)}s`) + (e.stacks && e.stacks > 1 ? ` ×${e.stacks}` : '');
+    case 'dodge': return L(`หลบ +${e.n}`, `Dodge +${e.n}`);
+    case 'haste': return L(`ตัวเองเร็วขึ้น ${pct(e.pct)} ${s1(e.secs)} วิ`, `Haste ${pct(e.pct)} ${s1(e.secs)}s`);
+    case 'wound': return L(`ศัตรูฟื้นน้อยลง ${pct(e.pct)}`, `Enemy heals ${pct(e.pct)} less`);
     case 'freeze': return L(`แช่แข็ง ${s1(e.secs)} วิ`, `Freezes ${s1(e.secs)}s`);
     case 'slow': return L(`ช้าลง ${pct(e.pct)} ${s1(e.secs)} วิ`, `Slows ${pct(e.pct)} ${s1(e.secs)}s`);
     case 'delay': return L(`ถ่วงศัตรู ${s1(e.secs)} วิ`, `Delays the enemy ${s1(e.secs)}s`);
@@ -69,11 +79,11 @@ function simpleEffect(e: Effect): string {
       return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
         (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
     case 'cleanse':
+      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`พัดไฟ/พิษทิ้ง ${e.n} กอง`, `Blows away ${e.n} burn/poison`);
       return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
     case 'dispel':
       return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +
         (e.shield !== undefined ? L(' · ทลายโล่', ' · breaks shield') : '') + (e.steal ? L(' · ขโมยพลัง', ' · steals power') : '');
-    case 'amplify': return L(`บัฟ ×2 (สูงสุด +${e.cap})`, `Doubles your buffs (max +${e.cap})`);
     case 'leech': return L(`การตีถัดไปดูดเลือด ${pct(e.pct)}`, `Next hit drains ${pct(e.pct)}`);
   }
 }
@@ -113,10 +123,13 @@ export function simpleBonus(b: Bonus, lv: number): string {
 
 function hitFormula(e: Hit): string {
   const base: string[] = [];
-  if (e.n > 0 || (!e.shieldPct && !e.thornsX && !e.burnPct)) base.push(String(e.n));
+  if (e.n > 0 || (!e.shieldPct && !e.thornsX && !e.burnPct && !e.poisonPct && !e.perBurn && !e.perDodge)) base.push(String(e.n));
   if (e.shieldPct) base.push(L(`${pct(e.shieldPct)}×โล่ของคุณ`, `${pct(e.shieldPct)}×your shield`));
   if (e.thornsX) base.push(L(`${e.thornsX}×หนามของคุณ`, `${e.thornsX}×your thorns`));
   if (e.burnPct) base.push(L(`${pct(e.burnPct)}×ไฟที่ยังเหลือบนศัตรู`, `${pct(e.burnPct)}×enemy burn left`));
+  if (e.poisonPct) base.push(L(`${pct(e.poisonPct)}×พิษที่ยังเหลือบนศัตรู`, `${pct(e.poisonPct)}×enemy poison left`));
+  if (e.perBurn) base.push(L(`${e.perBurn}×กองไฟบนศัตรู`, `${e.perBurn}×enemy burn stacks`));
+  if (e.perDodge) base.push(L(`${e.perDodge}×แต้มหลบของคุณ`, `${e.perDodge}×your dodge charges`));
   if (e.perRemoved) base.push(L(`${e.perRemoved}×ของที่ลบได้`, `${e.perRemoved}×things removed`));
   const mult: string[] = [];
   if (e.exec) mult.push(L(`×${e.exec[1]} ถ้าศัตรูเลือด<${pct(e.exec[0])}`, `×${e.exec[1]} if enemy HP<${pct(e.exec[0])}`));
@@ -131,6 +144,8 @@ function hitFormula(e: Hit): string {
   if (e.pierce) s += L(` · ไม่สนโล่ ${pct(e.pierce)}`, ` · ignores ${pct(e.pierce)} of shield`);
   if (e.leech) s += L(` · ฟื้น ${pct(e.leech)} ของดาเมจที่เข้าเลือด`, ` · heals ${pct(e.leech)} of HP damage`);
   if (e.burn) s += L(` · ทุกครั้งที่ตี ไฟ ${e.burn[0]}/วิ ${num(e.burn[1])} วิ`, ` · each hit burns ${e.burn[0]}/s ${num(e.burn[1])}s`);
+  if (e.poison) s += L(` · ทุกครั้งที่ตีโดน พิษ ${e.poison[0]}/วิ ${num(e.poison[1])} วิ`, ` · each landed hit poisons ${e.poison[0]}/s ${num(e.poison[1])}s`);
+  if (e.sure) s += L(' · หลบไม่ได้ (ไม่ใช้แต้มหลบศัตรู)', " · can't be dodged (ignores dodge charges)");
   return s;
 }
 
@@ -138,12 +153,21 @@ function effectDetail(e: Effect): string {
   switch (e.k) {
     case 'hit': return hitFormula(e);
     case 'shield': return L(`🛡 โล่ +${e.n} × แรงโบนัส (ไม่หายจนกว่าจะแตก)`, `🛡 shield +${e.n} × bonus power (stays until broken)`);
-    case 'heal': return L(`❤ ฟื้น ${e.n} × แรงโบนัส (หนามศัตรูลดการฟื้น)`, `❤ heal ${e.n} × bonus power (enemy thorns cut healing)`);
+    case 'heal': return L(`❤ ฟื้น ${e.n} × แรงโบนัส (หนามศัตรู พิษ และแผลลึกลดการฟื้น)`, `❤ heal ${e.n} × bonus power (enemy thorns, poison and wounds cut healing)`);
     case 'burn':
       return L(
         `🔥 ${e.dps}${e.growthHalf ? ' + ½พลัง' : ''}/วิ × ${num(e.secs)} วิ = ${num(e.dps * e.secs)}${e.growthHalf ? '+' : ''} รวม · ไม่สนโล่ · ซ้อนได้`,
         `🔥 ${e.dps}${e.growthHalf ? ' + ½power' : ''}/s × ${num(e.secs)}s = ${num(e.dps * e.secs)}${e.growthHalf ? '+' : ''} total · ignores shield · stacks`,
       );
+    case 'poison':
+      return L(
+        `☠ ${e.dps}/วิ × ${num(e.secs)} วิ = ${num(e.dps * e.secs)} รวม${e.stacks && e.stacks > 1 ? ` × ${e.stacks} กอง` : ''} · ไม่สนโล่ หลบไม่ได้ · ระหว่างติดพิษฟื้นได้ ×${T['poison.heal']}`,
+        `☠ ${e.dps}/s × ${num(e.secs)}s = ${num(e.dps * e.secs)} total${e.stacks && e.stacks > 1 ? ` × ${e.stacks} stacks` : ''} · ignores shield, can't be dodged · poisoned healing ×${T['poison.heal']}`,
+      );
+    case 'dodge':
+      return L(`💨 +${e.n} แต้มหลบ (สูงสุด ${T['dodge.cap']}) · การตีที่โดนครั้งถัดไปพลาด 1 ครั้งต่อแต้ม`, `💨 +${e.n} dodge (max ${T['dodge.cap']}) · each charge makes one incoming hit miss`);
+    case 'haste': return L(`⏩ คูลดาวน์ทุกตัวของคุณเร็วขึ้น ${pct(e.pct)} นาน ${num(e.secs)} วิ (สูงสุด ${pct(T['haste.cap'])})`, `⏩ all your cooldowns run ${pct(e.pct)} faster for ${num(e.secs)}s (max ${pct(T['haste.cap'])})`);
+    case 'wound': return L(`🩹 ศัตรูฟื้นเลือด ×${num(1 - e.pct)} นาน ${num(e.secs)} วิ`, `🩹 enemy healing ×${num(1 - e.pct)} for ${num(e.secs)}s`);
     case 'freeze': return L(`❄ ${num(e.secs)} วิ = ${Math.round(e.secs * 10)} tick (ลดเมื่อแรง<100%)`, `❄ ${num(e.secs)}s = ${Math.round(e.secs * 10)} ticks (less when power<100%)`);
     case 'slow': return L(`🐌 คูลดาวน์ศัตรูเดินช้าลง ${pct(e.pct)} นาน ${num(e.secs)} วิ`, `🐌 enemy cooldowns run ${pct(e.pct)} slower for ${num(e.secs)}s`);
     case 'delay': return L(`⏪ ดึงคูลดาวน์ศัตรูถอย ${Math.round(e.secs * 10)} tick`, `⏪ pushes enemy cooldowns back ${Math.round(e.secs * 10)} ticks`);
@@ -159,13 +183,15 @@ function effectDetail(e: Effect): string {
         `🗿 การคุมที่โดนเหลือ ${pct(e.keep ?? 0.4)}${e.ignoreFreeze ? ' · ไม่โดนแช่แข็งครั้งถัดไป' : ''}`,
         `🗿 control on you lands at ${pct(e.keep ?? 0.4)}${e.ignoreFreeze ? ' · ignores the next freeze' : ''}`,
       );
-    case 'cleanse': return L(`✨ ลบไฟ ${e.n >= 99 ? 'ทุก' : e.n} กอง + ความช้า + แช่แข็ง`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn stack(s) + slow + freeze`);
+    case 'cleanse':
+      return e.dot
+        ? L(`✨ ลบไฟ/พิษ ${e.n >= 99 ? 'ทุก' : e.n} กอง (ไม่ลบการแช่แข็ง ไม่ทำงานตอนโดนคุม)`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn/poison stack(s) (not freeze; does not react to control)`)
+        : L(`✨ ลบไฟ/พิษ ${e.n >= 99 ? 'ทุก' : e.n} กอง + ความช้า + แช่แข็ง + แผลลึก`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn/poison stack(s) + slow + freeze + wound`);
     case 'dispel':
       return L(
         `💥 ลบบัฟศัตรูอย่างละ ${e.n >= 99 ? 'ทั้งหมด' : e.n} + โล่ ${pct(e.shield ?? 0.2)}${e.steal ? ' · ได้พลังที่ลบมา' : ''}`,
         `💥 removes ${e.n >= 99 ? 'all' : e.n} of each enemy buff + ${pct(e.shield ?? 0.2)} shield${e.steal ? ' · you gain the power removed' : ''}`,
       );
-    case 'amplify': return L(`✖2 พลัง หนาม รวมพลัง ×2 เพิ่มได้ไม่เกิน +${e.cap}`, `✖2 power, thorns, charge ×2, adding at most +${e.cap}`);
     case 'leech': return L(`🩸 การตีถัดไปฟื้น ${pct(e.pct)} ของดาเมจ`, `🩸 next hit heals ${pct(e.pct)} of its damage`);
   }
 }

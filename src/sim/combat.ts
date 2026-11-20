@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
+import { HEROES_BY_ID, ULT_LV2_POW, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
@@ -385,6 +385,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   }
 
   // ---------------- ultimates ----------------
+  /** most damage one damage ultimate can deal: a share of the enemy's max HP (Lv2 × ULT_LV2_POW) */
+  const ultCap = (f: Fighter, foe: Fighter) => foe.maxHp * T['ult.cap'] * (f.ultLv >= 2 ? ULT_LV2_POW : 1);
   /** Fire f's ultimate now (its trigger was met). */
   function fireUlt(f: Fighter) {
     const foe = F[1 - f.side];
@@ -394,14 +396,14 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const pow = ultPow(f.hero, f.ultLv);
     switch (f.hero) {
       case 'assassin':
-        deal(foe, Math.max(1, Math.round(pow * f.bigHit)), false, 'ult');
+        deal(foe, Math.max(1, Math.round(Math.min(pow * f.bigHit, ultCap(f, foe)))), false, 'ult');
         break;
       case 'duelist':
         addHaste(f, pow, 3);
         addDodge(f, 2);
         break;
       case 'knight':
-        deal(foe, Math.max(1, Math.round(pow * f.shield)), true, 'ult');
+        deal(foe, Math.max(1, Math.round(Math.min(pow * f.shield, ultCap(f, foe)))), true, 'ult');
         break;
       case 'berserker': {
         const h = Math.min(f.maxHp - f.hp, Math.round(pow * f.maxHp));
@@ -414,9 +416,14 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
         break;
       }
-      case 'pyro':
-        deal(foe, Math.max(1, Math.round(pow * dotLeft(foe.burns))), false, 'ult');
+      case 'pyro': {
+        // the burn still to come lands now (× pow) and those burns are used up
+        const left = dotLeft(foe.burns);
+        foe.burns = [];
+        emit({ type: 'status', side: foe.side, status: 'burn', value: 0 });
+        deal(foe, Math.max(1, Math.round(pow * left)), false, 'ult');
         break;
+      }
       case 'thornguard':
         f.ultUntil = t + Math.round(pow * TPS);
         addWound(foe, 1, pow);

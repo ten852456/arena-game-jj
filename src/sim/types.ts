@@ -51,7 +51,6 @@ export type StatusKind =
   | 'thorns' // side = self, value = total thorns
   | 'steadfast' // side = self
   | 'rage' // side = self (hero passive)
-  | 'amplify' // side = self
   | 'cleanse' // side = self, value = debuffs removed
   | 'dispel' // side = target, value = buffs removed
   | 'delay' // side = target, value = cooldown ticks pushed back (0 = resisted)

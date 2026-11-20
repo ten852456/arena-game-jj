@@ -108,6 +108,8 @@ export const TUNING = {
   /** most haste a fighter can have (share faster) */
   'haste.cap': 0.6,
   // ---- ultimates: trigger amount (Lv1; Lv2 needs 30% less) and effect power (Lv1; Lv2 ×1.4) ----
+  /** damage ultimates (นักฆ่า, อัศวิน) deal at most this share of the enemy's max HP (Lv2 ×1.4) */
+  'ult.cap': 0.3,
   /** นักฆ่า: enemy HP below this share */
   'ult.assassin.trig': 0.5,
   /** นักฆ่า: hit = this × your biggest hit so far (ignores shield, can't be dodged) */

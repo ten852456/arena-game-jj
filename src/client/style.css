@@ -731,3 +731,35 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
 .linkgap.on { color: #ffe9a6; text-shadow: 0 0 9px #ffdf68, 0 0 18px #ffac73; }
 .shopv .skillrow.drop-near { box-shadow: 0 0 0 2px #ffe066, 0 0 20px #ffd77b; }
 .shopv .skillrow.synergy-preview { box-shadow: 0 0 0 2px #ffed9c, 0 0 24px #ffca72; }
+
+/* ---- 8 lines (sim v12): line-<line> replaces the old arch-<archetype> classes ---- */
+:root {
+  --l-hit: #e65a5a; --p-hit: #ff9a9a;
+  --l-dodge: #4fc98a; --p-dodge: #b6f0c8;
+  --l-shield: #5aa0e6; --p-shield: #9ccbff;
+  --l-heal: #e66aa8; --p-heal: #ffb3d9;
+  --l-burn: #f08a24; --p-burn: #ffb070;
+  --l-poison: #9b5de5; --p-poison: #c49cff;
+  --l-ice: #3cc6e0; --p-ice: #9df0ff;
+  --l-wind: #8cc63f; --p-wind: #d8f5a2;
+  --l-none: #9aa4ad; --p-none: #c6c1e8;
+}
+.line-hit { border-left-color: var(--l-hit) !important; --pa: var(--p-hit); } .tt-h.line-hit { border-color: var(--l-hit); } .modal-box.line-hit { border-top-color: var(--l-hit); } .a-hit { background: var(--l-hit); }
+.line-dodge { border-left-color: var(--l-dodge) !important; --pa: var(--p-dodge); } .tt-h.line-dodge { border-color: var(--l-dodge); } .modal-box.line-dodge { border-top-color: var(--l-dodge); } .a-dodge { background: var(--l-dodge); }
+.line-shield { border-left-color: var(--l-shield) !important; --pa: var(--p-shield); } .tt-h.line-shield { border-color: var(--l-shield); } .modal-box.line-shield { border-top-color: var(--l-shield); } .a-shield { background: var(--l-shield); }
+.line-heal { border-left-color: var(--l-heal) !important; --pa: var(--p-heal); } .tt-h.line-heal { border-color: var(--l-heal); } .modal-box.line-heal { border-top-color: var(--l-heal); } .a-heal { background: var(--l-heal); }
+.line-burn { border-left-color: var(--l-burn) !important; --pa: var(--p-burn); } .tt-h.line-burn { border-color: var(--l-burn); } .modal-box.line-burn { border-top-color: var(--l-burn); } .a-burn { background: var(--l-burn); }
+.line-poison { border-left-color: var(--l-poison) !important; --pa: var(--p-poison); } .tt-h.line-poison { border-color: var(--l-poison); } .modal-box.line-poison { border-top-color: var(--l-poison); } .a-poison { background: var(--l-poison); }
+.line-ice { border-left-color: var(--l-ice) !important; --pa: var(--p-ice); } .tt-h.line-ice { border-color: var(--l-ice); } .modal-box.line-ice { border-top-color: var(--l-ice); } .a-ice { background: var(--l-ice); }
+.line-wind { border-left-color: var(--l-wind) !important; --pa: var(--p-wind); } .tt-h.line-wind { border-color: var(--l-wind); } .modal-box.line-wind { border-top-color: var(--l-wind); } .a-wind { background: var(--l-wind); }
+.line-none { border-left-color: var(--l-none) !important; --pa: var(--p-none); } .tt-h.line-none { border-color: var(--l-none); } .modal-box.line-none { border-top-color: var(--l-none); } .a-none { background: var(--l-none); }
+.log .ult, #log .ult { color: #ffd166; }
+.shopv .line-hit { --pa: var(--p-hit); }
+.shopv .line-dodge { --pa: var(--p-dodge); }
+.shopv .line-shield { --pa: var(--p-shield); }
+.shopv .line-heal { --pa: var(--p-heal); }
+.shopv .line-burn { --pa: var(--p-burn); }
+.shopv .line-poison { --pa: var(--p-poison); }
+.shopv .line-ice { --pa: var(--p-ice); }
+.shopv .line-wind { --pa: var(--p-wind); }
+.shopv .line-none { --pa: var(--p-none); }

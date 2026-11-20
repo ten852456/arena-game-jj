@@ -1,37 +1,58 @@
 /**
  * English text for game data (the Thai text lives in the data files themselves).
  * client/lang.ts swaps these into the data objects when the player picks English.
- * Skill names are the same as the grid version (same Thai names); the rest is written for the list version.
+ * Skill names follow the Thai names; hero numbers are read from tuning.ts so they never drift.
  */
+import { ultPow, ultTrig } from '../sim/heroes';
+import { T } from '../sim/tuning';
 
 /** Skill tree names, per skill: variant ('_' = Lv1) → "Name" or "Name | branch style" (Lv2). */
 export const SKILLS_EN: Record<string, Record<string, string>> = {
+  // ⚔ hit
   strike: { _: 'Slash', a: 'Heavy Slash | Heavy hits', a1: 'Piercing Slash', a2: 'Finishing Slash', b: 'Twin Slash | Many hits', b1: 'Storm Slash', b2: 'Draining Slash' },
-  jab: { _: 'Quick Jab', a: 'Swift Jab | Speed', a1: 'Lightning Jab', a2: 'Venom Jab', b: 'Vital Jab | Hits unshielded foes', b1: 'Piercing Jab', b2: 'Binding Jab' },
-  heavy: { _: 'Heavy Smash', a: 'Breaker Hammer | Breaks shields', a1: 'Doom Hammer', a2: 'Quake Hammer', b: 'Stun Smash | Hit and control', b1: 'Dragging Smash', b2: 'Double Smash' },
   charge: { _: 'Charge Up', a: 'Big Charge | One huge hit', a1: 'All In', a2: 'Boiling Power', b: 'Quick Charge | Use often', b1: 'Follow-up', b2: 'Double Beat' },
-  shield: { _: 'Raise Shield', a: 'Shield Fort | Wall', a1: 'Iron Wall', a2: 'Thorn Shield', b: 'Counter Shield | Shield as damage', b1: 'Shield Bash', b2: 'Healing Shield' },
-  thorns: { _: 'Thorn Armor', a: 'Sharp Thorns | Strong reflect', a1: 'Poison Thorns', a2: 'Hindering Thorns', b: 'Lasting Thorns | Permanent stacks', b1: 'Thicket', b2: 'Armored Thorns' },
-  stoneskin: { _: 'Stoneskin', a: 'Mending Stone | Healing', a1: 'Lifestone', a2: 'Pure Stone', b: 'Hard Stone | Armor', b1: 'Cliffside', b2: 'Stone Burst' },
-  cleanse: { _: 'Cleanse', a: 'Purify | Stops burn and control', a1: 'Full Cleanse', a2: 'Cleanse & Harden', b: 'Cleanse & Counter | Punish debuffs', b1: 'Deadly Cleanse', b2: 'Thorn Cleanse' },
-  train: { _: 'Train', a: 'Hard Training | Big power gains', a1: 'Extreme Training', a2: 'Combat Training', b: 'Quick Training | Frequent power', b1: 'Endless Training', b2: 'Sparring' },
-  ignite: { _: 'Ignite', a: 'Blaze | Strong burn', a1: 'Hellfire', a2: 'Wildfire', b: 'Long Burn | Lasting burn', b1: 'Undying Flame', b2: 'Cold Fire' },
+  heavy: { _: 'Heavy Smash', a: 'Breaker Hammer | Breaks shields', a1: 'Doom Hammer', a2: 'Quake Hammer', b: 'Sure Smash | Never misses', b1: 'Unerring Smash', b2: 'Double Smash' },
+  // 💨 dodge
+  jab: { _: 'Dodge Jab', a: 'Swift Jab | Speed', a1: 'Lightning Jab', a2: 'Feint Jab', b: 'Vital Jab | Hits unshielded foes', b1: 'Piercing Jab', b2: 'Binding Jab' },
+  riposte: { _: 'Riposte', a: 'Hard Riposte | Heavy counters', a1: 'Deadly Riposte', a2: 'Piercing Riposte', b: 'Riposte & Dodge | Dodge loop', b1: 'Blade Dance', b2: 'Draining Riposte' },
+  sidestep: { _: 'Sidestep', a: 'Shake Off | Clear burn/poison', a1: 'Shake It All', a2: 'Shake & Mend', b: 'Mirage | Dodge a lot', b1: 'Shadow Form', b2: 'Shadow Counter' },
+  // 🛡 shield
+  shield: { _: 'Raise Shield', a: 'Shield Fort | Wall', a1: 'Iron Wall', a2: 'Steady Shield', b: 'Counter Shield | Shield as damage', b1: 'Shield Bash', b2: 'Healing Shield' },
+  stoneskin: { _: 'Stoneskin', a: 'Hard Stone | Armor', a1: 'Cliffside', a2: 'Mending Stone', b: 'Stone Burst | Shield as damage', b1: 'Rockslide', b2: 'Piercing Stone' },
+  cleanse: { _: 'Cleanse', a: 'Purify | Stops burn, poison and control', a1: 'Full Cleanse', a2: 'Cleanse & Harden', b: 'Cleanse & Counter | Punish debuffs', b1: 'Deadly Cleanse', b2: 'Cleanse & Guard' },
+  // ❤ heal
   feast: { _: 'Feast', a: 'Full Belly | Survive', a1: 'Banquet', a2: 'Hearty Meal', b: 'Growth Feast | Grow fast', b1: 'Endless Feast', b2: 'Blood Feast' },
-  amplify: { _: 'Amplify', a: 'Big Amplify | Late burst', a1: 'Multiply', a2: 'Amplify Charge', b: 'Quick Amplify | Steady', b1: 'Rapid Amplify', b2: 'Amplify & Grow' },
+  train: { _: 'Train', a: 'Hard Training | Big power gains', a1: 'Extreme Training', a2: 'Combat Training', b: 'Quick Training | Frequent power', b1: 'Endless Training', b2: 'Sparring' },
+  mend: { _: 'Mend', a: 'Quick Mend | Heal when controlled', a1: 'Endless Mend', a2: 'Pure Mend', b: 'Iron Blood | Guard big hits', b1: 'Iron Body', b2: 'Blood Counter' },
+  // 🔥 burn
+  ignite: { _: 'Ignite', a: 'Blaze | Strong burn', a1: 'Hellfire', a2: 'Wildfire', b: 'Long Burn | Lasting burn', b1: 'Undying Flame', b2: 'Cold Fire' },
+  blaze: { _: 'Fireball', a: 'Fire Barrage | Detonate', a1: 'Doom Fire', a2: 'Piercing Fire', b: 'Twin Fireball | Stack burn', b1: 'Fire Rain', b2: 'Scald' },
+  scorch: { _: 'Scorch', a: 'Searing Wound | Cut healing', a1: 'Cursed Fire', a2: 'Seeping Fire', b: 'Spreading Fire | Many small stacks', b1: 'Sea of Flames', b2: 'Wildfire Field' },
+  // ☠ poison
+  venom: { _: 'Venom Fang', a: 'Strong Venom | Heavy poison', a1: 'Deadly Venom', a2: 'Corroding Venom', b: 'Fang Flurry | Fast poison', b1: 'Poison Storm', b2: 'Draining Venom' },
+  plague: { _: 'Poison Burst', a: 'Venom Blast | Burst the poison', a1: 'Great Plague', a2: 'Spreading Venom', b: 'Plague | Long poison', b1: 'Heavy Plague', b2: 'Heartbane' },
+  thorns: { _: 'Venom Thorn Armor', a: 'Sharp Thorns | Strong reflect', a1: 'Deadly Thorns', a2: 'Hindering Thorns', b: 'Lasting Thorns | Permanent stacks', b1: 'Thicket', b2: 'Armored Thorns' },
+  // ❄ ice
   frost: { _: 'Frost Ball', a: 'Deep Freeze | Lock the foe', a1: 'Ice Age', a2: 'Shiver', b: 'Sharp Ice | Damage', b1: 'Ice Spear', b2: 'Hailstorm' },
-  chill: { _: 'Cold Wind', a: 'Blizzard | Very slow', a1: 'Freezing Wind', a2: 'Knife Gale', b: 'Long Chill | Long slow', b1: 'Eternal Cold', b2: 'Hot-Cold Wind' },
+  icelance: { _: 'Ice Lance', a: 'Frigid Lance | Freeze combo', a1: 'Shattering Lance', a2: 'Freezing Lance', b: 'Quick Lance | Often', b1: 'Storm Lance', b2: 'Biting Lance' },
+  glacier: { _: 'Glacier', a: 'Deep Glacier | A freeze that lands', a1: 'Eternal Glacier', a2: 'Shield-break Glacier', b: 'Sharp Glacier | Pierce', b1: 'Spiked Glacier', b2: 'Cracking Glacier' },
+  // 🌪 wind
+  chill: { _: 'Gust', a: 'Gale | Very slow', a1: 'Freezing Gale', a2: 'Knife Gale', b: 'Long Gust | Long slow', b1: 'Endless Wind', b2: 'Pushing Wind' },
+  tailwind: { _: 'Tailwind', a: 'Whirlwind | Blow burn/poison away', a1: 'Cyclone', a2: 'Cleansing Wind', b: 'Acid Wind | Fast', b1: 'Wind Storm', b2: 'Cutting Wind' },
   dispel: { _: 'Dispel', a: 'Big Dispel | Clear buffs', a1: 'Total Dispel', a2: 'Shield Break', b: 'Dispel Strike | Punish buffs', b1: 'Deadly Dispel', b2: 'Steal Power' },
+  // neutral
   ironwill: { _: 'Iron Will', a: 'Steel | Resist control', a1: 'Immune', a2: 'Pure Steel', b: 'Fighting Spirit | Keep fighting', b1: 'Burning Heart', b2: 'Brave Heart' },
   gear: { _: 'Gear', a: 'Heavy Gear | Stronger', a1: 'Iron Gear', a2: 'Shield Gear', b: 'Swift Gear | More often', b1: 'Storm Gear', b2: 'Twin Gear' },
   overclock: { _: 'Overclock', a: 'Hard Boost | Stronger', a1: 'Max Boost', a2: 'Boost & Guard', b: 'Quick Boost | More often', b1: 'Rapid Boost', b2: 'Steady Boost' },
-  bulwark: { _: 'Shield Slam', a: 'Clash | Shield as damage', a1: 'Shield Breaker', a2: 'Shield Quake', b: 'Clash & Guard | Shield loop', b1: 'Full Guard', b2: 'Mending Clash' },
-  spikewall: { _: 'Spike Fort', a: 'Thorn Burst | Thorns into damage', a1: 'Thorn Spray', a2: 'Thorn Ring', b: 'Plant Thorns | Stack thorns', b1: 'Thorn Garden', b2: 'Healing Thorns' },
+  // hero uniques
   execute: { _: 'Finisher', a: 'Execute | Close the game', a1: 'Executioner', a2: 'Piercing Execute', b: 'Quick Cut | Use often', b1: 'Swift Cut', b2: 'Draining Cut' },
-  flurry: { _: 'Sword Flurry', a: 'Sharp Flurry | More hits', a1: 'Thousand Blades', a2: 'Flame Blade', b: 'Heavy Blade | Fewer, harder hits', b1: 'Breaker Blade', b2: 'Dragging Blade' },
+  flurry: { _: 'Sword Flurry', a: 'Sharp Flurry | More hits', a1: 'Thousand Blades', a2: 'Shadow Blades', b: 'Heavy Blade | Fewer, harder hits', b1: 'Breaker Blade', b2: 'Dragging Blade' },
+  bulwark: { _: 'Shield Slam', a: 'Clash | Shield as damage', a1: 'Shield Breaker', a2: 'Shield Quake', b: 'Clash & Guard | Shield loop', b1: 'Full Guard', b2: 'Mending Clash' },
   rampage: { _: 'Rampage', a: 'Frenzy | Many hits', a1: 'Berserk', a2: 'Growing Rage', b: 'Heavy Rage | Hard hits', b1: 'Crushing Rage', b2: 'Blood Rage' },
   inferno: { _: 'Inferno', a: 'Big Blast | Detonate stored burn', a1: 'Cataclysm', a2: 'Spreading Blast', b: 'Kindle | Stack burn', b1: 'Lava Blast', b2: 'Smoke Blast' },
+  spikewall: { _: 'Venom Spike Fort', a: 'Venom Thorn Burst | Poison into damage', a1: 'Venom Spike Spray', a2: 'Venom Thorn Ring', b: 'Plant Venom Thorns | Stack poison', b1: 'Venom Thorn Garden', b2: 'Healing Venom Thorns' },
   shatter: { _: 'Shatter', a: 'Crack | Freeze combo', a1: 'Smash to Bits', a2: 'Shatter & Freeze', b: 'Straight Smash | No combo needed', b1: 'Piercing Smash', b2: 'Cold Smash' },
-  timewarp: { _: 'Time Warp', a: 'Rewind | Lock time', a1: 'Time Stop', a2: 'Rewind & Slow', b: 'Sharp Time | Damage', b1: 'Time Cut', b2: 'Frozen Time' },
+  timewarp: { _: 'Back Wind', a: 'Strong Back Wind | Lock time', a1: 'Time-stop Wind', a2: 'Back Wind & Slow', b: 'Sharp Wind | Damage', b1: 'Slicing Wind', b2: 'Rushing Wind' },
 };
 
 export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
@@ -40,7 +61,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   shield: { name: 'Shield', desc: 'Takes damage before your HP and stays until it breaks' },
   heal: { name: 'Heal', desc: 'Restore your own HP' },
   leech: { name: 'Leech', desc: 'Heal a share of the damage you deal' },
-  burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields · stacks' },
+  burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks' },
   freeze: {
     name: 'Freeze',
     desc: "All the enemy's skills stop counting their cooldowns · weaker if repeated quickly · capped per fight · when a freeze ends, the enemy resists control for 1.5s",
@@ -56,16 +77,26 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
     name: 'Thorns',
     desc: 'Each time you are hit, reflect damage equal to your thorns (max 75% of the hit) · while you have thorns, the enemy heals only half',
   },
+  dodge: {
+    name: 'Dodge',
+    desc: 'Gain dodge charges (max 2) · each one makes the next hit on you miss completely (no randomness) · burn, poison, thorns and fatigue can’t be dodged · dodging the hit of a freeze/delay skill also stops that control',
+  },
+  poison: {
+    name: 'Poison',
+    desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · weaker than burn but lasts longer · a poisoned fighter heals 40% less',
+  },
+  haste: { name: 'Haste', desc: 'All your cooldowns run X% faster for N seconds' },
+  wound: { name: 'Wound', desc: 'The enemy heals X% less for N seconds' },
+  sure: { name: 'Sure hit', desc: 'This hit can’t be dodged (it ignores the enemy’s dodge charges)' },
   steadfast: {
     name: 'Iron Will',
     desc: 'Freeze, slow and delay on you are 60% weaker until the fight ends · a skill with 🗿 fires right away when you are controlled (once per cooldown)',
   },
   cleanse: {
     name: 'Cleanse',
-    desc: 'Remove debuffs on you: burn (strongest stack), slow, freeze · a skill with ✨ fires right away when you are controlled (once per cooldown)',
+    desc: 'Remove debuffs on you: burn or poison (strongest stack), slow, freeze, wound · a skill with ✨ fires right away when you are controlled (once per cooldown) · ✨ 🔥☠ = only burn/poison',
   },
   dispel: { name: 'Dispel', desc: 'Remove 1 of each enemy buff: power, thorns, charge, iron will, and 20% of their shield' },
-  amplify: { name: 'Amplify', desc: 'Double the buffs you have now (power, thorns, charge), up to the cap' },
   exec: { name: 'Execute', desc: 'Stronger when the enemy is below the HP threshold' },
   shatter: { name: 'Shatter', desc: 'Stronger while the enemy is frozen' },
   gear: {
@@ -79,51 +110,115 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   cd: { name: 'Cooldown', desc: 'How often it works, in seconds (all skills count at the same time)' },
 };
 
-export const HEROES_EN: Record<string, { name: string; passive: string; style: string }> = {
-  knight: {
-    name: 'Knight',
-    passive: 'Max HP +30%, and start the fight with a shield of 12% of your HP',
-    style: 'Shield wall: stack a thick shield, then Shield Slam hits back harder the more shield you have',
-  },
-  thornguard: {
-    name: 'Thornguard',
-    passive: 'Max HP +20% · your thorns last 13s (normally 10) and Dispel removes only half a stack · start with 1 permanent thorn',
-    style: 'It hurts to hit you: stack thorns so fast attackers hurt themselves, then finish with Spike Fort',
-  },
+const pc = (x: number) => Math.round(x * 100);
+const r1 = (x: number) => +x.toFixed(1);
+const hpPlus = (id: string) => {
+  const m = T[`hp.${id}` as keyof typeof T];
+  return m === 1 ? '' : `Max HP ${m > 1 ? '+' : '−'}${Math.abs(pc(m - 1))}% · `;
+};
+const both = (f: (lv: number) => string) => `${f(1)} · Lv2 ${f(2)}`;
+
+export interface HeroEn {
+  name: string;
+  passive: string;
+  style: string;
+  ult: { name: string; trigger: string; effect: string };
+}
+
+/** Getters: numbers come from tuning.ts at the time the language is applied. */
+export const HEROES_EN: Record<string, HeroEn> = {
   assassin: {
     name: 'Assassin',
-    passive: 'Your first hit of each fight deals ×1.6',
+    get passive() { return `${hpPlus('assassin')}Your first hit of each fight deals ×${T['assassin.first']}`; },
     style: 'One-shot: charge up, unleash heavy hits and finish the enemy when their HP is low',
+    ult: {
+      name: 'Moon Shadow',
+      get trigger() { return both((lv) => `enemy HP below ${pc(ultTrig('assassin', lv))}%`); },
+      get effect() { return both((lv) => `instant hit ×${r1(ultPow('assassin', lv))} your biggest hit this fight (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), ignores shield, can’t be dodged`); },
+    },
   },
   duelist: {
     name: 'Duelist',
-    passive: 'Every 3rd hit you land deals 30% more (at least +1)',
-    style: 'Nonstop hits: short-cooldown, multi-hit skills; the faster you hit, the more 3rd hits you get',
+    get passive() { return `${hpPlus('duelist')}Start with 1 dodge · after you dodge, your next hit deals ×${T['duelist.counter']}`; },
+    style: 'Dodge and counter: fast hits stack dodge charges so enemy hits miss, then counter harder the more dodges you hold',
+    ult: {
+      name: 'Blade Dance',
+      get trigger() { return both((lv) => `${ultTrig('duelist', lv)} hits dodged`); },
+      get effect() { return both((lv) => `all cooldowns ${pc(ultPow('duelist', lv))}% faster for 3s + 2 dodges`); },
+    },
+  },
+  knight: {
+    name: 'Knight',
+    get passive() { return `Max HP +${pc(T['hp.knight'] - 1)}%, and start the fight with a shield of ${pc(T['knight.shield'])}% of your HP`; },
+    style: 'Shield wall: stack a thick shield, then Shield Slam hits back harder the more shield you have',
+    ult: {
+      name: 'Moon Fortress',
+      get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield`); },
+      get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
+    },
   },
   berserker: {
     name: 'Berserker',
-    passive:
-      'Max HP +10% · every 5 hits you take give +1 attack power · the first time your HP drops below half, gain +2 more (all hits of all skills until the fight ends)',
-    style: 'Never stop growing: stack attack power bit by bit; the longer you fight and the more you are hit, the harder you hit',
+    get passive() {
+      return `Max HP +${pc(T['hp.berserker'] - 1)}% · every ${T['berserker.hits']} hits you take give +1 attack power · the first time your HP drops below half, gain +2 more (all hits of all skills until the fight ends)`;
+    },
+    style: 'Drain without end: heal and leech to stay alive; the longer you fight and the more you are hit, the harder you hit',
+    ult: {
+      name: 'Undying',
+      get trigger() { return both((lv) => `HP below ${pc(ultTrig('berserker', lv))}% or a killing blow`); },
+      get effect() { return both((lv) => `don’t die (1 HP left on a killing blow), heal ${pc(ultPow('berserker', lv))}% of max HP + ${lv >= 2 ? 3 : 2} power`); },
+    },
   },
   pyro: {
     name: 'Pyromancer',
-    passive: 'Burns you apply last 30% longer',
+    get passive() { return `${hpPlus('pyro')}Burns you apply last ${pc(T['pyro.burn'] - 1)}% longer`; },
     style: 'Fire on fire: stack many burns, then Inferno blows up the burn that is left (ignores shields)',
+    ult: {
+      name: 'Sunfall',
+      get trigger() { return both((lv) => `${ultTrig('pyro', lv)} burn stacks on the enemy`); },
+      get effect() { return both((lv) => `all burn still to come lands now ×${r1(ultPow('pyro', lv))} (ignores shields; those burns are used up)`); },
+    },
+  },
+  thornguard: {
+    name: 'Venom Thornguard',
+    get passive() {
+      return `Max HP +${pc(T['hp.thornguard'] - 1)}% · each time you are hit, the attacker is poisoned 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
+    },
+    style: 'Poison on poison: whoever hits you gets poisoned; stack long poison, then burst it (poison ignores shields and can’t be dodged)',
+    ult: {
+      name: 'Venom Thorns',
+      get trigger() { return both((lv) => `${ultTrig('thornguard', lv)} hits taken`); },
+      get effect() { return both((lv) => `${r1(ultPow('thornguard', lv))}s: every hit on you poisons the attacker 2 more stacks and they can’t heal`); },
+    },
   },
   witch: {
     name: 'Ice Witch',
-    passive: 'Max HP +16% · freezes you apply last 0.3s longer',
+    get passive() { return `Max HP +${pc(T['hp.witch'] - 1)}% · freezes you apply last ${T['witch.freeze']}s longer`; },
     style: 'Stop time: freeze the enemy, then Shatter hits ×3 while they cannot move',
+    ult: {
+      name: 'Ice Age',
+      get trigger() { return both((lv) => `${ultTrig('witch', lv)} ice skill casts`); },
+      get effect() { return both((lv) => `freeze ${r1(ultPow('witch', lv))}s (no repeat penalty, still under the cap) + next hit ×${lv >= 2 ? 2.4 : 2}`); },
+    },
   },
   chrono: {
-    name: 'Chronomancer',
-    passive: 'Max HP +16% · your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal 10% more',
-    style: 'Stall: slow the enemy and push their cooldowns back so their skills barely fire',
+    name: 'Wind Mage',
+    get passive() {
+      return `Max HP +${pc(T['hp.chrono'] - 1)}% · your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal 10% more`;
+    },
+    style: 'Wind of time: slow the enemy, push their cooldowns back, speed yourself up and blow burn/poison away',
+    ult: {
+      name: 'Rewind Storm',
+      get trigger() { return both((lv) => `${ultTrig('chrono', lv)} slows/delays landed`); },
+      get effect() { return both((lv) => `all skills ready now + blow away every debuff + ${pc(ultPow('chrono', lv))}% faster for 3s`); },
+    },
   },
 };
 
-export const ARCH_EN: Record<string, string> = { tank: 'Tank', burst: 'Burst', scaling: 'Scaling', control: 'Control', none: 'General' };
+export const LINE_EN: Record<string, string> = {
+  hit: 'Hit', dodge: 'Dodge', shield: 'Shield', heal: 'Heal', burn: 'Burn', poison: 'Poison', ice: 'Ice', wind: 'Wind', none: 'General',
+};
+export const ROLE_EN: Record<string, string> = { core: 'Core', payoff: 'Payoff', tech: 'Counter' };
 
 export const MARKS_EN: Record<string, { name: string; desc: string }> = {
   burn: { name: 'Scorch', desc: 'Each use burns the enemy 1/s for 3s' },
