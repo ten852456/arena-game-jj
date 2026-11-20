@@ -358,8 +358,10 @@ export function rollLook(hero: string, seed: number): Look {
 
 // ---------------------------------------------------------------- render
 
-export type ChibiPose = 'idle' | 'cast' | 'hit';
+/** blink / happy are extra idle-animation frames, made only for the hero shown in the shop (see ensureChibiExtras) */
+export type ChibiPose = 'idle' | 'cast' | 'hit' | 'blink' | 'happy';
 const POSES: ChibiPose[] = ['idle', 'cast', 'hit'];
+const EXTRA_POSES: ChibiPose[] = ['blink', 'happy'];
 const HEAD = 'M100 40 C 150 40 168 75 166 105 C 164 135 138 148 100 148 C 62 148 36 135 34 105 C 32 75 50 40 100 40 Z';
 /** viewBox: x 0..200, y -12..220; the feet stand on y = 207 */
 export const VIEW = { w: 200, h: 232, top: -12, feet: 207 };
@@ -371,8 +373,17 @@ export function renderChibi(look: Look, pose: ChibiPose = 'idle', size?: number)
   const part = (k: Slot) => (P[k][q[k]] ?? P[k][Object.keys(P[k])[0]]).d(p);
   const ear = P.ears[q.ears] ?? P.ears.bunny;
   const face = look.meme?.face && MEME_FACE[look.meme.face];
-  const eyes = hit ? `<path d="M70 94 L84 101 L70 108 M130 94 L116 101 L130 108" fill="none" ${st(4)}/>` : face ? face() : part('eyes');
-  const mouth = hit ? P.mouth.wobble.d(p) : face ? '' : part('mouth');
+  // blink / happy frames replace the eyes (and the happy mouth), meme face or not
+  const eyes = hit
+    ? `<path d="M70 94 L84 101 L70 108 M130 94 L116 101 L130 108" fill="none" ${st(4)}/>`
+    : pose === 'blink'
+      ? [78, 122].map((x) => `<path d="M${x - 7} 101 Q${x} 105 ${x + 7} 101" fill="none" ${st(4)}/>`).join('')
+      : pose === 'happy'
+        ? P.eyes.happy.d(p)
+        : face
+          ? face()
+          : part('eyes');
+  const mouth = hit ? P.mouth.wobble.d(p) : pose === 'happy' ? P.mouth.open.d(p) : pose === 'blink' && face ? P.mouth.smile.d(p) : face ? '' : part('mouth');
   const extra = look.meme?.extra && MEME_PROP[look.meme.extra] ? MEME_PROP[look.meme.extra]() : '';
   const layers = [
     part('back'),
@@ -434,6 +445,29 @@ export function ensureChibi(scene: Phaser.Scene, hero: string, seed: number): Pr
       ),
     ).then(() => prefix);
     pending.set(prefix, p);
+  }
+  return p;
+}
+
+/**
+ * Extra idle frames (eyes closed, happy face) for the hero standing in the shop arena. Made lazily, once per look:
+ * resolves when `${prefix}_blink` and `${prefix}_happy` exist.
+ */
+export function ensureChibiExtras(scene: Phaser.Scene, hero: string, seed: number): Promise<string> {
+  const prefix = `chibi_${hero}_${seed >>> 0}`;
+  const key = prefix + ':extra';
+  if (scene.textures.exists(prefix + '_happy')) return Promise.resolve(prefix);
+  let p = pending.get(key);
+  if (!p) {
+    const look = rollLook(hero, seed);
+    p = Promise.all(
+      EXTRA_POSES.map((pose) =>
+        svgCanvas(renderChibi(look, pose, VIEW.h * TEX_SCALE)).then((cv) => {
+          if (!scene.textures.exists(`${prefix}_${pose}`)) scene.textures.addCanvas(`${prefix}_${pose}`, cv);
+        }),
+      ),
+    ).then(() => prefix);
+    pending.set(key, p);
   }
   return p;
 }

@@ -990,6 +990,68 @@ export function drawTownBackdrop(scene: Phaser.Scene, worldW: number, viewW: num
 // ---------------------------------------------------------------- fight arena
 
 /** Inside the moon colosseum: night sky and big moon, a bunny crowd in the stands, gates and moon sand. */
+/** x of each lantern post on the arena wall (the lantern hangs from ground - 56) */
+export const ARENA_LANTERNS = [120, 240, 400, 520];
+/** y of the first row of the arena stands, and the row step */
+export const ARENA_STANDS = { top: 118, step: 20, rows: 5 };
+
+/**
+ * Small textures for the living arena (idle.ts): a hanging lantern, a soft glow, a sakura petal, a cheering
+ * bunny per scarf colour and a sparkle. Drawn once, at R pixels per world unit like the rest of the art.
+ */
+export function makeArenaLifeArt(scene: Phaser.Scene) {
+  art(scene, 'life_lantern', 14, 22, (c) => {
+    line(c, [7, 0, 7, 5], INK, 1.2);
+    rr(c, 2, 5, 10, 13, 4.5);
+    paint(c, P.pink, 1.5);
+    line(c, [4.5, 8, 4.5, 15], 'rgba(255,255,255,0.55)', 1);
+    rr(c, 3.5, 4, 7, 2.4, 1);
+    paint(c, P.gold, 1);
+    rr(c, 3.5, 17, 7, 2.4, 1);
+    paint(c, P.gold, 1);
+    line(c, [7, 19.5, 7, 22], P.gold, 1.2);
+  });
+  art(scene, 'life_glow', 40, 40, (c) => glow(c, 20, 20, 20, '255,214,140', 0.75));
+  art(scene, 'life_petal', 6, 5, (c) => {
+    ell(c, 3, 2.5, 2.6, 1.7, 0.4);
+    c.fillStyle = '#ffc2d6';
+    c.fill();
+    ell(c, 2.4, 2.2, 1, 0.6, 0.4);
+    c.fillStyle = 'rgba(255,255,255,0.8)';
+    c.fill();
+  });
+  art(scene, 'life_spark', 12, 12, (c) => {
+    glow(c, 6, 6, 6, '255,240,190', 0.9);
+    c.beginPath();
+    c.moveTo(6, 0.5);
+    c.quadraticCurveTo(6, 6, 11.5, 6);
+    c.quadraticCurveTo(6, 6, 6, 11.5);
+    c.quadraticCurveTo(6, 6, 0.5, 6);
+    c.quadraticCurveTo(6, 6, 6, 0.5);
+    c.fillStyle = '#fff7d6';
+    c.fill();
+  });
+  const fur = ['#fffaf3', '#fff0f3', '#f6ead8', '#efe9ff'];
+  FOLK_COLORS.forEach((scarf, i) => {
+    art(scene, 'life_bunny_' + i, 14, 16, (c) => {
+      const col = fur[i % fur.length];
+      ell(c, 4.6, 4.5, 1.8, 4.6, -0.2);
+      paint(c, col, 1);
+      ell(c, 9.4, 4.5, 1.8, 4.6, 0.2);
+      paint(c, col, 1);
+      ell(c, 7, 11, 5.6, 4.6);
+      paint(c, col, 1);
+      c.fillStyle = scarf;
+      c.fillRect(2.6, 13.4, 8.8, 2);
+      c.fillStyle = INK;
+      c.fillRect(5, 10, 1.1, 1.3);
+      c.fillRect(8, 10, 1.1, 1.3);
+      blush(c, 4, 12, 1.3);
+      blush(c, 10, 12, 1.3);
+    });
+  });
+}
+
 export function drawArenaBackdrop(scene: Phaser.Scene, w: number, h: number, ground: number) {
   art(scene, 'arena_bg', w, h, (c) => {
     const rnd = seeded(7);
@@ -1092,9 +1154,10 @@ export function drawArenaBackdrop(scene: Phaser.Scene, w: number, h: number, gro
       paint(c, P.dark, 1.5);
       for (let x = gx + 6; x < gx + 38; x += 7) line(c, [x, ground - 30, x, ground], '#8f84b8', 1.5);
     }
-    for (const lx of [120, 240, 400, 520]) {
-      line(c, [lx, ground - 38, lx, ground - 46], INK, 1.5);
-      lantern(c, lx, ground - 50);
+    // lantern posts with a little hook; the lanterns themselves are sprites that sway (idle.ts)
+    for (const lx of ARENA_LANTERNS) {
+      line(c, [lx, ground - 38, lx, ground - 56], INK, 1.5);
+      line(c, [lx, ground - 56, lx + 5, ground - 56], INK, 1.5);
     }
     // moon sand
     const sand = c.createLinearGradient(0, ground, 0, h);
