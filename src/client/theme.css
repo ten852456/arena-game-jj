@@ -1,0 +1,345 @@
+/* ==========================================================================
+   Mochi Moon look (loaded last, after every other stylesheet).
+   One hand-made style for the whole HTML UI, drawn from the chibi heroes and the town art:
+   - panels  = "night rice paper": matte plum paper with fibre, a thick ink edge, a hard sticker shadow and a
+               stitched thread just inside the edge (no glass, no blur, no glossy gradients)
+   - cards   = felt tiles in a lighter dusk, also ink-edged; the archetype shows as a pastel band, not a border
+   - buttons = mochi dough: flat pastel fill, thick plum outline, a soft inner highlight, squish when pressed
+   - icons   = icons.ts (SVG in the same chibi style), never emoji
+   Skins: set --skin-btn / --skin-panel / --skin-card to a border-image value to swap in painted 9-slice art.
+   ========================================================================== */
+
+:root {
+  --ink: #3a2b48;
+  --ink-deep: #150e27;
+  --night: #2a2150;
+  --night-2: #352b63;
+  --night-3: #43387a;
+  --cream: #fff4e4;
+  --m-cream: #fff4e4;
+  --m-moon: #ffe3a3;
+  --m-gold: #ffd572;
+  --m-peach: #ffc39c;
+  --m-pink: #ffb3c7;
+  --m-lav: #d4c8f7;
+  --m-mint: #b2ebcb;
+  --m-sky: #c7e4ff;
+  --thread: rgba(255, 232, 196, 0.3);
+  --paper: url('/assets/ui/paper.svg');
+  --mochi-r: 17px 19px 16px 18px / 18px 16px 19px 17px;
+  --skin-btn: none;
+  --skin-panel: none;
+  --skin-card: none;
+  /* old tokens, retuned so leftover rules match */
+  --moon: #ffe3a3;
+  --moon-line: rgba(255, 232, 196, 0.32);
+  --moon-glow: rgba(255, 227, 163, 0.18);
+  --mn-card: #352b63;
+  --mn-card-hi: #43387a;
+  --mn-line: #150e27;
+  --gold: #ffd572;
+}
+
+body { font-family: Kanit, system-ui, sans-serif; }
+h2, h3, .town-h, .hero-nm, .pick-head h2, .sv-h h3, .mm-over-title { font-family: Mitr, Kanit, system-ui, sans-serif; font-weight: 500; letter-spacing: 0.2px; }
+
+/* ---------- icons (icons.ts) ---------- */
+.ico { display: inline-block; flex: none; vertical-align: -0.2em; overflow: visible; }
+.ico-w { display: inline-flex; vertical-align: -0.18em; line-height: 1; }
+.ico-w > .ico { width: 1.2em; height: 1.2em; vertical-align: 0; }
+img.ico { object-fit: contain; width: 1.2em; height: 1.2em; }
+
+/* ==========================================================================
+   Header: a plum paper band with a scalloped edge, like the hem of a lantern
+   ========================================================================== */
+header {
+  background: var(--paper) 0 0 / 240px repeat, #221a42;
+  border-bottom: none; box-shadow: none; backdrop-filter: none;
+}
+header::after {
+  content: ''; position: absolute; left: 0; right: 0; top: 100%; height: 9px; pointer-events: none;
+  background: radial-gradient(circle at 9px 0, #221a42 6.5px, var(--ink-deep) 7px 8.6px, transparent 9px) 0 0 / 18px 9px repeat-x;
+}
+header > b { color: var(--m-moon); text-shadow: 0 2px 0 var(--ink-deep), 0 0 12px rgba(255, 227, 163, 0.25); font-family: Mitr, Kanit, sans-serif; font-weight: 500; }
+header .logo-moon .ico, header .logo-moon .ico-w > .ico { width: 1.3em; height: 1.3em; }
+header .logo-moon { display: inline-flex; vertical-align: -0.2em; }
+header small { color: #c9bde9; }
+header button, header .lang button { font-weight: 600; }
+header button:not(.lang button) {
+  background: var(--m-lav); color: var(--ink); border: 2.5px solid var(--ink-deep); border-radius: var(--mochi-r);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(58, 43, 72, 0.16), 0 3px 0 var(--ink-deep);
+  transition: transform 0.12s var(--spring, ease), box-shadow 0.12s;
+}
+header button:not(.lang button):hover:not(:disabled) { background: #e2d9fb; border-color: var(--ink-deep); transform: translateY(-1px); }
+header button:not(.lang button):active:not(:disabled) { transform: translateY(2px) scale(1.04, 0.94); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.4), 0 1px 0 var(--ink-deep); }
+header .tut-open { background: var(--m-moon); }
+header .mute-btn, header .vol-btn { border-radius: 50% 48% 52% 50% / 52% 50% 48% 50%; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+header .mute-btn .ico, header .vol-btn .ico { width: 24px; height: 24px; }
+header .lang { background: var(--ink-deep); border-radius: 999px; padding: 3px; box-shadow: inset 0 0 0 1.5px rgba(255, 244, 228, 0.12); }
+header .lang button { background: transparent; color: #d9cff5; border: 2px solid transparent; border-radius: 999px; box-shadow: none; }
+header .lang button.on { background: var(--m-moon); color: var(--ink); border-color: var(--ink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.6), inset 0 -2px 0 rgba(58, 43, 72, 0.15); }
+
+/* ==========================================================================
+   Panels: night rice paper with a stitched edge
+   ========================================================================== */
+.glass, .sv-sec, .mm-card, .mm-result, .over-detail, .modal-box, .tut, .vol-panel, .over-box .mm-over, .mm-over,
+.shopv > .sv-fight, .pick-rules, .rotate-tip, .page .mm-lbhead {
+  background: var(--paper) 0 0 / 240px repeat, var(--night);
+  border: 3px solid var(--ink-deep); border-radius: 24px;
+  box-shadow: 0 5px 0 var(--ink-deep), 0 18px 34px rgba(8, 4, 24, 0.32);
+  outline: 1.5px dashed var(--thread); outline-offset: -8px;
+  border-image: var(--skin-panel);
+}
+.pick-rules, .rotate-tip { border-radius: 18px; outline-offset: -6px; }
+.sv-sec, .sv-fight { outline-offset: -7px; }
+.glass h2, .glass h3, .sv-h h3, .mm-card h2, h2, .page-side h3 { color: var(--m-moon); text-shadow: 0 2px 0 var(--ink-deep); }
+.tooltip {
+  background: var(--paper) 0 0 / 240px repeat, #241c46; border: 2.5px solid var(--ink-deep); border-radius: 16px;
+  box-shadow: 0 4px 0 var(--ink-deep), 0 12px 24px rgba(8, 4, 24, 0.4); outline: 1.2px dashed var(--thread); outline-offset: -6px;
+}
+.modal { background: rgba(14, 9, 32, 0.62); }
+.tut-backdrop { background: rgba(14, 9, 32, 0.62); }
+#panel .toast {
+  background: var(--m-cream); color: var(--ink); border: 2.5px solid var(--ink); border-radius: var(--mochi-r);
+  box-shadow: inset 0 3px 0 #fff, 0 4px 0 var(--ink-deep), 0 12px 26px rgba(8, 4, 24, 0.35);
+}
+#panel .toast b { color: #7a3d5c; }
+
+/* the game window: a thick ink frame with a moon-gold thread */
+#stage-clip { box-shadow: 0 0 0 3px var(--ink-deep), 0 0 0 6px #e8c98a, 0 0 0 9px var(--ink-deep), 0 6px 0 9px var(--ink-deep), 0 18px 34px rgba(8, 4, 24, 0.4); }
+#stage-clip.bleed { box-shadow: none; }
+
+/* ==========================================================================
+   Cards: felt tiles, archetype as a pastel band
+   ========================================================================== */
+#panel .pick3 .hero, .shopv .card.offer, .shopv .skillrow[data-i], .town-card .bcard, .lay-main .hero, .lay-main ol.build li,
+.mm-runs li, .mm-lb li, .mm-hist li > a, .mm-hist li > div, .shopv .bonus-panel, .tl, .bp-item, .fv-side .log, .mm-scout,
+.town-card .heroes .card, .chain-panel, .tnode {
+  background: var(--paper) 0 0 / 240px repeat, var(--night-2);
+  border: 2.5px solid var(--ink-deep) !important; border-radius: 18px;
+  box-shadow: inset 0 0 0 1.5px rgba(255, 244, 228, 0.07), 0 3px 0 var(--ink-deep);
+  border-image: var(--skin-card);
+}
+.fv-side .log { background: var(--paper) 0 0 / 240px repeat, #211a40; }
+.bp-item { border-radius: 12px; padding: 5px 8px; }
+/* archetype band: a strip of washi tape along the top of the card */
+#panel .pick3 .hero, .shopv .card.offer { box-shadow: inset 0 7px 0 var(--pa, var(--m-lav)), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 3px 0 var(--ink-deep); padding-top: 14px; }
+.shopv .skillrow[data-i] { box-shadow: inset 7px 0 0 var(--pa, var(--m-lav)), inset 9px 0 0 rgba(21, 14, 39, 0.5), 0 3px 0 var(--ink-deep); padding-left: 10px; }
+#panel .pick3 .hero:hover, #panel .pick3 .hero.previewing {
+  transform: translateY(-3px) rotate(-0.4deg);
+  box-shadow: inset 0 7px 0 var(--pa, var(--m-lav)), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 0 0 3px var(--m-moon), 0 6px 0 var(--ink-deep);
+}
+.shopv .card.offer:hover, .shopv .card.offer.hinting {
+  box-shadow: inset 0 7px 0 var(--pa, var(--m-lav)), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 0 0 3px var(--m-moon), 0 3px 0 var(--ink-deep);
+}
+.shopv .card.offer.locked { background: var(--paper) 0 0 / 240px repeat, #3f3570; outline: 2px dashed var(--m-moon); outline-offset: -6px; }
+.shopv .card.offer.upgrade { border-style: solid; }
+.shopv .card.offer.can-up { box-shadow: inset 0 7px 0 var(--m-mint), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 0 0 3px var(--m-mint), 0 3px 0 var(--ink-deep); }
+.shopv .skillrow.emptyslot, .shopv .card.empty {
+  background: rgba(21, 14, 39, 0.28); border: 2.5px dashed rgba(255, 232, 196, 0.28) !important; border-radius: 18px; box-shadow: none;
+}
+.shopv .skillrow.lifted { box-shadow: 0 14px 26px rgba(5, 3, 25, 0.5), 0 0 0 3px var(--m-moon) !important; transform: rotate(-0.6deg); }
+.shopv .skillrow.hl { box-shadow: inset 7px 0 0 var(--pa, var(--m-lav)), 0 0 0 3px var(--m-gold) !important; }
+.sk-no, .tl-no { background: var(--m-cream); color: var(--ink); border: 2px solid var(--ink-deep); }
+.sk-no { width: 26px; height: 26px; }
+.grip { color: #b9addf; }
+
+/* keyword chips on cards: little stitched tags */
+.kw, .shopv .kw {
+  background: rgba(21, 14, 39, 0.55); border: 1.5px solid rgba(255, 232, 196, 0.2); border-radius: 9px 11px 9px 11px;
+}
+.kw .ico-w > .ico { width: 1.15em; height: 1.15em; }
+.mark { background: var(--m-lav); color: var(--ink); border: 1.5px solid var(--ink-deep); }
+
+/* ==========================================================================
+   Buttons: mochi dough
+   ========================================================================== */
+#panel button, .modal button, .tut button, .vol-panel button, .tooltip button, .rotate-tip button {
+  --fill: var(--m-lav);
+  --sh: inset 0 3px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(58, 43, 72, 0.16), 0 3px 0 var(--ink-deep);
+  /* every variant only changes --fill / --sh, so older rules (gradients, glows) never leak through */
+  background: var(--fill) !important; color: var(--ink); border: 2.5px solid var(--ink-deep); border-radius: var(--mochi-r);
+  box-shadow: var(--sh) !important;
+  font-weight: 600; text-shadow: none; filter: none;
+  transition: transform 0.14s var(--spring, ease), box-shadow 0.14s, background-color 0.14s;
+  border-image: var(--skin-btn);
+}
+#panel button:hover:not(:disabled), .modal button:hover:not(:disabled), .tut button:hover:not(:disabled), .vol-panel button:hover:not(:disabled) {
+  border-color: var(--ink-deep); transform: translateY(-1px); filter: brightness(1.04);
+}
+#panel button:active:not(:disabled), .modal button:active:not(:disabled), .tut button:active:not(:disabled), .vol-panel button:active:not(:disabled) {
+  transform: translateY(2px) scale(1.03, 0.93); --sh: inset 0 3px 0 rgba(255, 255, 255, 0.35), inset 0 -1px 0 rgba(58, 43, 72, 0.1), 0 1px 0 var(--ink-deep);
+}
+#panel button:disabled, .modal button:disabled { --fill: #9a92ba; color: #3b3352; opacity: 0.7; --sh: inset 0 2px 0 rgba(255, 255, 255, 0.25), 0 2px 0 var(--ink-deep); }
+#panel button:focus-visible, .modal button:focus-visible, .tut button:focus-visible { outline: 3px solid var(--m-moon); outline-offset: 3px; }
+#panel button.primary, .tut button.primary, .modal button.primary { --fill: var(--m-moon); color: var(--ink); }
+#panel button.ghost, .modal button.ghost, .vol-panel button.ghost, .tut button.ghost {
+  --fill: rgba(255, 244, 228, 0.08); color: var(--m-cream); border-color: rgba(255, 232, 196, 0.35);
+  --sh: inset 0 0 0 1px rgba(21, 14, 39, 0.4);
+}
+#panel button.ghost:hover:not(:disabled) { --fill: rgba(255, 244, 228, 0.16); border-color: var(--m-moon); }
+#panel button.danger, #panel .concede-btn { --fill: var(--m-pink); color: #5a1f36; }
+#panel button.on { --fill: var(--m-moon); color: var(--ink); }
+#panel button:not(.hero) small { color: inherit; opacity: 0.75; }
+#panel button:not(.hero) .muted { color: #5c4d74; }
+
+/* the shop's big buttons */
+#panel .sv-fight .fightbtn { --fill: var(--m-peach); color: var(--ink); border-radius: 22px 26px 22px 24px / 24px 22px 26px 22px; font-size: 18px; border: 3px solid var(--ink-deep); --sh: inset 0 4px 0 rgba(255, 255, 255, 0.55), inset 0 -4px 0 rgba(58, 43, 72, 0.16), 0 4px 0 var(--ink-deep); }
+#panel .sv-fight .fightbtn:disabled { --fill: #9a92ba; }
+#panel .card.offer .buy { --fill: var(--m-peach); color: var(--ink); }
+#panel .card.offer.can-up .buy:not(:disabled) { --fill: var(--m-mint); border-color: var(--ink-deep); color: #1d4a32; }
+#panel .card.offer .buy:disabled { --fill: rgba(21, 14, 39, 0.4); color: #c9bfe6; border-color: rgba(255, 232, 196, 0.22); --sh: none; opacity: 1; }
+#panel .card.offer .buy .why { color: #d5cbef; }
+#panel .card.offer .buy .coin, #panel button .coin { color: #7a4a00; text-shadow: none; }
+#panel .card.offer .buy:disabled .coin { color: var(--m-gold); }
+#panel .card.offer .buy .coin.bad, #panel .card.offer .buy:disabled .coin.bad { color: #ff9cad; }
+#panel .reroll { --fill: var(--m-cream); }
+#panel .sk-btns .sell { --fill: var(--m-pink); color: #5a1f36; }
+#panel .sk-btns button.mv { --fill: rgba(255, 244, 228, 0.1); color: var(--m-cream); border-color: rgba(255, 232, 196, 0.3); --sh: none; }
+#panel .hero-go, .hero-go {
+  background: var(--m-moon); color: var(--ink); border: 2.5px solid var(--ink-deep); border-radius: var(--mochi-r);
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.55), inset 0 -3px 0 rgba(58, 43, 72, 0.16), 0 3px 0 var(--ink-deep);
+}
+#panel .pick3 .hero:active .hero-go { transform: translateY(2px) scale(1.03, 0.93); box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.35), 0 1px 0 var(--ink-deep); }
+/* hero cards are buttons themselves: keep them as cards */
+#panel .pick3 .hero { --fill: var(--paper) 0 0 / 240px repeat, var(--night-2); color: var(--m-cream); --sh: inset 0 7px 0 var(--pa, var(--m-lav)), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 3px 0 var(--ink-deep); }
+#panel .pick3 .hero:hover, #panel .pick3 .hero.previewing { --sh: inset 0 7px 0 var(--pa, var(--m-lav)), inset 0 9px 0 rgba(21, 14, 39, 0.5), 0 0 0 3px var(--m-moon), 0 6px 0 var(--ink-deep); filter: none; }
+#panel .pick3 .hero:active { transform: translateY(0) scale(0.99); }
+#panel .town-card .heroes .card, #panel .lay-main .hero { color: var(--m-cream); }
+
+/* small round icon buttons on cards: lock, tree info */
+#panel .shopv .card.offer .offer-top button, #panel button.info {
+  --fill: var(--m-cream); border-radius: 50% 48% 52% 50% / 52% 50% 48% 50%; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  --sh: inset 0 2px 0 #fff, inset 0 -2px 0 rgba(58, 43, 72, 0.14), 0 2px 0 var(--ink-deep); font-size: 18px; line-height: 1;
+}
+#panel .shopv .card.offer .lock { --fill: rgba(255, 244, 228, 0.12); border-style: solid; border-color: rgba(255, 232, 196, 0.4); --sh: none; }
+#panel .shopv .card.offer .lock.on { --fill: var(--m-peach); border-color: var(--ink-deep); --sh: inset 0 2px 0 rgba(255, 255, 255, 0.5), 0 2px 0 var(--ink-deep); }
+#panel button.info .ico-w > .ico { width: 1.25em; height: 1.25em; }
+#panel .offer-top .ico-w > .ico { width: 22px; height: 22px; }
+
+/* chips (town buildings, filters, periods) */
+#panel .chip {
+  --fill: rgba(255, 244, 228, 0.1); color: var(--m-cream); border: 2px solid rgba(255, 232, 196, 0.3); border-radius: 13px 15px 13px 15px / 15px 13px 15px 13px;
+  --sh: none;
+}
+#panel .chip:hover:not(:disabled) { border-color: var(--m-moon); }
+#panel .chip.on { --fill: var(--m-moon); color: var(--ink); border-color: var(--ink-deep); --sh: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 2px 0 var(--ink-deep); }
+#panel button.chip:not(.on) small, #panel button.chip:not(.on) .muted { color: #c9bde9; opacity: 0.85; }
+#panel button.chip.on small, #panel button.chip.on .muted { color: #6b5a86; }
+#panel .ins-slot.up button { --fill: var(--m-mint); color: #1d4a32 !important; }
+
+/* tutorial dots and nav */
+.tut .tut-dot { --fill: rgba(255, 244, 228, 0.25); min-height: 0 !important; width: 12px; height: 12px; border: 2px solid var(--ink-deep); --sh: none; border-radius: 50%; }
+.tut .tut-dot.on { --fill: var(--m-moon); }
+.tut-title { color: var(--m-moon); text-shadow: 0 2px 0 var(--ink-deep); font-family: Mitr, Kanit, sans-serif; font-weight: 500; }
+.tut-art .ico-w > .ico { width: 1.1em; height: 1.1em; }
+.tut .tut-lang button.on { --fill: var(--m-moon); color: var(--ink); }
+.tut .tut-lang button:not(.on) { --fill: rgba(255, 244, 228, 0.08); color: var(--m-cream); --sh: none; border-color: rgba(255, 232, 196, 0.35); }
+
+/* inputs: a cream rice-paper slip */
+input:not([type=range]):not([type=checkbox]) {
+  background: var(--m-cream); color: var(--ink); border: 2.5px solid var(--ink-deep); border-radius: 12px 14px 12px 14px;
+  box-shadow: inset 0 2px 0 rgba(58, 43, 72, 0.12);
+}
+input::placeholder { color: #8a7ba3; }
+input:focus:not(:focus-visible) { outline: none; }
+input:focus-visible { outline: 3px solid var(--m-moon); outline-offset: 2px; }
+
+/* ==========================================================================
+   Shop HUD, coin pill, coin, jar
+   ========================================================================== */
+.hud-chip {
+  background: var(--paper) 0 0 / 240px repeat, var(--night); border: 3px solid var(--ink-deep) !important; border-radius: 20px 22px 20px 22px;
+  box-shadow: 0 4px 0 var(--ink-deep), inset 0 0 0 1.5px rgba(255, 244, 228, 0.06); outline: 1.4px dashed var(--thread); outline-offset: -7px;
+}
+.hud-n { text-shadow: 0 2px 0 var(--ink-deep); }
+.hud-heart { stroke: var(--ink); stroke-width: 2; fill: var(--m-pink); filter: none; }
+.hud-moon { filter: none; }
+.mo-rim { stroke: var(--ink); stroke-width: 2; }
+.mo-dark { fill: #2a2150; }
+.hud-star svg { fill: rgba(255, 244, 228, 0.1); stroke: rgba(255, 232, 196, 0.45); stroke-width: 1.8; }
+.hud-star.on svg { fill: var(--m-gold); stroke: var(--ink); stroke-width: 2; filter: none; }
+.hud-bar { background: var(--ink-deep); box-shadow: none; height: 10px; border-radius: 6px; }
+.hud-bar > i, .svh-bar > i { background: var(--m-pink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45); }
+.hud-tag { color: var(--ink); background: var(--m-lav); border-color: var(--ink-deep); }
+.svh-wins i.on { background: var(--m-gold); border: 2px solid var(--ink); box-shadow: none; }
+
+.gold-pill {
+  background: var(--m-cream); border: 2.5px solid var(--ink-deep); border-radius: 999px;
+  box-shadow: inset 0 3px 0 #fff, inset 0 -3px 0 rgba(58, 43, 72, 0.12), 0 3px 0 var(--ink-deep);
+}
+.gold-pill .gold-n { color: #7a4a00; text-shadow: none; }
+.sv-fight .pill.gold, .shopv .pill { background: var(--paper) 0 0 / 240px repeat, var(--night-2); border: 2px solid var(--ink-deep); }
+
+.coin-ico, .shopv .coin-ico {
+  background: var(--ico-coin) center / contain no-repeat !important; box-shadow: none !important; border-radius: 0;
+}
+.coin-ico::after { display: none; }
+.coin { color: var(--m-gold); }
+.jar-ico {
+  width: 38px; height: 38px; border: none; border-radius: 0; overflow: visible; background: var(--ico-jar) center / contain no-repeat;
+}
+.jar-ico::before, .jar-ico > * { display: none; }
+.sell-jar {
+  background: var(--paper) 0 0 / 240px repeat, #241c46; border: 2.5px dashed rgba(255, 213, 114, 0.55); border-radius: 18px; color: #d5cbef;
+}
+body.skill-dragging .sell-jar { border-color: var(--m-gold); box-shadow: 0 0 0 3px var(--ink-deep), 0 0 18px rgba(255, 213, 114, 0.35); }
+.sell-jar.over { background: var(--paper) 0 0 / 240px repeat, #4a3a1c; border-style: solid; }
+
+/* the active-bonus panel and hints keep their moon-gold, but as ink-edged paper */
+.bp-h { color: var(--m-moon); }
+.bp-item { border-left: 2.5px solid var(--ink-deep) !important; box-shadow: inset 5px 0 0 var(--m-gold), 0 2px 0 var(--ink-deep); }
+
+/* ==========================================================================
+   Small fixes: sound panel, town card, result
+   ========================================================================== */
+.vol-panel { color: var(--m-cream); }
+.vol-head { color: var(--m-moon); }
+.vol-ico { display: inline-flex; justify-content: center; font-size: 20px; }
+.vol-row input[type=range] { accent-color: var(--m-peach); }
+.vol-mute input { accent-color: var(--m-pink); }
+.vol-x .ico-w > .ico { width: 18px; height: 18px; }
+.town-card .bcard h3 { color: var(--m-moon); }
+.town-card .bcard { padding: 6px 14px 12px; }
+.town-hint { color: #d2c8ee; }
+.mm-result h2, .rv-side .mm-result h2 { text-shadow: 0 2px 0 var(--ink-deep); }
+.pick-rules { text-shadow: none; }
+
+/* phones held sideways: thinner edges so nothing grows */
+@media (max-height: 500px) {
+  .glass, .sv-sec, .mm-card, .mm-result, .over-detail, .modal-box, .tut, .vol-panel, .mm-over, .shopv > .sv-fight, .pick-rules {
+    border-width: 2.5px; border-radius: 18px; box-shadow: 0 3px 0 var(--ink-deep), 0 10px 20px rgba(8, 4, 24, 0.3); outline-offset: -6px;
+  }
+  .hud-chip { border-width: 2.5px !important; border-radius: 16px; outline: none; }
+  #panel button, .modal button, .tut button { border-width: 2px; }
+  #stage-clip { box-shadow: 0 0 0 2px var(--ink-deep), 0 0 0 4px #e8c98a, 0 0 0 6px var(--ink-deep), 0 4px 0 6px var(--ink-deep); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #panel button, header button { transition: none; }
+}
+
+/* ==========================================================================
+   Result / explain boxes: felt cards with a pastel side band
+   ========================================================================== */
+.mm-moment, .explain, .mm-best, .xv-callout {
+  background: var(--paper) 0 0 / 240px repeat, var(--night-2); border: 2.5px solid var(--ink-deep) !important; border-radius: 16px;
+  box-shadow: inset 6px 0 0 var(--band, var(--m-lav)), 0 3px 0 var(--ink-deep);
+}
+.mm-moment { padding-left: 16px; }
+.mm-moment.side-0 { --band: var(--m-sky); } .mm-moment.side-1 { --band: var(--m-peach); }
+.mm-moment .mm-mi { font-size: 26px; display: inline-flex; }
+.xv-callout { padding-left: 14px; }
+.xv-callout.xv-bad { --band: var(--m-pink); background: var(--paper) 0 0 / 240px repeat, #3d2a55; }
+.xv-callout.xv-ok { --band: var(--m-mint); background: var(--paper) 0 0 / 240px repeat, #2a3a5a; }
+.mm-best { --band: var(--m-pink); }
+.xv-tipbox { background: rgba(255, 227, 163, 0.1); border: 1.5px dashed rgba(255, 227, 163, 0.55); border-radius: 12px; }
+.xv-res { border-width: 2px; }
+.xv-res.xv-ok { background: var(--m-mint); color: #1d4a32; border-color: var(--ink-deep); }
+.xv-res.xv-bad { background: var(--m-pink); color: #5a1f36; border-color: var(--ink-deep); }
+.xv-ico { display: inline-flex; justify-content: center; }
+
+/* leaderboard: medals big, first place ringed in moon gold, your own rows with a sky band */
+.mm-rank .ico-w > .ico { width: 30px; height: 30px; }
+.mm-lb li.r1 { box-shadow: 0 0 0 2.5px var(--m-moon), 0 3px 0 var(--ink-deep); }
+.mm-lb li.me { box-shadow: inset 6px 0 0 var(--m-sky), 0 3px 0 var(--ink-deep); }
+.mm-lb li.r1.me { box-shadow: inset 6px 0 0 var(--m-sky), 0 0 0 2.5px var(--m-moon), 0 3px 0 var(--ink-deep); }

@@ -13,6 +13,10 @@ import './layout.css';
 import './shopux.css';
 import { initLayout, setGameRefresh } from './layout';
 import { mountSoundPanel } from './soundPanel';
+import { icon, initIcons } from './icons';
+import './theme.css'; // the Mochi Moon look: loaded last so it wins
+
+initIcons();
 
 initLang();
 initLayout();
@@ -32,7 +36,7 @@ function mountMute() {
   mute.dataset.sfx = 'none';
   const paint = () => {
     const off = getAudioSettings().muted;
-    mute.textContent = off ? '🔇' : '🔊';
+    mute.innerHTML = icon(off ? 'mute' : 'speaker');
     const label = off ? L('เปิดเสียง', 'Sound on') : L('ปิดเสียง', 'Sound off');
     mute.setAttribute('aria-label', label);
     mute.title = label;

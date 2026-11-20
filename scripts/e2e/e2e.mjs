@@ -212,9 +212,10 @@ async function play(label, ctxOpts, runs = 1) {
   ok(`${label}: leaderboard lists runs`, /ชนะ/.test(await text()));
   await shot('leaderboard');
   // mute toggle
-  const m1 = await p.locator('.mute-btn').innerText();
+  const m1 = await p.locator('.mute-btn').getAttribute('aria-pressed');
   await p.locator('.mute-btn').click(); await p.waitForTimeout(200);
-  ok(`${label}: mute toggles`, m1 !== (await p.locator('.mute-btn').innerText()));
+  ok(`${label}: mute toggles`, m1 !== (await p.locator('.mute-btn').getAttribute('aria-pressed')));
+  ok(`${label}: no emoji left in the UI (icons.ts swaps them)`, !(await p.evaluate(() => /[🌀-🫿]/u.test(document.body.innerText))));
   ok(`${label}: no page/console errors`, errs.length === 0, errs.slice(0, 3).join(' | '));
   ok(`${label}: no failed requests`, bad.length === 0, bad.slice(0, 5).join(' | '));
   await browser.close();
