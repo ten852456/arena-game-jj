@@ -406,7 +406,7 @@ const BASE_LIST: SkillDef[] = [
   // ======================= 🔥 burn =======================
   // core: start burns
   def('ignite', 'burn', {
-    '': N('จุดไฟ', 5.5, [{ k: 'burn', dps: 2, secs: 4 }]),
+    '': N('จุดไฟ', 4.5, [{ k: 'burn', dps: 2, secs: 4 }]),
     a: N('ไฟลุก', 5.5, [{ k: 'burn', dps: 3, secs: 6 }], 'ไฟแรง'),
     a1: N('ไฟนรก', 5.5, [{ k: 'burn', dps: 6, secs: 6 }]),
     a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 4, secs: 6, growthHalf: true }]),
