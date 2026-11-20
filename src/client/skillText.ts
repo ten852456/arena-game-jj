@@ -165,7 +165,7 @@ function effectDetail(e: Effect): string {
         `☠ ${e.dps}/s × ${num(e.secs)}s = ${num(e.dps * e.secs)} total${e.stacks && e.stacks > 1 ? ` × ${e.stacks} stacks` : ''} · ignores shield, can't be dodged · poisoned healing ×${T['poison.heal']}`,
       );
     case 'dodge':
-      return L(`💨 +${e.n} แต้มหลบ (สูงสุด ${T['dodge.cap']}) · การตีที่โดนครั้งถัดไปพลาด 1 ครั้งต่อแต้ม`, `💨 +${e.n} dodge (max ${T['dodge.cap']}) · each charge makes one incoming hit miss`);
+      return L(`💨 +${e.n} แต้มหลบ (เก็บได้ ${T['dodge.cap']} · ฮีโร่สายหลบ ${T['dodge.cap'] + 1}) · การตีที่โดนครั้งถัดไปพลาด 1 ครั้งต่อแต้ม`, `💨 +${e.n} dodge (hold ${T['dodge.cap']} · dodge-line hero ${T['dodge.cap'] + 1}) · each charge makes one incoming hit miss`);
     case 'haste': return L(`⏩ คูลดาวน์ทุกตัวของคุณเร็วขึ้น ${pct(e.pct)} นาน ${num(e.secs)} วิ (สูงสุด ${pct(T['haste.cap'])})`, `⏩ all your cooldowns run ${pct(e.pct)} faster for ${num(e.secs)}s (max ${pct(T['haste.cap'])})`);
     case 'wound': return L(`🩹 ศัตรูฟื้นเลือด ×${num(1 - e.pct)} นาน ${num(e.secs)} วิ`, `🩹 enemy healing ×${num(1 - e.pct)} for ${num(e.secs)}s`);
     case 'freeze': return L(`❄ ${num(e.secs)} วิ = ${Math.round(e.secs * 10)} tick (ลดเมื่อแรง<100%)`, `❄ ${num(e.secs)}s = ${Math.round(e.secs * 10)} ticks (less when power<100%)`);

@@ -48,6 +48,8 @@ export const KNOBS: Knob[] = [
   { key: 'berserker.hits', lo: 4, hi: 6, step: 1, why: 'berserker hits taken per +1 พลัง (late)' },
   { key: 'pyro.burn', lo: 1.1, hi: 1.6, step: 0.1, why: 'pyro burn length' },
   { key: 'witch.freeze', lo: 0.1, hi: 0.6, step: 0.1, why: 'witch freeze bonus (s)' },
+  { key: 'line.affinity', lo: 1, hi: 1.3, step: 0.05, why: 'ถนัดสาย: power of skills of your own line (in-line vs off-line)' },
+  { key: 'burn.shield', lo: 0.5, hi: 1, step: 0.05, why: 'shield gains while burning (🔥 > 🛡)' },
   // ultimates (sim v12): trigger amount and effect power per hero
   { key: 'ult.assassin.trig', lo: 0.3, hi: 0.6, step: 0.05, why: 'assassin ult: enemy HP share' },
   { key: 'ult.assassin.pow', lo: 0.4, hi: 1.5, step: 0.1, why: 'assassin ult: × biggest hit' },

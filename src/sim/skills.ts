@@ -20,14 +20,14 @@ export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: strin
   shield: { icon: '🛡', name: 'โล่', desc: 'โล่รับดาเมจแทนเลือด อยู่จนกว่าจะแตก' },
   heal: { icon: '❤', name: 'ฟื้น', desc: 'ฟื้นเลือดตัวเอง' },
   leech: { icon: '🩸', name: 'ดูดเลือด', desc: 'ฟื้นเลือดตามสัดส่วนของดาเมจที่ทำ' },
-  burn: { icon: '🔥', name: 'ไฟ', desc: 'ศัตรูเสียเลือด X ต่อวินาที นาน N วิ · ไม่สนโล่ · ซ้อนกันได้' },
+  burn: { icon: '🔥', name: 'ไฟ', desc: 'ศัตรูเสียเลือด X ต่อวินาที นาน N วิ · ไม่สนโล่ · ซ้อนกันได้ · ระหว่างติดไฟ ได้โล่น้อยลง 25%' },
   freeze: { icon: '❄', name: 'แช่แข็ง', desc: 'skill ทุกตัวของศัตรูหยุดนับคูลดาวน์ · โดนถี่ๆ ผลลดลง · มีเพดานต่อการสู้ · หลุดแช่แข็งแล้วต้านการคุมได้ 1.5 วิ' },
   slow: { icon: '🐌', name: 'ช้า', desc: 'คูลดาวน์ทุกตัวของศัตรูเดินช้าลง X% · มีเพดานต่อการสู้' },
   delay: { icon: '⏪', name: 'ถ่วงเวลา', desc: 'ดึงคูลดาวน์ทุกตัวของศัตรูถอยหลัง N วิ · ใช้เพดานร่วมกับแช่แข็ง · โดนแล้วต้านการคุมได้ 1.5 วิ' },
   grow: { icon: '💪', name: 'พลัง', desc: 'ทุกการตีของทุก skill ทำดาเมจเพิ่ม +X จนจบการสู้' },
   charge: { icon: '⚡', name: 'รวมพลัง', desc: 'การตีครั้งถัดไปของคุณ (skill ไหนก็ได้) แรง ×N' },
   thorns: { icon: '🌵', name: 'หนาม', desc: 'ทุกครั้งที่โดนตี สะท้อนดาเมจเท่าหนาม (ไม่เกิน 75% ของดาเมจที่โดน) · ระหว่างมีหนาม ศัตรูฟื้นเลือดได้ครึ่งเดียว' },
-  dodge: { icon: '💨', name: 'หลบ', desc: 'ได้แต้มหลบ (สูงสุด 3) · การตีครั้งถัดไปที่โดนจะพลาดทั้งหมด ใช้ 1 แต้ม (ไม่สุ่ม) · ไฟ พิษ หนาม และความเหนื่อยล้าหลบไม่ได้ · หลบการตีของ skill ที่แช่แข็ง/ถ่วงเวลา = การคุมนั้นไม่ติดด้วย' },
+  dodge: { icon: '💨', name: 'หลบ', desc: 'ได้แต้มหลบ (เก็บได้ 1 · ฮีโร่สายหลบเก็บได้ 2) · การตีครั้งถัดไปที่โดนจะพลาดทั้งหมด ใช้ 1 แต้ม (ไม่สุ่ม) · ไฟ พิษ หนาม และความเหนื่อยล้าหลบไม่ได้ · การตีที่มี 👁 ไม่พลาด · หลบการตีของ skill ที่แช่แข็ง/ถ่วงเวลา = การคุมนั้นไม่ติดด้วย' },
   poison: { icon: '☠', name: 'พิษ', desc: 'ศัตรูเสียเลือด X ต่อวินาที นาน N วิ · ไม่สนโล่ หลบไม่ได้ · ซ้อนกันได้ · เบากว่าไฟแต่นานกว่า · ระหว่างติดพิษ ฟื้นเลือดได้น้อยลง 40%' },
   haste: { icon: '⏩', name: 'เร่ง', desc: 'คูลดาวน์ทุกตัวของคุณเดินเร็วขึ้น X% นาน N วิ' },
   wound: { icon: '🩹', name: 'แผลลึก', desc: 'ศัตรูฟื้นเลือดได้น้อยลง X% นาน N วิ' },
@@ -273,13 +273,13 @@ const BASE_LIST: SkillDef[] = [
   // ======================= ⚔ hit =======================
   // core: plain hits
   def('strike', 'hit', {
-    '': N('ฟัน', 4.3, [hit(4)]),
+    '': N('ฟัน', 4.3, [hit(5)]),
     a: N('ฟันหนัก', 5, [hit(9)], 'ตีหนัก'),
-    a1: N('ฟันทะลวง', 5, [hit(20, { pierce: 1 })]),
-    a2: N('ฟันประหาร', 5, [hit(19, { exec: [0.5, 1.6] })]),
+    a1: N('ฟันทะลวง', 5, [hit(14, { pierce: 1 })]),
+    a2: N('ฟันประหาร', 5, [hit(13, { exec: [0.5, 1.6] })]),
     b: N('ฟันคู่', 4, [hit(4, { times: 2 })], 'ตีหลายครั้ง'),
-    b1: N('ฟันพายุ', 4, [hit(4, { times: 4 })]),
-    b2: N('ฟันดูดเลือด', 4, [hit(9, { times: 2, leech: 0.3 })]),
+    b1: N('ฟันพายุ', 4, [hit(4, { times: 3 })]),
+    b2: N('ฟันดูดเลือด', 4, [hit(6, { times: 2, leech: 0.3 })]),
   }),
   // payoff: one hit much harder
   def('charge', 'hit', {
@@ -295,22 +295,22 @@ const BASE_LIST: SkillDef[] = [
   def('heavy', 'hit', {
     '': N('ทุบหนัก', 7.5, [hit(12, { pierce: 0.5 })]),
     a: N('ค้อนทลาย', 8, [hit(17, { pierce: 1 })], 'ทลายโล่'),
-    a1: N('ค้อนพิฆาต', 8, [hit(36, { pierce: 1 })]),
-    a2: N('ค้อนสะท้าน', 8, [hit(21, { pierce: 1 }), { k: 'freeze', secs: 1 }]),
-    b: N('ทุบแม่น', 6, [hit(10, { pierce: 0.5, sure: true })], 'ตีไม่พลาด'),
-    b1: N('ทุบไม่พลาด', 6, [hit(15, { pierce: 0.5, sure: true })]),
-    b2: N('ทุบคู่', 6, [hit(11, { pierce: 0.5, times: 2, sure: true })]),
+    a1: N('ค้อนพิฆาต', 8, [hit(25, { pierce: 1 })]),
+    a2: N('ค้อนสะท้าน', 8, [hit(18, { pierce: 1 }), { k: 'freeze', secs: 1 }]),
+    b: N('ทุบแม่น', 6, [hit(9, { pierce: 0.5, sure: true })], 'ตีไม่พลาด'),
+    b1: N('ทุบไม่พลาด', 6, [hit(13, { pierce: 0.5, sure: true })]),
+    b2: N('ทุบคู่', 6, [hit(7, { pierce: 0.5, times: 2, sure: true })]),
   }),
   // ======================= 💨 dodge =======================
   // core: quick hits that also dodge
   def('jab', 'dodge', {
     '': N('แทงหลบ', 4, [hit(2), { k: 'dodge', n: 1 }]),
-    a: N('แทงไว', 2.8, [hit(4), { k: 'dodge', n: 1 }], 'ความเร็ว'),
-    a1: N('แทงสายฟ้า', 2.2, [hit(6)]),
-    a2: N('แทงลวงตา', 3.5, [hit(5), { k: 'dodge', n: 1 }, hit(2, { perDodge: 2 })]),
-    b: N('แทงจุดตาย', 3, [hit(6, { noShield: 1.5 }), { k: 'dodge', n: 1 }], 'ตีศัตรูไร้โล่'),
-    b1: N('แทงทะลุ', 3, [hit(10, { pierce: 1, noShield: 1.5 }), { k: 'dodge', n: 1 }]),
-    b2: N('แทงสะกด', 3, [hit(6, { noShield: 1.5 }), { k: 'dodge', n: 1 }, { k: 'delay', secs: 0.5 }]),
+    a: N('แทงไว', 3.2, [hit(3), { k: 'dodge', n: 1 }], 'ความเร็ว'),
+    a1: N('แทงสายฟ้า', 2.8, [hit(4), { k: 'dodge', n: 1 }]),
+    a2: N('แทงลวงตา', 3.5, [hit(3), { k: 'dodge', n: 1 }, hit(2, { perDodge: 2 })]),
+    b: N('แทงจุดตาย', 3.5, [hit(4, { noShield: 1.3 }), { k: 'dodge', n: 1 }], 'ตีศัตรูไร้โล่'),
+    b1: N('แทงทะลุ', 3.5, [hit(6, { pierce: 1, noShield: 1.3 }), { k: 'dodge', n: 1 }]),
+    b2: N('แทงสะกด', 3.5, [hit(4, { noShield: 1.3 }), { k: 'dodge', n: 1 }, { k: 'delay', secs: 0.5 }]),
   }),
   // payoff: hits harder for every dodge charge held
   def('riposte', 'dodge', {
@@ -328,9 +328,9 @@ const BASE_LIST: SkillDef[] = [
     a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(3)], 'ล้างดีบัฟ'),
     a1: N('สะบัดหมด', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
     a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, { k: 'heal', n: 4 }]),
-    b: N('เงาลวง', 6, [{ k: 'dodge', n: 2 }, hit(4)], 'หลบมาก'),
-    b1: N('ร่างเงา', 6, [{ k: 'dodge', n: 2 }, hit(7)]),
-    b2: N('เงาสวน', 6, [{ k: 'dodge', n: 2 }, hit(3, { perDodge: 2 })]),
+    b: N('เงาลวง', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 1, dot: true }, hit(4)], 'หลบมาก'),
+    b1: N('ร่างเงา', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 1, dot: true }, hit(7)]),
+    b2: N('เงาสวน', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 1, dot: true }, hit(3, { perDodge: 2 })]),
   }),
   // ======================= 🛡 shield =======================
   // core: stack shield
@@ -370,9 +370,9 @@ const BASE_LIST: SkillDef[] = [
     a: N('กินอิ่ม', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
     a1: N('งานเลี้ยง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
     a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
-    b: N('กินโต', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
-    b1: N('กินไม่หยุด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 3 }, hit(3)]),
-    b2: N('กินเลือด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 2 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
+    b: N('กินโต', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
+    b1: N('กินไม่หยุด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 3 }, hit(3)]),
+    b2: N('กินเลือด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
   }),
   // payoff: the longer it lasts, the harder it hits
   def('train', 'heal', {
@@ -386,13 +386,13 @@ const BASE_LIST: SkillDef[] = [
   }),
   // tech: answers ⚔ ❄ (heals when controlled, shield vs big hits)
   def('mend', 'heal', {
-    '': N('ฟื้นฟู', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast' }]),
-    a: N('ฟื้นทันใจ', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast' }], 'ฟื้นตอนโดนคุม'),
-    a1: N('ฟื้นไม่หยุด', 5, [{ k: 'heal', n: 8 }, { k: 'steadfast' }]),
-    a2: N('ฟื้นบริสุทธิ์', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast' }, { k: 'cleanse', n: 1 }]),
-    b: N('เลือดเหล็ก', 6, [{ k: 'heal', n: 3 }, { k: 'shield', n: 4 }, { k: 'steadfast' }], 'กันตีแรง'),
-    b1: N('กายเหล็ก', 6, [{ k: 'heal', n: 3 }, { k: 'shield', n: 7 }, { k: 'steadfast' }]),
-    b2: N('เลือดสวน', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast' }, hit(5, { leech: 0.3 })]),
+    '': N('ฟื้นฟู', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast', keep: 0.55 }]),
+    a: N('ฟื้นทันใจ', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast', keep: 0.55 }], 'ฟื้นตอนโดนคุม'),
+    a1: N('ฟื้นไม่หยุด', 5, [{ k: 'heal', n: 8 }, { k: 'steadfast', keep: 0.55 }]),
+    a2: N('ฟื้นบริสุทธิ์', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast', keep: 0.55 }, { k: 'cleanse', n: 1 }]),
+    b: N('เลือดเหล็ก', 6, [{ k: 'heal', n: 3 }, { k: 'shield', n: 4 }, { k: 'steadfast', keep: 0.55 }], 'กันตีแรง'),
+    b1: N('กายเหล็ก', 6, [{ k: 'heal', n: 3 }, { k: 'shield', n: 7 }, { k: 'steadfast', keep: 0.55 }]),
+    b2: N('เลือดสวน', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast', keep: 0.55 }, hit(5, { leech: 0.3 })]),
   }),
   // ======================= 🔥 burn =======================
   // core: start burns
@@ -461,7 +461,7 @@ const BASE_LIST: SkillDef[] = [
   def('frost', 'ice', {
     '': N('ลูกน้ำแข็ง', 5, [hit(5), { k: 'freeze', secs: 1 }]),
     a: N('แช่ยาว', 5, [hit(4), { k: 'freeze', secs: 1.7 }], 'ล็อกศัตรู'),
-    a1: N('ยุคน้ำแข็ง', 5, [hit(10), { k: 'freeze', secs: 2.5 }]),
+    a1: N('ธารเยือกแข็ง', 5, [hit(10), { k: 'freeze', secs: 2.5 }]),
     a2: N('หนาวสะท้าน', 5, [hit(8), { k: 'freeze', secs: 2 }, { k: 'slow', pct: 0.2, secs: 3 }]),
     b: N('น้ำแข็งคม', 5, [hit(7), { k: 'freeze', secs: 1 }], 'ดาเมจ'),
     b1: N('หอกน้ำแข็ง', 5, [hit(15), { k: 'freeze', secs: 1 }]),
@@ -539,23 +539,23 @@ const BASE_LIST: SkillDef[] = [
     b2: E('เฟืองคู่', 2.8, { kind: 'gear', power: 0.6, n: 2 }),
   }),
   def('overclock', 'none', {
-    '': E('เร่งเครื่อง', 6, { kind: 'overclock', power: 0.85 }),
-    a: E('เร่งแรง', 6, { kind: 'overclock', power: 1 }, [], 'แรงขึ้น'),
-    a1: E('เร่งสุดขีด', 6, { kind: 'overclock', power: 1.15 }),
-    a2: E('เร่งแล้วตั้งรับ', 6, { kind: 'overclock', power: 1 }, [{ k: 'shield', n: 4 }]),
-    b: E('เร่งไว', 4.5, { kind: 'overclock', power: 0.9 }, [], 'ถี่ขึ้น'),
-    b1: E('เร่งถี่', 4, { kind: 'overclock', power: 1 }),
-    b2: E('เร่งต่อเนื่อง', 4.5, { kind: 'overclock', power: 0.9, keep: true }),
+    '': E('เร่งเครื่อง', 6, { kind: 'overclock', power: 0.7 }),
+    a: E('เร่งแรง', 6, { kind: 'overclock', power: 0.85 }, [], 'แรงขึ้น'),
+    a1: E('เร่งสุดขีด', 6, { kind: 'overclock', power: 1 }),
+    a2: E('เร่งแล้วตั้งรับ', 6, { kind: 'overclock', power: 0.85 }, [{ k: 'shield', n: 4 }]),
+    b: E('เร่งไว', 4.5, { kind: 'overclock', power: 0.75 }, [], 'ถี่ขึ้น'),
+    b1: E('เร่งถี่', 4, { kind: 'overclock', power: 0.85 }),
+    b2: E('เร่งต่อเนื่อง', 4.5, { kind: 'overclock', power: 0.75, keep: true }),
   }),
   // ======================= hero uniques (count for their hero's line) =======================
   def('execute', 'hit', {
-    '': N('ปลิดชีพ', 5, [hit(10, { sure: true, exec: [0.5, 1.5] })]),
-    a: N('ประหาร', 5, [hit(11, { sure: true, exec: [0.5, 1.6] })], 'ปิดเกม'),
-    a1: N('เพชฌฆาต', 5, [hit(11, { sure: true, exec: [0.35, 2.2] })]),
-    a2: N('ประหารทะลุ', 5, [hit(11, { sure: true, exec: [0.5, 1.5], pierce: 1 })]),
-    b: N('เชือดเร็ว', 4, [hit(8, { sure: true, exec: [0.5, 1.4] })], 'ใช้บ่อย'),
-    b1: N('เชือดไว', 3, [hit(7, { sure: true, exec: [0.5, 1.4] })]),
-    b2: N('เชือดดูดเลือด', 4, [hit(8, { sure: true, exec: [0.5, 1.4], leech: 0.3 })]),
+    '': N('ปลิดชีพ', 5, [hit(10, { exec: [0.5, 1.5] })]),
+    a: N('ประหาร', 5, [hit(12, { exec: [0.5, 1.6] })], 'ปิดเกม'),
+    a1: N('เพชฌฆาต', 5, [hit(13, { sure: true, exec: [0.35, 2.2] })]),
+    a2: N('ประหารทะลุ', 5, [hit(14, { exec: [0.5, 1.6], pierce: 1 })]),
+    b: N('เชือดเร็ว', 4, [hit(9, { exec: [0.5, 1.4] })], 'ใช้บ่อย'),
+    b1: N('เชือดไว', 3, [hit(8, { exec: [0.5, 1.4] })]),
+    b2: N('เชือดดูดเลือด', 4, [hit(10, { exec: [0.5, 1.4], leech: 0.3 })]),
   }, 'assassin'),
   def('flurry', 'dodge', {
     '': N('พายุดาบ', 5, [hit(2, { times: 3 })]),
@@ -780,7 +780,7 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
       case 'grow': out.push({ kw: 'grow', text: `💪+${e.n}` }); break;
       case 'charge': out.push({ kw: 'charge', text: `⚡×${e.mult}${e.hits && e.hits > 1 ? ` (${e.hits} ครั้ง)` : ''}` }); break;
       case 'thorns': out.push({ kw: 'thorns', text: `🌵${e.n}${e.perm ? ' ถาวร' : ''}${e.heal !== undefined ? ` ศัตรูฟื้น ${pct(e.heal)}` : ''}` }); break;
-      case 'steadfast': out.push({ kw: 'steadfast', text: `🗿${e.keep !== undefined && e.keep < 0.4 ? ' 80%' : ''}${e.ignoreFreeze ? ' +กันแช่แข็ง 1 ครั้ง' : ''}` }); break;
+      case 'steadfast': out.push({ kw: 'steadfast', text: `🗿${e.keep !== undefined && e.keep !== 0.4 ? ` ${pct(1 - e.keep)}` : ''}${e.ignoreFreeze ? ' +กันแช่แข็ง 1 ครั้ง' : ''}` }); break;
       case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}` }); break;
       case 'dispel': out.push({ kw: 'dispel', text: `${e.n >= 99 ? '💥ทั้งหมด' : e.n > 1 ? `💥×${e.n}` : '💥'}${e.shield !== undefined ? ` โล่${pct(e.shield)}` : ''}${e.steal ? ' ขโมยพลัง' : ''}` }); break;
       case 'leech': out.push({ kw: 'leech', text: `🩸${pct(e.pct)} ครั้งถัดไป` }); break;

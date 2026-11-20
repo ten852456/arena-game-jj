@@ -34,38 +34,38 @@ export const TUNING = {
   /** freeze / slow / delay seconds of every skill × this */
   'control': 1.2,
   // ---- shared skills of each line: power multiplier at Lv1 and Lv3 ----
-  'line.hit.lv1': 0.8,
-  'line.hit.lv3': 1.5,
-  'line.dodge.lv1': 0.8,
-  'line.dodge.lv3': 1.45,
+  'line.hit.lv1': 0.7,
+  'line.hit.lv3': 1.2,
+  'line.dodge.lv1': 0.7,
+  'line.dodge.lv3': 1.2,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.15,
-  'line.heal.lv1': 1.3,
+  'line.heal.lv1': 1.1,
   'line.heal.lv3': 1.15,
-  'line.burn.lv1': 1.5,
+  'line.burn.lv1': 1.35,
   'line.burn.lv3': 0.75,
   'line.poison.lv1': 1.2,
   'line.poison.lv3': 0.9,
   'line.ice.lv1': 0.9,
   'line.ice.lv3': 1.2,
   'line.wind.lv1': 1.2,
-  'line.wind.lv3': 0.7,
+  'line.wind.lv3': 0.6,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 1.25,
   'uniq.knight.lv3': 1.15,
   'uniq.thornguard.lv1': 1,
   'uniq.thornguard.lv3': 1.4,
-  'uniq.assassin.lv1': 1.1,
-  'uniq.assassin.lv3': 1,
-  'uniq.duelist.lv1': 1.1,
-  'uniq.duelist.lv3': 1.1,
-  'uniq.berserker.lv1': 0.95,
+  'uniq.assassin.lv1': 0.95,
+  'uniq.assassin.lv3': 1.6,
+  'uniq.duelist.lv1': 0.95,
+  'uniq.duelist.lv3': 1.5,
+  'uniq.berserker.lv1': 1.2,
   'uniq.berserker.lv3': 0.8,
   'uniq.pyro.lv1': 1.7,
   'uniq.pyro.lv3': 1.65,
   'uniq.witch.lv1': 1.25,
   'uniq.witch.lv3': 0.9,
-  'uniq.chrono.lv1': 1.4,
+  'uniq.chrono.lv1': 1.5,
   'uniq.chrono.lv3': 0.9,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
   'cd.knight': 1.1,
@@ -81,7 +81,7 @@ export const TUNING = {
   'hp.thornguard': 1.2,
   'hp.assassin': 1.08,
   'hp.duelist': 0.88,
-  'hp.berserker': 1,
+  'hp.berserker': 1.1,
   'hp.pyro': 1.42,
   'hp.witch': 1.5,
   'hp.chrono': 1.2,
@@ -103,8 +103,12 @@ export const TUNING = {
   /** นักรบหนาม: each hit taken poisons the attacker 1/s for this many seconds */
   'thornguard.poison': 3,
   // ---- new mechanics (sim v12) ----
-  /** most dodge charges a fighter can hold */
-  'dodge.cap': 2,
+  /** most dodge charges a fighter can hold (+1 for a hero of the 💨 line) */
+  'dodge.cap': 1,
+  /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
+  'line.affinity': 1.15,
+  /** a burning fighter's shield gains × this (ไฟละลายโล่) */
+  'burn.shield': 0.75,
   /** a poisoned fighter's healing × this */
   'poison.heal': 0.55,
   /** most haste a fighter can have (share faster) */
@@ -117,7 +121,7 @@ export const TUNING = {
   /** นักฆ่า: hit = this × your biggest hit so far (ignores shield, can't be dodged) */
   'ult.assassin.pow': 1,
   /** นักดาบคู่: hits dodged */
-  'ult.duelist.trig': 4,
+  'ult.duelist.trig': 3,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
   'ult.duelist.pow': 0.6,
   /** อัศวิน: shield gained, share of max HP */

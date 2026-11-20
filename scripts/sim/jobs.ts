@@ -2,12 +2,13 @@
 // which worker ran it or in what order; the main thread merges them in job order → deterministic report.
 import { BOT_TIERS, aiBuild, aiRun, botDay, botRules, randomAiBuild, type BotTier } from '../../src/sim/bot';
 import { simulate } from '../../src/sim/combat';
-import { HEROES, HEROES_BY_ID } from '../../src/sim/heroes';
+import { HEROES, HEROES_BY_ID, ultLevel } from '../../src/sim/heroes';
 import { Rng, hashSeed } from '../../src/sim/rng';
 import { WIN_TARGET, applyMark, chooseLastChance, newRun, recordResult, toBuild } from '../../src/sim/run';
 import { lvOf } from '../../src/sim/skills';
 import type { Build } from '../../src/sim/types';
 import { addFight, factsOf, newHealth, type Health } from './metrics';
+import { runLinesJob, type LinesJob } from './lines';
 
 export type TierSpec = BotTier | 'mix';
 export interface Ctx {
@@ -27,7 +28,8 @@ export type Job =
   | { k: 'len'; c: Ctx; day: number; from: number; to: number }
   | { k: 'pool'; c: Ctx; day: number; size: number }
   | { k: 'runs'; c: Ctx; hero: string; from: number; to: number; pool: Build[][] }
-  | { k: 'tiers'; c: Ctx; day: number; x: BotTier; y: BotTier; from: number; to: number };
+  | { k: 'tiers'; c: Ctx; day: number; x: BotTier; y: BotTier; from: number; to: number }
+  | LinesJob;
 
 export interface MatchRes {
   score: Record<string, number>;
@@ -71,6 +73,9 @@ export interface RunsRes {
   /** dead runs where one opponent caused more than half of the losses */
   deadMajority: number;
   health: Health;
+  /** runs by the first day the ultimate reached Lv1 / Lv2 (0 = never) */
+  ult1Day: Record<number, number>;
+  ult2Day: Record<number, number>;
 }
 
 export interface TiersRes {
@@ -158,6 +163,9 @@ export function runJob(j: Job): unknown {
     }
     case 'runs':
       return runRuns(j);
+    case 'lines':
+    case 'day1':
+      return runLinesJob(j);
     case 'tiers': {
       const r: TiersRes = { score: 0, n: 0, goldX: 0, goldY: 0, skillsX: 0, skillsY: 0, lvX: 0, lvY: 0 };
       for (let i = j.from; i < j.to; i++) {
@@ -187,7 +195,7 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
   const { c } = j;
   const h = HEROES_BY_ID[j.hero];
   const res: RunsRes = {
-    hero: h.id, runs: 0, won: 0, wins: 0, days: 0, byTier: {}, skills: {}, repeat3: 0, dead: 0, deadRepeat: 0, deadMajority: 0, health: newHealth(),
+    hero: h.id, runs: 0, won: 0, wins: 0, days: 0, byTier: {}, skills: {}, repeat3: 0, dead: 0, deadRepeat: 0, deadMajority: 0, health: newHealth(), ult1Day: {}, ult2Day: {},
   };
   const sk = (id: string) => (res.skills[id] ??= { own8: 0, ownAll: 0, fights: 0, wins: 0, share: 0, shareN: 0 });
   for (let r = j.from; r < j.to; r++) {
@@ -197,6 +205,8 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
     const rng = new Rng(hashSeed(c.seed, 'opp', h.id, r));
     const met: Record<number, number> = {};
     const lostTo: Record<number, number> = {};
+    let u1 = 0;
+    let u2 = 0;
     while (s.day <= MAX_DAY) {
       if (s.phase === 'lastchance') chooseLastChance(s, (['awaken', 'supply', 'mark'] as const)[r % 3]);
       if (s.phase === 'mark') applyMark(s, 0);
@@ -206,6 +216,9 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
       const oi = rng.int(j.pool[day].length);
       met[oi] = (met[oi] ?? 0) + 1;
       const me = toBuild(s);
+      const ul = ultLevel(me);
+      if (ul >= 1 && !u1) u1 = s.day;
+      if (ul >= 2 && !u2) u2 = s.day;
       const fight = simulate(me, j.pool[day][oi], rng.int(2 ** 31), s.day);
       const f = factsOf(fight, s.day);
       addFight(res.health, f, false);
@@ -224,6 +237,8 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
       recordResult(s, won, { opp: 'bot', ai: true });
     }
     res.runs++;
+    res.ult1Day[u1] = (res.ult1Day[u1] ?? 0) + 1;
+    res.ult2Day[u2] = (res.ult2Day[u2] ?? 0) + 1;
     const won8 = s.phase === 'won' && s.wins >= WIN_TARGET;
     if (won8) res.won++;
     res.wins += s.wins;

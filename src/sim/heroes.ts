@@ -30,6 +30,8 @@ export interface HookFighter {
   status(kind: StatusKind, value: number): void;
   /** gain dodge charges (capped) */
   dodge(n: number): void;
+  /** remove your strongest poison stack */
+  shedPoison(): void;
   /** poison the enemy: dps per second for secs */
   poisonFoe(dps: number, secs: number): void;
   /** cut the enemy's healing by pct for secs */
@@ -91,21 +93,26 @@ export interface HeroDef {
   day1: string[];
 }
 
-/** Lv2 needs this share of the Lv1 trigger amount (30% sooner) */
-export const ULT_LV2_TRIG = 0.7;
+/** Lv2 needs this share of the Lv1 trigger amount (sooner) */
+export const ULT_LV2_TRIG = 0.75;
 /** Lv2 effect power × this */
-export const ULT_LV2_POW = 1.4;
+export const ULT_LV2_POW = 1.3;
 /** pieces needed for ult Lv1 / Lv2 */
 export const ULT_PIECES = [3, 5] as const;
 const r1 = (x: number) => +x.toFixed(1);
 /** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
-const TRIG_BELOW = ['assassin', 'berserker'];
-/** trigger amount at a level: counts round, shares stay shares; Lv2 needs 30% less (HP thresholds: 30% less HP missing) */
+const TRIG_BELOW = ['assassin'];
+/**
+ * Heroes whose Lv2 keeps the Lv1 trigger: นักรบคลั่ง (a sooner "HP below" would waste the 1-HP survival) and
+ * นักเวทเพลิง (1 burn stack would make every fight end the same way). Their Lv2 is only stronger.
+ */
+const TRIG_SAME = ['berserker', 'pyro'];
+/** trigger amount at a level: counts round, shares stay shares; Lv2 needs 25% less (HP thresholds: 25% less HP missing) */
 export const ultTrig = (hero: string, lv: number) => {
   const v = T[`ult.${hero}.trig` as keyof typeof T] ?? 0;
-  if (lv < 2) return v;
+  if (lv < 2 || TRIG_SAME.includes(hero)) return v;
   if (TRIG_BELOW.includes(hero)) return r1(1 - (1 - v) * ULT_LV2_TRIG);
-  return Number.isInteger(v) ? Math.max(1, Math.round(v * ULT_LV2_TRIG)) : +(v * ULT_LV2_TRIG).toFixed(2);
+  return Number.isInteger(v) ? Math.max(2, Math.round(v * ULT_LV2_TRIG)) : +(v * ULT_LV2_TRIG).toFixed(2);
 };
 /** effect power at a level */
 export const ultPow = (hero: string, lv: number) => (T[`ult.${hero}.pow` as keyof typeof T] ?? 0) * (lv >= 2 ? ULT_LV2_POW : 1);
@@ -114,7 +121,7 @@ const both = (f: (lv: number) => string) => `${f(1)} · Lv2 ${f(2)}`;
 export const HEROES: HeroDef[] = [
   // ---------------- ⚔ hit ----------------
   {
-    id: 'assassin', day1: ['execute', 'strike', 'heavy', 'charge', 'jab'], name: 'นักฆ่า', line: 'hit', unique: 'execute',
+    id: 'assassin', day1: ['execute', 'strike', 'heavy', 'charge', 'venom'], name: 'นักฆ่า', line: 'hit', unique: 'execute',
     passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`,
     style: 'ตีทีเดียวจบ: รวมพลังแล้วปล่อยการโจมตีหนักๆ ปลิดชีพตอนศัตรูเลือดต่ำ',
     hooks: {
@@ -130,13 +137,13 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'เงาจันทร์',
       get trigger() { return both((lv) => `ศัตรูเลือดต่ำกว่า ${pc(ultTrig('assassin', lv))}%`); },
-      get effect() { return both((lv) => `ตีทันที ×${r1(ultPow('assassin', lv))} ของการตีที่แรงสุดในการสู้นี้ (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) ไม่สนโล่ หลบไม่ได้`); },
+      get effect() { return both((lv) => `ตีทันที ×${r1(ultPow('assassin', lv))} ของการตีที่แรงสุดในการสู้นี้ (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) ไม่สนโล่ · แต้มหลบของศัตรูลดเหลือครึ่ง`); },
     },
   },
   // ---------------- 💨 dodge ----------------
   {
     id: 'duelist', day1: ['flurry', 'jab', 'riposte', 'sidestep', 'strike'], name: 'นักดาบคู่', line: 'dodge', unique: 'flurry',
-    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1 · หลบได้แล้ว การตีครั้งถัดไปแรง ×${T['duelist.counter']}`,
+    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1 · เก็บแต้มหลบได้ ${T['dodge.cap'] + 1} · หลบได้แล้ว สะบัดพิษทิ้ง 1 กอง และการตีครั้งถัดไปแรง ×${T['duelist.counter']}`,
     style: 'หลบแล้วสวน: ตีเร็วสะสมแต้มหลบ ให้การตีของศัตรูพลาด แล้วสวนกลับแรงตามแต้มหลบที่มี',
     hooks: {
       maxHp: hpOf('duelist'),
@@ -145,6 +152,7 @@ export const HEROES: HeroDef[] = [
       },
       onDodge(me) {
         me.flags.counter = 1;
+        me.shedPoison();
       },
       onHit(me, dmg) {
         if (!me.flags.counter) return dmg;
@@ -199,7 +207,7 @@ export const HEROES: HeroDef[] = [
   },
   // ---------------- 🔥 burn ----------------
   {
-    id: 'pyro', day1: ['inferno', 'ignite', 'blaze', 'scorch', 'jab'], name: 'นักเวทเพลิง', line: 'burn', unique: 'inferno',
+    id: 'pyro', day1: ['inferno', 'ignite', 'blaze', 'scorch', 'strike'], name: 'นักเวทเพลิง', line: 'burn', unique: 'inferno',
     passive: `${hpTxt('pyro')}ไฟที่คุณจุดติดนานขึ้น ${pc(T['pyro.burn'] - 1)}%`,
     style: 'ไฟซ้อนไฟ: จุดไฟหลายกองให้ซ้อนกัน แล้วระเบิดเพลิงตามไฟที่ยังเหลือ (ไม่สนโล่)',
     hooks: { maxHp: hpOf('pyro'), burnSecs: (s) => Math.round(s * T['pyro.burn']) },
@@ -245,7 +253,7 @@ export const HEROES: HeroDef[] = [
   },
   // ---------------- 🌪 wind ----------------
   {
-    id: 'chrono', day1: ['timewarp', 'chill', 'tailwind', 'dispel', 'jab'], name: 'จอมเวทลม', line: 'wind', unique: 'timewarp',
+    id: 'chrono', day1: ['timewarp', 'chill', 'tailwind', 'dispel', 'strike'], name: 'จอมเวทลม', line: 'wind', unique: 'timewarp',
     passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%`,
     style: 'ลมพัดเวลา: ทำให้ศัตรูช้า ดึงคูลดาวน์ถอยหลัง เร่งตัวเอง และพัดไฟ/พิษทิ้ง',
     hooks: {
@@ -265,19 +273,27 @@ export const HEROES: HeroDef[] = [
 export const HEROES_BY_ID: Record<string, HeroDef> = Object.fromEntries(HEROES.map((h) => [h.id, h]));
 
 /**
- * Ultimate pieces of a build: every skill of the hero's main line (its unique counts) is 1 piece, +1 more at Lv3.
+ * Ultimate pieces of a build: every skill of the hero's main line (its unique counts) is 1 piece, and ONE Lv3 skill of
+ * that line adds +1 more (a line has 3 shared skills + the unique, so the most is 5 = Lv2).
  * Pure function of the build, so the server and the replay agree.
  */
 export function ultPieces(b: Pick<Build, 'hero' | 'skills'>): number {
   const line = HEROES_BY_ID[b.hero]?.line;
   if (!line) return 0;
   let n = 0;
+  let lv3 = 0;
   for (const k of b.skills) {
-    const d = SKILLS[k.id];
-    if (!d || d.line !== line || (d.hero && d.hero !== b.hero)) continue;
-    n += lvOf(k.v) >= 3 ? 2 : 1;
+    if (!inLine(b.hero, k.id)) continue;
+    n++;
+    if (lvOf(k.v) >= 3) lv3 = 1;
   }
-  return n;
+  return n + lv3;
+}
+/** Is this skill one of the hero's line pieces (a shared skill of its main line, or its own unique)? */
+export function inLine(hero: string, id: string): boolean {
+  const d = SKILLS[id];
+  const line = HEROES_BY_ID[hero]?.line;
+  return !!d && !!line && d.line === line && (!d.hero || d.hero === hero);
 }
 /** 0 = locked, 1 = 3 pieces, 2 = 5 pieces */
 export const ultLevel = (b: Pick<Build, 'hero' | 'skills'>) => {

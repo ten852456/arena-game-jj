@@ -3,7 +3,7 @@
  * client/lang.ts swaps these into the data objects when the player picks English.
  * Skill names follow the Thai names; hero numbers are read from tuning.ts so they never drift.
  */
-import { ultPow, ultTrig } from '../sim/heroes';
+import { ULT_LV2_POW, ultPow, ultTrig } from '../sim/heroes';
 import { T } from '../sim/tuning';
 
 /** Skill tree names, per skill: variant ('_' = Lv1) → "Name" or "Name | branch style" (Lv2). */
@@ -33,7 +33,7 @@ export const SKILLS_EN: Record<string, Record<string, string>> = {
   plague: { _: 'Poison Burst', a: 'Venom Blast | Burst the poison', a1: 'Great Plague', a2: 'Spreading Venom', b: 'Plague | Long poison', b1: 'Heavy Plague', b2: 'Heartbane' },
   thorns: { _: 'Venom Thorn Armor', a: 'Sharp Thorns | Strong reflect', a1: 'Deadly Thorns', a2: 'Hindering Thorns', b: 'Lasting Thorns | Permanent stacks', b1: 'Thicket', b2: 'Armored Thorns' },
   // ❄ ice
-  frost: { _: 'Frost Ball', a: 'Deep Freeze | Lock the foe', a1: 'Ice Age', a2: 'Shiver', b: 'Sharp Ice | Damage', b1: 'Ice Spear', b2: 'Hailstorm' },
+  frost: { _: 'Frost Ball', a: 'Deep Freeze | Lock the foe', a1: 'Glacial Grip', a2: 'Shiver', b: 'Sharp Ice | Damage', b1: 'Ice Spear', b2: 'Hailstorm' },
   icelance: { _: 'Ice Lance', a: 'Frigid Lance | Freeze combo', a1: 'Shattering Lance', a2: 'Freezing Lance', b: 'Quick Lance | Often', b1: 'Storm Lance', b2: 'Biting Lance' },
   glacier: { _: 'Glacier', a: 'Deep Glacier | A freeze that lands', a1: 'Eternal Glacier', a2: 'Shield-break Glacier', b: 'Sharp Glacier | Pierce', b1: 'Spiked Glacier', b2: 'Cracking Glacier' },
   // 🌪 wind
@@ -61,7 +61,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   shield: { name: 'Shield', desc: 'Takes damage before your HP and stays until it breaks' },
   heal: { name: 'Heal', desc: 'Restore your own HP' },
   leech: { name: 'Leech', desc: 'Heal a share of the damage you deal' },
-  burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks' },
+  burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · a burning fighter gains 25% less shield' },
   freeze: {
     name: 'Freeze',
     desc: "All the enemy's skills stop counting their cooldowns · weaker if repeated quickly · capped per fight · when a freeze ends, the enemy resists control for 1.5s",
@@ -79,7 +79,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   },
   dodge: {
     name: 'Dodge',
-    desc: 'Gain dodge charges (max 2) · each one makes the next hit on you miss completely (no randomness) · burn, poison, thorns and fatigue can’t be dodged · dodging the hit of a freeze/delay skill also stops that control',
+    desc: 'Gain dodge charges (hold 1 · a dodge-line hero holds 2) · each one makes the next hit on you miss completely (no randomness) · burn, poison, thorns and fatigue can’t be dodged · 👁 hits never miss · dodging the hit of a freeze/delay skill also stops that control',
   },
   poison: {
     name: 'Poison',
@@ -134,12 +134,12 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Moon Shadow',
       get trigger() { return both((lv) => `enemy HP below ${pc(ultTrig('assassin', lv))}%`); },
-      get effect() { return both((lv) => `instant hit ×${r1(ultPow('assassin', lv))} your biggest hit this fight (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), ignores shield, can’t be dodged`); },
+      get effect() { return both((lv) => `instant hit ×${r1(ultPow('assassin', lv))} your biggest hit this fight (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), ignores shield; a dodge charge halves it`); },
     },
   },
   duelist: {
     name: 'Duelist',
-    get passive() { return `${hpPlus('duelist')}Start with 1 dodge · after you dodge, your next hit deals ×${T['duelist.counter']}`; },
+    get passive() { return `${hpPlus('duelist')}Start with 1 dodge · hold up to ${T['dodge.cap'] + 1} dodges · after you dodge, shake off 1 poison stack and your next hit deals ×${T['duelist.counter']}`; },
     style: 'Dodge and counter: fast hits stack dodge charges so enemy hits miss, then counter harder the more dodges you hold',
     ult: {
       name: 'Blade Dance',
@@ -154,7 +154,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Moon Fortress',
       get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield (the start shield does not count)`); },
-      get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
+      get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
     },
   },
   berserker: {

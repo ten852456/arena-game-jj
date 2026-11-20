@@ -32,7 +32,12 @@ export interface BotRules {
   maxRerolls: number;
   /** default 'normal' */
   tier?: BotTier;
+  /** never buy skills of this line (and no hero unique): the simulator's "off-line" builds */
+  avoid?: Line;
 }
+
+/** Skills a bot with these rules may buy. */
+const allowed = (rules: BotRules, id: string) => !rules.avoid || (SKILLS[id]?.line !== rules.avoid && !SKILLS[id]?.hero);
 
 /** Default rules for a tier. */
 export function botRules(prefer: Line[], tier: BotTier = 'normal'): BotRules {
@@ -166,6 +171,10 @@ function linkGain(skills: SkillInstance[], extra: SkillInstance, drop = -1) {
 
 // ---------------- shop turn ----------------
 
+/** Bots ramp up gently: no Lv3 before day 5 (any tier), easy bots no Lv2 before day 3. */
+export const BOT_LV3_DAY = 5;
+const upgradeAllowed = (v: string, day: number, tier: BotTier) => (v.length >= 2 ? day >= BOT_LV3_DAY : tier !== 'easy' || day >= 3);
+
 /** How many early hitters the bot owns. */
 const ownedHitters = (s: RunState) => s.skills.filter(isEarlyHitter).length;
 
@@ -173,14 +182,14 @@ const ownedHitters = (s: RunState) => s.skills.filter(isEarlyHitter).length;
  * Guarantee: the build owns a damage skill that fires early. Buys the cheapest such offer (making room by selling
  * the weakest non-hitter if needed), rerolling a few times when the shop has none. Returns false if it could not.
  */
-function ensureHitter(s: RunState, keep: (k: SkillInstance) => number): boolean {
+function ensureHitter(s: RunState, keep: (k: SkillInstance) => number, rules: BotRules): boolean {
   for (let tries = 0; tries < 4; tries++) {
     if (ownedHitters(s) > 0) return true;
     // an upgrade can turn an owned skill into an early hitter too, but a new Lv1 hitter is the reliable fix
     let pick = -1;
     s.shop.forEach((o, i) => {
       if (!o || o.v !== '' || priceOf(o) > s.gold + (s.skills.length >= slotsOf(s) ? minSell(s, keep) : 0)) return;
-      if (s.skills.some((k) => k.id === o.id) || !isEarlyHitter({ id: o.id, v: '' })) return;
+      if (s.skills.some((k) => k.id === o.id) || !isEarlyHitter({ id: o.id, v: '' }) || !allowed(rules, o.id)) return;
       // the hitter the bot likes most (its line / its unique), cheaper on a tie
       const v = keep({ id: o.id, v: '' });
       const pv = pick < 0 ? -Infinity : keep({ id: s.shop[pick]!.id, v: '' });
@@ -229,7 +238,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
   };
   /** value of an owned skill when deciding what to sell; the last early hitter is never sold */
   const keep = (k: SkillInstance) => like(k.id) * 2 + lvOf(k.v) + (isEarlyHitter(k) && ownedHitters(s) <= 1 ? 100 : 0);
-  ensureHitter(s, keep);
+  ensureHitter(s, keep, rules);
   // easy: most easy bots leave one slot empty on days 1–3; at most 1 purchase a day early, 2 later
   const lazy = easy && s.day <= 3 && new Rng(hashSeed(s.seed, 'lazy')).next() < 0.7;
   const buyCap = !easy ? 99 : s.day <= 3 ? 1 : 2;
@@ -239,12 +248,13 @@ export function botShopTurn(s: RunState, rules: BotRules) {
     let bestScore = 0;
     const full = s.skills.length >= slotsOf(s) - (lazy ? 1 : 0);
     s.shop.forEach((offer, i) => {
-      if (!offer) return;
+      if (!offer || !allowed(rules, offer.id)) return;
       const id = offer.id;
       if (priceOf(offer) > s.gold) return;
       let score: number;
       if (offer.v !== '') {
         if (!upgradeOf(s, offer) || lazy) return; // lazy easy bots do not upgrade early either
+        if (!upgradeAllowed(offer.v, s.day, tier)) return;
         score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
         // a Lv3 on a line skill is one more ult piece (5 pieces = ult Lv2)
         if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultPieces(s) < ULT_PIECES[1]) score += 1;
@@ -321,7 +331,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
     if (needAnti && isAntiControl(k.id) && s.skills.filter((x) => isAntiControl(x.id)).length <= 1) v += 50;
     return v;
   };
-  ensureHitter(s, keep);
+  ensureHitter(s, keep, rules);
   version++; // the list may have changed
   const hasAnti = () => s.skills.some((k) => isAntiControl(k.id) || nodeAntiControl(nodeOf(k)));
 
@@ -330,7 +340,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
     const has = hasNow();
     if (o.v !== '') {
       const owned = upgradeOf(s, o);
-      if (!owned) return 0;
+      if (!owned || !upgradeAllowed(o.v, s.day, 'hard')) return 0;
       const gain = nodeValue(nodeOf({ id: o.id, v: o.v }), has) - nodeValue(nodeOf(owned), has);
       // finishing a branch (Lv2 → Lv3) on a skill that fits the build is worth more than spreading gold thin
       const branch = lvOf(owned.v) === 2 ? (SKILLS[o.id].line === line && ultPieces(s) < ULT_PIECES[1] ? 2.5 : 1.5) : 0.5;
@@ -362,7 +372,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
     let best = -1;
     let bestScore = 0;
     s.shop.forEach((o, i) => {
-      if (!o || priceOf(o) > s.gold) return;
+      if (!o || priceOf(o) > s.gold || !allowed(rules, o.id)) return;
       const sc = cachedScore(o);
       if (sc > bestScore) {
         bestScore = sc;
@@ -412,14 +422,14 @@ export function botDay(s: RunState, rules: BotRules) {
 }
 
 /** Build a bot's build as of `day`, by running its shop turns day by day. */
-export function aiBuild(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal'): Build {
-  return toBuild(aiRun(hero, day, prefer, seed, tier));
+export function aiBuild(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal', avoid?: Line): Build {
+  return toBuild(aiRun(hero, day, prefer, seed, tier, avoid));
 }
 
 /** The bot's run state after its shop on `day` (aiBuild without the toBuild; the simulator reads its unspent gold). */
-export function aiRun(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal'): RunState {
+export function aiRun(hero: string, day: number, prefer: Line[], seed: number, tier: BotTier = 'normal', avoid?: Line): RunState {
   const s = newRun(hero, seed, 'ai');
-  const rules = botRules(prefer, tier);
+  const rules: BotRules = { ...botRules(prefer, tier), ...(avoid ? { avoid } : {}) };
   for (let d = 1; d <= day; d++) {
     if (d > 1) {
       s.day = d;

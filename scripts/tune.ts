@@ -20,7 +20,7 @@ import { lengthTarget, TARGETS } from './sim/targets';
 import { applyTuningFile } from './tune/apply';
 import { cmaAsk, cmaInit, cmaTell, type CmaState } from './tune/cma';
 import { BAND, HERO_CURVE, curveTargets } from './tune/curves';
-import { measure, score, type EvalSpec, type Measure, type Score } from './tune/evaluate';
+import { LINE_DAYS, measure, score, type EvalSpec, type Measure, type Score } from './tune/evaluate';
 import { KNOBS, asTuning, fromUnit, toUnit, x0 } from './tune/knobs';
 import { TunePool } from './tune/pool';
 
@@ -52,11 +52,11 @@ const SETS = opt('set', '').split('|').filter(Boolean).map((v) => Object.fromEnt
 })));
 
 /** cheap evaluation: every candidate of a generation, same seed */
-const COARSE: Omit<EvalSpec, 'seed'> = { nb: 12, runs: 40, lenN: 40, days: DAYS };
+const COARSE: Omit<EvalSpec, 'seed'> = { nb: 12, runs: 40, lenN: 40, days: DAYS, linesN: 12 };
 /** confirmation: the generation's best and the search mean, fixed seed for the whole search (comparable across generations) */
-const CONFIRM: Omit<EvalSpec, 'seed'> = { nb: 32, runs: 100, lenN: 80, days: DAYS };
+const CONFIRM: Omit<EvalSpec, 'seed'> = { nb: 32, runs: 100, lenN: 80, days: DAYS, linesN: 30 };
 /** final check with fresh seeds: baseline vs best */
-const FINAL: Omit<EvalSpec, 'seed'> = { nb: 80, runs: 200, lenN: 200, days: DAYS };
+const FINAL: Omit<EvalSpec, 'seed'> = { nb: 80, runs: 200, lenN: 200, days: DAYS, linesN: 60 };
 
 const t0 = performance.now();
 const secs = () => (performance.now() - t0) / 1000;
@@ -95,6 +95,10 @@ function curveTable(m: Measure, title: string) {
   const lenMiss = Object.entries(m.len).filter(([d, l]) => { const [lo, hi] = lengthTarget(+d); return l.avg < lo || l.avg > hi; }).map(([d, l]) => `d${d} ${l.avg.toFixed(1)}s`);
   const fat = Math.max(...Object.values(m.len).map((l) => l.fatigue));
   console.log(`fight length misses: ${lenMiss.length ? lenMiss.join(', ') : 'none'} · worst fatigue ${p(fat).trim()}% · 0-skill ${(m.zeroAll * 100).toFixed(1)}%`);
+  const il = Object.entries(m.inline).map(([h, byDay]) => `${h.slice(0, 5)} ${Object.values(byDay).map((r) => p(r).trim()).join('/')}`);
+  if (il.length) console.log(`in-line beats off-line (d${LINE_DAYS.join('/')}): ${il.join(' · ')}`);
+  const uv = Object.entries(m.ultValue).map(([h, d]) => `${h.slice(0, 5)} ${(d * 100).toFixed(0)}`);
+  if (uv.length) console.log(`ult worth (pts): ${uv.join(' · ')}`);
   for (const [n, byDay] of Object.entries(m.watch)) console.log(`watch ${n}: ${Object.entries(byDay).map(([d, r]) => `d${d} ${p(r).trim()}%`).join(' · ')}`);
 }
 const partsStr = (s: Score) => Object.entries(s.parts).filter(([, v]) => v >= 0.5).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toFixed(0)}`).join(' ');

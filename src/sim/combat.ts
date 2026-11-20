@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, ULT_LV2_POW, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
+import { HEROES_BY_ID, ULT_LV2_POW, inLine, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 12;
+export const SIM_VERSION = 13;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -206,6 +206,11 @@ export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0):
   return Math.max(5, Math.round(base));
 }
 
+/** ถนัดสาย: a skill of the hero's own line (shared or its unique) works at this power (tuning.ts `line.affinity`). */
+export const affinityOf = (hero: string, id: string) => (inLine(hero, id) ? T['line.affinity'] : 1);
+/** most dodge charges a hero can hold: +1 for the 💨 line */
+export const dodgeCap = (hero: string) => T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0);
+
 function makeBlocks(b: Build): Block[] {
   const skills = b.skills.filter((k) => SKILLS[k.id]);
   const act = activeBonuses(skills);
@@ -215,7 +220,7 @@ function makeBlocks(b: Build): Block[] {
     const t = bonusTotals(skills, out.length, act);
     out.push({
       inst: { ...inst }, idx, cd: cdTicks(inst, t.haste), prog: 0,
-      power: t.power, dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      power: t.power * affinityOf(b.hero, inst.id), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
@@ -242,9 +247,10 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   };
 }
 
-export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trace?: boolean } = {}): CombatResult {
+export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trace?: boolean; /** simulator only: these sides fight with their ultimate locked */ noUlt?: [boolean, boolean] } = {}): CombatResult {
   const rng = new Rng(seed);
   const F: [Fighter, Fighter] = [makeFighter(a, 0, day), makeFighter(b, 1, day)];
+  for (const f of F) if (opts.noUlt?.[f.side]) f.ultLv = f.side_.ultLv = 0;
   const events: CombatEvent[] = [];
   let t = 0;
 
@@ -294,6 +300,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     },
     dodge(n) {
       addDodge(f, n);
+    },
+    shedPoison() {
+      if (!f.poisons.length) return;
+      let k = 0;
+      f.poisons.forEach((x, i) => { if (x.dps > f.poisons[k].dps) k = i; });
+      f.poisons.splice(k, 1);
+      emit({ type: 'status', side: f.side, status: 'cleanse', value: 1 });
     },
     poisonFoe(d, secs) {
       addPoison(F[1 - f.side], d, secs, -1);
@@ -355,6 +368,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     target.hooks.onDamaged?.(hookApi(target), amount - blocked, src);
   }
 
+  /** ไฟละลายโล่: a burning fighter gains less shield (tuning.ts `burn.shield`) */
+  const meltShield = (f: Fighter, n: number) => (f.burns.length && n > 0 ? Math.max(1, Math.round(n * T['burn.shield'])) : n);
   function addBurn(foe: Fighter, d: number, secs: number, idx: number) {
     foe.burns.push({ dps: d, t: secs * TPS, idx });
     emit({ type: 'status', side: foe.side, status: 'burn', value: dps(foe.burns) });
@@ -365,7 +380,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     emit({ type: 'status', side: foe.side, status: 'poison', value: dps(foe.poisons) });
   }
   function addDodge(f: Fighter, n: number) {
-    f.dodge = Math.min(T['dodge.cap'], f.dodge + n);
+    f.dodge = Math.min(dodgeCap(f.hero), f.dodge + n);
     emit({ type: 'status', side: f.side, status: 'dodge', value: f.dodge });
   }
   function addHaste(f: Fighter, pct: number, secs: number) {
@@ -403,9 +418,19 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     emit({ type: 'ult', side: f.side, hero: f.hero, lv: f.ultLv });
     const pow = ultPow(f.hero, f.ultLv);
     switch (f.hero) {
-      case 'assassin':
-        deal(foe, Math.max(1, Math.round(Math.min(pow * f.bigHit, ultCap(f, foe)))), false, 'ult');
+      case 'assassin': {
+        // ignores shields; a dodge charge can't make it miss, but it halves it (and is used up)
+        let n = Math.min(pow * f.bigHit, ultCap(f, foe));
+        if (foe.dodge > 0) {
+          foe.dodge--;
+          foe.dodges++;
+          foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
+          emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
+          n /= 2;
+        }
+        deal(foe, Math.max(1, Math.round(n)), false, 'ult');
         break;
+      }
       case 'duelist':
         addHaste(f, pow, 3);
         addDodge(f, 2);
@@ -573,6 +598,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         return dealt;
       },
       shield(n) {
+        n = meltShield(f, n);
         f.shield += n;
         f.shieldGot += n;
         st.sh += n;
@@ -770,7 +796,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const power = blk.power * q.mult;
     runSkill(f, foe, blk, power, Math.round(blk.dmg * q.mult));
     if (blk.shieldOnFire > 0 && f.hp > 0) {
-      const n = Math.max(1, Math.round(blk.shieldOnFire * q.mult));
+      const n = meltShield(f, Math.max(1, Math.round(blk.shieldOnFire * q.mult)));
       f.shield += n;
       f.shieldGot += n;
       st.sh += n;
