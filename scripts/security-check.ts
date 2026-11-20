@@ -46,4 +46,10 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   check('tutorial fight: cannot re-fight day 1 → 409', t4 === 409);
   const [, j5] = await post('/api/fight', { runId: pid + '-r3', playerId: pid + 'x', day: 1, rating: 1000, build, tutorial: 'yes' });
   check('tutorial fight: flag must be exactly true', !j5.tutorial);
+  // a tutorial win must not be farmable with fresh player ids: no rating gain, no stardust
+  const fresh = 'sec-tf-' + Date.now();
+  const [, jf] = await post('/api/fight', { runId: fresh + '-r', playerId: fresh, day: 1, rating: 1000, build, tutorial: true });
+  check('tutorial fight: rating unchanged', jf.tutorial === true && jf.rating === 1000, `rating ${jf.rating}`);
+  const [, fin] = await post('/api/run/finish', { runId: fresh + '-r', playerId: fresh, name: '', hero: 'knight', wins: jf.won ? 1 : 0, losses: jf.won ? 0 : 1, day: 1, build });
+  check('tutorial fight: its win earns no stardust (same as a 0-win run: 5)', !jf.won || fin?.reward?.stardust === 5, `stardust ${fin?.reward?.stardust}`);
 }

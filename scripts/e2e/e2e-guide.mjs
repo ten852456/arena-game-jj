@@ -113,7 +113,7 @@ async function playGuide(label, ctxOpts, lang = 'th-TH') {
   await shot('5-buy2');
   ok(`${label}: buy2 spotlight clear of the bubble`, await bubbleClear(p));
   const title2 = await p.locator('.gd-title').innerText().catch(() => '');
-  ok(`${label}: second skill is a chain partner`, /🔗/.test(title2), title2);
+  ok(`${label}: second skill is a chain partner`, /🔗|ต่อโซ่|chains/.test(title2), title2);
   const n2 = await buySpotlit(p, touch);
   ok(`${label}: bought the second skill`, !!n2 && (await p.locator('.skillrow[data-i]').count()) === 2, n2 ?? '');
   ok(`${label}: step chain`, await waitStep(p, 'chain'));

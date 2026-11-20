@@ -55,6 +55,8 @@ export interface RunTrack {
   opps: string[];
   /** day → 1 won, 0 lost/draw (a retried fight on the same day overwrites) */
   days: Record<string, 0 | 1>;
+  /** day 1 was the guided-tutorial fight (a training bot): it counts for the run, but earns no stardust or rating */
+  tutorial?: true;
   /** run state mirrored on the server with the game's own rules (run.ts): HP, last chance used, run over */
   hp?: number;
   ghost?: boolean;

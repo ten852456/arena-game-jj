@@ -102,7 +102,8 @@ export function handleFight(body: any): Res {
   result ??= simulate(build, opp.build, seed, day);
   const won = result.winner === 0;
   const score = won ? 1 : result.winner === -1 ? 0.5 : 0;
-  const newRating = Math.round(rating + 32 * (score - expected(rating, opp.rating)));
+  // the tutorial fight is a fixed easy win: it never moves rating (fresh player ids would otherwise farm it)
+  const newRating = tutorial ? rating : Math.round(rating + 32 * (score - expected(rating, opp.rating)));
   if (opp.snap) {
     opp.snap.rating = Math.round(opp.snap.rating + 32 * (1 - score - expected(opp.snap.rating, rating)));
     if (won) opp.snap.defLosses++;
@@ -113,6 +114,7 @@ export function handleFight(body: any): Res {
   const track = trackOf(runId, playerId, name);
   track.rating = newRating;
   track.days[day] = won ? 1 : 0;
+  if (tutorial) track.tutorial = true;
   // same rules as the client (run.ts recordResult): a loss costs HP by day, the first death is the last chance
   // at 1 HP, the second ends the run, WIN_TARGET wins end it too. A modified client can't fight past its end.
   track.hp ??= START_HP;

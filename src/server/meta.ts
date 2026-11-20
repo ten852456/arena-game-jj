@@ -72,7 +72,9 @@ export function handleFinish(body: any): Res {
   const countedWins = seenWins;
   const countedLosses = seenLosses;
   const capped = countedWins < wins;
-  const reward = rewardFor(countedWins, countedLosses);
+  // a guided-tutorial win (day 1 against a training bot) earns no stardust: player ids are free to make, so it must not be farmable
+  const tutorialWin = track.tutorial && track.days[1] === 1 ? 1 : 0;
+  const reward = rewardFor(countedWins - tutorialWin, countedLosses);
 
   const name = cleanName(body?.name, playerId);
   const player = (db.players[playerId] ??= newPlayer(playerId, name));
