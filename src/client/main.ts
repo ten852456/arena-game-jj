@@ -8,6 +8,7 @@ import { initLang, mountLangSwitch, onLang } from './lang';
 import { getLang, L } from '../i18n';
 import { getAudioSettings, initAudio, music, setLang as setVoiceLang, toggleMuted } from './audio';
 import './style.css';
+import { mountSoundPanel } from './soundPanel';
 
 initLang();
 // voice lines follow the game language (English UI → English announcer)
@@ -24,6 +25,7 @@ function mountMute() {
   mute.className = 'mute-btn small ghost';
   mute.type = 'button';
   mute.dataset.sfx = 'none';
+  let panel: { refresh: () => unknown } | undefined;
   const paint = () => {
     const off = getAudioSettings().muted;
     mute.textContent = off ? '🔇' : '🔊';
@@ -35,10 +37,12 @@ function mountMute() {
   mute.addEventListener('click', () => {
     toggleMuted();
     paint();
+    panel?.refresh();
   });
   onLang(paint);
   paint();
   header.appendChild(mute);
+  panel = mountSoundPanel(paint); // 🎚 volume sliders next to the mute button
 }
 
 async function boot() {

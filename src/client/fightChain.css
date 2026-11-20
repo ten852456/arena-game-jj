@@ -1,0 +1,29 @@
+/* "CHAIN ×N" popup over a fighter in the fight (fightChain.ts). Gold for you, pink for the enemy. */
+.chain-pop {
+  --s: 1; --cp-gold: #ffe2a0; --cp-pink: #ffb7c9;
+  position: fixed; z-index: 900; pointer-events: none; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px; animation: cpop var(--dur, 1000ms) ease-out forwards;
+}
+.cpop-t {
+  font: 800 calc(19px * var(--s)) / 1 Kanit, sans-serif; color: var(--cp-gold); letter-spacing: 0.5px;
+  -webkit-text-stroke: 3px #3a2050; paint-order: stroke fill; text-shadow: 0 0 10px rgba(255, 184, 107, 0.9);
+}
+.cpop-row {
+  display: inline-flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 999px;
+  background: rgba(38, 32, 87, 0.88); border: 1.5px solid var(--cp-gold); box-shadow: 0 0 14px rgba(255, 226, 160, 0.6);
+}
+.cpop-row img { width: calc(30px * var(--s)); height: calc(30px * var(--s)); object-fit: contain; }
+.cpop-row i { font-style: normal; font-size: calc(14px * var(--s)); color: var(--cp-gold); text-shadow: 0 0 6px var(--cp-gold); }
+.chain-pop.s1 .cpop-t { color: var(--cp-pink); text-shadow: 0 0 10px rgba(255, 120, 160, 0.8); }
+.chain-pop.s1 .cpop-row { border-color: var(--cp-pink); box-shadow: 0 0 12px rgba(255, 183, 201, 0.5); }
+.chain-pop.s1 .cpop-row i { color: var(--cp-pink); text-shadow: none; }
+@keyframes cpop {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.5); }
+  14% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  24% { transform: translate(-50%, -50%) scale(1); }
+  78% { opacity: 1; transform: translate(-50%, -62%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -75%) scale(0.95); }
+}
+@keyframes cpop-still { 0%, 100% { opacity: 0; } 12%, 80% { opacity: 1; } }
+.chain-pop.still { animation-name: cpop-still; }
+@media (prefers-reduced-motion: reduce) { .chain-pop { animation-name: cpop-still; } }
