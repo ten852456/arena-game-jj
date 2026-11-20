@@ -243,9 +243,16 @@ export const HEROES: HeroDef[] = [
   // ---------------- ❄ ice ----------------
   {
     id: 'witch', day1: ['shatter', 'frost', 'icelance', 'glacier', 'strike'], name: 'แม่มดน้ำแข็ง', line: 'ice', unique: 'shatter',
-    passive: `${hpTxt('witch')}การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ`,
+    passive: `${hpTxt('witch')}การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ${T['witch.wound'] ? ` · ตีโดนศัตรูที่ถูกแช่แข็ง ศัตรูฟื้นน้อยลง ${pc(T['witch.wound'])}% 3 วิ` : ''}`,
     style: 'หยุดเวลา: แช่แข็งศัตรูแล้วทุบน้ำแข็งแรง x3 ระหว่างที่ศัตรูขยับไม่ได้',
-    hooks: { maxHp: hpOf('witch'), freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10) },
+    hooks: {
+      maxHp: hpOf('witch'),
+      freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10),
+      // น้ำแข็งกัดแผล: a landed hit while the enemy is frozen cuts its healing for 3 s (❄ > ❤)
+      onLanded(me) {
+        if (me.foeFrozen && T['witch.wound'] > 0) me.woundFoe(T['witch.wound'], 3);
+      },
+    },
     ult: {
       name: 'ยุคน้ำแข็ง',
       get trigger() { return both((lv) => `ใช้ skill สายน้ำแข็งครบ ${ultTrig('witch', lv)} ครั้ง`); },

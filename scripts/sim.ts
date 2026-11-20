@@ -399,7 +399,7 @@ async function skills() {
   // heroes that can own each skill (unique skills: one hero), to turn counts into rates
   const ownersOf = (id: string) => (SKILLS[id].hero ? res.filter((x) => x.hero === SKILLS[id].hero) : res);
   hr(`Skills · from bot runs (${runsN} runs, ${won} reached 8 wins)`);
-  console.log('skill       line      pick in 8-win  pick (all)  win% owned  dmg share  fights');
+  console.log('skill       line      pick in 8-win  pick (all)  win% owned  dmg share  fights   off-line pick in 8-win');
   const rows = SKILL_LIST.map((d) => {
     const a = acc[d.id] ?? { own8: 0, ownAll: 0, fights: 0, wins: 0, share: 0, shareN: 0 };
     const owners = ownersOf(d.id);
@@ -409,12 +409,21 @@ async function skills() {
       id: d.id, arch: d.hero ? `${d.line}*` : d.line,
       pick8: won8 ? a.own8 / won8 : NaN, pick: all ? a.ownAll / all : 0,
       winRate: a.fights ? a.wins / a.fights : NaN, dmgShare: a.shareN ? a.share / a.shareN : 0, fights: a.fights,
+      // share of the 8-win runs of heroes NOT of this skill's line that owned it (a generic carry shows up here)
+      off8: (() => {
+        if (d.hero || d.line === 'none') return NaN;
+        const os = res.filter((x) => HEROES.find((h) => h.id === x.hero)?.line !== d.line);
+        const w = os.reduce((n, x) => n + x.won, 0);
+        return w ? os.reduce((n, x) => n + (x.skills[d.id]?.own8 ?? 0), 0) / w : NaN;
+      })(),
     };
   }).sort((x, y) => (y.pick8 || 0) - (x.pick8 || 0));
   for (const r of rows)
     console.log(
-      `${r.id.padEnd(12)}${r.arch.padEnd(10)}${pct(r.pick8, 13)}${pct(r.pick, 12)}${pct(r.winRate, 12)}${pct(r.dmgShare, 11)}${String(r.fights).padStart(8)}`,
+      `${r.id.padEnd(12)}${r.arch.padEnd(10)}${pct(r.pick8, 13)}${pct(r.pick, 12)}${pct(r.winRate, 12)}${pct(r.dmgShare, 11)}${String(r.fights).padStart(8)}${pct(r.off8, 12)}`,
     );
+  const gen = rows.filter((r) => Number.isFinite(r.off8)).sort((x, y) => y.off8 - x.off8)[0];
+  if (gen) target('no generic skill in > 30% of off-line 8-win builds', gen.off8, gen.off8 <= 0.3, `top ${gen.id} ${pct(gen.off8, 0).trim()}`);
   console.log('  * = hero-unique (rates use that hero\'s runs) · win% owned = fight win rate of run builds that had it · dmg share = its share of its side\'s damage');
   report.skills = Object.fromEntries(rows.map((r) => [r.id, r]));
 }

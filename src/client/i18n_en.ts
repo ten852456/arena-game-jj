@@ -193,7 +193,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   },
   witch: {
     name: 'Ice Witch',
-    get passive() { return `${hpPlus('witch')}freezes you apply last ${T['witch.freeze']}s longer`; },
+    get passive() { return `${hpPlus('witch')}freezes you apply last ${T['witch.freeze']}s longer${T['witch.wound'] ? ` · your hits on a frozen enemy cut its healing by ${pc(T['witch.wound'])}% for 3s` : ''}`; },
     style: 'Stop time: freeze the enemy, then Shatter hits ×3 while they cannot move',
     ult: {
       name: 'Ice Age',

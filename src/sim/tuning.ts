@@ -64,7 +64,7 @@ export const TUNING = {
   'uniq.pyro.lv1': 0.9,
   'uniq.pyro.lv3': 1.35,
   'uniq.witch.lv1': 1.05,
-  'uniq.witch.lv3': 1,
+  'uniq.witch.lv3': 0.9,
   'uniq.chrono.lv1': 1.6,
   'uniq.chrono.lv3': 0.7,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
@@ -98,6 +98,8 @@ export const TUNING = {
   'pyro.burn': 1.3,
   /** แม่มดน้ำแข็ง: freezes last + this many seconds */
   'witch.freeze': 0.2,
+  /** แม่มดน้ำแข็ง: a hit on a frozen enemy cuts its healing by this share for 3 s */
+  'witch.wound': 0.5,
   /** นักฆ่า: every landed hit cuts enemy healing by this share for 2 s */
   'assassin.wound': 0.4,
   /** นักดาบคู่: after a dodge, the next hit × this */
