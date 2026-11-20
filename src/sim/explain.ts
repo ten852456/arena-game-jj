@@ -372,8 +372,6 @@ export function explain(
   const ultEffect = (s: Side) => (HEROES_BY_ID[builds[s].hero]?.ult.effect ?? '').split(' · Lv2 ')[T[s].ultLv >= 2 ? 1 : 0] ?? '';
   const ults = [ultTxt(me), ultTxt(foe)].filter(Boolean);
   if (ults.length) fact('ult', L(`ท่าไม้ตาย: ${ults.join(' · ')}`, `Ultimates: ${ults.join(' · ')}`));
-  if (my.dodged || their.dodged)
-    fact('dodge', L(`หลบการตีได้: ${N[me]} ${my.dodged} ครั้ง · ${N[foe]} ${their.dodged} ครั้ง`, `Hits dodged: ${N[me]} ${my.dodged} · ${N[foe]} ${their.dodged}`));
   if (fatigued)
     fact(
       'fatigue',
