@@ -27,7 +27,17 @@ export interface Explanation {
   locks: Lock[];
   /** HP left at the end, as a share of max HP (0..1, can be below 0 on a double KO) */
   hpShare: [number, number];
+  /** what each line of `facts` is about (same order), so the UI can put an icon and colour on it */
+  factKinds: LineKind[];
+  /** what each line of `reasons` is about (same order) */
+  reasonKinds: LineKind[];
+  /** the display names the text was written with, [me, foe] (the UI colours them) */
+  names: [string, string];
 }
+
+/** Topic of one explanation line. Reasons put "what to try" after " → ". */
+export type LineKind =
+  | 'damage' | 'hit' | 'defence' | 'burn' | 'control' | 'chain' | 'speed' | 'thorns' | 'heal' | 'growth' | 'fatigue' | 'ko' | 'idle';
 
 export interface Moment {
   kind: 'hit' | 'chain' | 'comeback' | 'lock';
@@ -283,6 +293,8 @@ export function explain(
 
   // ---------- facts ----------
   const facts: string[] = [];
+  const factKinds: LineKind[] = [];
+  const fact = (kind: LineKind, text: string) => (facts.push(text), factKinds.push(kind));
   const dmg = [skillDamage(r, builds[0], 0), skillDamage(r, builds[1], 1)];
   const top = (s: Side) => {
     const list = dmg[s];
@@ -295,17 +307,18 @@ export function explain(
     ].filter(Boolean);
     return `${best.name} ${best.total} (${pct(best.total, total)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
   };
-  facts.push(L(`ดาเมจรวม: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`, `Total damage: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`));
+  fact('damage', L(`ดาเมจรวม: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`, `Total damage: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`));
   const mt = top(me);
   const ft = top(foe);
-  if (mt) facts.push(L(`skill ทำดาเมจมากสุดของ${N[me]}: ${mt}`, `Top damage skill of${N[me]}: ${mt}`));
-  if (ft) facts.push(L(`skill ทำดาเมจมากสุดของ${N[foe]}: ${ft}`, `Top damage skill of${N[foe]}: ${ft}`));
-  facts.push(L(`ใช้ skill: ${N[me]} ${my.casts} ครั้ง · ${N[foe]} ${their.casts} ครั้ง`, `Skills fired: ${N[me]} ${my.casts} · ${N[foe]} ${their.casts}`));
+  if (mt) fact('damage', L(`skill ทำดาเมจมากสุดของ${N[me]}: ${mt}`, `Top damage skill of${N[me]}: ${mt}`));
+  if (ft) fact('damage', L(`skill ทำดาเมจมากสุดของ${N[foe]}: ${ft}`, `Top damage skill of${N[foe]}: ${ft}`));
+  fact('speed', L(`ใช้ skill: ${N[me]} ${my.casts} ครั้ง · ${N[foe]} ${their.casts} ครั้ง`, `Skills fired: ${N[me]} ${my.casts} · ${N[foe]} ${their.casts}`));
   const ctlOn = (s: Side) => r.stats[1 - s].reduce((n, x) => n + x.fz, 0); // control applied TO side s
   const myCtl = ctlOn(me);
   const theirCtl = ctlOn(foe);
   if (myCtl || theirCtl)
-    facts.push(
+    fact(
+      'control',
       L(
         `โดนควบคุม (แช่แข็ง/ถ่วงเวลา): ${N[me]} ${sec(myCtl)} วิ · ${N[foe]} ${sec(theirCtl)} วิ`,
         `Controlled (freeze/delay): ${N[me]} ${sec(myCtl)}s · ${N[foe]} ${sec(theirCtl)}s`,
@@ -313,10 +326,11 @@ export function explain(
     );
   if (my.bigHit || their.bigHit) {
     const hits = `${N[me]} ${my.bigHit}${my.bigHitSrc ? ` (${srcName(me, my.bigHitSrc)})` : ''} · ${N[foe]} ${their.bigHit}${their.bigHitSrc ? ` (${srcName(foe, their.bigHitSrc)})` : ''}`;
-    facts.push(L(`ตีแรงสุด: ${hits}`, `Biggest hit: ${hits}`));
+    fact('hit', L(`ตีแรงสุด: ${hits}`, `Biggest hit: ${hits}`));
   }
   if (fatigued)
-    facts.push(
+    fact(
+      'fatigue',
       L(`ความเหนื่อยล้าเริ่มที่ ${sec(fStart)} วิ (วันที่ ${r.day}) แล้วแรงขึ้นทุกวินาที`, `Fatigue started at ${sec(fStart)}s (day ${r.day}) and grew every second`),
     );
 
@@ -399,8 +413,8 @@ export function explain(
   };
 
   // ---------- reasons (scored, highest first) ----------
-  const out: [number, string][] = [];
-  const add = (score: number, text: string) => score > 0 && out.push([score, text]);
+  const out: [number, string, LineKind][] = [];
+  const add = (score: number, text: string, kind: LineKind) => score > 0 && out.push([score, text, kind]);
   const lostHp = r.maxHp[me];
   if (!won) {
     if (pct(myCtl, len) >= 20) {
@@ -414,6 +428,7 @@ export function explain(
           `${N[me]}โดนแช่แข็ง/ถ่วงเวลา ${sec(myCtl)} วิ (${pct(myCtl, len)}% ของการสู้) skill แทบไม่ได้ออก → ${tip}`,
           `${N[me]}${was(me)} frozen/delayed for ${sec(myCtl)}s (${pct(myCtl, len)}% of the fight), so skills barely fired → ${tip}`,
         ),
+        'control',
       );
     }
     if (pct(my.blockedByFoe, my.dealt) >= 30) {
@@ -431,6 +446,7 @@ export function explain(
           `โล่ของ${N[foe]}กันดาเมจ${N[me]}ไป ${my.blockedByFoe} (${pct(my.blockedByFoe, my.dealt)}%) → ${tip}`,
           `The shield of${N[foe]}blocked ${my.blockedByFoe} of the damage from${N[me]}(${pct(my.blockedByFoe, my.dealt)}%) → ${tip}`,
         ),
+        'defence',
       );
     }
     if (pct(my.thornsTaken, lostHp) >= 15) {
@@ -441,6 +457,7 @@ export function explain(
           `หนามของ${N[foe]}สะท้อนใส่${N[me]} ${my.thornsTaken} → ตีน้อยครั้งแต่แรงแทนการตีรัว · ${tip}`,
           `The thorns of${N[foe]}reflected ${my.thornsTaken} onto${N[me]}→ hit fewer, harder times instead of many quick hits · ${tip}`,
         ),
+        'thorns',
       );
     }
     if (pct(their.healed, my.dealt) >= 20) {
@@ -454,13 +471,14 @@ export function explain(
           `${N[foe]}ฟื้นเลือด ${their.healed} (${pct(their.healed, my.dealt)}% ของดาเมจ${N[me]}) → ${tip}`,
           `${N[foe]}healed ${their.healed} (${pct(their.healed, my.dealt)}% of the damage from${N[me]}) → ${tip}`,
         ),
+        'heal',
       );
     }
     if (pct(my.burnTaken, lostHp) >= 25) {
       const tip = advise([['cleanse', L('ลบไฟกองที่แรงสุด', 'removes the strongest burn')]], L('เร่งดาเมจให้จบก่อนไฟซ้อน', 'end the fight before burns stack up'));
       add(
         pct(my.burnTaken, lostHp),
-        L(`ไฟทำดาเมจ${N[me]} ${my.burnTaken} (ไม่สนโล่) → ${tip}`, `Burn dealt ${my.burnTaken} to${N[me]}(it ignores shields) → ${tip}`),
+        L(`ไฟทำดาเมจ${N[me]} ${my.burnTaken} (ไม่สนโล่) → ${tip}`, `Burn dealt ${my.burnTaken} to${N[me]}(it ignores shields) → ${tip}`), 'burn',
       );
     }
     if (their.growth >= 8 && their.growth > my.growth * 2) {
@@ -471,6 +489,7 @@ export function explain(
           `${N[foe]}สะสมพลังโจมตีได้ถึง +${their.growth} ต่อการตี (ของ${N[me]} +${my.growth}) ยิ่งนานยิ่งแรง → ${tip}`,
           `${N[foe]}stacked attack power up to +${their.growth} per hit (${N[me]}: +${my.growth}); the longer it goes, the harder they hit → ${tip}`,
         ),
+        'growth',
       );
     }
     if (fatigued && my.dealt < their.dealt)
@@ -480,6 +499,7 @@ export function explain(
           `สู้กันยืดเยื้อเกิน ${sec(fStart)} วิ จนเหนื่อยล้า และ${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → เพิ่ม skill ที่ตีได้ หรืออัปเลเวล skill หลัก`,
           `The fight dragged past ${sec(fStart)}s into fatigue, and${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → add skills that hit, or level up your main skill`,
         ),
+        'fatigue',
       );
     if (their.casts > my.casts * 1.6 && their.casts >= 8) {
       const tip = advise([['chill', L('ศัตรูช้าลง', 'slows the enemy')], ['frost', L('แช่แข็งศัตรู', 'freezes the enemy')]]);
@@ -489,6 +509,7 @@ export function explain(
           `${N[foe]}ใช้ skill ถี่กว่ามาก (${their.casts} ต่อ ${my.casts} ครั้ง) → skill คูลดาวน์สั้น ตราร่ายไว · ${tip}`,
           `${N[foe]}fired skills much more often (${their.casts} vs ${my.casts}) → short-cooldown skills, the Quickcast mark · ${tip}`,
         ),
+        'speed',
       );
     }
     if (!out.length)
@@ -498,38 +519,39 @@ export function explain(
           `${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → อัปเลเวล skill ที่ทำดาเมจมากสุด หรือซื้อช่อง skill เพิ่มในร้าน`,
           `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → level up your top damage skill, or buy another skill slot in the shop`,
         ),
+        'damage',
       );
   } else {
     if (pct(theirCtl, len) >= 20)
       add(
         pct(theirCtl, len),
-        L(`${N[me]}ควบคุม${N[foe]}ได้ ${sec(theirCtl)} วิ (${pct(theirCtl, len)}% ของการสู้)`, `${N[me]}controlled${N[foe]}for ${sec(theirCtl)}s (${pct(theirCtl, len)}% of the fight)`),
+        L(`${N[me]}ควบคุม${N[foe]}ได้ ${sec(theirCtl)} วิ (${pct(theirCtl, len)}% ของการสู้)`, `${N[me]}controlled${N[foe]}for ${sec(theirCtl)}s (${pct(theirCtl, len)}% of the fight)`), 'control',
       );
     if (my.casts > their.casts * 1.6 && my.casts >= 8)
       add(
         Math.round((my.casts / Math.max(1, their.casts)) * 10),
-        L(`${N[me]}ใช้ skill ถี่กว่ามาก (${my.casts} ต่อ ${their.casts} ครั้ง)`, `${N[me]}fired skills much more often (${my.casts} vs ${their.casts})`),
+        L(`${N[me]}ใช้ skill ถี่กว่ามาก (${my.casts} ต่อ ${their.casts} ครั้ง)`, `${N[me]}fired skills much more often (${my.casts} vs ${their.casts})`), 'speed',
       );
     if (pct(their.thornsTaken, r.maxHp[foe]) >= 15)
       add(
         pct(their.thornsTaken, r.maxHp[foe]),
-        L(`หนามของ${N[me]}สะท้อนใส่${N[foe]} ${their.thornsTaken}`, `The thorns of${N[me]}reflected ${their.thornsTaken} onto${N[foe]}`),
+        L(`หนามของ${N[me]}สะท้อนใส่${N[foe]} ${their.thornsTaken}`, `The thorns of${N[me]}reflected ${their.thornsTaken} onto${N[foe]}`), 'thorns',
       );
-    if (my.growth >= 8) add(my.growth * 2, L(`${N[me]}สะสมพลังโจมตีได้ถึง +${my.growth} ต่อการตี`, `${N[me]}stacked attack power up to +${my.growth} per hit`));
+    if (my.growth >= 8) add(my.growth * 2, L(`${N[me]}สะสมพลังโจมตีได้ถึง +${my.growth} ต่อการตี`, `${N[me]}stacked attack power up to +${my.growth} per hit`), 'growth');
     const best = dmg[me].reduce<SkillDamage | null>((b, x) => (!b || x.total > b.total ? x : b), null);
     const total = dmg[me].reduce((n, x) => n + x.total, 0);
     if (best && pct(best.total, total) >= 40)
       add(
         pct(best.total, total),
-        L(`${best.name} ของ${N[me]}ทำดาเมจ ${pct(best.total, total)}% ของทั้งหมด`, `${best.name} of${N[me]}dealt ${pct(best.total, total)}% of all the damage`),
+        L(`${best.name} ของ${N[me]}ทำดาเมจ ${pct(best.total, total)}% ของทั้งหมด`, `${best.name} of${N[me]}dealt ${pct(best.total, total)}% of all the damage`), 'damage',
       );
     if (bothDown)
       add(
         50,
-        L(`ล้มพร้อมกัน แต่${N[me]}เลือดติดลบน้อยกว่า (${endHp[me]} ต่อ ${endHp[foe]})`, `Both fell at once, but${N[me]}${was(me)} less below zero (${endHp[me]} vs ${endHp[foe]})`),
+        L(`ล้มพร้อมกัน แต่${N[me]}เลือดติดลบน้อยกว่า (${endHp[me]} ต่อ ${endHp[foe]})`, `Both fell at once, but${N[me]}${was(me)} less below zero (${endHp[me]} vs ${endHp[foe]})`), 'ko',
       );
     if (!out.length) {
-      if (my.dealt >= their.dealt) add(1, L(`${N[me]}ทำดาเมจได้มากกว่า (${my.dealt} ต่อ ${their.dealt})`, `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt})`));
+      if (my.dealt >= their.dealt) add(1, L(`${N[me]}ทำดาเมจได้มากกว่า (${my.dealt} ต่อ ${their.dealt})`, `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt})`), 'damage');
       else if (fatigued)
         add(
           1,
@@ -537,11 +559,12 @@ export function explain(
             `${N[me]}อึดกว่าในช่วงเหนื่อยล้า (โล่ ${my.shielded} ฟื้นเลือด ${my.healed}) แม้ทำดาเมจน้อยกว่า (${my.dealt} ต่อ ${their.dealt}) → เพิ่ม skill ที่ตีได้ จะชนะง่ายขึ้น`,
             `${N[me]}lasted longer in fatigue (shield ${my.shielded}, healing ${my.healed}) despite dealing less damage (${my.dealt} vs ${their.dealt}) → add skills that hit to win more easily`,
           ),
+          'fatigue',
         );
       else
         add(
           1,
-          L(`${N[me]}เหลือเลือดมากกว่าตอนจบ (โล่ ${my.shielded} ฟื้นเลือด ${my.healed})`, `${N[me]}had more HP left at the end (shield ${my.shielded}, healing ${my.healed})`),
+          L(`${N[me]}เหลือเลือดมากกว่าตอนจบ (โล่ ${my.shielded} ฟื้นเลือด ${my.healed})`, `${N[me]}had more HP left at the end (shield ${my.shielded}, healing ${my.healed})`), 'defence',
         );
     }
   }
@@ -552,6 +575,7 @@ export function explain(
         `ล้มพร้อมกัน แต่${N[me]}เลือดติดลบมากกว่า (${endHp[me]} ต่อ ${endHp[foe]}) → ดาเมจอีกนิดเดียวก็ชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
         `Both fell at once, but${N[me]}${was(me)} further below zero (${endHp[me]} vs ${endHp[foe]}) → a little more damage wins it: level up your main skill or add shield/healing`,
       ),
+      'ko',
     );
   // skills that never fired, with the real reason
   const idle = mySkills.map((_, i) => i).filter((i) => r.stats[me][i] && firesOf(i) === 0);
@@ -559,7 +583,7 @@ export function explain(
     const txt = idle
       .filter((i) => !reported.has(i))
       .map((i) => `${nodeOf(mySkills[i]).name}: ${idleWhy(i)}`);
-    if (txt.length) add(lockedTicks ? 25 : 5, L(`skill ที่ไม่ได้ทำงานเลย · ${txt.join(' · ')}`, `Skills that never fired · ${txt.join(' · ')}`));
+    if (txt.length) add(lockedTicks ? 25 : 5, L(`skill ที่ไม่ได้ทำงานเลย · ${txt.join(' · ')}`, `Skills that never fired · ${txt.join(' · ')}`), 'idle');
   }
   const hitters = dmg[me].filter((x) => x.idx >= 0 && x.total > 0).length;
   if (!won && mySkills.length >= 3 && hitters <= 1)
@@ -569,6 +593,7 @@ export function explain(
         `มีแค่ ${hitters} skill ที่ทำดาเมจ → เพิ่ม skill โจมตีอีกสักตัว (หรือให้ skill ที่มีอยู่เลเวลสูงขึ้น)`,
         `Only ${hitters} skill${hitters === 1 ? '' : 's'} dealt damage → add another attack skill (or level up the ones you have)`,
       ),
+      'damage',
     );
 
   out.sort((a, b) => b[0] - a[0]);
@@ -642,7 +667,7 @@ export function explain(
   for (const m of moments) m.text = sq(m.text);
   for (const l of locks) l.text = sq(l.text);
   return {
-    headline: sq(headline), facts: facts.map(sq), reasons: out.slice(0, 3).map((x) => sq(x[1])), close,
-    tiebreak: tiebreak && sq(tiebreak), moments, locks, hpShare,
+    headline: sq(headline), facts: facts.map(sq), reasons: out.slice(0, 3).map((x) => sq(x[1])), reasonKinds: out.slice(0, 3).map((x) => x[2]), close,
+    tiebreak: tiebreak && sq(tiebreak), moments, locks, hpShare, factKinds, names: [names[me], names[foe]],
   };
 }
