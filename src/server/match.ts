@@ -46,7 +46,9 @@ export function tierFor(day: number, rating: number, streak: number): BotTier {
 }
 
 /** AI opponent build of the chosen difficulty (bot tiers live in src/sim/bot.ts). */
-export const aiBuildFor = (day: number, seed: number, tier: BotTier): Build => randomAiBuild(day, seed, tier);
+export const aiBuildFor = (day: number, seed: number, tier: BotTier, avoidHero?: string): Build => randomAiBuild(day, seed, tier, avoidHero);
+/** Mirror matches (same hero) are never offered on days 1–2 and only half as often later. */
+export const avoidMirror = (day: number, hero: string, coin: number) => (day <= 2 || coin < 0.5 ? hero : undefined);
 
 export interface MatchQuery {
   day: number;

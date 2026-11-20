@@ -1460,7 +1460,7 @@ async function doFight() {
   } catch (err) {
     console.warn('[arena] server unavailable, fighting a local AI', err);
     const seed = hashSeed(r.seed, 'offline', r.day, Date.now());
-    const opp = randomAiBuild(r.day, seed);
+    const opp = randomAiBuild(r.day, seed, r.day <= 2 ? 'easy' : 'normal', r.day <= 2 ? r.hero : undefined);
     const result = simulate(build, opp, seed, r.day);
     res = {
       seed, day: r.day, result, won: result.winner === 0, rating: r.rating, offline: true,

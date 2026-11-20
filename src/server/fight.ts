@@ -4,7 +4,7 @@ import { SIM_VERSION, simulate } from '../sim/combat';
 import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
-import { aiBuildFor, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
+import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild } from './validate';
 
@@ -90,12 +90,15 @@ export function handleFight(body: any): Res {
     result = t.result;
     opp = { name: `AI · ${HEROES_BY_ID[t.build.hero].name}`, build: t.build, rating, ai: true, tier: 'easy' };
   } else if (pool.length) {
-    const near = closest(pool);
+    // no mirror match on days 1–2, fewer later: prefer the candidates of another hero when there are any
+    const all = closest(pool);
+    const other = all.filter((s) => s.build.hero !== build.hero);
+    const near = other.length && avoidMirror(day, build.hero, Math.random()) ? other : all;
     const snap = near[randomInt(0, near.length)];
     opp = { snap, name: snap.name, build: snap.build, rating: snap.rating, ai: false };
   } else {
     const tier = tierFor(day, rating, streak);
-    const aiB = aiBuildFor(day, randomInt(0, 2 ** 32 - 1), tier);
+    const aiB = aiBuildFor(day, randomInt(0, 2 ** 32 - 1), tier, avoidMirror(day, build.hero, Math.random()));
     opp = { name: `AI · ${HEROES_BY_ID[aiB.hero].name}`, build: aiB, rating, ai: true, tier };
   }
 

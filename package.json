@@ -11,7 +11,7 @@
     "start": "tsx src/server/index.ts",
     "typecheck": "tsc --noEmit",
     "balance": "tsx scripts/balance.ts",
-    "test": "tsx scripts/determinism.ts && tsx scripts/i18n-check.ts && tsx scripts/skilltext-check.ts && tsx scripts/upgrade-check.ts",
+    "test": "tsx scripts/determinism.ts && tsx scripts/i18n-check.ts && tsx scripts/skilltext-check.ts && tsx scripts/upgrade-check.ts && tsx scripts/validate-check.ts",
     "smoke": "tsx scripts/smoke.ts",
     "security": "tsx scripts/security-check.ts",
     "runs": "tsx scripts/runs.ts",

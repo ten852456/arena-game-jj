@@ -447,9 +447,11 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
   return s;
 }
 
-export function randomAiBuild(day: number, seed: number, tier: BotTier = 'normal'): Build {
+/** A random hero's bot build. avoidHero: never that hero (no mirror match). */
+export function randomAiBuild(day: number, seed: number, tier: BotTier = 'normal', avoidHero?: string): Build {
   const rng = new Rng(seed);
-  const hero = rng.pick(HEROES);
+  let hero = rng.pick(HEROES);
+  if (avoidHero && hero.id === avoidHero) hero = rng.pick(HEROES.filter((h) => h.id !== avoidHero));
   const second = rng.pick(LINES.filter((a) => a !== hero.line));
   return aiBuild(hero.id, day, [hero.line, second], hashSeed(seed, 'ai'), tier);
 }

@@ -2,14 +2,40 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { MAX_SLOTS, slotsFor } from '../sim/run';
-import { SKILLS, isVariant } from '../sim/skills';
+import { DAY1_GOLD, LV3_DAY, MAX_SLOTS, PRICES, incomeFor, slotsFor } from '../sim/run';
+import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
 const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];
 export const MAX_DAY = 20;
 
-/** Builds come from the client (Phase 2 moves run state to the server): check everything that can be checked. */
+/** Most gold a run can have earned by the end of `day`'s shop: base income + the biggest streak bonus every day + the last-chance supply. */
+export function goldCap(day: number) {
+  let g = DAY1_GOLD;
+  for (let d = 2; d <= day; d++) g += incomeFor(d, 5).base + incomeFor(d, 5).bonus;
+  // the last chance can give 8 gold, or Awaken (every Lv1 skill → Lv2 for free; a first death is day 5 at the earliest)
+  return g + 8 + (day >= 5 ? MAX_SLOTS * PRICES[1] : 0);
+}
+/** Least gold a build can have cost: each skill's Lv1 + upgrades at shop prices, plus the slots above the day's own. */
+export function buildCost(b: Build, day: number) {
+  let g = 0;
+  for (const s of b.skills) {
+    const lv = lvOf(s.v);
+    for (let l = 1; l <= lv; l++) g += PRICES[l - 1];
+    if (SKILLS[s.id]?.hero) g += 1;
+  }
+  // one extra slot can come free from the last chance (เสบียงสุดท้าย); slot prices are 4, 6, 8 …
+  const extra = Math.max(0, b.skills.length - slotsFor(day) - 1);
+  for (let i = 0; i < extra; i++) g += 4 + 2 * i;
+  return g;
+}
+
+/**
+ * Builds come from the client: check the shape, then whether a real run could own it on this day (sim v14 plausibility
+ * caps): Lv1 only on day 1, no Lv3 before LV3_DAY, at most 2 bonuses per skill, at most 1 mark unless every skill is
+ * Lv3 (moon wishes), and the build's least cost within the most gold a run can earn by then. A full server-authoritative
+ * run (server rolls the shop and replays every purchase) would close the rest; see docs/DESIGN_LINES_ULT.md §10c.
+ */
 export function validateBuild(x: unknown, day: number): Build | string {
   const b = x as Build;
   if (!b || typeof b !== 'object' || !HEROES_BY_ID[b.hero]) return 'bad hero';
@@ -30,6 +56,15 @@ export function validateBuild(x: unknown, day: number): Build | string {
     });
   }
   if (new Set(skills.map((s) => s.id)).size !== skills.length) return 'duplicate skill';
+  // plausibility for this day
+  const lvs = skills.map((s) => lvOf(s.v));
+  if (day <= 1 && lvs.some((l) => l > 1)) return 'implausible: upgrades on day 1';
+  if (day < LV3_DAY && lvs.some((l) => l >= 3)) return 'implausible: Lv3 before day ' + LV3_DAY;
+  if (skills.some((s) => (s.bonus?.length ?? 0) > 2)) return 'implausible: too many bonuses';
+  const marks = skills.filter((s) => s.mark).length;
+  if (marks > 1 && !lvs.every((l) => l >= 3)) return 'implausible: too many marks';
+  if (skills.length > slotsFor(day) + 1 && day <= 2) return 'implausible: too many slots';
+  if (buildCost({ hero: b.hero, skills }, day) > goldCap(day)) return 'implausible: costs more gold than a run can have';
   const look = Number.isInteger(b.look) && b.look! > 0 && b.look! < 2 ** 32 ? b.look : undefined;
   return { hero: b.hero, skills, ...(look ? { look } : {}) };
 }
