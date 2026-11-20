@@ -28,6 +28,7 @@ import { IMAGES, skillIcon, archIcon } from './assets';
 import { L } from '../i18n';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
 import { setView } from './layout';
+import { bonusRows, detailTipHTML, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
 
 export interface Stage {
   town: TownScene;
@@ -165,9 +166,9 @@ const randSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 
 /** Icon + number chips for a skill variant; each chip explains its keyword on hover / tap. haste = connect-bonus cooldown cut */
 function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
-  return `<span class="chips-row">${chipsOf(nodeOf(k), cdTicks(k, haste))
+  return `<span class="chips-row info-det">${chipsOf(nodeOf(k), cdTicks(k, haste))
     .map((c) => `<span class="kw kw-${c.kw}" data-kw="${c.kw}">${esc(chipText(c.text))}</span>`)
-    .join('')}</span>`;
+    .join('')}</span>${simpleSkillHTML(k, haste)}`;
 }
 
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
@@ -203,8 +204,9 @@ const bonusText = (b: Bonus, lv: number) =>
  */
 function bonusChips(bonus: Bonus[], lv: number, on: Set<number> | null, can: Set<number> | null = null, dir: (bi: number) => Dir = () => 'any') {
   if (!bonus.length) return '';
-  return `<span class="bonus-row">${bonus
-    .map((b, bi) => {
+  const states: ('on' | 'can' | 'off')[] = [];
+  const tips: string[] = [];
+  const chips = bonus.map((b, bi) => {
       const st = on?.has(bi) ? 'on' : can?.has(bi) ? 'can' : 'off';
       const tip = `<div class="tt-h"><b>${L('🔗 โบนัสเชื่อมต่อ', '🔗 Connect bonus')}</b></div><div class="desc">${bonusText(b, lv)}</div>${
         st === 'on'
@@ -213,9 +215,11 @@ function bonusChips(bonus: Bonus[], lv: number, on: Set<number> | null, can: Set
             ? `<div class="muted small">${L('คุณมี skill ที่เปิดโบนัสนี้ได้ วางให้ติดกัน', 'You own a skill that switches this on: put them next to each other')}</div>`
             : `<div class="muted small">${L('ยังไม่ทำงาน: วาง skill ที่ตรงเงื่อนไขไว้ช่องบนหรือล่าง', 'Not active: put a matching skill in the slot above or below')}</div>`
       }`;
+      states.push(st);
+      tips.push(tip);
       return partnerChip(b, lv, st, st === 'on' ? dir(bi) : 'any', tip);
-    })
-    .join('')}</span>`;
+    });
+  return bonusRows(chips, bonus, lv, states, tips);
 }
 
 /** tooltip of an offer's own connect bonus (shop card "pairs with" chips) */
@@ -281,10 +285,12 @@ function tipBody(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, note = '
   return `<div class="tt-h arch-${d.arch}"><b>${node.name}</b> <small>Lv${lvOf(k.v)}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}
       ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}</div>
     <div class="muted small">${ARCH_NAME[d.arch]}${branch ? L(` · สาย${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
+    ${simpleTipHTML(k, on)}<div class="info-det">
     <div>${chipsHTML(k)}</div>
     <ul class="kwlist">${kws.map((kw) => `<li><b>${KEYWORDS[kw].icon} ${KEYWORDS[kw].name}</b> ${KEYWORDS[kw].desc}</li>`).join('')}</ul>
     ${k.bonus?.length ? `<div class="muted small">${L('โบนัสเชื่อมต่อ (skill ช่องบนหรือล่าง):', 'Connect bonuses (skill above or below):')}</div><ul class="kwlist bonus">${k.bonus.map((b, bi) => `<li class="${on?.has(bi) ? 'on' : ''}">🔗${BONUS_ICON[b.e]} ${bonusText(b, lvOf(k.v))}${on?.has(bi) ? ' <b class="ok">✓</b>' : ''}</li>`).join('')}</ul>` : ''}
     ${k.mark ? `<div class="muted small">${L('ตรา', 'Mark: ')}${R.MARK_INFO[k.mark].name}: ${R.MARK_INFO[k.mark].desc}</div>` : ''}
+    </div>${detailTipHTML(k, on)}
     ${note ? `<div class="muted small">${note}</div>` : ''}`;
 }
 
@@ -317,7 +323,7 @@ function upDeltaHTML(owned: SkillInstance, v: string) {
   a.forEach((x, k) => {
     if (!used.has(k)) lines.push(`<li><s class="d-old">${esc(x.t)}</s></li>`);
   });
-  return `<div class="tt-delta"><div class="td-h">▲ ${esc(nodeOf(owned).name)} Lv${lvOf(owned.v)} → <b>${esc(nodeOf(next).name)} Lv${lvOf(v)}</b></div>${
+  return `${simpleDeltaHTML(owned, v)}<div class="tt-delta info-det"><div class="td-h">▲ ${esc(nodeOf(owned).name)} Lv${lvOf(owned.v)} → <b>${esc(nodeOf(next).name)} Lv${lvOf(v)}</b></div>${
     lines.length ? `<ul>${lines.join('')}</ul>` : `<div class="muted small">${L('ตัวเลขเท่าเดิม แต่ได้ความสามารถใหม่', 'Same numbers, new effect')}</div>`
   }</div>`;
 }

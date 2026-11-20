@@ -1,0 +1,216 @@
+/**
+ * Two levels of skill explanation, generated from the skill data (sim/skills.ts) so every skill, Lv2/Lv3 branch,
+ * mark and connect bonus is always described correctly:
+ * - simpleText: one plain line a new player reads at a glance ("ตี 6 · 3 ที · ทุก 4 วิ" / "Hits 6 ×3 · every 4s")
+ * - detailLines: the exact internals a competitive player wants (cooldown in ticks, damage formula, multipliers…)
+ * Pure text in the current language (L from i18n.ts): no DOM, so scripts/skilltext-check.ts can test every skill.
+ */
+import { L } from '../i18n';
+import { cdTicks, CTL_BASE, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
+import { HASTE_BONUS, POWER_BONUS, bonusValue } from '../sim/links';
+import { nodeOf, type Effect, type SkillNode } from '../sim/skills';
+import { T } from '../sim/tuning';
+import type { Bonus, SkillInstance } from '../sim/types';
+
+type K = Pick<SkillInstance, 'id' | 'v' | 'mark'>;
+type Hit = Extract<Effect, { k: 'hit' }>;
+
+/** 1.5 → "1.5", 6 → "6" */
+const num = (x: number) => String(+x.toFixed(2));
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+/** seconds in the plain line: one decimal (0.55 → 0.6) */
+const s1 = (x: number) => String(+x.toFixed(1));
+/** cooldown ticks → seconds with one decimal, no trailing ".0" */
+export const cdSecs = (ticks: number) => String(+(ticks / 10).toFixed(1));
+
+// ---------------- simple ----------------
+
+function simpleHit(e: Hit): string {
+  const add: string[] = [];
+  if (e.shieldPct) add.push(L('แรงจากโล่', 'shield'));
+  if (e.thornsX) add.push(L('แรงจากหนาม', 'thorns'));
+  if (e.burnPct) add.push(L('ระเบิดไฟ', 'burn left'));
+  if (e.perRemoved) add.push(L(`${e.perRemoved} ต่อของที่ลบได้`, `${e.perRemoved} per removed`));
+  let s: string;
+  if (e.n > 0) s = L(`ตี ${e.n}`, `Hits ${e.n}`) + add.map((a) => ` + ${a}`).join('');
+  else s = L(`ตีด้วย${add.join(' + ')}`, `Hits = your ${add.join(' + ')}`);
+  if (e.times && e.times > 1) s += L(` · ${e.times} ที`, ` ×${e.times}`);
+  if (e.ifSlowed) s = L(`ถ้าศัตรูช้า: ${s}`, `If slowed: ${s.replace(/^Hits/, 'hits')}`);
+  const tail: string[] = [];
+  if (e.pierce) tail.push(e.pierce >= 1 ? L('ทะลุโล่', 'ignores shield') : L(`ทะลุโล่ ${pct(e.pierce)}`, `${pct(e.pierce)} pierce`));
+  if (e.exec) tail.push(L('แรงขึ้นเมื่อศัตรูเลือดต่ำ', 'stronger vs low HP'));
+  if (e.frozen) tail.push(L('แรงขึ้นเมื่อศัตรูแข็ง', 'stronger vs frozen'));
+  if (e.noShield) tail.push(L('แรงขึ้นถ้าศัตรูไม่มีโล่', 'stronger vs no shield'));
+  if (e.leech) tail.push(L('ดูดเลือด', 'drains HP'));
+  if (e.burn) tail.push(L(`ติดไฟ ${s1(e.burn[1])} วิ`, `burns ${s1(e.burn[1])}s`));
+  return [s, ...tail].join(' · ');
+}
+
+function simpleEffect(e: Effect): string {
+  switch (e.k) {
+    case 'hit': return simpleHit(e);
+    case 'shield': return L(`ได้โล่ ${e.n}`, `Shield ${e.n}`);
+    case 'heal': return L(`ฟื้น ${e.n}`, `Heal ${e.n}`);
+    case 'burn':
+      return L(`ติดไฟ ${num(e.dps)}/วิ ${s1(e.secs)} วิ`, `Burns ${num(e.dps)}/s for ${s1(e.secs)}s`) +
+        (e.growthHalf ? L(' (แรงขึ้นตามพลัง)', ' (+power)') : '');
+    case 'freeze': return L(`แช่แข็ง ${s1(e.secs)} วิ`, `Freezes ${s1(e.secs)}s`);
+    case 'slow': return L(`ช้าลง ${pct(e.pct)} ${s1(e.secs)} วิ`, `Slows ${pct(e.pct)} ${s1(e.secs)}s`);
+    case 'delay': return L(`ถ่วงศัตรู ${s1(e.secs)} วิ`, `Delays the enemy ${s1(e.secs)}s`);
+    case 'grow': return L(`ทุกการตี +${e.n} ถาวร`, `All hits +${e.n} for good`);
+    case 'charge':
+      return e.hits && e.hits > 1
+        ? L(`${e.hits} การตีถัดไป ×${e.mult}`, `Next ${e.hits} hits ×${e.mult}`)
+        : L(`การตีถัดไป ×${e.mult}`, `Next hit ×${e.mult}`);
+    case 'thorns':
+      return L(`สะท้อนดาเมจ ${e.n}`, `Reflects ${e.n}`) + (e.perm ? L(' ถาวร', ' for good') : '') +
+        (e.heal !== undefined ? L(' · ศัตรูฟื้นน้อยลง', ' · cuts enemy healing') : '');
+    case 'steadfast':
+      return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
+        (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
+    case 'cleanse':
+      return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
+    case 'dispel':
+      return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +
+        (e.shield !== undefined ? L(' · ทลายโล่', ' · breaks shield') : '') + (e.steal ? L(' · ขโมยพลัง', ' · steals power') : '');
+    case 'amplify': return L(`บัฟ ×2 (สูงสุด +${e.cap})`, `Doubles your buffs (max +${e.cap})`);
+    case 'leech': return L(`การตีถัดไปดูดเลือด ${pct(e.pct)}`, `Next hit drains ${pct(e.pct)}`);
+  }
+}
+
+function simpleEngine(n: SkillNode): string {
+  const en = n.engine;
+  if (!en) return '';
+  if (en.kind === 'gear')
+    return en.n && en.n > 1
+      ? L(`สั่ง skill บน+ล่างทำงาน (แรง ${pct(en.power)})`, `Fires above + below (${pct(en.power)})`)
+      : L(`สั่ง skill ข้างๆ ทำงาน (แรง ${pct(en.power)})`, `Fires a neighbour (${pct(en.power)})`);
+  return L(`สั่ง skill บน+ล่างทำงาน (แรง ${pct(en.power)})`, `Fires above + below (${pct(en.power)})`) + (en.keep ? L(' · ไม่รีเซ็ต', ' · no reset') : '');
+}
+
+/** One plain line for a skill: its effects, then how often (marks are explained in the tooltip). haste = connect-bonus cooldown cut. */
+export function simpleText(k: K, haste = 0): string {
+  const n = nodeOf(k);
+  const parts = [simpleEngine(n), ...n.fx.map(simpleEffect)].filter(Boolean);
+  parts.push(L(`ทุก ${cdSecs(cdTicks(k, haste))} วิ`, `every ${cdSecs(cdTicks(k, haste))}s`));
+  return parts.join(' · ');
+}
+
+/** A connect bonus in a few words: "ต่อ chain: +2 ดาเมจ" / "Chain: +2 damage". */
+export function simpleBonus(b: Bonus, lv: number): string {
+  const v = bonusValue(b.e, lv);
+  const what = {
+    dmg: L(`+${v} ดาเมจ`, `+${v} damage`),
+    shield: L(`+${v} โล่`, `+${v} shield`),
+    haste: L(`ไวขึ้น ${pct(HASTE_BONUS)}`, `${pct(HASTE_BONUS)} faster`),
+    power: L(`แรงขึ้น ${pct(POWER_BONUS)}`, `${pct(POWER_BONUS)} stronger`),
+    trigger: L('ทำงานพร้อมกัน', 'fires together'),
+  }[b.e];
+  return L(`ต่อ chain: ${what}`, `Chain: ${what}`);
+}
+
+// ---------------- detailed ----------------
+
+function hitFormula(e: Hit): string {
+  const base: string[] = [];
+  if (e.n > 0 || (!e.shieldPct && !e.thornsX && !e.burnPct)) base.push(String(e.n));
+  if (e.shieldPct) base.push(L(`${pct(e.shieldPct)}×โล่ของคุณ`, `${pct(e.shieldPct)}×your shield`));
+  if (e.thornsX) base.push(L(`${e.thornsX}×หนามของคุณ`, `${e.thornsX}×your thorns`));
+  if (e.burnPct) base.push(L(`${pct(e.burnPct)}×ไฟที่ยังเหลือบนศัตรู`, `${pct(e.burnPct)}×enemy burn left`));
+  if (e.perRemoved) base.push(L(`${e.perRemoved}×ของที่ลบได้`, `${e.perRemoved}×things removed`));
+  const mult: string[] = [];
+  if (e.exec) mult.push(L(`×${e.exec[1]} ถ้าศัตรูเลือด<${pct(e.exec[0])}`, `×${e.exec[1]} if enemy HP<${pct(e.exec[0])}`));
+  if (e.frozen) mult.push(L(`×${e.frozen} ถ้าศัตรูแข็ง`, `×${e.frozen} if frozen`));
+  if (e.noShield) mult.push(L(`×${e.noShield} ถ้าศัตรูไม่มีโล่`, `×${e.noShield} if no enemy shield`));
+  let s = L(
+    `⚔ ต่อครั้ง = (${base.join(' + ')})${mult.length ? ` ${mult.join(' ')}` : ''} × แรงโบนัส + พลังสะสม + โบนัสดาเมจ, แล้ว × รวมพลัง`,
+    `⚔ per hit = (${base.join(' + ')})${mult.length ? ` ${mult.join(' ')}` : ''} × bonus power + stacked power + bonus damage, then × charge`,
+  );
+  if (e.times && e.times > 1) s += L(` · ${e.times} ครั้ง`, ` · ${e.times} hits`);
+  if (e.ifSlowed) s += L(' · เฉพาะถ้าศัตรูช้าอยู่', ' · only if the enemy is slowed');
+  if (e.pierce) s += L(` · ไม่สนโล่ ${pct(e.pierce)}`, ` · ignores ${pct(e.pierce)} of shield`);
+  if (e.leech) s += L(` · ฟื้น ${pct(e.leech)} ของดาเมจที่เข้าเลือด`, ` · heals ${pct(e.leech)} of HP damage`);
+  if (e.burn) s += L(` · ทุกครั้งที่ตี ไฟ ${e.burn[0]}/วิ ${num(e.burn[1])} วิ`, ` · each hit burns ${e.burn[0]}/s ${num(e.burn[1])}s`);
+  return s;
+}
+
+function effectDetail(e: Effect): string {
+  switch (e.k) {
+    case 'hit': return hitFormula(e);
+    case 'shield': return L(`🛡 โล่ +${e.n} × แรงโบนัส (ไม่หายจนกว่าจะแตก)`, `🛡 shield +${e.n} × bonus power (stays until broken)`);
+    case 'heal': return L(`❤ ฟื้น ${e.n} × แรงโบนัส (หนามศัตรูลดการฟื้น)`, `❤ heal ${e.n} × bonus power (enemy thorns cut healing)`);
+    case 'burn':
+      return L(
+        `🔥 ${e.dps}${e.growthHalf ? ' + ½พลัง' : ''}/วิ × ${num(e.secs)} วิ = ${num(e.dps * e.secs)}${e.growthHalf ? '+' : ''} รวม · ไม่สนโล่ · ซ้อนได้`,
+        `🔥 ${e.dps}${e.growthHalf ? ' + ½power' : ''}/s × ${num(e.secs)}s = ${num(e.dps * e.secs)}${e.growthHalf ? '+' : ''} total · ignores shield · stacks`,
+      );
+    case 'freeze': return L(`❄ ${num(e.secs)} วิ = ${Math.round(e.secs * 10)} tick (ลดเมื่อแรง<100%)`, `❄ ${num(e.secs)}s = ${Math.round(e.secs * 10)} ticks (less when power<100%)`);
+    case 'slow': return L(`🐌 คูลดาวน์ศัตรูเดินช้าลง ${pct(e.pct)} นาน ${num(e.secs)} วิ`, `🐌 enemy cooldowns run ${pct(e.pct)} slower for ${num(e.secs)}s`);
+    case 'delay': return L(`⏪ ดึงคูลดาวน์ศัตรูถอย ${Math.round(e.secs * 10)} tick`, `⏪ pushes enemy cooldowns back ${Math.round(e.secs * 10)} ticks`);
+    case 'grow': return L(`💪 +${e.n} ต่อการตีทุกครั้ง จนจบการสู้`, `💪 +${e.n} on every hit until the fight ends`);
+    case 'charge': return L(`⚡ การตี ${e.hits ?? 1} ครั้งถัดไป ×${e.mult}`, `⚡ next ${e.hits ?? 1} hit(s) ×${e.mult}`);
+    case 'thorns':
+      return L(
+        `🌵 ${e.n}${e.perm ? ' ถาวร' : ''} · สะท้อนไม่เกิน ${pct(THORNS_MAX)} ของดาเมจ · ศัตรูฟื้น ×${e.heal ?? 0.5}`,
+        `🌵 ${e.n}${e.perm ? ' permanent' : ''} · reflects at most ${pct(THORNS_MAX)} of a hit · enemy heals ×${e.heal ?? 0.5}`,
+      );
+    case 'steadfast':
+      return L(
+        `🗿 การคุมที่โดนเหลือ ${pct(e.keep ?? 0.4)}${e.ignoreFreeze ? ' · ไม่โดนแช่แข็งครั้งถัดไป' : ''}`,
+        `🗿 control on you lands at ${pct(e.keep ?? 0.4)}${e.ignoreFreeze ? ' · ignores the next freeze' : ''}`,
+      );
+    case 'cleanse': return L(`✨ ลบไฟ ${e.n >= 99 ? 'ทุก' : e.n} กอง + ความช้า + แช่แข็ง`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn stack(s) + slow + freeze`);
+    case 'dispel':
+      return L(
+        `💥 ลบบัฟศัตรูอย่างละ ${e.n >= 99 ? 'ทั้งหมด' : e.n} + โล่ ${pct(e.shield ?? 0.2)}${e.steal ? ' · ได้พลังที่ลบมา' : ''}`,
+        `💥 removes ${e.n >= 99 ? 'all' : e.n} of each enemy buff + ${pct(e.shield ?? 0.2)} shield${e.steal ? ' · you gain the power removed' : ''}`,
+      );
+    case 'amplify': return L(`✖2 พลัง หนาม รวมพลัง ×2 เพิ่มได้ไม่เกิน +${e.cap}`, `✖2 power, thorns, charge ×2, adding at most +${e.cap}`);
+    case 'leech': return L(`🩸 การตีถัดไปฟื้น ${pct(e.pct)} ของดาเมจ`, `🩸 next hit heals ${pct(e.pct)} of its damage`);
+  }
+}
+
+/** Exact internals for the detailed tooltip, one line each. */
+export function detailLines(k: K, haste = 0): string[] {
+  const n = nodeOf(k);
+  const ticks = cdTicks(k, haste);
+  const mods: string[] = [];
+  if (k.mark === 'quick') mods.push(L('ร่ายไว ×0.6', 'quick ×0.6'));
+  if (haste) mods.push(L(`ต่อ chain −${pct(Math.min(0.5, haste))}`, `chain −${pct(Math.min(0.5, haste))}`));
+  const out = [
+    L(
+      `⏱ ${ticks} tick = ${num(ticks / 10)} วิ${mods.length ? ` (ฐาน ${n.cd} tick, ${mods.join(', ')})` : ''} · 10 tick = 1 วิ · ต่ำสุด 5 tick`,
+      `⏱ ${ticks} ticks = ${num(ticks / 10)}s${mods.length ? ` (base ${n.cd} ticks, ${mods.join(', ')})` : ''} · 10 ticks = 1s · min 5 ticks`,
+    ),
+  ];
+  const direct = n.fx.reduce((s, e) => (e.k === 'hit' && !e.ifSlowed ? s + e.n * (e.times ?? 1) : s), 0);
+  if (direct > 0) out.push(L(`≈ ${num(direct / (ticks / 10))} ดาเมจฐาน/วิ (ยังไม่รวมพลัง โบนัส และตัวคูณ)`, `≈ ${num(direct / (ticks / 10))} base damage/s (before power, bonuses, multipliers)`));
+  if (n.engine) {
+    const en = n.engine;
+    out.push(
+      en.kind === 'gear'
+        ? L(`⚙ ทุกครั้งที่ทำงาน สั่ง ${en.n ?? 1} skill ข้างๆ (สลับบน/ล่าง) ที่แรง ${pct(en.power)} × แรงโบนัส · คูลดาวน์ตัวนั้นเดินต่อ`, `⚙ each fire sets off ${en.n ?? 1} neighbour(s) (taking turns) at ${pct(en.power)} × bonus power · their cooldowns keep running`)
+        : L(`🚀 สั่งบนและล่างที่แรง ${pct(en.power)} × แรงโบนัส · ${en.keep ? 'คูลดาวน์ตัวนั้นไม่เริ่มใหม่' : 'คูลดาวน์ตัวนั้นเริ่มใหม่'}`, `🚀 fires above and below at ${pct(en.power)} × bonus power · ${en.keep ? 'their cooldowns keep their progress' : 'their cooldowns restart'}`),
+    );
+    out.push(L(`ตัวที่ถูกสั่ง ทำงานซ้ำจากการสั่งได้ทุก ${TRIGGER_GAP}–${TRIGGER_GAP_MAX} tick · การคุมลดตามแรง`, `a set-off skill can be set off again after ${TRIGGER_GAP}–${TRIGGER_GAP_MAX} ticks · its control scales with power`));
+  }
+  for (const e of n.fx) out.push(effectDetail(e));
+  if (n.fx.some((e) => e.k === 'freeze' || e.k === 'delay'))
+    out.push(L(`เพดานแช่แข็ง+ถ่วง: ${CTL_BASE} tick + ${pct(CTL_SHARE)} ของเวลาที่สู้ · ศัตรูที่ไม่ได้ใช้ skill ${SHAKE_OFF} tick จะสะบัดหลุด`, `freeze+delay cap: ${CTL_BASE} ticks + ${pct(CTL_SHARE)} of fight time · an enemy idle for ${SHAKE_OFF} ticks shakes it off`));
+  if (k.mark === 'echo') out.push(L('ตรา ตีซ้ำ: ทำงานซ้ำทันทีที่แรง 50% (โบนัสดาเมจ ×0.5)', 'Echo mark: works again right away at 50% (bonus damage ×0.5)'));
+  if (k.mark === 'burn') out.push(L('ตรา เผาไหม้: ทุกครั้งที่ใช้ ไฟ 1/วิ 3 วิ', 'Burn mark: each use burns 1/s for 3s'));
+  if (k.mark === 'steadfast') out.push(L('ตรา ไม่หวั่นไหว: คูลดาวน์เดินต่อตอนโดนแช่แข็ง', 'Steadfast mark: cooldown keeps counting while frozen'));
+  return out;
+}
+
+/** Exact math of a connect bonus (detailed tooltip). */
+export function detailBonus(b: Bonus, lv: number): string {
+  const v = bonusValue(b.e, lv);
+  return {
+    dmg: L(`+${v} ต่อการตี (Lv×1)`, `+${v} per hit (Lv×1)`),
+    shield: L(`+${v} โล่ทุกครั้งที่ทำงาน (1+Lv)`, `+${v} shield per fire (1+Lv)`),
+    haste: L(`คูลดาวน์ ×${1 - HASTE_BONUS} (ซ้อนได้ ลดได้สูงสุด 50%)`, `cooldown ×${1 - HASTE_BONUS} (stacks, max −50%)`),
+    power: L(`ตัวเลขทุกอย่าง ×${1 + POWER_BONUS} (ซ้อนแบบบวก)`, `every number ×${1 + POWER_BONUS} (stacks additively)`),
+    trigger: L(`ตัวที่ติดกันทำงานที่แรงเท่ากัน · ต่อ chain ชั้นลึกแรง ×${T.chainDecay}`, `the neighbour fires at the same power · deeper chain steps ×${T.chainDecay}`),
+  }[b.e];
+}

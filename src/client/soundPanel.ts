@@ -4,6 +4,7 @@ import { L } from '../i18n';
 import { onLang } from './lang';
 import { getAudioSettings, setMuted, setVolume, sfx, voice, type Channel } from './audio';
 import './sound.css';
+import { isDetail, onInfoMode, setDetail, settingsRowHTML } from './infoMode';
 
 const ROWS: { ch: Channel; icon: string; th: string; en: string }[] = [
   { ch: 'master', icon: '🔊', th: 'เสียงทั้งหมด', en: 'Master' },
@@ -41,7 +42,8 @@ export function mountSoundPanel(onChange: () => void) {
           <input type="range" min="0" max="100" step="5" value="${Math.round(s[r.ch] * 100)}" data-ch="${r.ch}">
           <span class="vol-val">${Math.round(s[r.ch] * 100)}</span></label>`,
       ).join('')}
-      <label class="vol-mute"><input type="checkbox" ${s.muted ? 'checked' : ''}> ${L('ปิดเสียงทั้งหมด', 'Mute everything')}</label>`;
+      <label class="vol-mute"><input type="checkbox" ${s.muted ? 'checked' : ''}> ${L('ปิดเสียงทั้งหมด', 'Mute everything')}</label>
+      ${settingsRowHTML()}`;
   };
 
   panel.addEventListener('input', (ev) => {
@@ -61,6 +63,10 @@ export function mountSoundPanel(onChange: () => void) {
   // preview the level when a slider is released
   panel.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
+    if (t.type === 'checkbox' && t.dataset.info !== undefined) {
+      if (t.checked !== isDetail()) setDetail(t.checked);
+      return;
+    }
     if (t.type === 'checkbox') {
       setMuted(t.checked);
       onChange();
@@ -95,6 +101,10 @@ export function mountSoundPanel(onChange: () => void) {
   onLang(() => {
     btn.title = L('ตั้งค่าเสียง', 'Sound settings');
     if (!panel.hidden) render();
+  });
+  onInfoMode(() => {
+    const cb = panel.querySelector<HTMLInputElement>('input[data-info]');
+    if (cb) cb.checked = isDetail();
   });
   render();
 

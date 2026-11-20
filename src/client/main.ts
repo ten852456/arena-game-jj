@@ -13,6 +13,7 @@ import './layout.css';
 import './shopux.css';
 import { initLayout, setGameRefresh } from './layout';
 import { mountSoundPanel } from './soundPanel';
+import { initInfoMode } from './infoMode';
 
 initLang();
 initLayout();
@@ -85,6 +86,7 @@ async function boot() {
   startUI(stage);
   initTutorial();
   mountLangSwitch();
+  initInfoMode(); // simple / detailed skill info: ⓘ in the header, Alt to peek
   mountMute();
   paintTagline();
   onLang(() => {

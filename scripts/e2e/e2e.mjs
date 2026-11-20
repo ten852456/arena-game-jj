@@ -64,6 +64,28 @@ async function play(label, ctxOpts, runs = 1) {
     await tap('[data-a="start"]', 900);
     ok(`${label} run${run}: shop opens`, await has('.shopv'));
     ok(`${label} run${run}: shop has no horizontal scroll`, await noHScroll());
+    if (run === 0) {
+      // simple / detailed skill info: simple line by default, ⓘ toggle shows every chip, Alt peeks (desktop)
+      const vis = (sel) => p.locator(sel).first().isVisible().catch(() => false);
+      ok(`${label}: simple skill text shows by default`, (await vis('.offer-desc .sk-simple')) && !(await vis('.offer-desc .chips-row')), await p.locator('.offer-desc .sk-simple').first().innerText().catch(() => ''));
+      // the ⓘ header switch (upright phones: the checkbox in the 🎚 settings panel)
+      const toggle = async () => {
+        if (await vis('header .info-btn')) return tap('header .info-btn', 300);
+        await tap('header .vol-btn', 300); await tap('.vol-panel input[data-info]', 300); await tap('.vol-panel .vol-x', 300);
+      };
+      await toggle();
+      ok(`${label}: detailed toggle shows the chips`, (await vis('.offer-desc .chips-row')) && !(await vis('.offer-desc .sk-simple')));
+      ok(`${label}: detailed setting is saved`, (await p.evaluate(() => localStorage.getItem('mochi.infoDetail'))) === '1');
+      await shot(`run${run}-shop-detail`);
+      await toggle();
+      ok(`${label}: toggle back to simple`, (await vis('.offer-desc .sk-simple')) && !(await vis('.offer-desc .chips-row')));
+      if (!ctxOpts.hasTouch) {
+        await p.keyboard.down('Alt'); await p.waitForTimeout(150);
+        const peek = await vis('.offer-desc .chips-row');
+        await p.keyboard.up('Alt'); await p.waitForTimeout(150);
+        ok(`${label}: holding Alt shows detail, releasing goes back`, peek && (await vis('.offer-desc .sk-simple')));
+      }
+    }
     await shot(`run${run}-shop-d1`);
 
     let day = 0, fights = 0, sawLC = false, sawMark = false, triedShopTools = false;
