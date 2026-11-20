@@ -13,6 +13,8 @@ const results = [];
 const ok = (name, pass, info = '') => { results.push({ name, pass, info }); console.log(`${pass ? '✔' : '✘'} ${name}${info ? ' — ' + info : ''}`); };
 
 async function play(label, ctxOpts, runs = 1) {
+  // E2E_ONLY=phoneL,desktop runs just those devices
+  if (process.env.E2E_ONLY && !process.env.E2E_ONLY.split(',').includes(label)) return;
   const browser = await chromium.launch({ executablePath: exe, headless: true });
   const ctx = await browser.newContext(ctxOpts);
   const p = await ctx.newPage();
@@ -33,6 +35,105 @@ async function play(label, ctxOpts, runs = 1) {
   const text = async () => (await p.locator('#panel').innerText().catch(() => '')).replace(/\s+/g, ' ');
   const noHScroll = async () => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   const shot = (n) => p.screenshot({ path: path.join(OUT, `${label}-${n}.png`) });
+  const landscape = (ctxOpts.viewport?.width ?? 0) > (ctxOpts.viewport?.height ?? 0);
+  const touch = !!ctxOpts.hasTouch;
+  const noPageScroll = async () => p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1 && document.documentElement.scrollWidth <= window.innerWidth + 1);
+  const runState = async () => p.evaluate(() => JSON.parse(localStorage.getItem('arena.gridrun.v5') || '{}'));
+  const placedN = async () => p.locator('.grid.live [data-blk]').count();
+  const cdp = touch ? await ctx.newCDPSession(p) : null;
+  // a drag gesture: real touch events on touch screens, the mouse elsewhere; target() is read once the drag has started
+  const gesture = async (x0, y0, target, during) => {
+    if (touch) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+      for (let k = 1; k <= 4; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + k * 4, y: y0 - k * 4 }] }); await p.waitForTimeout(30); }
+      const t = await target();
+      for (let k = 1; k <= 14; k++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 + (t.x - x0) * k / 14, y: y0 + (t.y - y0) * k / 14 }] }); await p.waitForTimeout(30); }
+      if (during) await during();
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } else {
+      await p.mouse.move(x0, y0); await p.mouse.down(); await p.mouse.move(x0 + 12, y0 - 12, { steps: 3 });
+      const t = await target();
+      await p.mouse.move(t.x, t.y, { steps: 16 }); await p.waitForTimeout(200);
+      if (during) await during();
+      await p.mouse.up();
+    }
+    await p.waitForTimeout(900);
+  };
+  /** centre of the landing copy's cell nearest its middle (where a dragged card is held) */
+  const landPoint = async () => p.evaluate(() => {
+    const hits = [...document.querySelectorAll('.gs-land rect.hit')].map((e) => e.getBoundingClientRect());
+    if (!hits.length) return null;
+    const c = hits.map((b) => [b.left + b.width / 2, b.top + b.height / 2]);
+    const mx = c.reduce((a, q) => a + q[0], 0) / c.length, my = c.reduce((a, q) => a + q[1], 0) / c.length;
+    let best = c[0];
+    for (const q of c) if (Math.hypot(q[0] - mx, q[1] - my) < Math.hypot(best[0] - mx, best[1] - my) - 0.5) best = q;
+    return { x: best[0], y: best[1] };
+  });
+  /** shop UX checks (HUD, coin pill, prices, icons, landing preview, upgrade badge, drag / tap buy, sell jar, one screen) */
+  const shopUX = async (tag) => {
+    ok(`${label} ${tag}: HUD shows HP heart, moon day and 10 win stars`, (await has('[data-hud="hp"] .hud-heart')) && (await has('[data-hud="day"] .hud-moon')) && (await p.locator('.hud-star').count()) === 10);
+    const st = await runState();
+    const pill = (await p.locator('.gs-shop .gold-pill .gold-n').first().innerText().catch(() => '')).trim();
+    ok(`${label} ${tag}: coin pill on the shop panel shows the gold`, pill === String(st.gold), `pill ${pill}, gold ${st.gold}`);
+    ok(`${label} ${tag}: shop cards show coin prices`, (await p.locator('.gs-card[data-card] .gs-buy .coin .coin-ico').count()) > 0);
+    const icons = await p.evaluate(() => {
+      const imgs = [...document.querySelectorAll('.gs img.skill-icon')];
+      const cards = [...document.querySelectorAll('.gs-card[data-card]')].filter((c) => !c.querySelector('.offer-name img.skill-icon')).length;
+      const blocks = [...document.querySelectorAll('.grid.live svg.blk')].filter((b) => !b.querySelector('image.bl-icon')).length;
+      const bag = [...document.querySelectorAll('.gs-bagitem')].filter((b) => !b.querySelector('img.skill-icon')).length;
+      const broken = imgs.filter((i) => i.complete && i.naturalWidth === 0).map((i) => i.getAttribute('src'));
+      return { n: imgs.length, cards, blocks, bag, broken };
+    });
+    ok(`${label} ${tag}: every shop card, grid block and bag item has its skill icon (and none is broken)`, icons.cards === 0 && icons.blocks === 0 && icons.bag === 0 && icons.broken.length === 0, JSON.stringify(icons));
+    if (landscape) ok(`${label} ${tag}: shop fits one screen (no page scroll)`, await noPageScroll());
+    const up = p.locator('.gs-card.can-up').first();
+    if (await up.count()) ok(`${label} ${tag}: upgrade card shows a ▲Lv badge`, /▲\s*Lv[23]/.test(await up.locator('.up-badge').innerText().catch(() => '')));
+    else ok(`${label} ${tag}: upgrade badge check skipped (no upgrade card in this shop)`, true);
+    // buy a new block onto the grid: drag the card (mouse) / tap the card then the see-through copy (touch)
+    const card = p.locator('.gs-card[data-card]:not(.nobuy):not(.upgrade)').first();
+    if (!(await card.count())) return ok(`${label} ${tag}: buy-onto-grid skipped (no affordable new skill)`, true);
+    await card.scrollIntoViewIfNeeded(); await p.waitForTimeout(200);
+    const art = await card.locator('.offer-art').boundingBox();
+    const n0 = await placedN(), g0 = (await runState()).gold;
+    if (touch) {
+      await card.locator('.offer-art').tap(); await p.waitForTimeout(500);
+      await p.locator('.gs-land').scrollIntoViewIfNeeded().catch(() => {}); await p.waitForTimeout(300);
+      const land = await landPoint();
+      ok(`${label} ${tag}: tapping a card picks it and shows where it lands`, (await has('.gs-card.picked')) && (!!land || (await has('.gs-bag.land-bag'))));
+      await shot(`${tag}-picked`);
+      if (!land) return ok(`${label} ${tag}: tap-to-place skipped (no room on the grid)`, true);
+      await p.touchscreen.tap(land.x, land.y); await p.waitForTimeout(900);
+      const n1 = await placedN(), g1 = (await runState()).gold;
+      ok(`${label} ${tag}: tap card then tap the grid buys it onto the grid`, n1 === n0 + 1 && g1 < g0, `placed ${n0}→${n1}, gold ${g0}→${g1}`);
+    } else {
+      await p.mouse.move(art.x + art.width / 2, art.y + art.height / 2); await p.waitForTimeout(400);
+      const land = await landPoint();
+      ok(`${label} ${tag}: hovering a card shows where its block lands`, !!land || (await has('.gs-bag.land-bag')));
+      await shot(`${tag}-landing`);
+      if (!land) return ok(`${label} ${tag}: drag-buy skipped (no room on the grid)`, true);
+      let ghost = false;
+      await gesture(art.x + art.width / 2, art.y + art.height / 2, async () => land, async () => { ghost = await has('.gs-buyghost.snap:not(.bad)'); await shot(`${tag}-dragbuy`); });
+      const n1 = await placedN(), g1 = (await runState()).gold;
+      ok(`${label} ${tag}: dragging a shop card shows the block snapped on the grid`, ghost);
+      ok(`${label} ${tag}: dropping a shop card on the grid buys it there`, n1 === n0 + 1 && g1 < g0, `placed ${n0}→${n1}, gold ${g0}→${g1}`);
+    }
+    // sell: drag a placed block onto the coin jar
+    {
+      await p.locator('.gs-pack').scrollIntoViewIfNeeded().catch(() => {}); await p.waitForTimeout(300);
+      const s0 = (await runState()).skills.length, g0b = (await runState()).gold;
+      const hit = p.locator('.grid.live [data-blk] rect.hit').last();
+      const hb = await hit.boundingBox();
+      let amt = '';
+      await gesture(hb.x + hb.width / 2, hb.y + hb.height / 2, async () => {
+        const jb = await p.locator('.sell-jar').boundingBox();
+        return { x: jb.x + jb.width / 2, y: jb.y + jb.height / 2 };
+      }, async () => { amt = await p.locator('.sell-jar .jar-amt').innerText().catch(() => ''); });
+      const s1 = (await runState()).skills.length, g1b = (await runState()).gold;
+      ok(`${label} ${tag}: the jar shows the sell price while dragging`, /\+\d/.test(amt), amt);
+      ok(`${label} ${tag}: dropping a block on the coin jar sells it`, s1 === s0 - 1 && g1b > g0b, `skills ${s0}→${s1}, gold ${g0b}→${g1b}`);
+    }
+    if (landscape) ok(`${label} ${tag}: still one screen after buying and selling`, await noPageScroll());
+  };
 
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForTimeout(1500);
@@ -60,6 +161,7 @@ async function play(label, ctxOpts, runs = 1) {
     await tap('[data-a="start"]', 900);
     ok(`${label} run${run}: shop opens`, await has('[data-a="fight"]'));
     ok(`${label} run${run}: shop has no horizontal scroll`, await noHScroll());
+    if (landscape) ok(`${label} run${run}: day-1 shop fits one screen (no page scroll)`, await noPageScroll());
     await shot(`run${run}-shop-d1`);
 
     let day = 0, fights = 0, sawLC = false, sawMark = false, triedShopTools = false;
@@ -87,6 +189,7 @@ async function play(label, ctxOpts, runs = 1) {
           ok(`${label} run${run}: back to Thai`, /[฀-๿]/.test(await text()) && before.length > 0);
           ok(`${label} run${run}: firing timeline visible`, (await has('[class*="timeline"], [class*="tl-"], .gs-tl, svg')));
           if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
+          if (run === 0) await shopUX(`run${run}-d${day}`);
         }
         // buy what we can afford (left to right), then fight
         for (let i = 0; i < 6; i++) {
@@ -164,7 +267,8 @@ async function api() {
 
 await api();
 await play('phone', { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, 2);
-await play('desktop', { viewport: { width: 1280, height: 860 } }, 1);
+await play('phoneL', { viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true }, 1);
+await play('desktop', { viewport: { width: 1280, height: 720 } }, 1);
 const failed = results.filter((r) => !r.pass);
 fs.writeFileSync(path.join(OUT, 'e2e.json'), JSON.stringify(results, null, 1));
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

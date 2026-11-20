@@ -13,6 +13,11 @@ import * as R from '../sim/run';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Build, CombatEvent, CombatResult, Rot, SkillInstance } from '../sim/types';
 import { afterRender as boardAfterRender, flash, initBoard, isDragging } from './shop/board';
+import { buyDragging, initBuy, type Spot3 } from './shop/buy';
+import { COIN, coinFly, coinHTML, goldPillHTML, hudAfterRender, hudHTML, popBlock } from './shop/hud';
+import { initShopLife, shopReact } from './shopLife';
+import './style.css';
+import './gridshop.css';
 import { bonusPanelHTML, linkChips, ownedStates } from './shop/links';
 import { offerBest, placeBag, placeBest } from './shop/placement';
 import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
@@ -209,7 +214,7 @@ function treeHTML() {
         <div class="tleaves">${treeNode(id, `${b}1` as Variant, cur, offer)}${treeNode(id, `${b}2` as Variant, cur, offer)}</div></div>
     </div>`;
   return `<div class="modal" data-a="treeClose"><div class="modal-box arch-${d.arch}" role="dialog" aria-label="${L('ต้นไม้ skill', 'Skill tree')} ${d.name}">
-    <div class="modal-h"><b>${L('ต้นไม้ skill', 'Skill tree')}: ${d.name}</b> <span class="muted small">${ARCH_NAME[d.arch]}${d.hero ? L(' · เฉพาะฮีโร่', ' · Hero only') : ''}</span>
+    <div class="modal-h"><img class="skill-icon" src="${skillIcon(id)}" alt=""><b>${L('ต้นไม้ skill', 'Skill tree')}: ${d.name}</b> <span class="muted small">${ARCH_NAME[d.arch]}${d.hero ? L(' · เฉพาะฮีโร่', ' · Hero only') : ''}</span>
       <button class="small ghost" data-a="treeClose">${L('ปิด', 'Close')} ✕</button></div>
     <p class="muted small">${L('Lv1 → เลือกได้ 1 ใน 2 สายที่ Lv2 → แต่ละสายแยกอีก 2 ทางที่ Lv3 · ร้านจะสุ่มเสนอ 1 ทางของขั้นถัดไปให้ ซื้อแล้วย้อนกลับไม่ได้ · อัปเกรดแล้วบล็อกใช้รูปและที่เดิม และได้โบนัสติดกันเพิ่ม 1 อัน', 'Lv1 → pick 1 of 2 branches at Lv2 → each branch splits 2 more ways at Lv3 · The shop offers one random next step; once bought you cannot go back · An upgrade keeps the block’s shape and place and adds 1 connect bonus')}</p>
     <div class="tree">
@@ -233,7 +238,7 @@ function tipBody(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, fx: Retu
     .join('');
   const kws = [...new Set(chipsOf(node).map((c) => c.kw))].filter((kw) => kw !== 'cd');
   const branch = k.v.length >= 1 ? d.tree[k.v[0] as 'a' | 'b'].style : '';
-  return `<div class="tt-h arch-${d.arch}"><b>${node.name}</b> <small>Lv${lv}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}
+  return `<div class="tt-h arch-${d.arch}"><img class="skill-icon tt-icon" src="${skillIcon(k.id)}" alt=""><b>${node.name}</b> <small>Lv${lv}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}
       ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}</div>
     <div class="muted small">${ARCH_NAME[d.arch]}${branch ? ` · ${L('สาย', 'branch: ')}${branch}` : ''}${k.v ? ` · ${L('มาจาก', 'from')} ${d.name}` : ''}${fx?.power ? ` · ${L('แรงขึ้น', 'stronger by')} ${Math.round(fx.power * 100)}%` : ''}</div>
     <div>${chipsHTML(k, fx?.haste ?? 0)}</div>
@@ -327,6 +332,10 @@ function render() {
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'shop' && sel !== null) highlightFor('g:' + sel);
   boardAfterRender();
+  if (view === 'shop' && run) {
+    hudAfterRender($panel, run);
+    playBuyFx();
+  } else bought = null;
   if (view === 'title') {
     const input = document.getElementById('name') as HTMLInputElement | null;
     input?.addEventListener('input', () => store(NAME_KEY, input.value.trim()));
@@ -409,7 +418,7 @@ function expandCard(r: R.RunState) {
     <div class="offer-name">${what ? L(`ตาราง +1 ${what === 'col' ? 'คอลัมน์' : 'แถว'}`, `Grid +1 ${what === 'col' ? 'column' : 'row'}`) : L('ตาราง 8×6 แล้ว', 'Grid is 8×6')}</div>
     <div class="offer-art"><div class="minigrid" style="width:${nw * 9}px;height:${nh * 9}px">${cells}</div></div>
     <div class="offer-desc">${L(`ถาวรทั้งรอบ · ตอนนี้ ${w}×${h}`, `For the whole run · now ${w}×${h}`)}</div>
-    <button class="gs-buy" data-a="expand" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
+    <button class="gs-buy" data-a="expand" ${why ? 'disabled' : ''}>${!what ? why : why ? `${coinHTML(price, true)} <span class="why">${why}</span>` : `${L('ซื้อ', 'Buy')} ${coinHTML(price)}`}</button>
   </div>`;
 }
 
@@ -435,8 +444,18 @@ function wishCard(r: R.RunState) {
     <div class="offer-name">🌙 ${L('พรจันทร์', 'Moon Wish')}</div>
     <div class="offer-art gs-moon" aria-hidden="true"></div>
     <div class="offer-desc">${desc}</div>
-    <button class="gs-buy" data-a="wish" ${why ? 'disabled' : ''}>${why || `${L('ขอพร', 'Wish')} <span class="coin">${price}</span>`}</button>
+    <button class="gs-buy" data-a="wish" ${why ? 'disabled' : ''}>${why && kind && r.skills.length ? `${coinHTML(price, true)} <span class="why">${why}</span>` : why || `${L('ขอพร', 'Wish')} ${coinHTML(price)}`}</button>
   </div>`;
+}
+
+/** Why shop offer i can't be bought right now ('' = it can). */
+function offerWhy(r: R.RunState, i: number): string {
+  const o = r.shop[i];
+  if (!o) return L('ซื้อแล้ว', 'Sold');
+  if (o.v !== '' && !R.upgradeOf(r, o)) return L('ใช้ไม่ได้แล้ว', 'No longer usable');
+  if (r.gold < R.priceOf(o)) return L('เงินไม่พอ', 'Not enough gold');
+  if (o.v === '' && R.bag(r).length >= R.BAG_MAX) return L('กระเป๋าเต็ม', 'Bag is full');
+  return '';
 }
 
 /** One shop offer: lock, level, tree, name, block, chips, link chips (what its bonuses need), best spot, buy. */
@@ -446,7 +465,8 @@ function offerCard(r: R.RunState, o: Offer, i: number) {
   const up = R.upgradeOf(r, o);
   const price = R.priceOf(o);
   const stale = o.v !== '' && !up;
-  const why = stale ? L('ใช้ไม่ได้แล้ว', 'No longer usable') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
+  const why = offerWhy(r, i);
+  const poor = !stale && r.gold < price;
   const branch = o.v ? d.tree[o.v[0] as 'a' | 'b'].style : '';
   const look = up ? { ...up, v: o.v } : { ...o };
   const locked = R.isLocked(r, i);
@@ -464,14 +484,18 @@ function offerCard(r: R.RunState, o: Offer, i: number) {
         ? `<div class="gs-spot good">✨ ${L(`วางดีๆ ได้ +${best.score} 🔗`, `Best spot: +${best.score} 🔗`)}</div>`
         : '';
   } else if (up) spot = `<div class="gs-spot up">⬆ ${L('ที่เดิม · +1 🔗 ใหม่', 'Same place · +1 new 🔗')}</div>`;
-  return `<div class="card offer gs-card arch-${d.arch}${o.v ? ' upgrade' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}" data-card="${i}">
+  const label = up ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy');
+  const btn = stale ? why : why ? `${coinHTML(price, poor)} <span class="why">${why}</span>` : `${label} ${coinHTML(price)}`;
+  const upMeta = up ? `<span class="up">▲ ${nodeOf(up).name} <small>Lv${lvOf(up.v)}</small> → <b>Lv${lvOf(o.v)}</b>${branch ? ` · ${branch}` : ''}</span>` : '';
+  return `<div class="card offer gs-card arch-${d.arch}${o.v ? ' upgrade' : ''}${up ? ' can-up' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}${locked ? ' locked' : ''}" data-tip="s:${i}" data-card="${i}">
+    ${up ? `<span class="up-shine" aria-hidden="true"></span><span class="up-badge" title="${L('อัปเกรด skill ที่คุณมี', 'Levels up a skill you own')}">▲ Lv${lvOf(o.v)}</span>` : ''}
     <div class="gs-ctop">${lockBtn}<span class="gs-lv">Lv${lvOf(o.v)}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
     <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="">${node.name}</div>
     <div class="offer-art">${pieceHTML(look, { tip: `s:${i}` })}</div>
-    <div class="offer-meta">${o.v ? `<span class="up">⬆ ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="gs-arch">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}</div>
+    <div class="offer-meta">${o.v ? upMeta || `<span class="up">⬆ ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="gs-arch">${ARCH_NAME[d.arch]}</span>`}${d.hero ? `<span class="mark">${L('เฉพาะ', 'Unique')}</span>` : ''}</div>
     <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${links}</div>
     ${spot}
-    <button class="gs-buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${why || `${L('ซื้อ', 'Buy')} <span class="coin">${price}</span>`}</button>
+    <button class="gs-buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${btn}</button>
   </div>`;
 }
 
@@ -529,39 +553,31 @@ function renderShop() {
     : '';
   const bar = k
     ? `<div class="gs-bar placing" role="region" aria-label="${L('กำลังวางบล็อก', 'Placing a block')}">
-        <div class="gs-pick"><span class="gs-pk">${k.x < 0 ? L('✋ กำลังวาง', '✋ Placing') : L('✋ ย้าย', '✋ Moving')}: <b>${nodeOf(k).name}</b> <small>Lv${lvOf(k.v)}</small></span>
+        <div class="gs-pick"><span class="gs-pk"><img class="skill-icon" src="${skillIcon(k.id)}" alt="">${k.x < 0 ? L('✋ กำลังวาง', '✋ Placing') : L('✋ ย้าย', '✋ Moving')}: <b>${nodeOf(k).name}</b> <small>Lv${lvOf(k.v)}</small></span>
           ${linkChips(k.bonus, lvOf(k.v), ownedStates(r.skills, sel!, act))}</div>
         <div id="gs-hintnote" class="gs-hintnote"></div>
         <div class="gs-pbtns">
           <button data-a="rot" aria-label="${L('หมุน', 'Rotate')}">⟳ ${L('หมุน', 'Rotate')}</button>
           ${k.x >= 0 ? `<button data-a="bag">👜 ${L('เก็บ', 'To bag')}</button>` : ''}
-          <button class="gs-sell" data-a="sell" data-i="${sel}">${L('ขาย', 'Sell')} +${R.sellPrice(k)}</button>
+          <button class="gs-sell" data-a="sell" data-i="${sel}">${L('ขาย', 'Sell')} +${coinHTML(R.sellPrice(k))}</button>
           <button class="gs-done" data-a="desel">✕ ${L('เสร็จ', 'Done')}</button>
         </div>
         <div class="gs-ptip">${L('แตะช่องในตารางเพื่อวาง · ลากก็ได้ · สองนิ้วแตะ = หมุน', 'Tap a grid cell to place · or drag · two-finger tap = rotate')}</div>
       </div>`
     : `<div class="gs-bar">
-        <span class="gs-pill gold"><small>${L('เงิน', 'Gold')}</small> <b>${r.gold}</b></span>
+        ${goldPillHTML(r.gold)}
         <button class="primary gs-fight" data-a="fight" ${busy || !placed ? 'disabled' : ''}>⚔ ${L(`สู้วันที่ ${r.day}`, `Fight day ${r.day}`)} <small>${L(`แพ้เสียเลือด ${R.damageFor(r.day)}`, `a loss costs ${R.damageFor(r.day)} HP`)}</small></button>
         <button class="ghost gs-home" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
       </div>`;
   return `<div class="gs${k ? ' has-pick' : ''}"><div class="rotate-hint"><img src="${IMAGES.rotatePhone}" alt=""><span>${L('หมุนโทรศัพท์แนวนอนเพื่อมองเห็นสนามได้กว้างขึ้น', 'Rotate your phone for a wider view')}</span></div>
-  <div class="gs-top">
-    <span class="gs-pill"><small>${L('วันที่', 'Day')}</small> <b>${r.day}</b></span>
-    <span class="gs-pill hp"><small>${L('เลือด', 'HP')}</small> <b>${r.hp}</b>/${R.START_HP}${r.ghost ? ` <span class="mark">${L('กึ่งวิญญาณ', 'Half-ghost')}</span>` : ''}</span>
-    <span class="gs-pill win"><small>${L('ชนะ', 'Wins')}</small> <b>${r.wins}</b>/${R.WIN_TARGET}</span>
-    <span class="gs-pill gold"><small>${L('เงิน', 'Gold')}</small> <b>${r.gold}</b></span>
-    <span class="gs-pill"><small>${L('คะแนน', 'Rating')}</small> <b>${r.rating}</b></span>
-    ${streakText(r.streak) ? `<span class="gs-pill streak">${streakText(r.streak)}</span>` : ''}
-    <span class="stats-right">${concedeHTML()}</span>
-  </div>
+  ${hudHTML(r, streakText(r.streak), concedeHTML())}
   <p class="gs-sub">${L('วันนี้ได้', 'Income today')} +${inc.base}${inc.bonus ? ` ${L('และโบนัส', 'and bonus')} +${inc.bonus}` : ''} · <b>${hero.name}</b>: ${hero.passive}</p>
 
   <section class="gs-sec gs-shop">
-    <div class="gs-h"><h3>${L('ร้าน skill', 'Skill shop')}</h3>
-      <button class="gs-reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s fixed shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">🎲 ${L('สุ่มใหม่', 'Reroll')} <span class="coin">${R.REROLL}</span></button></div>
+    <div class="gs-h">${goldPillHTML(r.gold)}<h3>${L('ร้าน skill', 'Skill shop')}</h3>
+      <button class="gs-reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s fixed shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">🎲 ${L('สุ่มใหม่', 'Reroll')} ${coinHTML(R.REROLL, r.gold < R.REROLL)}</button></div>
     <p class="gs-note">🔓 ${L('กดกุญแจเพื่อ<b>ล็อกการ์ด</b>ไว้ (ฟรี): อยู่ต่อแม้สุ่มใหม่ และกลับมาพรุ่งนี้', 'Press the lock to <b>keep a card</b> (free): it stays through rerolls and comes back tomorrow')}${nLocked ? L(` · ล็อกอยู่ ${nLocked} ใบ`, ` · ${nLocked} locked`) : ''}
-      · ${L('แตะ/ชี้การ์ดเพื่อดูช่องที่เปิดโบนัสได้ (สีทอง)', 'Tap / hover a card to see where it switches bonuses on (gold cells)')}</p>
+      · ${L('ชี้หรือแตะการ์ดเพื่อดูว่าบล็อกจะลงตรงไหน · ลากการ์ดไปวางบนตารางเพื่อซื้อ (มือถือ: แตะการ์ดแล้วแตะช่อง)', 'Hover or tap a card to see where its block lands · drag a card onto the grid to buy it there (phone: tap the card, then a cell)')}</p>
     <div class="gs-cards">${shop}${expandCard(r)}${wishCard(r)}</div>
   </section>
 
@@ -577,7 +593,8 @@ function renderShop() {
             ${bagged.length ? `<button class="small gs-placebag" data-a="placeBag" title="${L('วางของในกระเป๋าลงที่ว่างที่ดีที่สุด บล็อกที่วางแล้วไม่ขยับ', 'Put bag blocks into the best free spots; placed blocks never move')}">📥 ${L('วางลงที่ว่าง', 'Place in free space')}</button>` : ''}</div>
           <div class="gs-bagitems">${bagItems}${'<div class="gs-bagslot"></div>'.repeat(freeSlots)}</div>
         </div>
-        <div class="sellzone gs-sellzone" data-drop="sell">💰 ${L('ลากมาที่นี่เพื่อขาย', 'Drag here to sell')}</div>
+        <div class="sell-jar gs-sellzone" data-drop="sell" aria-label="${L('โหลขาย: ลากบล็อกมาวางเพื่อขาย', 'Sell jar: drop a block here to sell it')}">
+          <span class="jar-ico" aria-hidden="true">${COIN}${COIN}${COIN}</span><span class="jar-t">${L('ลากบล็อกมาใส่โหลเพื่อขาย', 'Drag a block into the jar to sell')}</span><span class="jar-s">${L('ขาย', 'Sell')}</span><b class="jar-amt"></b></div>
       </div>
     </div>
     ${info}
@@ -1138,18 +1155,10 @@ function onClick(ev: Event) {
     case 'enterArena':
       view = runActive() ? phaseView(run!) : 'title';
       break;
-    case 'buy': {
-      const r = run!;
-      const isNew = r.shop[n]?.v === '';
-      err = R.buy(r, n);
-      if (!err && isNew) {
-        // GC1: a new block goes to the free spot that switches on the most bonuses; placed blocks never move
-        const i = r.skills.length - 1;
-        if (placeBest(r, i)) toast = L(`วาง ${nodeOf(r.skills[i]).name} ลงที่ว่างที่ดีที่สุดแล้ว · ลากย้ายได้`, `${nodeOf(r.skills[i]).name} went to the best free spot · drag to move it`);
-        else toast = L(`${nodeOf(r.skills[i]).name} อยู่ในกระเป๋า (ตารางเต็ม)`, `${nodeOf(r.skills[i]).name} is in your bag (the grid is full)`);
-      }
-      break;
-    }
+    case 'buy':
+      if (buyDragging) return;
+      buyOffer(n, null, el.closest('.gs-card')?.getBoundingClientRect() ?? null);
+      return;
     case 'lock':
       err = R.toggleLock(run!, n);
       break;
@@ -1191,10 +1200,17 @@ function onClick(ev: Event) {
     case 'reroll':
       err = R.reroll(run!);
       break;
-    case 'sell':
+    case 'sell': {
+      const from = el.getBoundingClientRect();
       R.sell(run!, n);
       sel = null;
-      break;
+      sfx('sell');
+      saveRun();
+      render();
+      coinFly(from, document.querySelector('.gs-shop .gold-pill')?.getBoundingClientRect() ?? null, 3);
+      shopReact('sell');
+      return;
+    }
     case 'rot':
       err = rotateSelected();
       break;
@@ -1278,8 +1294,13 @@ function onClick(ev: Event) {
       return;
   }
   if (err) toast = err;
-  else if (a === 'buy' || a === 'sell' || a === 'reroll') sfx(a);
-  else if (a === 'expand') sfx('unlock');
+  else if (a === 'reroll') {
+    sfx('reroll');
+    shopReact('reroll');
+  } else if (a === 'expand') {
+    sfx('unlock');
+    shopReact('buy');
+  } else if (a === 'wish') shopReact('buy');
   saveRun();
   render();
 }
@@ -1351,7 +1372,7 @@ function highlightFor(key: string) {
   });
 }
 function onHover(ev: PointerEvent) {
-  if (ev.pointerType !== 'mouse' || isDragging()) return;
+  if (ev.pointerType !== 'mouse' || isDragging() || buyDragging) return;
   const kw = (ev.target as Element).closest?.('[data-kw]') as HTMLElement | null;
   if (kw) return showTip('raw:' + kwTip(kw.dataset.kw as Keyword), ev.clientX, ev.clientY);
   const tt = (ev.target as Element).closest?.('[data-ttxt]') as HTMLElement | null;
@@ -1403,6 +1424,49 @@ function playBlockAnims() {
       );
     });
   }
+}
+
+// ---------- buying (Buy button, drag a card onto the grid, tap a card then a cell) ----------
+/** what was just bought, for the pop + coin animation after the re-render */
+let bought: { idx: number; up: boolean; from: DOMRect | null } | null = null;
+
+/** Buy shop offer i. at = grid spot for a new block, 'bag' = leave it in the bag, null = best free spot / the upgrade. */
+function buyOffer(i: number, at: Spot3 | 'bag' | null, from: DOMRect | null) {
+  const r = run;
+  const o = r?.shop[i];
+  if (!r || !o) return;
+  const up = R.upgradeOf(r, o);
+  const err = R.buy(r, i);
+  if (err) {
+    flash(err);
+    return;
+  }
+  let idx = up ? r.skills.indexOf(up) : r.skills.length - 1;
+  const name = nodeOf(r.skills[idx]).name;
+  if (up) toast = L(`${name} เลเวล ${lvOf(up.v)} แล้ว · +1 🔗`, `${name} is now Lv${lvOf(up.v)} · +1 🔗`);
+  else if (at === 'bag') toast = L(`${name} อยู่ในกระเป๋า · ลากลงตารางได้`, `${name} is in your bag · drag it onto the grid`);
+  else if (at && !R.place(r, idx, at.x, at.y, at.rot)) toast = L(`วาง ${name} แล้ว`, `${name} placed`);
+  // GC1: a new block goes to the free spot that switches on the most bonuses; placed blocks never move
+  else if (placeBest(r, idx)) toast = L(`วาง ${name} ลงที่ว่างที่ดีที่สุดแล้ว · ลากย้ายได้`, `${name} went to the best free spot · drag to move it`);
+  else toast = L(`${name} อยู่ในกระเป๋า (ตารางเต็ม)`, `${name} is in your bag (the grid is full)`);
+  if (idx < 0) idx = r.skills.length - 1;
+  bought = { idx, up: !!up, from };
+  sfx('buy');
+  shopReact('buy');
+  sel = null;
+  saveRun();
+  render();
+}
+
+/** After the shop re-renders: pop the bought block (starburst on a level-up) and fly coins out of the pill. */
+function playBuyFx() {
+  const b = bought;
+  bought = null;
+  if (!b) return;
+  const blk = document.querySelector(`.grid.live [data-blk="${b.idx}"]`) ?? document.querySelector(`.gs-bag [data-blk="${b.idx}"]`)?.closest('.gs-bagitem') ?? null;
+  const host = (blk?.closest('.grid.live, .gs-bagitem') as HTMLElement | null) ?? null;
+  popBlock(blk, blk?.closest('.grid.live') ? host : (blk as HTMLElement | null), b.up);
+  coinFly(document.querySelector('.gs-shop .gold-pill')?.getBoundingClientRect() ?? null, blk?.getBoundingClientRect() ?? b.from, 3);
 }
 
 // ---------- grid: tap, drag, rotate ----------
@@ -1473,7 +1537,23 @@ export function startUI(st: Stage) {
     preview: previewLayout,
     hideTip,
     spin,
+    why: (i) => (run ? offerWhy(run, i) : ''),
+    sold: (from) => {
+      sfx('sell');
+      shopReact('sell');
+      coinFly(from, document.querySelector('.gs-shop .gold-pill')?.getBoundingClientRect() ?? null, 3);
+    },
   });
+  initBuy($panel, {
+    run: () => run,
+    active: () => view === 'shop' && !!run && run.phase === 'shop',
+    why: (i) => (run ? offerWhy(run, i) : ''),
+    buy: buyOffer,
+    preview: previewLayout,
+    hideTip,
+    spin,
+  });
+  initShopLife(scene);
   $panel.addEventListener('pointerleave', hideTip);
   installPatterns();
   run = loadRun();

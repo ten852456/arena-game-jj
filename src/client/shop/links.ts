@@ -98,6 +98,7 @@ export function bonusPanelHTML(skills: SkillInstance[], w: number, h: number) {
       const by = a.to.map((j) => `<b>${nm(j)}</b>`).join(L(' และ ', ' and '));
       return `<li class="bp-item bp-${a.b.e}" data-a="pick" data-i="${a.from}" role="button" tabindex="0">
         <span class="bp-icon" aria-hidden="true">${BONUS_ICON[a.b.e]}</span>
+        <img class="skill-icon bp-ico" src="${skillIcon(k.id)}" alt="">
         <span class="bp-text"><b>${nm(a.from)}</b> <small>Lv${lv}</small>: ${effectShort(a.b, lv)}<br><small class="muted">${L('เปิดโดย', 'switched on by')} ${by}</small></span>
       </li>`;
     })

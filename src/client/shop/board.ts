@@ -8,7 +8,9 @@
  * - Tap a block to pick it (placing mode). On touch the page cannot scroll while a block is picked, so the second tap
  *   always lands on the grid; a bottom bar shows "placing…", rotate, bag, sell and cancel. Tap a cell to put the
  *   block there (the best fitting spot that covers that cell). Two-finger tap on the grid rotates.
- * - Pressing / hovering a shop card lights the cells where that block would switch a bonus on.
+ * - Pressing / hovering a shop card lights the cells where that block would switch a bonus on, and shows the spot a
+ *   new block lands on (buy.ts). On touch the pressed card stays picked: tapping a cell buys it there.
+ * - Dragging a block over the coin jar shows its sell price; dropping it there sells it.
  * Near the top or bottom edge a drag scrolls the page; the bottom zone stops above the sticky bar.
  */
 import { L } from '../../i18n';
@@ -16,6 +18,7 @@ import { cellsOf, footprint, matches } from '../../sim/grid';
 import * as R from '../../sim/run';
 import type { Rot, SkillInstance } from '../../sim/types';
 import { pieceHTML } from '../gridView';
+import { buyAtCell, buyAtLanding, buyDragging, clearLanding, showLanding } from './buy';
 import { bestSpot, offerPiece, rotsOf, scoreAt, spotsFor, withBlockAt, type Spot } from './placement';
 
 export interface BoardCtx {
@@ -32,6 +35,10 @@ export interface BoardCtx {
   preview(skills: SkillInstance[] | null): void;
   hideTip(): void;
   spin(el: Element | null): void;
+  /** why shop offer i can't be bought now ('' = it can) */
+  why(i: number): string;
+  /** a block was sold on the coin jar (after the re-render): coins fly, the hero reacts */
+  sold(from: DOMRect | null): void;
 }
 
 interface Drag {
@@ -71,8 +78,8 @@ let offerPinned = false;
 export const isDragging = () => !!drag?.moved;
 
 // ---------- small helpers ----------
-const gridEl = () => document.querySelector<HTMLElement>('.grid.live');
-function cellPx() {
+export const gridEl = () => document.querySelector<HTMLElement>('.grid.live');
+export function cellPx() {
   const g = gridEl();
   const r = run();
   if (!g || !r) return 40;
@@ -81,7 +88,7 @@ function cellPx() {
 const run = () => ctx.run();
 
 /** Grid cell under a screen point (may be outside the grid). */
-function cellAt(px: number, py: number): [number, number] | null {
+export function cellAt(px: number, py: number): [number, number] | null {
   const g = gridEl();
   if (!g) return null;
   const b = g.getBoundingClientRect();
@@ -106,10 +113,10 @@ export function flash(msg: string) {
   flashTimer = window.setTimeout(() => el!.classList.remove('on'), 2600);
 }
 
-function clearCells(...cls: string[]) {
+export function clearCells(...cls: string[]) {
   document.querySelectorAll(cls.map((c) => `.grid.live .gc.${c}`).join(',')).forEach((el) => el.classList.remove(...cls));
 }
-const cellEl = (x: number, y: number) => document.querySelector(`.grid.live [data-gx="${x}"][data-gy="${y}"]`);
+export const cellEl = (x: number, y: number) => document.querySelector(`.grid.live [data-gx="${x}"][data-gy="${y}"]`);
 
 /** Gold cells: every best-scoring spot (only when it switches something on). */
 function paintSpots(spots: Spot[], shape: string, cls = 'hint') {
@@ -199,19 +206,22 @@ function setLock(on: boolean) {
 // ---------- shop card hints ----------
 function clearOfferHints() {
   offerHint = -1;
+  clearLanding();
   clearCells('ohint');
   document.querySelectorAll('.grid.live .blk.gs-mate, .grid.live .blk.gs-up').forEach((el) => el.classList.remove('gs-mate', 'gs-up'));
   document.querySelectorAll('.gs-card.hinting').forEach((el) => el.classList.remove('hinting'));
 }
 /** Light up where shop offer i would switch a bonus on (gold cells) and the blocks it would link with. */
-export function showOfferHints(i: number) {
+export function showOfferHints(i: number, pinned = false) {
   const r = run();
-  if (i === offerHint) return;
+  if (i === offerHint && !pinned) return;
   clearOfferHints();
   const o = r?.shop[i];
   if (!r || !o) return;
   offerHint = i;
   document.querySelector(`.gs-card[data-card="${i}"]`)?.classList.add('hinting');
+  document.querySelector(`.gs-card[data-card="${i}"]`)?.classList.toggle('picked', pinned);
+  showLanding(i, pinned && !ctx.why(i));
   const blk = (j: number) => document.querySelector(`.grid.live [data-blk="${j}"]`);
   if (o.v !== '') {
     const up = R.upgradeOf(r, o);
@@ -273,9 +283,11 @@ function updateDrag() {
   }
   d.ghost.classList.toggle('snap', !!spot);
   d.ghost.classList.toggle('bad', !!spot && !spot.ok);
+  const overJar = !spot && !!(document.elementFromPoint(d.x, d.y) as HTMLElement | null)?.closest('[data-drop="sell"]');
+  document.querySelector('.sell-jar')?.classList.toggle('over', overJar);
   const badge = d.ghost.querySelector('.gs-gbadge') as HTMLElement | null;
   if (badge) {
-    badge.textContent = spot?.ok && spot.score ? `+${spot.score} 🔗` : spot && !spot.ok ? '✕' : '';
+    badge.textContent = spot?.ok && spot.score ? `+${spot.score} 🔗` : spot && !spot.ok ? '✕' : overJar ? `+${R.sellPrice(k)} 🪙` : '';
     badge.style.display = badge.textContent ? '' : 'none';
   }
   const prev = d.spot;
@@ -328,7 +340,10 @@ function startDrag(d: Drag) {
   clearOfferHints();
   ghostFor(d);
   document.querySelectorAll(`.grid.live [data-blk="${d.i}"], .gs-bag [data-blk="${d.i}"]`).forEach((el) => el.classList.add('gs-lifted'));
-  document.body.classList.add('gs-dragging');
+  document.body.classList.add('gs-dragging', 'skill-dragging');
+  const amt = document.querySelector('.sell-jar .jar-amt');
+  const r = run();
+  if (amt && r?.skills[d.i]) amt.textContent = `+${R.sellPrice(r.skills[d.i])}`;
   hintsFor(d.i, d.rot);
 }
 
@@ -339,7 +354,10 @@ function endDrag(ev: PointerEvent) {
   if (!d || !r) return;
   if (d.raf) cancelAnimationFrame(d.raf);
   d.ghost?.remove();
-  document.body.classList.remove('gs-dragging');
+  document.body.classList.remove('gs-dragging', 'skill-dragging');
+  const jar = document.querySelector('.sell-jar');
+  const jarRect = jar?.getBoundingClientRect() ?? null;
+  jar?.classList.remove('over');
   clearCells('ok', 'bad', 'hint');
   if (!d.moved) return;
   // swallow the click that follows a drag
@@ -369,6 +387,10 @@ function endDrag(ev: PointerEvent) {
     R.sell(r, d.i);
     ctx.setSel(null);
     msg = L(`ขายแล้ว +${gold}`, `Sold +${gold}`);
+    ctx.commit();
+    ctx.sold(jarRect);
+    flash(msg);
+    return;
   }
   ctx.commit();
   flash(msg);
@@ -404,8 +426,17 @@ function onDown(ev: PointerEvent) {
         offerPinned = false;
         clearOfferHints();
       } else {
-        showOfferHints(n);
         offerPinned = true;
+        showOfferHints(n, true);
+        const why = ctx.why(n);
+        const o = run()?.shop[n];
+        if (o && ctx.sel() === null)
+          flash(
+            why ||
+              (o.v !== ''
+                ? L('แตะตารางเพื่ออัปเกรด (หรือกดปุ่มอัปเกรด)', 'Tap the grid to upgrade (or press Upgrade)')
+                : L('แตะช่องในตารางเพื่อซื้อแล้ววางตรงนั้น · หรือแตะเงาบล็อก', 'Tap a grid cell to buy it there · or tap the see-through block')),
+          );
       }
     } else if (!t.closest('.gs-board') && offerPinned) {
       offerPinned = false;
@@ -449,6 +480,7 @@ function onUp(ev: PointerEvent) {
     if (d.moved) return endDrag(ev);
     drag = null;
     if (wasMulti || ev.type === 'pointercancel') return;
+    if (offerPinned && offerHint >= 0 && run()?.shop[offerHint]?.v && (ev.target as Element).closest?.('.gs-board')) return buyAtCell(offerHint, 0, 0);
     // a tap on a block: pick it / drop the pick
     const r = run()!;
     const was = ctx.sel();
@@ -459,10 +491,14 @@ function onUp(ev: PointerEvent) {
     return;
   }
   if (wasMulti || ev.type === 'pointercancel' || !ctx.active()) return;
+  // a tap on the see-through copy of a picked shop card: buy it right there
+  if (offerPinned && offerHint >= 0 && (ev.target as Element).closest?.('.gs-land.tap')) return buyAtLanding(offerHint);
   // a tap on a grid cell while a block is picked: put it there
   const sel = ctx.sel();
   const cell = (ev.target as Element).closest?.('.grid.live [data-gx]') as HTMLElement | null;
   if (cell && sel !== null) tapPlace(sel, Number(cell.dataset.gx), Number(cell.dataset.gy), ev.pointerType !== 'mouse');
+  // ... or while a shop card is picked: buy it there
+  else if (cell && offerPinned && offerHint >= 0) buyAtCell(offerHint, Number(cell.dataset.gx), Number(cell.dataset.gy));
 }
 
 /**
@@ -499,7 +535,7 @@ function tapPlace(i: number, gx: number, gy: number, touch: boolean) {
 }
 
 function onHoverCard(ev: PointerEvent) {
-  if (ev.pointerType !== 'mouse' || drag?.moved || !ctx.active() || offerPinned) return;
+  if (ev.pointerType !== 'mouse' || drag?.moved || buyDragging || !ctx.active() || offerPinned) return;
   const card = (ev.target as Element).closest?.('.gs-card[data-card]') as HTMLElement | null;
   if (card) showOfferHints(Number(card.dataset.card));
   else if (offerHint >= 0) clearOfferHints();

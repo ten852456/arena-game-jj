@@ -2,6 +2,7 @@ import { activeBonuses, bonusValue, cellsOf, footprint, type ActiveBonus } from 
 import { ARCH_NAME, SKILLS, chipsOf, lvOf, nodeOf } from '../sim/skills';
 import type { Archetype, Bonus, Rot, SkillInstance } from '../sim/types';
 import { L } from '../i18n';
+import { skillIcon } from './assets';
 
 /**
  * Skill blocks drawn as one SVG shape each, filled with the skill's own pattern.
@@ -100,7 +101,8 @@ function fitText(s: string, em: number) {
 }
 const escXml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-/** Short label inside the block: on the widest row of the shape (top-most on ties). */
+/** Short label inside the block: the skill icon plus name + main chip on the widest row of the shape (top-most on ties).
+ * The icon gets its own cell when the shape has one off the label row; on a one-row block it sits at the left end. */
 function labelSVG(k: Piece, cells: [number, number][]) {
   const has = (x: number, y: number) => cells.some((p) => p[0] === x && p[1] === y);
   let best = { x: 0, y: 0, run: 0 };
@@ -113,12 +115,30 @@ function labelSVG(k: Piece, cells: [number, number][]) {
   const node = nodeOf(k);
   const chip = chipsOf(node)[0]?.text ?? '';
   const FS = 5.6; // font size in SVG units (one cell = 20)
-  const room = (best.run * U - 3) / FS;
+  const href = skillIcon(k.id);
+  const img = (x: number, y: number, s: number) =>
+    `<image class="bl-icon" href="${href}" x="${x}" y="${y}" width="${s}" height="${s}" preserveAspectRatio="xMidYMid meet" pointer-events="none"/>`;
+  const free = cells.find(([x, y]) => y !== best.y);
+  let icon = '';
+  let lx = best.x;
+  let run = best.run;
+  if (free) icon = img(free[0] * U + 3, free[1] * U + 3, U - 6);
+  else if (run === 1) {
+    // a one-cell block: big icon and the main number, no name
+    return `<g class="blabel" aria-hidden="true" pointer-events="none">${img(best.x * U + 3.5, best.y * U + 1.5, 13)}${
+      chip ? `<text class="bl-chip" x="${best.x * U + U / 2}" y="${best.y * U + 18.6}" font-size="${FS - 1.2}">${escXml(fitText(chip, (U - 2) / (FS - 1.2)))}</text>` : ''
+    }</g>`;
+  } else {
+    icon = img(best.x * U + 2.5, best.y * U + 3, U - 5);
+    lx += 1;
+    run -= 1;
+  }
+  const room = (run * U - 3) / FS;
   const name = fitText(node.name, room);
   const main = fitText(chip, room);
-  const cx = best.x * U + (best.run * U) / 2;
+  const cx = lx * U + (run * U) / 2;
   const y0 = best.y * U;
-  return `<g class="blabel" aria-hidden="true"><text x="${cx}" y="${y0 + 11}" font-size="${FS}">${escXml(name)}</text>${
+  return `<g class="blabel" aria-hidden="true" pointer-events="none">${icon}<text x="${cx}" y="${y0 + 11}" font-size="${FS}">${escXml(name)}</text>${
     main ? `<text class="bl-chip" x="${cx}" y="${y0 + 17.6}" font-size="${FS - 0.4}">${escXml(main)}</text>` : ''
   }</g>`;
 }
@@ -187,7 +207,7 @@ export function gridHTML(
     )
     .join('');
   // the live grid sizes its cells from its column count (--gw) so it never gets wider than a phone
-  const fit = opts.interactive ? `--gw:${w};` : '';
+  const fit = opts.interactive ? `--gw:${w};--gh:${h};` : '';
   return `<div class="grid${opts.small ? ' small' : ''}${opts.interactive ? ' live' : ''}" style="${fit}width:calc(var(--c)*${w});height:calc(var(--c)*${h})">${cells}${blocks}</div>`;
 }
 
