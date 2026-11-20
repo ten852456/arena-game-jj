@@ -1,5 +1,5 @@
 // Fast balance simulator: matchups, whole bot runs, per-skill stats, bot tier check. Uses every CPU core.
-// Usage: npm run sim -- [matchups|runs|skills|tiers|all] [--n 200] [--days 3,5,10,13] [--tier easy|normal|hard|mix]
+// Usage: npm run sim -- [matchups|runs|skills|tiers|lines|all] [--n 200] [--days 3,5,10,13] [--tier easy|normal|hard|mix]
 //          [--seed 1] [--pool 24] [--workers N] [--json out.json] [--compare old.json] [--strict] [--full]
 // See docs/SIMULATOR.md.
 import { WIN_TARGET } from '../src/sim/run';
@@ -30,7 +30,7 @@ const positional = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUE
 const MODE = positional[0] ?? 'all';
 const MODES = ['matchups', 'runs', 'skills', 'tiers', 'lines', 'all'];
 if (!MODES.includes(MODE) || flag('help')) {
-  console.log('usage: npm run sim -- [matchups|runs|skills|tiers|all] [--n 200] [--days 3,5,10,13] [--tier normal|easy|hard|mix]\n' +
+  console.log('usage: npm run sim -- [matchups|runs|skills|tiers|lines|all] [--n 200] [--days 3,5,10,13] [--tier normal|easy|hard|mix]\n' +
     '                        [--seed 1] [--pool 24] [--workers N] [--json out.json] [--compare old.json] [--strict] [--full]');
   process.exit(flag('help') ? 0 : 2);
 }

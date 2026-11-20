@@ -8,6 +8,7 @@ any number of workers), so two reports can be diffed.
 npm run sim                                   # = all, n 200, days 3,5,10,13, normal bots (~20 s on 12 cores)
 npm run sim -- matchups --n 300               # only matchups + fight length / health
 npm run sim -- runs --tier mix                # whole runs, bots of mixed difficulty
+npm run sim -- lines --n 100                  # in-line vs off-line builds, ult value, day-1 openings
 npm run sim -- all --json before.json         # save a machine-readable report
 # ... change numbers in combat.ts / skills.ts ...
 npm run sim -- all --json after.json --compare before.json   # print what moved
@@ -25,7 +26,8 @@ A baseline from the code this tool was written on is kept in `scripts/sim/baseli
 | `runs` | Bots play whole runs through the run API (shop → fight → result, day by day, last chance and marks included, like `scripts/runs.ts`) against a same-day pool of `--pool` bot builds (pool slot *i* is "the same opponent" on every day). Per hero: share of all 8-win runs, reach-8 rate, avg wins, avg days. Also: how often a run meets one opponent ≥ 3 times, how often a lost run lost twice to the same opponent / mostly to one opponent, and health numbers of all run fights. With `--tier mix` it also prints reach-8 by the runner's tier. |
 | `skills` | From the same bot runs, per skill: how many 8-win runs owned it at the end (pick in 8-win), how many runs owned it at all, the fight win rate of run builds that had it, and its average share of its side's damage. Hero-unique skills (`*`) use only that hero's runs. |
 | `tiers` | Bot difficulty check: for each day in `--days`, `n` random hero pairs per tier pair (hard vs normal, normal vs easy, hard vs easy), both sides. Prints win rates per day and on average, and the average unspent gold, skill count and summed skill levels of each tier's builds. |
-| `all` | All four (runs and skills share one simulation). |
+| `lines` | Does following the hero's line pay off? (sim v13) Per hero per day in `--days`: `n` **in-line** bot builds (prefer the hero's line, as usual) vs `n` **off-line** builds of the same hero (bot rule `avoid`: never buys a skill of the hero's line or its unique, so it picks the best generic skills by numbers). Bots are `normal` (`--tier hard` for numbers-aware bots). Prints in-line vs off-line head to head, both vs random normal bots of the day, the **ult value** (in-line builds with an unlocked ult vs the pool, with the ult and with it locked via `simulate(..., { noUlt })`, by ult level), the skills off-line / in-line builds own (Lv2+ keep the branch letter, e.g. `strike-b`), and **day 1**: every affordable opening (2 cards, ≤ 7 gold) of each hero's fixed day-1 shop vs random day-1 bots (easy / normal), best and worst. |
+| `all` | All five (runs and skills share one simulation). |
 
 ## Options
 
@@ -41,6 +43,16 @@ A baseline from the code this tool was written on is kept in `scripts/sim/baseli
 | `--compare FILE` | | print what changed vs an earlier `--json` report: rates that moved ≥ 2 points, other numbers ≥ 5%, the 50 biggest (all with `--full`), and targets that flipped ✔/✘. Warns when n / tier / seed / sim version differ. |
 | `--strict` | | exit code 1 when any target is missed |
 | `--full` | | full hero × hero matrices, and no row limit in `--compare` |
+
+## Lines report targets (sim v13)
+
+| target | value |
+|---|---|
+| in-line beats off-line (average of days ≥ 5) | ≥ 55% |
+| ult worth (with − locked, every hero, Lv1 and Lv2) | ≤ 15 pts |
+| best day-1 opening of every hero vs normal day-1 bots | 50–70% |
+
+`runs` also prints the **ult unlock day** per hero: median (p25–p75) first day the run's build had ult Lv1 / Lv2, and the share of runs that never got there.
 
 ## Counter web (sim v12, 8 lines)
 

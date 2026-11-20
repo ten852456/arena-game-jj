@@ -129,7 +129,7 @@ export interface HeroEn {
 export const HEROES_EN: Record<string, HeroEn> = {
   assassin: {
     name: 'Assassin',
-    get passive() { return `${hpPlus('assassin')}Your first hit of each fight deals ×${T['assassin.first']} · your landed hits cut enemy healing by ${pc(T['assassin.wound'])}% for 2s`; },
+    get passive() { return `${hpPlus('assassin')}Your first hit of each fight${T['assassin.every'] ? ` and every ${T['assassin.every']}th hit` : ''} deals ×${T['assassin.first']} · your landed hits cut enemy healing by ${pc(T['assassin.wound'])}% for 2s`; },
     style: 'One-shot: charge up, unleash heavy hits and finish the enemy when their HP is low',
     ult: {
       name: 'Moon Shadow',

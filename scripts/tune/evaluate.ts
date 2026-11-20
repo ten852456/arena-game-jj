@@ -73,8 +73,8 @@ export const W = {
   zero: 5,
   fatigue: 2,
   length: 30,
-  /** designed counter pairs outside 54–57% (points²) */
-  beats: 2,
+  /** designed counter pairs outside 53–60% (points²; sim v13: soft counters, the owner accepts 50–65) */
+  beats: 3,
   /** ultimate fire rate / fire time misses (points²) */
   ult: 0.5,
   /** in-line builds beat off-line builds of the same hero 58–85% (points²) */
@@ -268,7 +268,7 @@ export function score(m: Measure, xs: number[]): Score {
   for (const [a, bs] of Object.entries(BEATS))
     for (const b of bs) {
       const avg = days.reduce((n, d) => n + (m.pairs[d][`${heroOf(a)}>${heroOf(b)}`] ?? 0.5), 0) / Math.max(1, days.length);
-      parts.beats += W.beats * sq((over(0.54, avg) + over(avg, 0.57)) * 100);
+      parts.beats += W.beats * sq((over(0.53, avg) + over(avg, 0.6)) * 100);
     }
   for (const [h, u] of Object.entries(m.ult)) {
     const lo = ULT_LOW.includes(h) ? TARGETS.ultFireLow : TARGETS.ultFire;
