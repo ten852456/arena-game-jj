@@ -79,7 +79,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   },
   dodge: {
     name: 'Dodge',
-    desc: 'Gain dodge charges (hold 1 · a dodge-line hero holds 2) · each one makes the next hit on you miss completely (no randomness) · burn, poison, thorns and fatigue can’t be dodged · 👁 hits never miss · dodging the hit of a freeze/delay skill also stops that control',
+    desc: `Gain dodge charges (hold 1 · a dodge-line hero holds 2) · each one turns the next hit on you into a graze: only ${Math.round(T['dodge.graze'] * 100)}% lands and none of its riders (no randomness) · burn, poison, thorns and fatigue can’t be dodged · 👁 hits never miss · dodging the hit of a freeze/delay skill also stops that control`,
   },
   poison: {
     name: 'Poison',

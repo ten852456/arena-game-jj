@@ -368,8 +368,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     target.hooks.onDamaged?.(hookApi(target), amount - blocked, src);
   }
 
-  /** ไฟละลายโล่: a burning fighter gains less shield (tuning.ts `burn.shield`) */
-  const meltShield = (f: Fighter, n: number) => (f.burns.length && n > 0 ? Math.max(1, Math.round(n * T['burn.shield'])) : n);
+  /** ไฟ/พิษละลายโล่: a burning or poisoned fighter gains less shield (tuning.ts `burn.shield`) */
+  const meltShield = (f: Fighter, n: number) => ((f.burns.length || f.poisons.length) && n > 0 ? Math.max(1, Math.round(n * T['burn.shield'])) : n);
   function addBurn(foe: Fighter, d: number, secs: number, idx: number) {
     foe.burns.push({ dps: d, t: secs * TPS, idx });
     emit({ type: 'status', side: foe.side, status: 'burn', value: dps(foe.burns) });
