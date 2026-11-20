@@ -500,10 +500,10 @@ const BASE_LIST: SkillDef[] = [
   }),
   // payoff: speed yourself up and blow debuffs away
   def('tailwind', 'wind', {
-    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 2, dot: true }, hit(3)]),
-    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 3, dot: true }, hit(3)], 'ล้างดีบัฟ'),
+    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 99, dot: true }, hit(3)]),
+    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 99, dot: true }, hit(3)], 'ล้างดีบัฟ'),
     a1: N('พายุหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 4 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
-    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 3, dot: true }, { k: 'heal', n: 4 }]),
+    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 99, dot: true }, { k: 'heal', n: 4 }]),
     b: N('ลมกรด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(3, { times: 2 })], 'เร็ว'),
     b1: N('ลมพายุ', 4.5, [{ k: 'haste', pct: 0.4, secs: 3 }, hit(3, { times: 2 })]),
     b2: N('ลมบาด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(4, { times: 2 }), { k: 'slow', pct: 0.2, secs: 2 }]),

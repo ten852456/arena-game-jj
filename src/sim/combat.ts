@@ -39,7 +39,7 @@ export const MAX_TICKS = 90 * TPS;
  * Base HP per day, tuned with `npm run balance` so fights last ≈10–13s on days 1–3,
  * 15–22s on days 4–7 and 23–30s on day 8+ (bot damage per second grows about linearly with the day).
  */
-const HP_BY_DAY = [16, 18, 21, 39, 50, 61, 72, 127, 135, 156, 176, 198, 220];
+const HP_BY_DAY = [15, 20, 28, 44, 57, 68, 80, 127, 135, 156, 176, 198, 220];
 /** HP added per day after the table */
 const HP_LATE_STEP = 60;
 /** tuning.ts multiplier of the base HP on a day */
@@ -297,6 +297,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     poisonFoe(d, secs) {
       addPoison(F[1 - f.side], d, secs, -1);
     },
+    woundFoe(pct, secs) {
+      const foe = F[1 - f.side];
+      if (foe.hp <= 0) return;
+      // quiet: no status event for every hit (the wound chip is enough)
+      foe.woundP = foe.woundT > 0 ? Math.max(foe.woundP, pct) : pct;
+      foe.woundT = Math.max(foe.woundT, Math.round(secs * TPS));
+    },
   });
   const init = snap();
   let trace: CooldownTrace | undefined;
@@ -536,6 +543,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         }
         f.bigHit = Math.max(f.bigHit, dmg);
         foe.hitsTaken++;
+        f.hooks.onLanded?.(hookApi(f));
         // credit for connect bonuses: the +damage bonus plus the share added by power bonuses
         const fromPower = blk.power > 1 ? n - n / blk.power : 0;
         const bonusPart = Math.round((bonusDmg + fromPower) * mult);

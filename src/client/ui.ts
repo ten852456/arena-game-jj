@@ -12,7 +12,7 @@ import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
-import { KEYWORDS, LINE_ICON, LINE_NAME, SKILLS, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
+import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
@@ -304,7 +304,7 @@ function tipBody(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, note = '
   const branch = k.v.length >= 1 ? d.tree[k.v[0] as 'a' | 'b'].style : '';
   return `<div class="tt-h line-${d.line}"><b>${node.name}</b> <small>Lv${lvOf(k.v)}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}
       ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}</div>
-    <div class="muted small">${lineLabel(d.line)}${branch ? L(` · สาย${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
+    <div class="muted small">${lineLabel(d.line)}${SKILL_ROLE[d.id] ? ` · ${ROLE_NAME[SKILL_ROLE[d.id]]}` : ''}${branch ? L(` · สาย${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
     ${simpleTipHTML(k, on)}<div class="info-det">
     <div>${chipsHTML(k)}</div>
     <ul class="kwlist">${kws.map((kw) => `<li><b>${KEYWORDS[kw].icon} ${KEYWORDS[kw].name}</b> ${KEYWORDS[kw].desc}</li>`).join('')}</ul>

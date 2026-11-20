@@ -28,14 +28,14 @@ export const KNOBS: Knob[] = [
   { key: 'engine', lo: 0.8, hi: 1.2, step: 0.05, why: 'engine skills power' },
   { key: 'control', lo: 0.8, hi: 1.2, step: 0.05, why: 'freeze / slow / delay length (0-skill, control heroes)' },
   ...LINES.flatMap((a) => [
-    { key: `line.${a}.lv1` as TuningKey, lo: 0.7, hi: 1.4, step: 0.05, why: `${a} line shared skills, early (Lv1)` },
-    { key: `line.${a}.lv3` as TuningKey, lo: 0.7, hi: 1.4, step: 0.05, why: `${a} line shared skills, late (Lv3)` },
+    { key: `line.${a}.lv1` as TuningKey, lo: 0.6, hi: 1.6, step: 0.05, why: `${a} line shared skills, early (Lv1)` },
+    { key: `line.${a}.lv3` as TuningKey, lo: 0.6, hi: 1.6, step: 0.05, why: `${a} line shared skills, late (Lv3)` },
   ]),
   ...HEROES.flatMap((h) => [
-    { key: `uniq.${h.id}.lv1` as TuningKey, lo: 0.75, hi: 1.4, step: 0.05, why: `${h.id} unique skill Lv1 (early curve)` },
-    { key: `uniq.${h.id}.lv3` as TuningKey, lo: 0.75, hi: 1.35, step: 0.05, why: `${h.id} unique skill Lv3 (late curve)` },
+    { key: `uniq.${h.id}.lv1` as TuningKey, lo: 0.6, hi: 1.7, step: 0.05, why: `${h.id} unique skill Lv1 (early curve)` },
+    { key: `uniq.${h.id}.lv3` as TuningKey, lo: 0.6, hi: 1.7, step: 0.05, why: `${h.id} unique skill Lv3 (late curve)` },
   ]),
-  ...HEROES.map((h): Knob => ({ key: `cd.${h.id}` as TuningKey, lo: 0.8, hi: 1.2, step: 0.05, why: `${h.id} unique skill cooldown (short = early)` })),
+  ...HEROES.map((h): Knob => ({ key: `cd.${h.id}` as TuningKey, lo: 0.8, hi: ['assassin', 'duelist', 'berserker', 'chrono'].includes(h.id) ? 1 : 1.2, step: 0.05, why: `${h.id} unique skill cooldown (short = early; 5 s uniques stay early hitters)` })),
   ...HEROES.map((h): Knob => {
     const v = TUNING[`hp.${h.id}` as TuningKey];
     return { key: `hp.${h.id}` as TuningKey, lo: +(v - 0.15).toFixed(2), hi: +(v + 0.15).toFixed(2), step: 0.02, why: `${h.id} max HP` };

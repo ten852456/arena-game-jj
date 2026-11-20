@@ -144,3 +144,14 @@ Timing on 12 cores: one generation ≈ 45–90 s (depends on other load on the m
 is ≈ 18–25 generations, then prune and the final check (≈ 4 min, reserved inside the budget). `--resume` first
 re-scores the saved base and best (the objective may have changed since the save).
 For a bigger change, run `--resume` again (each run adds generations).
+
+## Sim v12 (8 lines + ultimates) changes to the tuner
+
+- Days scored: `3,5,10,13` (the matchup days of `npm run sim`); every hero's curve is **flat 50%** (owner target:
+  every hero 45–55% on each of those days), band ±4.
+- New objective terms: `beats` (each of the 16 designed counter pairs in `scripts/sim/targets.ts` `BEATS`, averaged over
+  the days, outside 54–57% costs points²) and `ult` (fire rate below the target + 3 points, median fire time outside
+  43–67% of the fight).
+- Knobs: `arch.<archetype>.*` became `line.<line>.lv1/lv3` (8 lines, range 0.7–1.4); new `duelist.counter`,
+  `thornguard.poison`, `poison.heal` and per-hero `ult.<hero>.trig` / `ult.<hero>.pow`.
+- `dist` weight 25 → 5: the v12 redesign needed bigger moves than a nudge.

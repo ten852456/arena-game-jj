@@ -129,7 +129,7 @@ export interface HeroEn {
 export const HEROES_EN: Record<string, HeroEn> = {
   assassin: {
     name: 'Assassin',
-    get passive() { return `${hpPlus('assassin')}Your first hit of each fight deals ×${T['assassin.first']}`; },
+    get passive() { return `${hpPlus('assassin')}Your first hit of each fight deals ×${T['assassin.first']} · your landed hits cut enemy healing by ${pc(T['assassin.wound'])}% for 2s`; },
     style: 'One-shot: charge up, unleash heavy hits and finish the enemy when their HP is low',
     ult: {
       name: 'Moon Shadow',
@@ -182,7 +182,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   thornguard: {
     name: 'Venom Thornguard',
     get passive() {
-      return `Max HP +${pc(T['hp.thornguard'] - 1)}% · each time you are hit, the attacker is poisoned 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
+      return `Max HP +${pc(T['hp.thornguard'] - 1)}% · every 2nd hit you take poisons the attacker 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
     },
     style: 'Poison on poison: whoever hits you gets poisoned; stack long poison, then burst it (poison ignores shields and can’t be dodged)',
     ult: {
@@ -273,8 +273,8 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
   {
     title: 'Pick 1 of 3 heroes',
     body: [
-      'Heroes come in 4 styles: <b>Tank</b> (tough, hits back) · <b>Burst</b> (big hits) · <b>Scaling</b> (stronger over time) · <b>Control</b> (freeze, slow)',
-      'Each run offers 3 heroes from different styles. Every hero has a <b>passive</b> and a <b>unique skill</b>',
+      'Skills come in 8 lines: <b>⚔ Hit · 💨 Dodge · 🛡 Shield · ❤ Heal · 🔥 Burn · ☠ Poison · ❄ Ice · 🌪 Wind</b>. Each line beats 2 lines and loses to 2 (a small edge, not a lock), e.g. shields block hits, but burn and poison ignore shields',
+      'Each hero has one main line · 3 pieces of it unlock the hero’s <b>★ Ultimate</b> (5 pieces = Lv2 · a Lv3 skill counts as 2), which fires by itself once per fight',
       'See every hero in the <b>Hero Hall</b> in town',
     ],
   },

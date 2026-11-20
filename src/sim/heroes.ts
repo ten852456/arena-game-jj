@@ -32,6 +32,8 @@ export interface HookFighter {
   dodge(n: number): void;
   /** poison the enemy: dps per second for secs */
   poisonFoe(dps: number, secs: number): void;
+  /** cut the enemy's healing by pct for secs */
+  woundFoe(pct: number, secs: number): void;
 }
 
 /**
@@ -59,6 +61,8 @@ export interface CombatHooks {
   slow?(pct: number, secs: number): [number, number];
   /** this fighter dodged a hit */
   onDodge?(me: HookFighter): void;
+  /** a direct hit of this fighter landed (was not dodged) */
+  onLanded?(me: HookFighter): void;
 }
 
 /** What a hero's ultimate does, in words (Thai; client/i18n_en.ts has English). Numbers come from tuning.ts. */
@@ -108,13 +112,16 @@ export const HEROES: HeroDef[] = [
   // ---------------- ⚔ hit ----------------
   {
     id: 'assassin', day1: ['execute', 'strike', 'heavy', 'charge', 'jab'], name: 'นักฆ่า', line: 'hit', unique: 'execute',
-    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้แรง ×${T['assassin.first']}`,
+    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`,
     style: 'ตีทีเดียวจบ: รวมพลังแล้วปล่อยการโจมตีหนักๆ ปลิดชีพตอนศัตรูเลือดต่ำ',
     hooks: {
       maxHp: hpOf('assassin'),
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
         return me.flags.hits === 1 ? dmg * T['assassin.first'] : dmg;
+      },
+      onLanded(me) {
+        me.woundFoe(T['assassin.wound'], 2);
       },
     },
     ult: {
@@ -203,11 +210,13 @@ export const HEROES: HeroDef[] = [
   // ---------------- ☠ poison ----------------
   {
     id: 'thornguard', day1: ['spikewall', 'venom', 'plague', 'thorns', 'strike'], name: 'นักรบหนามพิษ', line: 'poison', unique: 'spikewall',
-    passive: `เลือดสูงสุด +${pc(T['hp.thornguard'] - 1)}% · ทุกครั้งที่โดนตี ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
+    passive: `เลือดสูงสุด +${pc(T['hp.thornguard'] - 1)}% · โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
     style: 'พิษซ้อนพิษ: ใครตีเราก็ติดพิษ สะสมพิษให้ซ้อนกันนานๆ แล้วระเบิดพิษปิดเกม (พิษไม่สนโล่และหลบไม่ได้)',
     hooks: {
       onDamaged(me, _n, src) {
-        if (src !== 'burn' && src !== 'poison' && src !== 'fatigue' && src !== 'thorns' && me.hp > 0) me.poisonFoe(1, T['thornguard.poison']);
+        if (src === 'burn' || src === 'poison' || src === 'fatigue' || src === 'thorns' || src === 'ult' || me.hp <= 0) return;
+        me.flags.hitsTaken = (me.flags.hitsTaken ?? 0) + 1;
+        if (me.flags.hitsTaken % 2 === 0) me.poisonFoe(1, T['thornguard.poison']);
       },
       thornsSecs: 13,
       maxHp: hpOf('thornguard'),
