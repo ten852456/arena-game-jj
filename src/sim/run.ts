@@ -19,6 +19,14 @@ export const MAX_LV = 3;
 export const DAY1_GOLD = 7;
 /** Skill slots: 3 on day 1, +1 every 3 days up to 6; buying slots can go up to MAX_SLOTS. */
 export const MAX_SLOTS = 8;
+/** Lv3 upgrades are offered from this day on (shop, moon wish, bots): before it a Lv2 skill gets no upgrade card */
+export const LV3_DAY = 4;
+/** shop rolls: a new skill of the hero's own line is this many times as likely as any other skill */
+export const LINE_WEIGHT = 2;
+/** from this day the hero's unique, when not owned, is always in the shop (one place) */
+export const UNIQUE_BACK_DAY = 3;
+/** can a skill at variant v be upgraded on this day? */
+export const canUpgrade = (v: string, day: number) => lvOf(v) < MAX_LV && (lvOf(v) < 2 || day >= LV3_DAY);
 
 /**
  * Shop offer: a skill at a tree variant. v = '' is a new Lv1 skill (with its rolled connect bonuses); any other v is
@@ -184,9 +192,24 @@ function rollShop(s: RunState) {
   const rng = new Rng(hashSeed(s.seed, s.day, s.rolls));
   const owned = new Set(s.skills.map((k) => k.id));
   const fresh = SKILL_LIST.filter((d) => (!d.hero || d.hero === s.hero) && !owned.has(d.id) && !keptIds.has(d.id)).map((d) => d.id);
-  const ups = s.skills.filter((k) => lvOf(k.v) < MAX_LV && !keptIds.has(k.id)).map((k) => k.id);
+  const ups = s.skills.filter((k) => canUpgrade(k.v, s.day) && !keptIds.has(k.id)).map((k) => k.id);
   const picks: Offer[] = [];
   const need = SHOP_SIZE - keptIds.size;
+  const line = HEROES_BY_ID[s.hero]?.line;
+  // the unique comes back: from UNIQUE_BACK_DAY, a hero without its unique always finds it in the shop
+  const uniq = HEROES_BY_ID[s.hero]?.unique;
+  if (uniq && s.day >= UNIQUE_BACK_DAY && fresh.includes(uniq) && need > 0) {
+    fresh.splice(fresh.indexOf(uniq), 1);
+    picks.push({ id: uniq, v: '', bonus: rollBonuses(rng, uniq, s.hero) });
+  }
+  /** weighted pick of a new skill: the hero's own line counts LINE_WEIGHT times */
+  const pickFresh = () => {
+    const w = fresh.map((id) => (SKILLS[id].line === line ? LINE_WEIGHT : 1));
+    let r = rng.next() * w.reduce((a, b) => a + b, 0);
+    let i = 0;
+    while (i < w.length - 1 && (r -= w[i]) >= 0) i++;
+    return fresh.splice(i, 1)[0];
+  };
   while (picks.length < need && (fresh.length || ups.length)) {
     const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < 0.5);
     if (takeUp) {
@@ -194,7 +217,7 @@ function rollShop(s: RunState) {
       const k = s.skills.find((x) => x.id === id)!;
       picks.push({ id, v: rng.pick(nextVariants(k.v)) });
     } else {
-      const id = fresh.splice(rng.int(fresh.length), 1)[0];
+      const id = pickFresh();
       picks.push({ id, v: '', bonus: rollBonuses(rng, id, s.hero) });
     }
   }
@@ -232,7 +255,7 @@ export const WISH_BASE = 6;
 export const wishPrice = (s: RunState) => WISH_BASE + 2 * (s.wishes ?? 0);
 export type WishKind = 'upgrade' | 'mark' | null;
 export function wishKind(s: RunState): WishKind {
-  if (s.skills.some((k) => lvOf(k.v) < MAX_LV)) return 'upgrade';
+  if (s.skills.some((k) => canUpgrade(k.v, s.day))) return 'upgrade';
   if (s.skills.some((k) => !k.mark)) return 'mark';
   return null;
 }
@@ -243,13 +266,19 @@ export function wish(s: RunState): WishResult {
   const price = wishPrice(s);
   if (s.gold < price) return { err: 'เงินไม่พอ' };
   const rng = new Rng(hashSeed(s.seed, 'wish', s.day, s.wishes ?? 0));
-  const pool = s.skills.map((k, i) => ({ k, i })).filter(({ k }) => (kind === 'upgrade' ? lvOf(k.v) < MAX_LV : !k.mark));
+  const pool = s.skills.map((k, i) => ({ k, i })).filter(({ k }) => (kind === 'upgrade' ? canUpgrade(k.v, s.day) : !k.mark));
   const { k, i } = rng.pick(pool);
   const from = k.v;
   s.gold -= price;
   s.wishes = (s.wishes ?? 0) + 1;
   if (kind === 'upgrade') {
     k.v = rng.pick(nextVariants(k.v));
+    // an upgrade card in the shop (locked or not) for this skill no longer fits: turn it into its next level (or drop it)
+    s.shop.forEach((o, j) => {
+      if (!o || o.id !== k.id || o.v === '') return;
+      s.shop[j] = canUpgrade(k.v, s.day) ? { id: k.id, v: rng.pick(nextVariants(k.v)) } : null;
+      if (!s.shop[j] && s.locks?.[j]) s.locks[j] = false;
+    });
     return { idx: i, from, v: k.v };
   }
   k.mark = rng.pick(MARKS);
@@ -318,7 +347,7 @@ export function recordResult(s: RunState, won: boolean, info: Omit<LogEntry, 'da
     s.streak = s.streak > 0 ? s.streak + 1 : 1;
   } else {
     s.losses++;
-    s.hp -= damageFor(s.day);
+    s.hp = Math.max(0, s.hp - damageFor(s.day));
     s.streak = s.streak < 0 ? s.streak - 1 : -1;
   }
   if (s.wins >= WIN_TARGET) {

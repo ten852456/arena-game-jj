@@ -2,7 +2,7 @@ import { HEROES, HEROES_BY_ID, ULT_PIECES, ultPieces } from './heroes';
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
-  MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
+  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
 import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, type Effect, type SkillNode, type Variant } from './skills';
@@ -172,8 +172,11 @@ function linkGain(skills: SkillInstance[], extra: SkillInstance, drop = -1) {
 // ---------------- shop turn ----------------
 
 /** Bots ramp up gently: no Lv3 before day 5 (any tier), easy bots no Lv2 before day 3. */
-export const BOT_LV3_DAY = 5;
-const upgradeAllowed = (v: string, day: number, tier: BotTier) => (v.length >= 2 ? day >= BOT_LV3_DAY : tier !== 'easy' || day >= 3);
+export const BOT_LV3_DAY = LV3_DAY;
+const upgradeAllowed = (v: string, day: number, tier: BotTier) =>
+  v.length >= 2 ? day >= (tier === 'easy' ? EASY_LV3_DAY : BOT_LV3_DAY) : tier !== 'easy' || day >= 3;
+/** easy bots stay gentle: Lv3 only from this day */
+export const EASY_LV3_DAY = 8;
 
 /** How many early hitters the bot owns. */
 const ownedHitters = (s: RunState) => s.skills.filter(isEarlyHitter).length;
@@ -278,7 +281,8 @@ export function botShopTurn(s: RunState, rules: BotRules) {
           continue;
         }
         // make room: buy a slot if it leaves enough gold, else swap out a weaker skill
-        if (slotsOf(s) < MAX_SLOTS && s.gold >= slotPrice(s) + priceOf(offer)) buySlot(s);
+        // normal bots buy at most one extra slot (hard bots manage slots on their own)
+        if (slotsOf(s) < MAX_SLOTS && s.bonusSlots < 1 && s.gold >= slotPrice(s) + priceOf(offer)) buySlot(s);
         else {
           const worst = weakest(s, keep);
           if (worst >= 0 && keep(s.skills[worst]) < like(id) * 2 + 1) sell(s, worst);

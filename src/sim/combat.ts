@@ -1,4 +1,4 @@
-import { HEROES_BY_ID, ULT_LV2_POW, inLine, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
+import { HEROES_BY_ID, ULT_LV2_POW, inLine, lineAffinity, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 13;
+export const SIM_VERSION = 14;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -68,6 +68,8 @@ const MAX_CHAIN = 8;
  */
 export const TRIGGER_GAP = 2 * TPS;
 export const TRIGGER_GAP_MAX = 4 * TPS;
+/** a skill set off by an engine (ฟันเฟือง / เร่งเครื่อง) can't be set off again for at least this long (sim v14) */
+export const ENGINE_GAP = 3 * TPS;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
@@ -145,6 +147,8 @@ interface Fighter {
   /** dodge charges, and hits dodged this fight */
   dodge: number;
   dodges: number;
+  /** damage this fighter dealt (pre-shield, no fatigue): decides a double KO */
+  dealtTotal: number;
   /** haste share and ticks left */
   hasteP: number;
   hasteT: number;
@@ -207,7 +211,7 @@ export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0):
 }
 
 /** ถนัดสาย: a skill of the hero's own line (shared or its unique) works at this power (tuning.ts `line.affinity`). */
-export const affinityOf = (hero: string, id: string) => (inLine(hero, id) ? T['line.affinity'] : 1);
+export const affinityOf = (hero: string, id: string) => (inLine(hero, id) ? lineAffinity(hero) : 1);
 /** most dodge charges a hero can hold: +1 for the 💨 line */
 export const dodgeCap = (hero: string) => T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0);
 
@@ -241,7 +245,7 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
     burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
     ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
     freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
-    stats: b.skills.map(emptyStat),
+    stats: b.skills.map(emptyStat), dealtTotal: 0,
     immuneUntil: 0, pendingReact: [], lastFire: 0,
     side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0, ultLv: ultLevel(b), ult: -1, dodged: 0 },
   };
@@ -348,6 +352,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   /** shieldable: true / false, or the share of the hit (0..1) that shields can block */
   function deal(target: Fighter, amount: number, shieldable: boolean | number, src: string, owner = -1, bonusPart = 0) {
     if (amount <= 0 || target.hp <= 0) return;
+    if (src !== 'fatigue') F[1 - target.side].dealtTotal += amount;
     let blocked = 0;
     const share = shieldable === true ? 1 : shieldable === false ? 0 : shieldable;
     if (share > 0 && target.shield > 0) {
@@ -544,17 +549,20 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const ctl = Math.min(1, power);
     const thornsUntil = () => t + (f.hooks.thornsSecs ? f.hooks.thornsSecs * TPS : THORNS_TICKS);
     const ctx: Ctx = {
+      inLine: inLine(f.hero, inst.id),
       v: (n) => Math.max(1, Math.round(n * power)),
       get me() { return view(f); },
       get foe() { return view(foe); },
       hit(n, o = {}) {
         if (foe.hp <= 0 || f.hp <= 0) return 0;
-        const mult = f.charge;
+        // a charge waits for a real hit: hits below charge.min (before power and charge) don't use it up
+        const useCharge = f.charge > 1 && n + bonusDmg >= T['charge.min'];
+        const mult = useCharge ? f.charge : 1;
         let dmg = Math.round((n + sum(f.growth) + bonusDmg) * mult);
         if (f.hooks.onHit) dmg = Math.max(0, Math.round(f.hooks.onHit(hookApi(f), dmg)));
         if (!o.sure && foe.dodge > 0) {
           // dodged: the whole hit misses (a charge is spent on it too), no thorns, no leech
-          if (f.chargeHits > 1) f.chargeHits--;
+          if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
           else {
             f.charge = 1;
             f.chargeIdx = -1;
@@ -580,7 +588,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         // credit for buffs: each พลัง stack's owner gets its share, the charge's owner gets the multiplier's extra
         for (const g of f.growth) if (f.stats[g.idx]) f.stats[g.idx].bf += Math.round(g.v * mult);
         if (mult > 1 && f.stats[f.chargeIdx]) f.stats[f.chargeIdx].bf += dmg - Math.round(dmg / mult);
-        if (f.chargeHits > 1) f.chargeHits--;
+        if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
         else {
           f.charge = 1;
           f.chargeIdx = -1;
@@ -786,7 +794,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (q.from === undefined) st.c++;
     else {
       st.tc++;
-      blk.trigAt = t + Math.min(TRIGGER_GAP_MAX, Math.max(TRIGGER_GAP, blk.cd));
+      const byEngine = !!nodeOf(f.blocks[q.from].inst).engine;
+      blk.trigAt = t + Math.min(TRIGGER_GAP_MAX, Math.max(byEngine ? ENGINE_GAP : TRIGGER_GAP, blk.cd));
       if (q.restart) blk.prog = 0;
     }
     f.side_.casts++;
@@ -943,7 +952,12 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
 
     if (F[0].hp <= 0 || F[1].hp <= 0) {
-      winner = F[0].hp === F[1].hp ? -1 : F[0].hp > F[1].hp ? 0 : 1;
+      // one side down: the other wins. Both down in the same tick (double KO): the side that dealt more damage in the
+      // whole fight wins, then the one less below zero, else a draw (sim v14; before: only "less below zero")
+      if (F[0].hp <= 0 && F[1].hp <= 0) {
+        const d = F[0].dealtTotal - F[1].dealtTotal;
+        winner = d !== 0 ? (d > 0 ? 0 : 1) : F[0].hp === F[1].hp ? -1 : F[0].hp > F[1].hp ? 0 : 1;
+      } else winner = F[0].hp > 0 ? 0 : 1;
       decided = true;
       break;
     }

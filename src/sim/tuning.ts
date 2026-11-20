@@ -87,7 +87,7 @@ export const TUNING = {
   'hp.chrono': 1.34,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
-  'knight.shield': 0.14,
+  'knight.shield': 0.18,
   /** นักฆ่า: the first hit of the fight × this */
   'assassin.first': 1.4,
   /** นักฆ่า: every this-many-th hit is ×assassin.first too (0 = only the first hit) */
@@ -99,7 +99,7 @@ export const TUNING = {
   /** แม่มดน้ำแข็ง: freezes last + this many seconds */
   'witch.freeze': 0.2,
   /** แม่มดน้ำแข็ง: a hit on a frozen enemy cuts its healing by this share for 3 s */
-  'witch.wound': 0.5,
+  'witch.wound': 0.7,
   /** นักฆ่า: every landed hit cuts enemy healing by this share for 2 s */
   'assassin.wound': 0.4,
   /** นักดาบคู่: after a dodge, the next hit × this */
@@ -113,6 +113,19 @@ export const TUNING = {
   'dodge.graze': 0.3,
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
+  /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
+  'aff.assassin': 1.1,
+  'aff.duelist': 1.1,
+  'aff.knight': 1.2,
+  'aff.berserker': 1.1,
+  'aff.pyro': 1.2,
+  'aff.thornguard': 1.2,
+  'aff.witch': 1.2,
+  'aff.chrono': 1.2,
+  /** a charge (รวมพลัง) waits for a hit of at least this much (before power and charge) */
+  'charge.min': 4,
+  /** จอมเวทลม: hits on a slowed / frozen enemy deal this much more */
+  'chrono.slowHit': 0.05,
   /** a burning fighter's shield gains × this (ไฟละลายโล่) */
   /** each burn tick also removes this × the burn per second of shield (ไฟเผาโล่) */
   'burn.scorch': 1,
@@ -133,7 +146,7 @@ export const TUNING = {
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
   'ult.duelist.pow': 0.35,
   /** อัศวิน: shield gained, share of max HP */
-  'ult.knight.trig': 0.2,
+  'ult.knight.trig': 0.15,
   /** อัศวิน: hit = shield × this (the shield stays) */
   'ult.knight.pow': 1.7,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
@@ -143,17 +156,17 @@ export const TUNING = {
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,
   /** นักเวทเพลิง: deals the burn still to come × this right away */
-  'ult.pyro.pow': 0.9,
+  'ult.pyro.pow': 1.2,
   /** นักรบหนาม: direct hits taken */
-  'ult.thornguard.trig': 6,
+  'ult.thornguard.trig': 4,
   /** นักรบหนาม: seconds of poison thorns */
   'ult.thornguard.pow': 2.5,
   /** แม่มดน้ำแข็ง: ice skill casts */
-  'ult.witch.trig': 4,
+  'ult.witch.trig': 3,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
   'ult.witch.pow': 1.5,
   /** จอมเวทลม: slows / delays landed */
-  'ult.chrono.trig': 4,
+  'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
   'ult.chrono.pow': 0.15,
 };

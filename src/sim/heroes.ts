@@ -122,7 +122,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- ⚔ hit ----------------
   {
     id: 'assassin', day1: ['execute', 'strike', 'heavy', 'charge', 'venom'], name: 'นักฆ่า', line: 'hit', unique: 'execute',
-    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้${T['assassin.every'] ? ` และทุกการตีครั้งที่ ${T['assassin.every']}` : ''}แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`,
+    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้${T['assassin.every'] ? ` และทุกการตีครั้งที่ ${T['assassin.every']}` : ''} แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`,
     style: 'ตีทีเดียวจบ: รวมพลังแล้วปล่อยการโจมตีหนักๆ ปลิดชีพตอนศัตรูเลือดต่ำ',
     hooks: {
       maxHp: hpOf('assassin'),
@@ -262,12 +262,12 @@ export const HEROES: HeroDef[] = [
   // ---------------- 🌪 wind ----------------
   {
     id: 'chrono', day1: ['timewarp', 'chill', 'tailwind', 'dispel', 'strike'], name: 'จอมเวทลม', line: 'wind', unique: 'timewarp',
-    passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%`,
+    passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น ${pc(T['chrono.slowHit'])}%`,
     style: 'ลมพัดเวลา: ทำให้ศัตรูช้า ดึงคูลดาวน์ถอยหลัง เร่งตัวเอง และพัดไฟ/พิษทิ้ง',
     hooks: {
       maxHp: hpOf('chrono'),
       slow: (p, s) => [p + 0.1, s + 1],
-      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? dmg * 1.1 : dmg),
+      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? dmg * (1 + T['chrono.slowHit']) : dmg),
     },
     botWant: ['timewarp', 'chill', 'tailwind'],
     ult: {
@@ -297,6 +297,8 @@ export function ultPieces(b: Pick<Build, 'hero' | 'skills'>): number {
   }
   return n + lv3;
 }
+/** ถนัดสาย of a hero: its line skills work at this power (tuning.ts `aff.<hero>`, default `line.affinity`) */
+export const lineAffinity = (hero: string) => T[`aff.${hero}` as keyof typeof T] ?? T['line.affinity'];
 /** Is this skill one of the hero's line pieces (a shared skill of its main line, or its own unique)? */
 export function inLine(hero: string, id: string): boolean {
   const d = SKILLS[id];
