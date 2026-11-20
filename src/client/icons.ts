@@ -156,7 +156,16 @@ export const ICON_NAMES = Object.keys(ICONS);
  * Optional raster art per icon (e.g. a painted pack in /assets/ui/). An entry here wins over the SVG;
  * names without an entry keep the hand-drawn SVG. Example: IMG.coin = '/assets/ui/coin.webp'.
  */
-export const IMG: Partial<Record<string, string>> = {};
+export const IMG: Partial<Record<string, string>> = {
+  // painted by Codex (image generation) in the same chibi style; only the ones that stay readable at ~20px.
+  // The others in /assets/ui (sliders, gear, info, sword, help, town, arena, hero, moonmochi) blur into blobs that small;
+  // they are kept for big spots (town map, cards) later.
+  speaker: '/assets/ui/speaker.webp',
+  mute: '/assets/ui/mute.webp',
+  close: '/assets/ui/close.webp',
+  home: '/assets/ui/home.webp',
+  trophy: '/assets/ui/trophy.webp',
+};
 
 const has = (n: string | undefined) => !!n && (!!ICONS[n] || !!IMG[n]);
 const resolve = (name: string) => (has(name) ? name : has(ALIAS[name]) ? ALIAS[name] : 'sparkle');
