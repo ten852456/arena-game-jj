@@ -23,6 +23,8 @@ export interface EvalSpec {
   days: number[];
   /** in-line vs off-line builds per hero per LINE_DAYS day (0 = skip) */
   linesN?: number;
+  /** runs per day-1 opening per hero (0 = skip) */
+  day1N?: number;
 }
 /** days of the in-line vs off-line check */
 export const LINE_DAYS = [4, 7, 11];
@@ -55,6 +57,8 @@ export interface Measure {
   inline: Record<string, Record<number, number>>;
   /** hero → points the ultimate is worth (in-line builds with it vs locked) */
   ultValue: Record<string, number>;
+  /** hero → best day-1 opening's win rate vs normal day-1 bots */
+  day1: Record<string, number>;
 }
 
 export interface Score {
@@ -81,6 +85,8 @@ export const W = {
   inline: 1.5,
   /** the ultimate is worth 6–15 win-rate points (points²) */
   ultValue: 0.5,
+  /** each hero's best day-1 opening vs normal day-1 bots 50–70% (points²) */
+  day1: 0.5,
   /** distance from the current values: (Δ / knob range)² summed × this */
   dist: 5,
 };
@@ -123,7 +129,7 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
 
   // ---- phase 2: matchups, runs, length sweep, watch builds ----
   const t2: Task[] = [];
-  const k2: { ci: number; kind: 'm' | 'r' | 'l' | 'w' | 'n'; day?: number; hero?: string; name?: string }[] = [];
+  const k2: { ci: number; kind: 'm' | 'r' | 'l' | 'w' | 'n' | 'd'; day?: number; hero?: string; name?: string }[] = [];
   cands.forEach((tune, ci) => {
     for (const day of spec.days)
       for (const h of HEROES) {
@@ -141,6 +147,11 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
         t2.push({ tune, job: { k: 'len', c, day, from, to } as Job });
         k2.push({ ci, kind: 'l', day });
       }
+    if (spec.day1N)
+      for (const h of HEROES) {
+        t2.push({ tune, job: { k: 'day1', c, hero: h.id, n: spec.day1N } });
+        k2.push({ ci, kind: 'd', hero: h.id });
+      }
     if (spec.linesN)
       for (const day of LINE_DAYS)
         for (const h of HEROES) {
@@ -156,7 +167,7 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
   });
   const r2 = await pool.run<unknown>(t2);
 
-  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {}, ult: {}, inline: {}, ultValue: {} }));
+  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {}, ult: {}, inline: {}, ultValue: {}, day1: {} }));
   const ultAcc = cands.map(() => ({} as Record<string, [number, number, number]>));
   const match: Record<number, Record<number, Record<string, MatchRes>>> = {};
   const runs: Record<number, Record<string, { won: number; runs: number }>> = {};
@@ -170,6 +181,9 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
       const a = ((runs[k.ci] ??= {})[k.hero!] ??= { won: 0, runs: 0 });
       a.won += r.won;
       a.runs += r.runs;
+    } else if (k.kind === 'd') {
+      const r = res as Record<string, { normal: number; n: number }>;
+      out[k.ci].day1[k.hero!] = Math.max(...Object.values(r).map((x) => x.normal / Math.max(1, x.n)));
     } else if (k.kind === 'n') {
       const r = res as LinesRes;
       (out[k.ci].inline[k.hero!] ??= {})[k.day!] = r.h2h / Math.max(1, r.n);
@@ -261,6 +275,7 @@ export function score(m: Measure, xs: number[]): Score {
   const parts: Record<string, number> = { curve: 0, reach: 0, pair: 0, arch: 0, beats: 0, ult: 0, inline: 0, ultValue: 0, zero: 0, fatigue: 0, length: 0, watch: 0, dist: 0 };
   for (const byDay of Object.values(m.inline))
     for (const r of Object.values(byDay)) parts.inline += W.inline * (sq(over(0.58, r) * 100) + 0.5 * sq(over(r, 0.85) * 100));
+  for (const b of Object.values(m.day1)) parts.day1 = (parts.day1 ?? 0) + W.day1 * sq((over(0.5, b) + over(b, 0.7)) * 100);
   for (const d of Object.values(m.ultValue)) parts.ultValue += W.ultValue * sq((over(0.06, d) + over(d, 0.15)) * 100);
   // designed counters (one hero per line): average over the scanned days, inner band 54–57%
   const heroOf = (line: string) => HEROES.find((h) => h.line === line)!.id;

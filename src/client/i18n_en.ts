@@ -61,7 +61,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   shield: { name: 'Shield', desc: 'Takes damage before your HP and stays until it breaks' },
   heal: { name: 'Heal', desc: 'Restore your own HP' },
   leech: { name: 'Leech', desc: 'Heal a share of the damage you deal' },
-  burn: { name: 'Burn', desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · a burning fighter gains 25% less shield' },
+  burn: { name: 'Burn', desc: `Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · a burning fighter gains ${Math.round((1 - T['burn.shield']) * 100)}% less shield` },
   freeze: {
     name: 'Freeze',
     desc: "All the enemy's skills stop counting their cooldowns · weaker if repeated quickly · capped per fight · when a freeze ends, the enemy resists control for 1.5s",
@@ -83,7 +83,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   },
   poison: {
     name: 'Poison',
-    desc: 'Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · weaker than burn but lasts longer · a poisoned fighter heals 40% less',
+    desc: `Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · weaker than burn but lasts longer · a poisoned fighter heals ${Math.round((1 - T['poison.heal']) * 100)}% less and gains ${Math.round((1 - T['burn.shield']) * 100)}% less shield`,
   },
   haste: { name: 'Haste', desc: 'All your cooldowns run X% faster for N seconds' },
   wound: { name: 'Wound', desc: 'The enemy heals X% less for N seconds' },
