@@ -306,8 +306,8 @@ const BASE_LIST: SkillDef[] = [
   def('jab', 'dodge', {
     '': N('แทงหลบ', 4, [hit(2), { k: 'dodge', n: 1 }]),
     a: N('แทงไว', 2.8, [hit(4), { k: 'dodge', n: 1 }], 'ความเร็ว'),
-    a1: N('แทงสายฟ้า', 2.2, [hit(6), { k: 'dodge', n: 1 }]),
-    a2: N('แทงลวงตา', 2.8, [hit(4), { k: 'dodge', n: 2 }]),
+    a1: N('แทงสายฟ้า', 2.2, [hit(6)]),
+    a2: N('แทงลวงตา', 3.5, [hit(5), { k: 'dodge', n: 1 }, hit(2, { perDodge: 2 })]),
     b: N('แทงจุดตาย', 3, [hit(6, { noShield: 1.5 }), { k: 'dodge', n: 1 }], 'ตีศัตรูไร้โล่'),
     b1: N('แทงทะลุ', 3, [hit(10, { pierce: 1, noShield: 1.5 }), { k: 'dodge', n: 1 }]),
     b2: N('แทงสะกด', 3, [hit(6, { noShield: 1.5 }), { k: 'dodge', n: 1 }, { k: 'delay', secs: 0.5 }]),
@@ -319,7 +319,7 @@ const BASE_LIST: SkillDef[] = [
     a1: N('สวนพิฆาต', 5, [hit(7, { perDodge: 5 })]),
     a2: N('สวนทะลุ', 5, [hit(6, { perDodge: 3, pierce: 1 })]),
     b: N('สวนแล้วหลบ', 5, [hit(3, { perDodge: 2 }), { k: 'dodge', n: 1 }], 'หลบวน'),
-    b1: N('เต้นดาบ', 4.5, [hit(4, { perDodge: 2 }), { k: 'dodge', n: 2 }]),
+    b1: N('เต้นดาบ', 4.5, [hit(4, { perDodge: 2 }), { k: 'dodge', n: 1 }]),
     b2: N('สวนดูดเลือด', 5, [hit(4, { perDodge: 2, leech: 0.3 }), { k: 'dodge', n: 1 }]),
   }),
   // tech: answers 🔥 ☠ (shakes off a burn / poison stack)
@@ -561,7 +561,7 @@ const BASE_LIST: SkillDef[] = [
     '': N('พายุดาบ', 5, [hit(2, { times: 3 })]),
     a: N('พายุคม', 5, [hit(2, { times: 4 })], 'ตีรัวขึ้น'),
     a1: N('พายุพันดาบ', 5, [hit(2, { times: 5 })]),
-    a2: N('ดาบเงา', 5, [hit(2, { times: 4 }), { k: 'dodge', n: 2 }]),
+    a2: N('ดาบเงา', 5, [hit(2, { times: 4 }), { k: 'dodge', n: 1 }]),
     b: N('ดาบหนัก', 5, [hit(3, { times: 3 })], 'ตีน้อยแต่แรง'),
     b1: N('ดาบทลาย', 5, [hit(6, { times: 3 })]),
     b2: N('ดาบถ่วง', 5, [hit(4, { times: 3 }), { k: 'delay', secs: 0.3 }]),

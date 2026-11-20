@@ -1,6 +1,6 @@
 # 8 สาย + แก้ทางกัน + Ultimate ประจำฮีโร่ (ร่าง v2)
 
-สถานะ: **ร่าง ยังไม่ได้ลงมือทำ** · 20 พ.ย. 2026 · ตัวเลขเป็นจุดเริ่ม ต้องจูนด้วย `npm run sim` / `npm run tune`
+สถานะ: **ลงมือแล้ว (sim v12, branch `feat/lines`) ยกเว้นข้อ 4 (ปิด 2 สายต่อวัน) และ UI สวยๆ** · ร่าง 20 พ.ย. 2026 · ดูข้อ 10 สำหรับสิ่งที่ทำจริงและตัวเลขที่วัดได้
 
 ตกลงแล้ว: ปลด ult ที่ 3 / 5 ชิ้น · 8 สายเป็นธาตุ/สไตล์ที่แก้ทางกันเอง · แต่ละรอบใช้ได้ 6 จาก 8 สาย (ฮีโร่ที่สายหลักหายไป เลือกไม่ได้) · ห้ามให้สกิลเยอะเกิน
 
@@ -124,3 +124,206 @@ Lv2 = เงื่อนไขเร็วขึ้น 30% + ผลแรงข�
 ขั้น 1–2 คือ "การจัดการสาย" ที่ต้องเสร็จก่อน ขั้น 3–4 ต่อจากนั้น
 
 แหล่ง: [Steam store](https://store.steampowered.com/app/3114410/Skill_Legends_Royale/) · [GameRant: 8 Best Archetypes](https://gamerant.com/skill-legends-royale-best-archetypes-ranked/) · [note.com: Life Style guide](https://note.com/takisugikogeo/n/nce171a9bc51a?hl=en) · [Gameaton review](https://gameaton.com/blog/skill-legends-royale-a-surprisingly-thoughtful-auto-battler-beneath-the-rough-edges) · [Steam forum: when do schools change](https://steamcommunity.com/app/3114410/discussions/0/592909007187920627/)
+
+## 10. ลงมือแล้ว (sim v12, branch `feat/lines`, 20 พ.ย. 2026)
+
+ทำขั้น 1, 2, 4, 5 ของข้อ 9 (ขั้น 3 "ปิด 2 สายต่อวัน" กับ UI สวยๆ ยังไม่ทำ ตามที่เจ้าของสั่ง) · ตัวเลขจริงอยู่ใน `src/sim/skills.ts` × `src/sim/tuning.ts` · ตารางสกิลทั้ง 35 ตัวอยู่ใน docs/SKILL_TREE.md
+
+การตัดสินใจของเจ้าของที่ต่างจากร่างข้างบน (ชนะร่าง):
+- แก้ทางแบบ **นุ่ม ~55/45** (ไม่ใช่ 60/40) และต้องมาจาก **กลไก** ไม่ใช่ตารางตัวคูณ
+- สายละ 3 สกิล (แกน / จบ / แก้ทาง) + unique 1 ต่อฮีโร่ + กลาง 3 = **35 สกิล** · `arch` → `line` ทุกที่ (connect bonus `line:<สาย>`, tuning `line.<สาย>.lv1/lv3`)
+- เพิ่มกลไก: **หลบ** (แต้มหลบ สูงสุด 2, การตีที่โดนพลาดทั้งครั้ง ไม่สุ่ม) · **พิษ** (DoT ซ้อน ไม่สนโล่ หลบไม่ได้ ระหว่างติดพิษฟื้น ×0.6) · **เร่ง** (คูลดาวน์ตัวเองเร็วขึ้น) · **แผลลึก** (ลดการฟื้นของศัตรู) · **ไม่พลาด** (หลบไม่ได้) · ชำระของลม/หลบล้างได้แค่ไฟ/พิษ (ไม่ละลายน้ำแข็ง ไม่ react)
+- หลบการตีของสกิลที่ใส่แช่แข็ง/ถ่วงเวลา = การคุมนั้นไม่ติดด้วย (นี่คือเหตุที่ 💨 ชนะ ❄) · ธารน้ำแข็ง (แก้ทางของ ❄) แช่ก่อนตี จึงหลบไม่ได้
+- ฮีโร่ทั้ง 8 id เดิม: นักรบหนาม → **นักรบหนามพิษ** ☠ · จอมเวทเวลา → **จอมเวทลม** 🌪 · นักรบคลั่ง = ❤ · นักดาบคู่ = 💨
+
+### Ultimate ที่ทำจริง (ยิงเอง ≤ 1 ครั้งต่อการสู้ · ชิ้น = สกิลสายหลัก (unique นับ) +1 ถ้า Lv3 · 3 ชิ้น = Lv1 · 5 ชิ้น = Lv2)
+
+ตัวเลขเงื่อนไข / ผลอยู่ใน tuning.ts `ult.<hero>.trig` / `ult.<hero>.pow` (Lv2 = เงื่อนไขน้อยลง 30% และผล ×1.4) · event `{type:'ult', side, hero, lv}` ใน replay และ `sides[s].ult` (tick ที่ยิง) / `ultLv`
+
+| ฮีโร่ | ชนิดเงื่อนไข | เงื่อนไข | ท่า | ผล | ต่างจากร่าง |
+|---|---|---|---|---|---|
+| นักฆ่า ⚔ | เลือดศัตรู | ศัตรูเลือดต่ำกว่า X% | เงาจันทร์ | ตี = pow × การตีแรงสุดในการสู้ ไม่สนโล่ หลบไม่ได้ | มีเพดาน 30% ของเลือดศัตรู (Lv2 42%) กันการฆ่าทีเดียวตั้งแต่วัน 3 |
+| นักดาบคู่ 💨 | หลบ | หลบได้ครบ N ครั้ง | ร่ายรำดาบ | เร่ง pow% 3 วิ + หลบ +2 | เร่งแทน "คูลดาวน์ลด 50%" (ใช้กลไกเร่งใหม่) |
+| อัศวิน 🛡 | สะสม | ได้โล่รวม X% ของเลือดสูงสุด (ไม่นับโล่เริ่มต้น) | ป้อมจันทรา | ตี = โล่ × pow โล่ไม่หาย | เพดาน 30% ของเลือดศัตรูเหมือนนักฆ่า |
+| นักรบคลั่ง ❤ | ใกล้ตาย | เลือดต่ำกว่า X% **หรือ** โดนตีจนตาย (อันไหนก่อน) | ไม่ยอมตาย | ถ้าโดนตีจนตายเหลือ 1 เลือด · ฟื้น pow% + พลัง +2 (Lv2 +3) | เพิ่มเงื่อนไขเลือดต่ำ ไม่งั้นยิงแต่ตอนจะแพ้ (เวลายิงจะเลยเป้า 70%) |
+| นักเวทเพลิง 🔥 | ดีบัฟศัตรู | ไฟบนศัตรูครบ N กอง | สุริยะดับ | ไฟที่ยังเหลือทั้งหมดลงทันที × pow แล้วไฟกองนั้นหมดไป | ใช้ไฟหมด (ไม่งั้นได้ดาเมจฟรีเกิน 100% ของเลือด) |
+| นักรบหนามพิษ ☠ | โดนตี | โดนตีโดนครบ N ครั้ง | หนามพิษ | pow วิ: ทุกครั้งที่โดนตี ศัตรูติดพิษอีก 2 กอง และฟื้นไม่ได้ (แผลลึก 100%) | — |
+| แม่มดน้ำแข็ง ❄ | ร่ายสกิลในสาย | ใช้สกิลสายน้ำแข็งครบ N ครั้ง | ยุคน้ำแข็ง | แช่แข็ง pow วิ (ไม่ลดจากโดนถี่ ไม่สน immune แต่อยู่ใต้เพดานการคุม และใจเหล็กลดได้) + การตีถัดไป ×2 (Lv2 ×2.4) | — |
+| จอมเวทลม 🌪 | คุมศัตรู | ใส่ช้า/ถ่วงเวลาติดครบ N ครั้ง | พายุย้อนกาล | สกิลทุกตัวพร้อมใช้ทันที + ล้างดีบัฟทั้งหมด + เร่ง pow% 3 วิ | เพิ่มเร่ง |
+
+### กติกาเวอร์ชันเก่า
+
+`SIM_VERSION` 11 → 12: server ทิ้ง snapshot / fight เวอร์ชันเก่าตอนโหลด (เหมือนเดิม) · replay เก่าเปิดไม่ได้ (ข้อความเดิม) · รอบที่เล่นค้างในเครื่อง (`RunState.v` 7 → 8) ถูกเริ่มใหม่ · build ที่มีสกิลที่ลบไป (amplify) ถูก validateBuild ตอบ 400 ไม่ทำให้ server ล้ม · รอบที่จบแล้วใน db มี `arch` เดิม ไม่มี `line` (API ส่ง `line: null`)
+
+### ตัวเลขที่วัดได้ (`npm run sim -- all --n 200`, tier normal, seed 1, sim v12)
+
+ทุก "ชนะทาง" (`*`) คือคู่ที่ออกแบบไว้ · เป้า 53–58% เฉลี่ยทุกวัน · ผ่าน 4/16 คู่ ส่วนที่เหลืออยู่ระหว่าง 43–69% (ไม่มีคู่ไหนล็อกตายในค่าเฉลี่ย แต่วันที่ 3 ยังแกว่งแรง เพราะบอทอัป unique ถึง Lv3 ภายในวัน 3 และปลด ult ได้แล้ว)
+
+```
+Day 3 · 51200 fights · avg 10.2s   line win rate (row vs column) · * = designed counter (row beats column)
+               ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
+⚔hit              -     61%      21%      26%*     66%      65%*     30%      27% 
+💨dodge        39%*        -     72%      36%      42%      33%      88%*     91%!
+🛡shield       79%*     27%         -     17%      46%      46%      61%*     58% 
+❤heal          72%      63%      83%!        -     51%*     50%      63%      58%*
+🔥burn         30%      58%*     55%*     48%         -     49%      62%      48% 
+☠poison        37%      67%*     55%*     50%      56%         -     47%      23% 
+❄ice           70%      12%      38%      38%*     39%      53%         -     33%*
+🌪wind         74%      11%      39%      41%      50%*     77%*     64%         -
+Day 5 · 51200 fights · avg 11.5s   line win rate (row vs column) · * = designed counter (row beats column)
+               ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
+⚔hit              -     36%      67%      69%*     58%      71%*     46%      61% 
+💨dodge        64%*        -     76%!     72%      46%      37%      62%*     69% 
+🛡shield       35%*     23%         -     35%      47%      36%      43%*     67% 
+❤heal          30%      25%      63%         -     59%*     22%      30%      44%*
+🔥burn         43%      53%*     54%*     43%         -     62%      46%      55% 
+☠poison        30%      62%*     62%*     77%!     40%         -     38%      47% 
+❄ice           54%      38%      57%      71%*     51%      61%         -     64%*
+🌪wind         41%      31%      35%      51%      47%*     54%*     37%         -
+Day 10 · 51200 fights · avg 15.9s   line win rate (row vs column) · * = designed counter (row beats column)
+               ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
+⚔hit              -     45%      56%      51%*     44%      53%*     37%      45% 
+💨dodge        55%*        -     56%      46%      43%      30%      41%*     46% 
+🛡shield       45%*     44%         -     30%      57%      48%      61%*     58% 
+❤heal          52%      55%      69%         -     52%*     35%      62%      49%*
+🔥burn         59%      56%*     41%*     49%         -     65%      54%      53% 
+☠poison        43%      74%*     56%*     64%      34%         -     44%      43% 
+❄ice           60%      61%      38%      38%*     45%      57%         -     57%*
+🌪wind         55%      56%      44%      48%      48%*     56%*     44%         -
+Day 13 · 51200 fights · avg 17.8s   line win rate (row vs column) · * = designed counter (row beats column)
+               ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
+⚔hit              -     47%      54%      43%*     39%      50%*     44%      38% 
+💨dodge        53%*        -     48%      35%      38%      28%      37%*     31% 
+🛡shield       48%*     54%         -     25%      69%      54%      72%*     53% 
+❤heal          52%      64%      72%         -     59%*     43%      76%!     48%*
+🔥burn         61%      60%*     32%*     41%         -     68%      65%      42% 
+☠poison        48%      75%*     47%*     58%      31%         -     51%      36% 
+❄ice           58%      62%      31%      25%*     36%      50%         -     49%*
+🌪wind         64%      70%      46%      51%      56%*     66%*     51%         -
+```
+
+ฮีโร่ (ชนะทุกฮีโร่อื่น) · เป้า 45–55% ทุกวัน: วัน 10 ผ่านหมด · วัน 3 / 5 / 13 ยังมีหลุด
+
+```
+Hero overall win rate (vs every other hero) · 0-skill = share of its fights where it cast nothing
+hero             d3     d5    d10    d13      0sk d3   0sk d5  0sk d10  0sk d13
+assassin        42%    58%    47%    45%          0%       0%       0%       0%
+duelist         57%    61%    45%    38%          0%       0%       0%       0%
+knight          48%    41%    49%    53%          1%       0%       0%       0%
+berserker       63%    39%    53%    59%          2%       1%       0%       0%
+pyro            50%    51%    54%    53%          1%       1%       0%       0%
+thornguard      48%    51%    51%    49%          0%       0%       0%       0%
+witch           41%    57%    51%    44%          0%       0%       0%       0%
+chrono          51%    42%    50%    58%          1%       1%       0%       0%
+spread          22p    22p     9p    21p
+```
+
+คู่แก้ทาง:
+
+```
+pair                   d3    d5   d10   d13     avg
+⚔hit > ❤heal          26%   69%   51%   43%     47% ✘
+⚔hit > ☠poison        65%   71%   53%   50%     60% ✘
+💨dodge > ⚔hit        39%   64%   55%   53%     53% ✘
+💨dodge > ❄ice        88%   62%   41%   37%     57% ✔
+🛡shield > ⚔hit       79%   35%   45%   48%     52% ✘
+🛡shield > ❄ice       61%   43%   61%   72%     59% ✘
+❤heal > 🔥burn        51%   59%   52%   59%     55% ✔
+❤heal > 🌪wind        58%   44%   49%   48%     50% ✘
+🔥burn > 🛡shield     55%   54%   41%   32%     45% ✘
+🔥burn > 💨dodge      58%   53%   56%   60%     57% ✔
+☠poison > 🛡shield    55%   62%   56%   47%     55% ✔
+☠poison > 💨dodge     67%   62%   74%   75%     69% ✘
+❄ice > 🌪wind         33%   64%   57%   49%     51% ✘
+❄ice > ❤heal          38%   71%   38%   25%     43% ✘
+🌪wind > ☠poison      77%   54%   56%   66%     63% ✘
+🌪wind > 🔥burn       50%   47%   48%   56%     50% ✘
+```
+
+Ultimate (เป้า: ยิง ≥ 75% เมื่อปลด (นักฆ่า / นักรบคลั่ง ≥ 50%) · เวลายิงกลาง 40–70% ของการสู้):
+
+```
+hero          unl d3  unl d5 unl d10 unl d13    Lv2 d3  Lv2 d5 Lv2 d10 Lv2 d13   fire%  at(med)  win unl/locked
+assassin         88%    100%    100%    100%        0%     35%     96%    100%     88%      63%   48% / 57%
+duelist          89%    100%    100%    100%        0%     38%     97%    100%     65%      50%   50% / 76%
+knight           83%    100%    100%    100%        0%     20%     94%    100%     64%      50%   47% / 71%
+berserker        90%     99%    100%    100%        0%     23%     92%    100%     91%      67%   53% / 50%
+pyro             84%    100%    100%    100%        0%     37%     97%    100%     74%      39%   51% / 58%
+thornguard       90%    100%    100%    100%        0%     45%     98%    100%     78%      45%   49% / 69%
+witch            90%    100%    100%    100%        0%     37%     98%    100%     74%      41%   48% / 59%
+chrono           85%    100%    100%    100%        0%     37%     96%    100%     81%      38%   50% / 58%
+```
+
+ความยาวการสู้ + อัตราปลด ult ตามวัน (`ult1+` / `ult2` = บอทสุ่มฮีโร่ที่ปลด Lv1+/Lv2):
+
+```
+day   avg   p10   p90  target      fatigue  0-skill locked ctl/side ctlmax  close trig/f chain  ult1+  ult2 fire%
+  1   9.2s  5.0s 12.3s  7–13s  ✔     5%✔     3%     1%    0.3s   2.0s    14%    0.1     2     0%    0%    0%
+  2  10.2s  6.6s 14.0s  7–13s  ✔    10%✔     1%     0%    0.3s   2.0s    13%    0.1     2     2%    0%   58%
+  3  10.3s  6.0s 15.0s  7–13s  ✔    14%✔     1%     0%    0.4s   2.0s    17%    0.2     3    84%    0%   49%
+  4  11.9s  8.0s 17.0s  10–18s ✔    11%✔     1%     3%    0.6s   4.5s    17%    0.6     3    97%    0%   74%
+  5  11.4s  6.0s 17.2s  10–18s ✔     6%✔     1%     3%    0.7s   4.5s    13%    1.0     4   100%   34%   79%
+  6  12.1s  7.0s 17.9s  10–18s ✔     3%✔     0%     5%    0.8s   4.5s    15%    1.0     4   100%   56%   81%
+  7  11.7s  7.0s 17.2s  10–18s ✔     2%✔     0%     4%    0.8s   4.5s    15%    1.4     4   100%   69%   83%
+  8  16.2s 10.0s 25.0s  15–26s ✔    10%✔     0%     5%    1.2s   6.0s    13%    2.1     4   100%   78%   89%
+  9  16.0s 10.0s 24.1s  15–26s ✔     7%✔     0%     5%    1.3s   6.0s    15%    2.2     4   100%   86%   90%
+ 10  15.8s 10.3s 23.0s  15–26s ✔     3%✔     0%     5%    1.3s   6.0s    17%    3.3     4   100%   92%   88%
+ 11  17.1s 10.8s 25.9s  15–26s ✔     5%✔     0%     5%    1.5s   6.0s    16%    3.4     5   100%   96%   91%
+ 12  16.9s 10.7s 25.7s  15–26s ✔     5%✔     0%     5%    1.4s   6.0s    13%    3.3     4   100%   97%   89%
+ 13  17.8s 12.0s 25.4s  15–26s ✔     5%✔     0%     6%    1.6s   6.0s    14%    3.5     4   100%   99%   89%
+all  13.6s                            7%      0%     4%    0.9s   6.0s    15%    1.7     5
+```
+
+```
+━━ Targets ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✘ day 3: line matchups ≤ 75%                           worst 91%
+✘ day 3: hero pairs ≤ 75%                              worst 91%
+✔ day 3: hero spread ≤ 30 pts                          22 pts
+✘ day 3: every hero 45%–55%                            assassin 42%, duelist 57%, berserker 63%, witch 41%
+✘ day 5: line matchups ≤ 75%                           worst 77%
+✘ day 5: hero pairs ≤ 75%                              worst 77%
+✔ day 5: hero spread ≤ 30 pts                          22 pts
+✘ day 5: every hero 45%–55%                            assassin 58%, duelist 61%, knight 41%, berserker 39%, witch 57%, chrono 42%
+✔ day 10: line matchups ≤ 75%                          worst 74%
+✔ day 10: hero pairs ≤ 75%                             worst 74%
+✔ day 10: hero spread ≤ 30 pts                         9 pts
+✔ day 10: every hero 45%–55%                           all in
+✘ day 13: line matchups ≤ 75%                          worst 76%
+✘ day 13: hero pairs ≤ 75%                             worst 76%
+✔ day 13: hero spread ≤ 30 pts                         21 pts
+✘ day 13: every hero 45%–55%                           duelist 38%, berserker 59%, witch 44%, chrono 58%
+✘ counter pairs 53%–58% (avg over days)                4/16 in · miss hit>heal 47%, hit>poison 60%, dodge>hit 53%, shield>hit 52%, shield>ice 59%, heal>wind 50%, burn>shield 45%, poison>dodge 69%, ice>wind 51%, ice>heal 43%, wind>poison 63%, wind>burn 50%
+✔ assassin ult fires ≥ 50% when unlocked               88%
+✔ assassin ult median time 40%–70% of the fight        63%
+✘ duelist ult fires ≥ 75% when unlocked                65%
+✔ duelist ult median time 40%–70% of the fight         50%
+✘ knight ult fires ≥ 75% when unlocked                 64%
+✔ knight ult median time 40%–70% of the fight          50%
+✔ berserker ult fires ≥ 50% when unlocked              91%
+✔ berserker ult median time 40%–70% of the fight       67%
+✘ pyro ult fires ≥ 75% when unlocked                   74%
+✘ pyro ult median time 40%–70% of the fight            39%
+✔ thornguard ult fires ≥ 75% when unlocked             78%
+✔ thornguard ult median time 40%–70% of the fight      45%
+✘ witch ult fires ≥ 75% when unlocked                  74%
+✔ witch ult median time 40%–70% of the fight           41%
+✔ chrono ult fires ≥ 75% when unlocked                 81%
+✘ chrono ult median time 40%–70% of the fight          38%
+✔ avg fight length in target every day (1–13)          all days
+✔ fatigue-ended ≤ 20% every day                        worst 14% (day 3)
+✔ 0-skill fights ≤ 3% (days 1–13)                      0%
+✔ assassin reaches 10 wins in 15%–45% of runs          39%
+✔ duelist reaches 10 wins in 15%–45% of runs           42%
+✔ knight reaches 10 wins in 15%–45% of runs            39%
+✔ berserker reaches 10 wins in 15%–45% of runs         42%
+✔ pyro reaches 10 wins in 15%–45% of runs              39%
+✔ thornguard reaches 10 wins in 15%–45% of runs        35%
+✔ witch reaches 10 wins in 15%–45% of runs             40%
+✔ chrono reaches 10 wins in 15%–45% of runs            43%
+✔ tiers: hard beats normal ≥ 55% avg, ≥ 50% every day  avg 72%, worst day 61%
+✔ tiers: normal beats easy ≥ 55% avg, ≥ 50% every day  avg 75%, worst day 71%
+
+✘ 16 of 46 targets missed
+```
+
+สิ่งที่ยังไม่ผ่าน (ตรงๆ): ฮีโร่ 45–55% ไม่ผ่านวัน 3/5/13 (หลุดสุด นักรบคลั่ง 39% วัน 5 / 63% วัน 3, นักดาบคู่ 38% วัน 13) · คู่แก้ทาง 12/16 นอก 53–58% (☠>💨 69% แรงไป, ❄>❤ 43% และ 🔥>🛡 45% กลับด้าน) · คู่ฮีโร่ > 75% ในวัน 3/5/13 (แย่สุด นักดาบคู่ > จอมเวทลม 91% วัน 3) · ult นักดาบคู่ / อัศวิน ยิงแค่ ~65% · ult นักเวทเพลิง / จอมเวทลม ยิงเร็วไปนิด (39%, 38% ของการสู้)
