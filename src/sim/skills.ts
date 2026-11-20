@@ -97,7 +97,7 @@ export type Effect =
   | { k: 'charge'; mult: number; /** the multiplier lasts this many hits */ hits?: number }
   | { k: 'thorns'; n: number; /** never wears off */ perm?: boolean; /** enemy healing multiplier while you have thorns (default 0.5) */ heal?: number }
   | { k: 'steadfast'; /** share of control that still lands (default 0.4) */ keep?: number; /** the next freeze on you is ignored */ ignoreFreeze?: boolean }
-  | { k: 'cleanse'; /** how many burn / poison stacks (99 = all); slow, freeze and wound always go */ n: number }
+  | { k: 'cleanse'; /** how many burn / poison stacks (99 = all); slow, freeze and wound always go */ n: number; /** only burn / poison (blows DoT away, can't thaw ice; does not react to control) */ dot?: boolean }
   | { k: 'dispel'; /** how many of each buff (99 = all) */ n: number; /** share of the enemy shield removed (default 0.2) */ shield?: number; /** you gain the พลัง removed */ steal?: boolean }
   | { k: 'leech'; /** your next hit heals this share of its damage */ pct: number };
 
@@ -191,7 +191,7 @@ export interface Ctx {
   thorns(n: number, perm: boolean, heal?: number): void;
   steadfast(keep: number, ignoreFreeze: boolean): void;
   /** returns debuffs removed */
-  cleanse(n: number): number;
+  cleanse(n: number, dotOnly?: boolean): number;
   /** returns buffs removed */
   dispel(n: number, shield: number, steal: boolean): number;
   leech(pct: number): void;
@@ -248,7 +248,7 @@ export function execNode(node: SkillNode, c: Ctx) {
       case 'charge': c.charge(e.mult, e.hits ?? 1); break;
       case 'thorns': c.thorns(c.v(e.n), !!e.perm, e.heal); break;
       case 'steadfast': c.steadfast(e.keep ?? 0.4, !!e.ignoreFreeze); break;
-      case 'cleanse': removed = c.cleanse(e.n); break;
+      case 'cleanse': removed = c.cleanse(e.n, !!e.dot); break;
       case 'dispel': removed = c.dispel(e.n, e.shield ?? 0.2, !!e.steal); break;
       case 'leech': c.leech(e.pct); break;
       case 'dodge': c.dodge(c.v(e.n)); break;
@@ -304,7 +304,7 @@ const BASE_LIST: SkillDef[] = [
   // ======================= 💨 dodge =======================
   // core: quick hits that also dodge
   def('jab', 'dodge', {
-    '': N('แทงหลบ', 3.5, [hit(2), { k: 'dodge', n: 1 }]),
+    '': N('แทงหลบ', 4, [hit(2), { k: 'dodge', n: 1 }]),
     a: N('แทงไว', 2.8, [hit(4), { k: 'dodge', n: 1 }], 'ความเร็ว'),
     a1: N('แทงสายฟ้า', 2.2, [hit(6), { k: 'dodge', n: 1 }]),
     a2: N('แทงลวงตา', 2.8, [hit(4), { k: 'dodge', n: 2 }]),
@@ -324,18 +324,18 @@ const BASE_LIST: SkillDef[] = [
   }),
   // tech: answers 🔥 ☠ (shakes off a burn / poison stack)
   def('sidestep', 'dodge', {
-    '': N('ก้าวหลบ', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 1 }, hit(3)]),
-    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 2 }, hit(3)], 'ล้างดีบัฟ'),
-    a1: N('สะบัดหมด', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 99 }, hit(4)]),
-    a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 2 }, { k: 'heal', n: 4 }]),
-    b: N('เงาลวง', 6, [{ k: 'dodge', n: 3 }, hit(4)], 'หลบมาก'),
-    b1: N('ร่างเงา', 6, [{ k: 'dodge', n: 3 }, hit(7)]),
-    b2: N('เงาสวน', 6, [{ k: 'dodge', n: 3 }, hit(3, { perDodge: 2 })]),
+    '': N('ก้าวหลบ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 1, dot: true }, hit(3)]),
+    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 2, dot: true }, hit(3)], 'ล้างดีบัฟ'),
+    a1: N('สะบัดหมด', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
+    a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 2, dot: true }, { k: 'heal', n: 4 }]),
+    b: N('เงาลวง', 6, [{ k: 'dodge', n: 2 }, hit(4)], 'หลบมาก'),
+    b1: N('ร่างเงา', 6, [{ k: 'dodge', n: 2 }, hit(7)]),
+    b2: N('เงาสวน', 6, [{ k: 'dodge', n: 2 }, hit(3, { perDodge: 2 })]),
   }),
   // ======================= 🛡 shield =======================
   // core: stack shield
   def('shield', 'shield', {
-    '': N('ยกโล่', 6, [{ k: 'shield', n: 6 }, hit(4)]),
+    '': N('ยกโล่', 5, [{ k: 'shield', n: 5 }, hit(3)]),
     a: N('ป้อมโล่', 7, [{ k: 'shield', n: 11 }, hit(6)], 'กำแพง'),
     a1: N('กำแพงเหล็ก', 7, [{ k: 'shield', n: 15 }, hit(7)]),
     a2: N('โล่มั่นคง', 7, [{ k: 'shield', n: 10 }, { k: 'steadfast' }, hit(6)]),
@@ -366,7 +366,7 @@ const BASE_LIST: SkillDef[] = [
   // ======================= ❤ heal =======================
   // core: heal + grow
   def('feast', 'heal', {
-    '': N('กินฟื้นแรง', 5.5, [{ k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
+    '': N('กินฟื้นแรง', 5, [{ k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
     a: N('กินอิ่ม', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
     a1: N('งานเลี้ยง', 5.5, [{ k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
     a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
@@ -500,10 +500,10 @@ const BASE_LIST: SkillDef[] = [
   }),
   // payoff: speed yourself up and blow debuffs away
   def('tailwind', 'wind', {
-    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 1 }, hit(3)]),
-    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 2 }, hit(3)], 'ล้างดีบัฟ'),
-    a1: N('พายุหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 4 }, { k: 'cleanse', n: 99 }, hit(4)]),
-    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 2 }, { k: 'heal', n: 4 }]),
+    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 2, dot: true }, hit(3)]),
+    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 3, dot: true }, hit(3)], 'ล้างดีบัฟ'),
+    a1: N('พายุหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 4 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
+    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 3, dot: true }, { k: 'heal', n: 4 }]),
     b: N('ลมกรด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(3, { times: 2 })], 'เร็ว'),
     b1: N('ลมพายุ', 4.5, [{ k: 'haste', pct: 0.4, secs: 3 }, hit(3, { times: 2 })]),
     b2: N('ลมบาด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(4, { times: 2 }), { k: 'slow', pct: 0.2, secs: 2 }]),
@@ -558,13 +558,13 @@ const BASE_LIST: SkillDef[] = [
     b2: N('เชือดดูดเลือด', 4, [hit(8, { exec: [0.5, 1.4], leech: 0.3 })]),
   }, 'assassin'),
   def('flurry', 'dodge', {
-    '': N('พายุดาบ', 5, [hit(2, { times: 3 }), { k: 'dodge', n: 1 }]),
-    a: N('พายุคม', 5, [hit(2, { times: 4 }), { k: 'dodge', n: 1 }], 'ตีรัวขึ้น'),
-    a1: N('พายุพันดาบ', 5, [hit(2, { times: 5 }), { k: 'dodge', n: 1 }]),
+    '': N('พายุดาบ', 5, [hit(2, { times: 3 })]),
+    a: N('พายุคม', 5, [hit(2, { times: 4 })], 'ตีรัวขึ้น'),
+    a1: N('พายุพันดาบ', 5, [hit(2, { times: 5 })]),
     a2: N('ดาบเงา', 5, [hit(2, { times: 4 }), { k: 'dodge', n: 2 }]),
-    b: N('ดาบหนัก', 5, [hit(3, { times: 3 }), { k: 'dodge', n: 1 }], 'ตีน้อยแต่แรง'),
-    b1: N('ดาบทลาย', 5, [hit(6, { times: 3 }), { k: 'dodge', n: 1 }]),
-    b2: N('ดาบถ่วง', 5, [hit(4, { times: 3 }), { k: 'dodge', n: 1 }, { k: 'delay', secs: 0.3 }]),
+    b: N('ดาบหนัก', 5, [hit(3, { times: 3 })], 'ตีน้อยแต่แรง'),
+    b1: N('ดาบทลาย', 5, [hit(6, { times: 3 })]),
+    b2: N('ดาบถ่วง', 5, [hit(4, { times: 3 }), { k: 'delay', secs: 0.3 }]),
   }, 'duelist'),
   def('bulwark', 'shield', {
     '': N('โล่กระแทก', 6, [hit(6, { shieldPct: 1 })]),
@@ -576,7 +576,7 @@ const BASE_LIST: SkillDef[] = [
     b2: N('ปะทะฟื้น', 6, [hit(9, { shieldPct: 0.8 }), { k: 'shield', n: 4 }, { k: 'heal', n: 4 }]),
   }, 'knight'),
   def('rampage', 'heal', {
-    '': N('คลั่ง', 7, [hit(2, { times: 2, leech: 0.25 })]),
+    '': N('คลั่ง', 5, [hit(2, { times: 2, leech: 0.25 })]),
     a: N('คลั่งรัว', 6, [hit(2, { times: 3, leech: 0.25 })], 'ตีหลายครั้ง'),
     a1: N('บ้าคลั่ง', 6, [hit(4, { times: 4, leech: 0.25 })]),
     a2: N('คลั่งโต', 6, [hit(2, { times: 3, leech: 0.25 }), { k: 'grow', n: 1 }]),
@@ -691,7 +691,7 @@ export const nodeOf = (k: Pick<SkillInstance, 'id' | 'v'>): SkillNode => SKILLS[
 export const hits = (node: SkillNode) => node.fx.some((e) => e.k === 'hit');
 
 /** True if the variant fires early when its owner is controlled (it has ✨ ชำระ or 🗿 ใจเหล็ก). */
-export const reacts = (node: SkillNode) => node.fx.some((e) => e.k === 'cleanse' || e.k === 'steadfast');
+export const reacts = (node: SkillNode) => node.fx.some((e) => (e.k === 'cleanse' && !e.dot) || e.k === 'steadfast');
 
 /** True for engine skills (ฟันเฟือง, เร่งเครื่อง): they fire their list neighbours. */
 export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
@@ -781,7 +781,7 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
       case 'charge': out.push({ kw: 'charge', text: `⚡×${e.mult}${e.hits && e.hits > 1 ? ` (${e.hits} ครั้ง)` : ''}` }); break;
       case 'thorns': out.push({ kw: 'thorns', text: `🌵${e.n}${e.perm ? ' ถาวร' : ''}${e.heal !== undefined ? ` ศัตรูฟื้น ${pct(e.heal)}` : ''}` }); break;
       case 'steadfast': out.push({ kw: 'steadfast', text: `🗿${e.keep !== undefined && e.keep < 0.4 ? ' 80%' : ''}${e.ignoreFreeze ? ' +กันแช่แข็ง 1 ครั้ง' : ''}` }); break;
-      case 'cleanse': out.push({ kw: 'cleanse', text: e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨' }); break;
+      case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}` }); break;
       case 'dispel': out.push({ kw: 'dispel', text: `${e.n >= 99 ? '💥ทั้งหมด' : e.n > 1 ? `💥×${e.n}` : '💥'}${e.shield !== undefined ? ` โล่${pct(e.shield)}` : ''}${e.steal ? ' ขโมยพลัง' : ''}` }); break;
       case 'leech': out.push({ kw: 'leech', text: `🩸${pct(e.pct)} ครั้งถัดไป` }); break;
     }

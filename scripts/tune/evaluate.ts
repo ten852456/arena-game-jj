@@ -1,11 +1,11 @@
 // Measures candidates with the simulator jobs (scripts/sim/jobs.ts) and scores them (lower = better).
 // All candidates of one call share the same seeds (common random numbers), so they are compared fairly.
-import { HEROES } from '../../src/sim/heroes';
+import { HEROES, HEROES_BY_ID } from '../../src/sim/heroes';
 import { TPS } from '../../src/sim/combat';
 import { LINES, type Build } from '../../src/sim/types';
 import { MAX_DAY, type Ctx, type Job, type MatchRes, type RunsRes } from '../sim/jobs';
 import { healthSummary, mergeHealth, newHealth, type Health } from '../sim/metrics';
-import { lengthTarget } from '../sim/targets';
+import { BEATS, TARGETS, ULT_LOW, lengthTarget } from '../sim/targets';
 import { BAND, CURVE_DAYS, curveTargets } from './curves';
 import { KNOBS, toUnit, x0 } from './knobs';
 import type { Task, TunePool } from './pool';
@@ -44,6 +44,8 @@ export interface Measure {
   len: Record<number, { avg: number; fatigue: number; zero: number }>;
   zeroAll: number;
   watch: Record<string, Record<number, number>>;
+  /** hero → ultimate fire rate when unlocked and median fire time share (all scanned days) */
+  ult: Record<string, { fire: number; at: number }>;
 }
 
 export interface Score {
@@ -62,8 +64,12 @@ export const W = {
   zero: 5,
   fatigue: 2,
   length: 30,
+  /** designed counter pairs outside 54–57% (points²) */
+  beats: 2,
+  /** ultimate fire rate / fire time misses (points²) */
+  ult: 0.5,
   /** distance from the current values: (Δ / knob range)² summed × this */
-  dist: 25,
+  dist: 5,
 };
 /** Inner limits (a little stricter than the targets, so noise does not carry a candidate over them). */
 /**
@@ -131,7 +137,7 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
   });
   const r2 = await pool.run<unknown>(t2);
 
-  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {} }));
+  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {}, ult: {} }));
   const match: Record<number, Record<number, Record<string, MatchRes>>> = {};
   const runs: Record<number, Record<string, { won: number; runs: number }>> = {};
   const lens: Record<number, Record<number, Health>> = {};
@@ -192,6 +198,19 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
         }
       m.archWorst[day] = aw;
     }
+    for (const h of HEROES) {
+      let on = 0;
+      let fired = 0;
+      const at: number[] = [];
+      for (const day of spec.days) {
+        const r = match[ci][day][h.id];
+        on += r.ultOn;
+        fired += r.ultFired;
+        at.push(...r.ultAt);
+      }
+      at.sort((x, y) => x - y);
+      m.ult[h.id] = { fire: fired / Math.max(1, on), at: at.length ? at[Math.floor(at.length / 2)] : 0.5 };
+    }
     if (spec.runs > 0) for (const h of HEROES) m.reach[h.id] = runs[ci][h.id].won / runs[ci][h.id].runs;
     let all = newHealth();
     for (const day of LEN_DAYS) {
@@ -213,7 +232,20 @@ const over = (x: number, lim: number) => Math.max(0, x - lim);
 /** Objective of one measured candidate with knob values xs. Lower is better; parts show where the cost comes from. */
 export function score(m: Measure, xs: number[]): Score {
   const tg = curveTargets();
-  const parts: Record<string, number> = { curve: 0, reach: 0, pair: 0, arch: 0, zero: 0, fatigue: 0, length: 0, watch: 0, dist: 0 };
+  const parts: Record<string, number> = { curve: 0, reach: 0, pair: 0, arch: 0, beats: 0, ult: 0, zero: 0, fatigue: 0, length: 0, watch: 0, dist: 0 };
+  // designed counters (one hero per line): average over the scanned days, inner band 54–57%
+  const heroOf = (line: string) => HEROES.find((h) => h.line === line)!.id;
+  const days = Object.keys(m.overall).map(Number);
+  for (const [a, bs] of Object.entries(BEATS))
+    for (const b of bs) {
+      const avg = days.reduce((n, d) => n + (m.pairs[d][`${heroOf(a)}>${heroOf(b)}`] ?? 0.5), 0) / Math.max(1, days.length);
+      parts.beats += W.beats * sq((over(0.54, avg) + over(avg, 0.57)) * 100);
+    }
+  for (const [h, u] of Object.entries(m.ult)) {
+    const lo = ULT_LOW.includes(h) ? TARGETS.ultFireLow : TARGETS.ultFire;
+    parts.ult += W.ult * sq(over(lo + 0.03, u.fire) * 100) + W.ult * sq((over(TARGETS.ultTimeLo + 0.03, u.at) + over(u.at, TARGETS.ultTimeHi - 0.03)) * 100);
+  }
+  void HEROES_BY_ID;
   const pairLim = LIMITS.pair + 0.5 * Math.sqrt(0.25 / Math.max(1, m.pairN));
   for (const day of Object.keys(m.overall).map(Number)) {
     for (const [h, r] of Object.entries(m.overall[day])) {

@@ -32,7 +32,7 @@ const opt = (n: string, d: string) => {
   return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : d;
 };
 const SEED = Number(opt('seed', '1'));
-const DAYS = opt('days', '3,6,9,12,15').split(',').map(Number);
+const DAYS = opt('days', '3,5,10,13').split(',').map(Number);
 const BUDGET = Number(opt('budget', '25')) * 60;
 const LAMBDA = Number(opt('lambda', '12'));
 const SIGMA = Number(opt('sigma', '0.12'));

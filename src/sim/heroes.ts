@@ -57,6 +57,8 @@ export interface CombatHooks {
   burnSecs?(secs: number): number;
   /** slow this fighter applies: [percent 0..1, seconds] */
   slow?(pct: number, secs: number): [number, number];
+  /** this fighter dodged a hit */
+  onDodge?(me: HookFighter): void;
 }
 
 /** What a hero's ultimate does, in words (Thai; client/i18n_en.ts has English). Numbers come from tuning.ts. */
@@ -124,17 +126,20 @@ export const HEROES: HeroDef[] = [
   // ---------------- 💨 dodge ----------------
   {
     id: 'duelist', day1: ['flurry', 'jab', 'riposte', 'sidestep', 'strike'], name: 'นักดาบคู่', line: 'dodge', unique: 'flurry',
-    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1 · ตีครบทุก ${T['duelist.every']} ครั้ง ได้หลบ +1`,
+    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1 · หลบได้แล้ว การตีครั้งถัดไปแรง ×${T['duelist.counter']}`,
     style: 'หลบแล้วสวน: ตีเร็วสะสมแต้มหลบ ให้การตีของศัตรูพลาด แล้วสวนกลับแรงตามแต้มหลบที่มี',
     hooks: {
       maxHp: hpOf('duelist'),
       onStart(me) {
         me.dodge(1);
       },
+      onDodge(me) {
+        me.flags.counter = 1;
+      },
       onHit(me, dmg) {
-        me.flags.hits = (me.flags.hits ?? 0) + 1;
-        if (me.flags.hits % T['duelist.every'] === 0) me.dodge(1);
-        return dmg;
+        if (!me.flags.counter) return dmg;
+        me.flags.counter = 0;
+        return dmg * T['duelist.counter'];
       },
     },
     botWant: ['jab', 'flurry', 'riposte'],
@@ -178,8 +183,8 @@ export const HEROES: HeroDef[] = [
     botWant: ['feast', 'rampage', 'train'],
     ult: {
       name: 'ไม่ยอมตาย',
-      trigger: 'โดนตีจนเลือดหมด (ทุกเลเวล)',
-      get effect() { return both((lv) => `รอดที่ 1 เลือด ฟื้น ${pc(ultPow('berserker', lv))}% ของเลือดสูงสุด + พลัง +${lv >= 2 ? 3 : 2}`); },
+      get trigger() { return both((lv) => `เลือดต่ำกว่า ${pc(ultTrig('berserker', lv))}% หรือโดนตีจนเลือดหมด`); },
+      get effect() { return both((lv) => `ไม่ตาย (เหลือ 1 เลือดถ้าโดนตีจนหมด) ฟื้น ${pc(ultPow('berserker', lv))}% ของเลือดสูงสุด + พลัง +${lv >= 2 ? 3 : 2}`); },
     },
   },
   // ---------------- 🔥 burn ----------------

@@ -455,7 +455,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       }
     }
   }
-  /** Has f's trigger been met? (นักรบคลั่ง's fires inside deal) */
+  /** Has f's trigger been met? (นักรบคลั่ง's also fires inside deal on a killing blow) */
   function ultReady(f: Fighter): boolean {
     if (f.ultLv <= 0 || f.ultDone || f.hp <= 0) return false;
     const foe = F[1 - f.side];
@@ -465,6 +465,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       case 'assassin': return f.bigHit > 0 && foe.hp < foe.maxHp * need;
       case 'duelist': return f.dodges >= need;
       case 'knight': return f.shieldGot >= f.maxHp * need && f.shield > 0;
+      case 'berserker': return f.hp < f.maxHp * need;
       case 'pyro': return foe.burns.length >= need;
       case 'thornguard': return f.hitsTaken >= need;
       case 'witch': return f.lineCasts >= need;
@@ -523,6 +524,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           foe.dodges++;
           foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
           emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
+          foe.hooks.onDodge?.(hookApi(foe));
           return -1;
         }
         f.bigHit = Math.max(f.bigHit, dmg);
@@ -667,9 +669,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         if (f.frozen > 0) f.frozen = Math.max(1, Math.round(f.frozen * keep));
         emit({ type: 'status', side: f.side, status: 'steadfast', value: 1 });
       },
-      cleanse(stacks) {
+      cleanse(stacks, dotOnly) {
         // the strongest burn / poison stacks, then slow, freeze and wounds
         let n = removeDots(f, stacks);
+        if (dotOnly) {
+          emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
+          return n;
+        }
         if (f.woundT > 0) { f.woundT = 0; f.woundP = 0; n++; }
         if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
         if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
