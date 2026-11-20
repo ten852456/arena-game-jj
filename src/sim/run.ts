@@ -2,7 +2,7 @@ import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID } from './heroes';
 import { rollBonuses } from './links';
 import { T } from './tuning';
-import { SKILLS, SKILL_LIST, lvOf, nextVariants } from './skills';
+import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
 
 /** One run (รอบ) of the game: pick skills day by day until 10 wins or HP runs out. */
@@ -340,12 +340,19 @@ export function recordResult(s: RunState, won: boolean, info: Omit<LogEntry, 'da
   beginDay(s);
 }
 
+/** What Awaken would do, per skill: the Lv2 variant a Lv1 skill becomes (null = not Lv1). Same rolls as Awaken itself. */
+export function awakenPreview(s: RunState): (Variant | null)[] {
+  const rng = new Rng(hashSeed(s.seed, 'awaken', s.day));
+  return s.skills.map((k) => (k.v === '' ? rng.pick(nextVariants('')) : null));
+}
+
 export function chooseLastChance(s: RunState, opt: LastChanceOption) {
   if (s.phase !== 'lastchance') return;
   if (opt === 'awaken') {
     // every Lv1 skill moves to Lv2 on a random branch
-    const rng = new Rng(hashSeed(s.seed, 'awaken', s.day));
-    for (const k of s.skills) if (k.v === '') k.v = rng.pick(nextVariants(''));
+    awakenPreview(s).forEach((v, i) => {
+      if (v) s.skills[i].v = v;
+    });
   }
   if (opt === 'supply') {
     s.gold += 8;

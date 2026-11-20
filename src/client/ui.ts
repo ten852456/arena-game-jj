@@ -372,6 +372,17 @@ function render() {
     onEnterView(view);
   }
   stage.show(view === 'town' || view === 'profile' || view === 'leaderboard' ? 'town' : 'combat');
+  // low run HP: the screen edges glow red in the shop (the fight has its own red vignette)
+  const hpFrac = run && runActive() && view === 'shop' ? run.hp / R.START_HP : 1;
+  document.body.classList.toggle('low-hp', hpFrac <= 0.3);
+  document.body.classList.toggle('crit', hpFrac <= 0.15);
+  const logoEl = document.querySelector<HTMLElement>('header .logo');
+  if (logoEl) {
+    const busy = view === 'fighting' || view === 'replay';
+    logoEl.setAttribute('aria-disabled', String(busy));
+    logoEl.title = busy ? '' : L('กลับเมือง', 'Back to town');
+    logoEl.setAttribute('aria-label', `Mochi Moon · ${L('กลับเมือง', 'Back to town')}`);
+  }
   const html = {
     profile: renderProfile,
     leaderboard: renderLeaderboard,
@@ -982,6 +993,44 @@ function renderResult() {
   </div>`;
 }
 
+/** Awaken: how many skills it would level up. */
+function awakenCount() {
+  const n = R.awakenPreview(run!).filter(Boolean).length;
+  return n ? L(`อัป ${n} ใบ`, `${n} skill${n > 1 ? 's' : ''} up`) : L('ไม่มี Lv1 ให้อัป', 'no Lv1 skill to level');
+}
+
+/** Last chance: your skills under the three powers, showing what each power would do to them. Pointing at (or focusing)
+ * a power highlights its part (data-show on .lc-build, set in onLcHover). */
+function lcBuild() {
+  const r = run!;
+  const up = R.awakenPreview(r);
+  const rows = r.skills
+    .map((k, i) => {
+      const t = bonusTotals(r.skills, i);
+      const v = up[i];
+      const next = v ? { ...k, v } : null;
+      const aw = next
+        ? `<span class="lc-fx lc-awaken">▲ ${L('ตื่นพลัง', 'Awaken')} → <b>${nodeOf(next).name} Lv2</b> ${chipsHTML(next)}</span>`
+        : `<span class="lc-fx lc-awaken lc-same">${L('ตื่นพลัง: เลเวลสูงแล้ว ไม่เปลี่ยน', 'Awaken: already Lv2+, no change')}</span>`;
+      const mk = `<span class="lc-fx lc-mark">✦ ${k.mark ? L(`มีตรา ${R.MARK_INFO[k.mark].name} แล้ว (ใส่ใหม่จะแทน)`, `has ${R.MARK_INFO[k.mark].name} (a new mark replaces it)`) : L('ใส่ตราวิญญาณได้', 'can take the Spirit Mark')}</span>`;
+      return `<li class="arch-${SKILLS[k.id].arch}${v ? ' will-up' : ''}"><img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste)}${aw}${mk}</div></li>`;
+    })
+    .join('');
+  const supply = `<li class="lc-fx lc-supply lc-slot">＋ ${L('ช่อง skill ใหม่ (ถาวร) และเงิน +8 ไว้ซื้อของวันพรุ่งนี้', 'A new skill slot (for good) and +8 gold for tomorrow')}</li>`;
+  return `<div class="lc-build" data-show="awaken">
+    <h3>${L('skill ของคุณ', 'Your skills')} <small class="muted">${L('ชี้ที่พลังด้านบนเพื่อดูว่าจะเปลี่ยนอะไร', 'point at a power above to see what it changes')}</small></h3>
+    <ol class="build readonly lc-list">${rows}${supply}</ol>
+  </div>`;
+}
+
+/** Hover / focus on a last-chance power: show its effect on the skill list. */
+function onLcHover(ev: Event) {
+  if (view !== 'lastchance') return;
+  const b = (ev.target as Element).closest?.<HTMLElement>('[data-a="lc"]');
+  const box = $panel.querySelector<HTMLElement>('.lc-build');
+  if (b && box && box.dataset.show !== b.dataset.i) box.dataset.show = b.dataset.i!;
+}
+
 function renderLastChance() {
   scene.idle(run!.hero, R.lookOf(run!));
   return `<div class="lay">
@@ -993,10 +1042,11 @@ function renderLastChance() {
     'You become a <b>half-spirit</b>: you come back with 1 HP, and one more loss ends the run. Pick one power',
   )}</p>
   <div class="heroes">
-    <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
+    <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span class="lc-count">${awakenCount()}</span><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มสาย A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
     <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Get 1 of 4 random marks, then pick a skill for it')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for a build with a clear main skill')}</span></button>
     <button class="hero" data-a="lc" data-i="supply"><b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${L('เงิน 8 และช่อง skill +1 ถาวร', '8 gold and +1 skill slot for good')}</span><span class="muted">${L('เหมาะกับ build ที่ยังขาดชิ้นสำคัญ', 'Good for a build still missing a key piece')}</span></button>
   </div>
+  ${lcBuild()}
   </section>
   </div>`;
 }
@@ -1010,8 +1060,14 @@ function renderMark() {
   <section class="lay-main glass">
   <h2>${L('ได้ตรา', 'New mark')}: ${m.name}</h2>
   <p>${m.desc} · ${L('เลือก skill ที่จะใส่ตรา', 'pick the skill that gets the mark')}</p>
-  <ol class="build">${r.skills
-    .map((k, i) => (`<li class="arch-${SKILLS[k.id].arch}"><div class="sk-text">${skillLine(k)}</div><span class="btns"><button data-a="mark" data-i="${i}">${L('ใส่ตรานี้', 'Mark this')}</button></span></li>`))
+  <ol class="build lc-list mark-list">${r.skills
+    .map((k, i) => {
+      const t = bonusTotals(r.skills, i);
+      const repl = k.mark && k.mark !== r.pendingMark ? `<span class="lc-fx lc-warn">${L('แทนตราเดิม', 'replaces')} ${R.MARK_INFO[k.mark].name}</span>` : '';
+      return `<li class="arch-${SKILLS[k.id].arch}"><img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste)}
+        <span class="lc-fx lc-mark">✦ ${m.name}: ${m.desc}</span>${repl}</div>
+        <span class="btns"><button class="primary" data-a="mark" data-i="${i}">${L('ใส่ตรานี้', 'Mark this')}</button></span></li>`;
+    })
     .join('')}</ol>
   <div class="actions"><button class="ghost" data-a="mark" data-i="-1">${L('ไม่ใส่', 'Skip')}</button></div>
   </section>
@@ -1564,6 +1620,25 @@ function onPointerDown(ev: PointerEvent) {
 export function startUI(st: Stage) {
   stage = st;
   scene = st.combat;
+  // header logo: back to the town from any screen (not while a fight is playing: its end would pull you back)
+  const logo = document.querySelector<HTMLElement>('header .logo');
+  const goHome = () => {
+    if (view === 'fighting' || view === 'replay' || view === 'town') return;
+    if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
+    treeOpen = null;
+    hideTip();
+    view = 'town';
+    render();
+  };
+  logo?.addEventListener('click', goHome);
+  $panel.addEventListener('pointerover', onLcHover);
+  $panel.addEventListener('focusin', onLcHover);
+  logo?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      goHome();
+    }
+  });
   st.town.onSelect = (id) => {
     selected = id;
     if (view === 'town') render();

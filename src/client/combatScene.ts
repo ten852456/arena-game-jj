@@ -1,5 +1,6 @@
 import { combatSfx, fightSfx, voice } from './audio';
 import Phaser from 'phaser';
+import { DangerVignette } from './danger';
 import { ZOOM } from './view';
 import { SKILLS, nodeOf } from '../sim/skills';
 import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '../sim/types';
@@ -83,6 +84,7 @@ export class CombatScene extends Phaser.Scene {
   private chainFlash: { a: number; b: number; until: number }[][] = [[], []];
   private maxHp: [number, number] = [40, 40];
   private hp: [number, number] = [40, 40];
+  private danger!: DangerVignette;
   private sh: [number, number] = [0, 0];
   private frozenUntil = [0, 0];
   private evs: CombatEvent[] = [];
@@ -152,6 +154,7 @@ export class CombatScene extends Phaser.Scene {
     this.bars = this.add.graphics();
     this.strip = new SkillStrip(this, GROUND + 22);
     this.fxl = new FxLayer(this);
+    this.danger = new DangerVignette(this, W, H);
     this.fighters.forEach((f) => f.setDepth(2));
     this.ffx = new FighterFx(this, this.fxl, POS, GROUND, HERO_H);
     const trace = () => this.trace;
@@ -332,6 +335,7 @@ export class CombatScene extends Phaser.Scene {
     this.life.update(t, delta);
     this.fxl.update(vdt);
     this.updateShake(t);
+    this.danger.update(t, delta, this.hp[0] / Math.max(1, this.maxHp[0]), this.playing);
     if (!this.playing) {
       this.heroIdle.update(t, delta);
       return;
