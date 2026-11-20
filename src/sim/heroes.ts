@@ -122,10 +122,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- ⚔ hit ----------------
   {
     id: 'assassin', day1: ['execute', 'strike', 'heavy', 'charge', 'venom'], name: 'นักฆ่า', line: 'hit', unique: 'execute',
-    get passive() {
-      const every = T['assassin.every'];
-      return `${hpTxt('assassin')}การตีครั้งแรกของการสู้${every ? ` และทุกการตีครั้งที่ ${every}` : ''}แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`;
-    },
+    passive: `${hpTxt('assassin')}การตีครั้งแรกของการสู้${T['assassin.every'] ? ` และทุกการตีครั้งที่ ${T['assassin.every']}` : ''}แรง ×${T['assassin.first']} · การตีที่โดนทำให้ศัตรูฟื้นน้อยลง ${pc(T['assassin.wound'])}% 2 วิ`,
     style: 'ตีทีเดียวจบ: รวมพลังแล้วปล่อยการโจมตีหนักๆ ปลิดชีพตอนศัตรูเลือดต่ำ',
     hooks: {
       maxHp: hpOf('assassin'),

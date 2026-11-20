@@ -921,6 +921,9 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         const foeStats = F[1 - f.side].stats;
         if (f.burns.length && f.hp > 0) {
           for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
+          // ไฟเผาโล่: each burn tick also burns away shield (tuning.ts `burn.scorch` × the burn per second);
+          // done before the burn damage so that damage event's snapshot already shows the smaller shield
+          f.shield -= Math.min(f.shield, Math.round(dps(f.burns) * T['burn.scorch']));
           deal(f, dps(f.burns), false, 'burn');
           f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
         }

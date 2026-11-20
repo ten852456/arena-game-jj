@@ -61,7 +61,7 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   shield: { name: 'Shield', desc: 'Takes damage before your HP and stays until it breaks' },
   heal: { name: 'Heal', desc: 'Restore your own HP' },
   leech: { name: 'Leech', desc: 'Heal a share of the damage you deal' },
-  burn: { name: 'Burn', desc: `Enemy loses X HP per second for N seconds · ignores shields, can’t be dodged · stacks · a burning fighter gains ${Math.round((1 - T['burn.shield']) * 100)}% less shield` },
+  burn: { name: 'Burn', desc: `Enemy loses X HP per second for N seconds · ignores shields and burns shield away by the same amount each second, can’t be dodged · stacks · a burning fighter gains ${Math.round((1 - T['burn.shield']) * 100)}% less shield` },
   freeze: {
     name: 'Freeze',
     desc: "All the enemy's skills stop counting their cooldowns · weaker if repeated quickly · capped per fight · when a freeze ends, the enemy resists control for 1.5s",
