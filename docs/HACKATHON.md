@@ -4,6 +4,18 @@ Notes from research on 18 Nov 2026. Sources at the bottom.
 
 **Project name: Mochi Moon** (decided 19 Nov 2026). Art style: the mochi chibi critters from the layered template (mix-and-match parts, recolour by palette).
 
+## Source documents (read in this order)
+
+| Doc | Date | Status |
+|---|---|---|
+| [Vision and identity of the game](hackathon/vision-th.pdf) (Ten, Thai) | 13 Nov 2026 | **The original vision.** Player feelings ("so close, one more!" / "that build was insane"), the run, async fights, rule-set bots, daily rules, hero library, town + idle heroes, seasons, and the 10 fixed principles |
+| [Project overview](hackathon/project-overview-th.pdf) (Ten, Thai) | 19 Nov 2026 | **Latest summary** after discussing the docs below: core = Arena + idle Farm fully onchain (ER + session keys + VRF), Private ER to hide opponent builds, Legend builds, Challenge Blinks, economy tiers A/B/C, sprint plan, Grid-vs-List playtest (recommends List + engine skills + drag + timeline) |
+| [Onchain game design](hackathon/onchain-game-design.pdf) + [pitch deck](hackathon/pitch.pdf) (JaJoJi) | 18 Nov 2026 | Build economy: Seal → Build Card, Build Library with USDC use fees, Raid Boss, Endless Tower, Farm tickets, season USDC prizes |
+
+**Owner, 20 Nov 2026:**
+- The game's numbers in these docs are **old**: balance has been developed since (e.g. the live list version ends a run at 10 wins). The code (`src/sim/tuning.ts`, `run.ts`) is the source of truth for numbers.
+- **Direction is GameFi on the blockchain first.** Legal is not a design constraint, so "waiting for a lawyer" items in the docs (USDC use fees, season pools) are open to design now.
+
 ## Game design and pitch (JaJoJi, 18 Nov 2026)
 
 Full documents: [onchain game design](hackathon/onchain-game-design.pdf) (14 pages) and [pitch deck](hackathon/pitch.pdf) (16 slides).
