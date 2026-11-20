@@ -99,6 +99,8 @@ export interface Db {
   tracks: Record<string, RunTrack>;
   runs: FinishedRun[];
   players: Record<string, Player>;
+  /** playerId → time it used its one guided-tutorial fight (day 1 vs a training AI) */
+  tutorials: Record<string, number>;
 }
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -118,6 +120,7 @@ function loadDb(): Db {
     tracks: Object.assign(Object.create(null), isObj(d.tracks) ? d.tracks : {}),
     runs: Array.isArray(d.runs) ? d.runs : [],
     players: Object.assign(Object.create(null), isObj(d.players) ? d.players : {}),
+    tutorials: Object.assign(Object.create(null), isObj(d.tutorials) ? d.tutorials : {}),
   };
 }
 
@@ -136,6 +139,7 @@ export function enforceCaps() {
   if (db.runs.length > RUN_CAP) db.runs.splice(0, db.runs.length - RUN_CAP);
   capRecord(db.tracks, TRACK_CAP, (x) => x.t);
   capRecord(db.players, PLAYER_CAP, (x) => x.updatedAt);
+  capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
 }
 
 let saveTimer: NodeJS.Timeout | null = null;

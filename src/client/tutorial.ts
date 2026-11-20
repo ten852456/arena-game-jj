@@ -113,20 +113,23 @@ export function showTutorial() {
   draw();
 }
 
-/** Show the tutorial if this browser hasn't seen it, and add the "?" button to the header. */
-export function initTutorial() {
+/**
+ * Add the "?" button to the header. Without options it opens these slides and shows them on the first visit;
+ * `onHelp` replaces both (the guided tutorial offers itself and lets the player pick slides or the guide).
+ */
+export function initTutorial(opts: { onHelp?: () => void } = {}) {
   const header = document.querySelector('header');
   if (header && !header.querySelector('.tut-open')) {
     const b = document.createElement('button');
     b.className = 'tut-open small ghost';
     const paint = () => (b.textContent = L('? วิธีเล่น', '? How to play'));
     paint();
-    b.addEventListener('click', showTutorial);
+    b.addEventListener('click', () => (opts.onHelp ?? showTutorial)());
     header.appendChild(b);
     onLang(() => {
       paint();
       redraw();
     });
   }
-  if (!seen()) showTutorial();
+  if (!opts.onHelp && !seen()) showTutorial();
 }

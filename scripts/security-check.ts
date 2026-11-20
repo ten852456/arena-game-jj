@@ -33,3 +33,17 @@ const fin = await post('/api/run/finish', { runId: s.id, playerId: 'p4', name: '
 check('fighting after the run ended → 409', (await post('/api/fight', { runId: s.id, playerId: 'p4', name: '', day: s.day + 1, rating: 1000, build: toBuild(s) }))[0] === 409);
 check('skipping ahead a day → 409', (await post('/api/fight', { runId: 'sec-skip-' + Date.now(), playerId: 'p5', day: 3, rating: 1000, build }))[0] === 409);
 check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0, `w${s.wins} l${s.losses} → ${fin[1].reward?.stardust} ผงดาว`);
+// 7 guided-tutorial fight: once per player, only on day 1 of a brand-new run, flag must be exactly true
+{
+  const pid = 'sec-tut-' + Date.now();
+  const [t1, j1] = await post('/api/fight', { runId: pid + '-r1', playerId: pid, day: 1, rating: 1000, build, tutorial: true });
+  check('tutorial fight: day 1 of a new run → training AI', t1 === 200 && j1.tutorial === true && j1.opponent.ai && j1.opponent.tier === 'easy', `won ${j1.won}`);
+  const [t2, j2] = await post('/api/fight', { runId: pid + '-r2', playerId: pid, day: 1, rating: 1000, build, tutorial: true });
+  check('tutorial fight: only once per player', t2 === 200 && !j2.tutorial);
+  const [, j3] = await post('/api/fight', { runId: pid + '-r1', playerId: pid, day: 2, rating: 1000, build, tutorial: true });
+  check('tutorial fight: not on day 2', !j3.tutorial);
+  const [t4] = await post('/api/fight', { runId: pid + '-r1', playerId: pid, day: 1, rating: 1000, build, tutorial: true });
+  check('tutorial fight: cannot re-fight day 1 → 409', t4 === 409);
+  const [, j5] = await post('/api/fight', { runId: pid + '-r3', playerId: pid + 'x', day: 1, rating: 1000, build, tutorial: 'yes' });
+  check('tutorial fight: flag must be exactly true', !j5.tutorial);
+}

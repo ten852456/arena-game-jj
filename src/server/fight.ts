@@ -4,7 +4,7 @@ import { SIM_VERSION, simulate } from '../sim/combat';
 import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { ARCHES, type Archetype, type Build } from '../sim/types';
-import { aiBuildFor, archetypeOf, candidates, closest, streakOf, tierFor } from './match';
+import { aiBuildFor, archetypeOf, candidates, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild } from './validate';
 
@@ -75,11 +75,21 @@ export function handleFight(body: any): Res {
   if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   const streak = streakOf(prev);
 
+  // Guided tutorial: the very first fight of a brand-new run, once per player, is against a training AI
+  // (an easy bot with one skill, a fight the player wins). The server decides everything; the client only asks.
+  const tutorial = body?.tutorial === true && day === 1 && !prev && !Object.hasOwn(db.tutorials, playerId);
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
-  const { pool, window } = candidates({ day, rating, runId, playerId, track: prev });
-  const seed = randomInt(0, 2 ** 32 - 1);
+  const { pool, window } = tutorial ? { pool: [] as Snapshot[], window: null } : candidates({ day, rating, runId, playerId, track: prev });
+  let seed = randomInt(0, 2 ** 32 - 1);
   let opp: { snap?: Snapshot; name: string; build: Build; rating: number; ai: boolean; tier?: BotTier };
-  if (pool.length) {
+  let result: ReturnType<typeof simulate> | null = null;
+  if (tutorial) {
+    db.tutorials[playerId] = Date.now();
+    const t = tutorialOpponent(build, day);
+    seed = t.seed;
+    result = t.result;
+    opp = { name: `AI · ${HEROES_BY_ID[t.build.hero].name}`, build: t.build, rating, ai: true, tier: 'easy' };
+  } else if (pool.length) {
     const near = closest(pool);
     const snap = near[randomInt(0, near.length)];
     opp = { snap, name: snap.name, build: snap.build, rating: snap.rating, ai: false };
@@ -89,7 +99,7 @@ export function handleFight(body: any): Res {
     opp = { name: `AI · ${HEROES_BY_ID[aiB.hero].name}`, build: aiB, rating, ai: true, tier };
   }
 
-  const result = simulate(build, opp.build, seed, day);
+  result ??= simulate(build, opp.build, seed, day);
   const won = result.winner === 0;
   const score = won ? 1 : result.winner === -1 ? 0.5 : 0;
   const newRating = Math.round(rating + 32 * (score - expected(rating, opp.rating)));
@@ -155,6 +165,7 @@ export function handleFight(body: any): Res {
         arch: archetypeOf(opp.build), build: opp.build, rating: opp.rating,
       },
       match: { window, pool: pool.length },
+      ...(tutorial ? { tutorial: true } : {}),
       result, won, rating: newRating,
     },
   };

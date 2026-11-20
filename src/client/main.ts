@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CombatScene, H, W, sceneReady } from './combatScene';
 import { TownScene, townReady } from './townScene';
 import { initTutorial } from './tutorial';
+import { initGuide, openHelp } from './guide';
 import { startUI, type Stage } from './ui';
 import { ZOOM } from './view';
 import { initLang, mountLangSwitch, onLang } from './lang';
@@ -83,7 +84,8 @@ async function boot() {
     },
   };
   startUI(stage);
-  initTutorial();
+  initTutorial({ onHelp: openHelp });
+  initGuide();
   mountLangSwitch();
   mountMute();
   paintTagline();

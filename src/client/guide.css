@@ -1,0 +1,73 @@
+/* ---------- guided tutorial (guide.ts): dimmed screen, cut-out spotlight, pulsing ring, bubble ---------- */
+.gd-root {
+  --gd-dim: rgba(8, 5, 28, 0.66);
+  --gd-gold: var(--accent, #f0b429);
+  position: fixed; inset: 0; z-index: 1100; pointer-events: none;
+}
+/* the hole: everything outside it is dimmed by its huge shadow; clicks pass straight through it */
+.gd-hole {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 200vmax var(--gd-dim);
+  transition: left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease;
+}
+.gd-ring {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  border: 3px solid var(--gd-gold); box-shadow: 0 0 18px var(--gd-gold);
+  animation: gd-pulse 1.3s ease-in-out infinite;
+  transition: left 0.18s ease, top 0.18s ease, width 0.18s ease, height 0.18s ease;
+}
+@keyframes gd-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.04); opacity: 0.55; }
+}
+/* no target: a centred card on a fully dimmed screen */
+.gd-root.nohole .gd-hole { left: 50% !important; top: 50% !important; width: 0 !important; height: 0 !important; transition: none; }
+.gd-root.nohole .gd-ring { display: none; }
+/* the fight plays (or the screen is still drawing): no dimming */
+.gd-root.passive .gd-hole, .gd-root.waiting .gd-hole { box-shadow: none; }
+.gd-root.waiting .gd-ring, .gd-root.waiting .gd-bubble { opacity: 0; pointer-events: none; }
+
+.gd-bubble {
+  position: fixed; left: 0; top: 0; width: min(330px, calc(100vw - 24px)); pointer-events: auto;
+  background: #fff8e6; color: #2a1d10; border: 2px solid var(--gd-gold); border-radius: 16px;
+  padding: 12px 14px 10px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  font-size: 15px; line-height: 1.45; transition: transform 0.18s ease, opacity 0.15s;
+}
+.gd-title { display: block; font-size: 17px; margin-bottom: 2px; color: #7a4a00; }
+.gd-text { margin: 0 0 10px; }
+.gd-btns { display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+.gd-bubble button { min-height: 40px; }
+.gd-bubble .gd-skip { color: #6b5a44; border-color: #d9c7a6; background: transparent; }
+.gd-bubble .gd-next { margin-left: auto; }
+.gd-dots { display: flex; gap: 4px; justify-content: center; margin-top: 8px; }
+.gd-dots i { width: 6px; height: 6px; border-radius: 50%; background: #e2d2b2; }
+.gd-dots i.on { background: var(--gd-gold); }
+/* arrow towards the target (data-side = the bubble side the arrow sits on) */
+.gd-arrow { position: absolute; width: 16px; height: 16px; background: #fff8e6; border: 2px solid var(--gd-gold); transform: rotate(45deg); display: none; }
+.gd-bubble[data-side="top"] .gd-arrow { display: block; top: -10px; margin-left: -8px; border-right: none; border-bottom: none; }
+.gd-bubble[data-side="bottom"] .gd-arrow { display: block; bottom: -10px; margin-left: -8px; border-left: none; border-top: none; }
+.gd-bubble[data-side="left"] .gd-arrow { display: block; left: -10px; margin-top: -8px; border-right: none; border-top: none; }
+.gd-bubble[data-side="right"] .gd-arrow { display: block; right: -10px; margin-top: -8px; border-left: none; border-bottom: none; }
+@media (max-height: 430px) {
+  .gd-bubble { padding: 8px 12px 6px; font-size: 14px; width: min(300px, calc(100vw - 24px)); }
+  .gd-title { font-size: 15px; }
+  .gd-text { margin-bottom: 6px; }
+  .gd-dots { margin-top: 4px; }
+  .gd-bubble button { min-height: 36px; padding-top: 4px; padding-bottom: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gd-ring { animation: none; }
+  .gd-hole, .gd-ring, .gd-bubble { transition: none; }
+}
+
+/* "? How to play" chooser */
+.gd-help { position: fixed; inset: 0; z-index: 1101; background: rgba(5, 7, 10, 0.72); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.gd-help-box {
+  position: relative; width: min(360px, 100%); display: flex; flex-direction: column; gap: 10px;
+  background: var(--panel, #161b22); border: 1px solid var(--line, #2a313c); border-radius: 14px; padding: 20px 18px 18px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+.gd-help-box h2 { margin: 0 0 4px; color: var(--accent, #f0b429); text-align: center; }
+.gd-help-box button { min-height: 44px; }
+.gd-help-box p { margin: -4px 0 0; text-align: center; }
+.gd-help-x { position: absolute; top: 8px; right: 8px; min-width: 44px; }

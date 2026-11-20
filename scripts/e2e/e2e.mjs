@@ -37,10 +37,10 @@ async function play(label, ctxOpts, runs = 1) {
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForTimeout(1500);
   ok(`${label}: title is Mochi Moon`, (await p.title()) === 'Mochi Moon');
-  // tutorial
-  const tut = await has('.tut-x');
-  ok(`${label}: tutorial shows on first visit`, tut);
-  await tap('.tut-x');
+  // tutorial: the guided tutorial offers itself on the first visit (skip it here; e2e-guide.mjs plays it)
+  const tut = await has('.gd-skip');
+  ok(`${label}: guided tutorial is offered on first visit`, tut);
+  await tap('.gd-skip');
   ok(`${label}: town has no horizontal scroll`, await noHScroll());
   await tap('[data-lang="en"]');
   ok(`${label}: English switch changes language`, await p.locator('html').getAttribute('lang') === 'en');
@@ -257,7 +257,7 @@ async function layout(label, ctxOpts, portrait = false) {
   };
   await p.goto(BASE, { waitUntil: 'load' });
   await p.waitForTimeout(1500);
-  await tap('.tut-x');
+  await tap('.gd-skip');
   await fits('town', '.town-card');
   await tap('[data-a="goto"][data-i="arena"]');
   await tap('[data-a="enterArena"]', 900);
