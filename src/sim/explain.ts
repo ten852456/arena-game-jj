@@ -570,7 +570,7 @@ export function explain(
         'speed',
       );
     }
-    if (!out.length)
+    if (!out.length && their.dealt > my.dealt)
       add(
         1,
         L(
@@ -578,6 +578,15 @@ export function explain(
           `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → level up your top damage skill, or buy another skill slot in the shop`,
         ),
         'damage',
+      );
+    else if (!out.length)
+      add(
+        1,
+        L(
+          `${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}อึดกว่า (โล่ ${their.shielded} ฟื้นเลือด ${their.healed}) → เพิ่มการทะลุโล่ ไฟ/พิษ หรือแผลลึก`,
+          `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}lasted longer (shield ${their.shielded}, healing ${their.healed}) → add pierce, burn/poison or wounds`,
+        ),
+        'defence',
       );
   } else {
     if (pct(theirCtl, len) >= 20)
