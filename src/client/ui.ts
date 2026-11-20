@@ -2,6 +2,7 @@ import { randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
 import { HEROES, HEROES_BY_ID } from '../sim/heroes';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
+import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
 import * as M from './views/meta';
 import * as P from './views/pages';
@@ -787,12 +788,7 @@ const FOE = '#d95926';
  */
 /** C6: explanation of the fight (headline, facts, why) from side `me`'s point of view. */
 function explainHTML(r: CombatResult, x: Explanation, me: 0 | 1) {
-  const won = r.winner === me;
-  return `<div class="explain">
-    <p><b>${esc(x.headline)}</b></p>
-    <ul class="facts">${x.facts.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
-    ${x.reasons.length ? `<h4>${won ? L('ทำไมชนะ', 'Why you won') : L('ทำไมแพ้ และลองอะไรต่อ', 'Why you lost, and what to try next')}</h4><ul class="reasons">${x.reasons.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
-  </div>`;
+  return explainView(x, r.winner === me);
 }
 
 function vsSummary(r: CombatResult, builds: [Build, Build], names2: [string, string]) {
