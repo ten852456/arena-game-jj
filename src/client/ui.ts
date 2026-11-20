@@ -6,6 +6,9 @@ import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
 import * as M from './views/meta';
 import * as P from './views/pages';
+import * as RC from './views/records';
+import * as RF from './runEndFx';
+import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
@@ -25,7 +28,7 @@ import { initShopDrag, shopDragging } from './shop/shopdrag';
 import { clearPick, goToPick, picked, setPick } from './shop/pick';
 import { music, sfx, voice } from './audio';
 import { IMAGES, skillIcon, archIcon } from './assets';
-import { L } from '../i18n';
+import { L, getLang } from '../i18n';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
 import { setView } from './layout';
 import { bonusRows, detailTipHTML, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
@@ -423,6 +426,8 @@ function render() {
   if (view === 'shop') fx?.();
   setView(view);
   if (view === 'shop') mountScout();
+  if (view === 'over') overAfterRender();
+  else RF.stop();
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'title') {
     const input = document.getElementById('name') as HTMLInputElement | null;
@@ -447,7 +452,11 @@ function renderTown() {
           `<p>Run in progress: <b>${HEROES_BY_ID[r.hero].name}</b> · day ${r.day} · wins ${r.wins}/${R.WIN_TARGET} · HP ${r.hp}/${R.START_HP}</p>`,
         );
       }
-      body += `<div class="actions"><button class="primary" data-a="enterArena">${runActive() ? L('เล่นต่อ', 'Continue') : L('เข้าสนามประลอง', 'Enter the Arena')}</button></div>`;
+      // a finished run whose end screen was closed (reload / tab closed) keeps its results one tap away
+      const done = run && (run.phase === 'won' || run.phase === 'dead');
+      body += `<div class="actions"><button class="primary" data-a="enterArena">${runActive() ? L('เล่นต่อ', 'Continue') : L('เข้าสนามประลอง', 'Enter the Arena')}</button>${
+        done ? `<button data-a="lastResults">${L('ผลรอบล่าสุด', 'Last run results')}</button>` : ''
+      }</div>`;
     } else if (b.id === 'board') {
       body += `<div class="actions"><button class="primary" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
@@ -933,10 +942,7 @@ function claimReward(r: R.RunState) {
   }).then((res) => {
     pendingClaim.delete(r.id);
     if (res) {
-      if (res.stardust > 0) {
-        sfx('stardust');
-        voice('stardust');
-      }
+      // the stardust sound plays when the reveal shows the reward (runEndFx)
       M.rememberClaim(r.id, res);
       M.saveLocalRun({ ...summary, stardust: res.stardust });
     }
@@ -965,7 +971,21 @@ function noteFight(r: R.RunState, f: FightResponse, build: Build, day: number) {
   const comeback = x.moments.some((y) => y.kind === 'comeback' && y.side === 0);
   lastClose = x.close;
   const score = (f.won ? 50 : 0) + (x.close ? 30 : 0) + (comeback ? 40 : 0) + day;
-  M.addFightNote(r.id, { day, won: f.won, opp: f.opponent.name, fightId: f.fightId, close: x.close, score, text: th.text, textEn: en.text });
+  // the end-of-run screen: your biggest hit (records) and, for a loss, the main reason + what to try
+  const refl = reflectEvents(f.result.events);
+  let hit = 0;
+  for (const e of f.result.events)
+    if (e.type === 'damage' && e.side === 1 && e.src !== 'burn' && e.src !== 'fatigue' && !refl.has(e)) hit = Math.max(hit, e.amount + e.blocked);
+  const split = (s?: string) => {
+    const k = s ? s.indexOf(' → ') : -1;
+    return k < 0 ? [s, undefined] : [s!.slice(0, k), s!.slice(k + 3)];
+  };
+  const [why, tip] = f.won ? [] : split(th.x.reasons[0]);
+  const [whyEn, tipEn] = f.won ? [] : split(en.x.reasons[0]);
+  M.addFightNote(r.id, {
+    day, won: f.won, opp: f.opponent.name, fightId: f.fightId, close: x.close, score, text: th.text, textEn: en.text, hit,
+    ...(why ? { why, whyEn, tip, tipEn } : {}),
+  });
 }
 
 function renderResult() {
@@ -1104,14 +1124,110 @@ function renderOver() {
   const r = run!;
   scene.idle(r.hero, R.lookOf(r));
   const won = r.phase === 'won';
+  const notes = M.fightNotes(r.id);
+  const stats: RC.RunStats = {
+    runId: r.id, hero: r.hero, wins: r.wins, losses: r.losses, won,
+    streak: RC.bestStreakOf(r.log), hit: Math.max(0, ...notes.map((n) => n.hit ?? 0)),
+  };
+  const recap = RC.recapFor(stats); // before claimReward: the local history must not count this run yet
   claimReward(r);
   const c = M.claimed(r.id);
-  const reward = c && 'stardust' in c ? c : null;
+  const reward = pendingClaim.has(r.id) ? undefined : c && 'stardust' in c ? c : null;
+  const plan = RC.revealPlan(won, r.wins);
+  const clock = RF.clock(r.id, plan, r.wins);
+  const rewardAt = RF.rewardAt(r.id, reward !== undefined, !!reward && reward.stardust > 0);
+  const total = reward?.total ?? (reward === undefined ? null : M.localHistory().reduce((n, x) => n + (x.stardust ?? 0), 0) || null);
+  const lastLog = r.log.at(-1);
+  const lastNote = lastLog ? notes.find((n) => n.day === lastLog.day) : undefined;
+  const en = getLang() === 'en';
+  const ended = !won && !r.conceded && lastLog && !lastLog.won
+    ? { day: lastLog.day, close: !!lastNote?.close, why: (en ? lastNote?.whyEn : undefined) ?? lastNote?.why, tip: (en ? lastNote?.tipEn : undefined) ?? lastNote?.tip }
+    : null;
+  // the next run's heroes (the same offer the hero-pick screen shows): one tap starts it
+  const offered = R.heroChoices((nextSeed ??= randSeed()));
+  const quick: P.QuickHero[] = offered
+    .map((id) => ({ id, name: HEROES_BY_ID[id].name, art: heroArt(id, 'tiny', R.lookFor(nextSeed!, id)), tag: (id === r.hero ? 'again' : recap.cur.heroes.includes(id) ? '' : 'new') as P.QuickHero['tag'] }))
+    .sort((a, b) => Number(b.tag === 'again') - Number(a.tag === 'again'));
   return stageSlot(true, 'over-slot bleed') + P.runOverPage({
     won, conceded: !!r.conceded, hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), wins: r.wins, losses: r.losses,
-    winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, buildHTML: buildList(R.toBuild(r)),
-    historyHTML: P.historyList(r.log, M.fightNotes(r.id)), best: M.bestNote(r.id), reward: pendingClaim.has(r.id) ? undefined : reward,
+    winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, streak: stats.streak, buildHTML: buildList(R.toBuild(r)),
+    historyHTML: P.historyList(r.log, notes), best: M.bestNote(r.id), reward, total, recap,
+    fresh: RC.freshRecords(stats, recap, reward?.bestWins), goal: RC.nextGoal(stats, recap, R.WIN_TARGET), ended, quick,
+    plan, el: clock.el, on: clock.on, rewardAt,
   });
+}
+
+/** Share card of the crowned run on screen. */
+function cardData(r: R.RunState): CardData {
+  const flawless = r.losses === 0;
+  return {
+    runId: r.id, heroSvg: renderChibi(rollLook(r.hero, R.lookOf(r))), heroName: HEROES_BY_ID[r.hero].name,
+    player: displayName(M.serverName() ?? playerName()), wins: r.wins, losses: r.losses, winTarget: R.WIN_TARGET,
+    streak: RC.bestStreakOf(r.log), skills: r.skills.map((k) => k.id),
+    title: flawless ? L('มงกุฎไร้พ่าย!', 'Flawless crown!') : L('มงกุฎดวงจันทร์!', 'Moon crown!'),
+    sub: L(`ชนะครบ ${R.WIN_TARGET} ในสนามดวงจันทร์`, `All ${R.WIN_TARGET} wins in the moon arena`),
+    recordLine: L(`ชนะ ${r.wins} · แพ้ ${r.losses} · ชนะติด ${RC.bestStreakOf(r.log)}`, `${r.wins} wins · ${r.losses} losses · best streak ${RC.bestStreakOf(r.log)}`),
+    footer: `${location.host} · ${new Date().toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'th-TH')}`,
+  };
+}
+
+let overFocused = '';
+/** After the end screen renders: count-ups, the share card, focus on "Play again" once the reveal is over. */
+function overAfterRender() {
+  const r = run;
+  if (!r) return;
+  RF.countUps($panel, () => {
+    if (overFocused === r.id) return;
+    overFocused = r.id;
+    const b = $panel.querySelector<HTMLButtonElement>('.re-again');
+    if (b && !document.activeElement?.closest('#panel button, #panel a, input')) b.focus({ preventScroll: true });
+  });
+  const slot = $panel.querySelector<HTMLElement>('[data-card]');
+  if (slot && r.phase === 'won') {
+    const d = cardData(r);
+    const key = d.runId + d.title;
+    void cardBlob(d).then((b) => {
+      const el = $panel.querySelector<HTMLElement>('[data-card]');
+      if (!el) return;
+      if (!b) {
+        el.remove();
+        return;
+      }
+      if (!cardURLs.has(key)) cardURLs.set(key, URL.createObjectURL(b));
+      const img = document.createElement('img');
+      img.src = cardURLs.get(key)!;
+      img.alt = L('การ์ดมงกุฎของคุณ', 'Your crown card');
+      img.width = 1200;
+      img.height = 675;
+      el.replaceChildren(img);
+    });
+  }
+}
+/** object URLs of drawn share cards (per run and language) */
+const cardURLs = new Map<string, string>();
+
+/** End screen: skip the reveal, or start the next run (Enter / R). */
+function overKey(e: KeyboardEvent) {
+  if (view !== 'over' || !run || treeOpen) return;
+  const t = e.target as HTMLElement | null;
+  if (t?.closest('input, textarea, select')) return;
+  const onControl = !!t?.closest('button, a, summary');
+  if (RF.revealing() && (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape')) {
+    e.preventDefault();
+    RF.skip();
+    render();
+    return;
+  }
+  if ((e.key === 'Enter' && !onControl) || ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+    e.preventDefault();
+    playAgain();
+  }
+}
+function playAgain() {
+  if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
+  view = 'title';
+  saveRun();
+  render();
 }
 
 /** Display names of a replay: "คุณ" (you) for your own fights, and never two identical names. */
@@ -1403,6 +1519,12 @@ function onClick(ev: Event) {
     }
     if (picked >= 0) clearPick($panel);
   }
+  // end screen: a tap anywhere (not on a control) during the reveal shows everything at once
+  if (view === 'over' && RF.revealing() && !(ev.target as HTMLElement).closest('a, button, summary')) {
+    RF.skip();
+    render();
+    return;
+  }
   if (!el || (el as HTMLButtonElement).disabled) return;
   const a = el.dataset.a!;
   // the tree window closes from its button or a click on the dark backdrop, not from clicks inside it
@@ -1422,6 +1544,10 @@ function onClick(ev: Event) {
       break;
     case 'resume':
       view = phaseView(run!);
+      break;
+    case 'lastResults':
+      if (!run || (run.phase !== 'won' && run.phase !== 'dead')) return;
+      view = 'over';
       break;
     case 'home':
       if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
@@ -1546,6 +1672,23 @@ function onClick(ev: Event) {
       lbData = null;
       lbLoading = false;
       break;
+    case 'shareCard':
+    case 'saveCard': {
+      if (!run || run.phase !== 'won') return;
+      const d = cardData(run);
+      const btn = el as HTMLButtonElement;
+      btn.disabled = true;
+      const done = (how: string) => {
+        btn.disabled = false;
+        if (how === 'failed') {
+          toast = L('ทำรูปการ์ดไม่สำเร็จ', 'Could not make the card image');
+          render();
+        }
+      };
+      if (a === 'saveCard') void saveCard(d).then(done);
+      else void shareCard(d, L(`โมจิของฉันได้มงกุฎดวงจันทร์ใน Mochi Moon! ${location.origin}`, `My mochi won the moon crown in Mochi Moon! ${location.origin}`)).then(done);
+      return;
+    }
     case 'leaveReplay':
       history.replaceState(null, '', location.pathname);
       replay = null;
@@ -1727,6 +1870,7 @@ export function startUI(st: Stage) {
     render();
     if (view === 'fighting' || view === 'replay') logHist.slice(-80).forEach(writeLog);
   });
+  window.addEventListener('keydown', overKey);
   run = loadRun();
   const rid = new URLSearchParams(location.search).get('replay');
   if (rid) {

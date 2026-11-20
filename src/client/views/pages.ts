@@ -4,6 +4,8 @@
  */
 import { L } from '../../i18n';
 import { IMAGES } from '../assets';
+import { icon } from '../icons';
+import { titleFor, type Fresh, type Recap, type RevealPlan } from './records';
 import { displayName } from '../lang';
 import type { Explanation, Lock } from '../../sim/explain';
 import { HEROES_BY_ID } from '../../sim/heroes';
@@ -47,6 +49,13 @@ function lockCallout(l: Lock) {
 
 // ---------- end of run ----------
 
+export interface QuickHero {
+  id: string;
+  name: string;
+  art: string;
+  /** again = the hero of this run, new = never finished a run with it */
+  tag: 'again' | 'new' | '';
+}
 export interface OverData {
   won: boolean;
   conceded: boolean;
@@ -57,60 +66,181 @@ export interface OverData {
   winTarget: number;
   days: number;
   rating: number;
+  /** longest win streak of the run */
+  streak: number;
   buildHTML: string;
   historyHTML: string;
   best: FightNote | null;
   /** undefined = still asking the server, null = no reward available */
   reward: FinishRunResult | null | undefined;
+  /** stardust in total after this run (server, or this browser's runs), null = unknown */
+  total: number | null;
+  recap: Recap;
+  fresh: Fresh[];
+  goal: string;
+  /** the fight that ended a lost run */
+  ended: { day: number; why?: string; tip?: string; close: boolean } | null;
+  /** heroes offered for the next run: one tap starts it */
+  quick: QuickHero[];
+  plan: RevealPlan;
+  /** reveal clock: ms elapsed, staged animation on, when the reward shows */
+  el: number;
+  on: boolean;
+  rewardAt: number;
+}
+
+const ms = (n: number) => `${Math.max(0, Math.round(n))}ms`;
+/** a piece of the staged reveal: pops in `n` ms after the screen opened */
+const at = (n: number) => `style="--at:${ms(n)}"`;
+
+function overTitle(d: OverData) {
+  if (d.won) return d.losses === 0 ? L('มงกุฎไร้พ่าย!', 'Flawless crown!') : L('มงกุฎดวงจันทร์!', 'Moon crown!');
+  return d.conceded ? L('พักรอบนี้ไว้ก่อน', 'Run set aside') : L('จบรอบแล้ว', 'Run over');
+}
+
+/** Win: pride. Loss: how close it was, said kindly (never more than the truth). */
+function overSub(d: OverData) {
+  const toGo = d.winTarget - d.wins;
+  if (d.won) return L(`ชนะครบ ${d.winTarget} · โมจิของคุณสวมมงกุฎดวงจันทร์คืนนี้`, `${d.winTarget} wins · your mochi wears the moon crown tonight`);
+  if (d.wins === 0)
+    return d.conceded ? L('รอบใหม่เริ่มสดใสได้ทุกเมื่อ', 'A fresh run is always one tap away') : L('ทุกรอบสอนอะไรใหม่ ลองอีกครั้งนะ', 'Every run teaches something: have another go');
+  if (toGo <= 3) return L(`อีกแค่ ${toGo} ชนะก็ได้มงกุฎแล้ว!`, `Only ${toGo} ${toGo === 1 ? 'win' : 'wins'} from the moon crown!`);
+  return L(`ชนะ ${d.wins} ครั้ง · อีก ${toGo} ชนะถึงมงกุฎ`, `${d.wins} wins · ${toGo} more for the crown`);
+}
+
+function statCell(v: number, label: string, t: number, from = 0, dur = 450) {
+  return `<div><b data-count="${v}" data-from="${from}" data-at="${Math.round(t)}" data-dur="${dur}">${v}</b><span>${label}</span></div>`;
+}
+
+const CONFETTI = Array.from({ length: 18 }, (_, i) => `<i class="c${i % 5}" style="--x:${(i * 37) % 100}%;--d:${(i * 173) % 900}ms;--r:${(i * 61) % 360}deg"></i>`).join('');
+
+function rewardBlock(d: OverData) {
+  if (d.reward === undefined)
+    return `<div class="re-dust pending"><img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true"><span>${L('กำลังนับผงดาว…', 'Counting stardust…')}</span></div>`;
+  const got = d.reward?.stardust ?? 0;
+  if (!d.reward && d.total === null) return '';
+  const t = d.rewardAt;
+  const total = d.total ?? got;
+  const before = titleFor(total - got);
+  const now = titleFor(total);
+  const from = before.index === now.index ? before.frac : 0;
+  const next = now.next
+    ? L(`อีก ${now.next.at - total} ผงดาว ได้ฉายา «${now.next.name}»`, `${now.next.at - total} more stardust to «${now.next.name}»`)
+    : L('ได้ฉายาสูงสุดแล้ว!', 'Top title reached!');
+  return `<div class="re-dust re-in" ${at(t)}>
+    <img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true">
+    <div class="re-dust-main">
+      ${d.reward ? `<div class="mm-reward-n">+<b data-count="${got}" data-at="${t}" data-dur="700">${got}</b> <small>${L('ผงดาว', 'stardust')}</small></div>` : ''}
+      <div class="re-title-row"><span class="re-title">${esc(now.name)}</span><span class="re-total">${L('รวม', 'total')} <b data-count="${total}" data-from="${total - got}" data-at="${t + 250}" data-dur="800">${total}</b></span></div>
+      <div class="re-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(now.frac * 100)}" aria-label="${esc(next)}"><i style="--from:${(from * 100).toFixed(1)}%;--to:${(now.frac * 100).toFixed(1)}%;--at:${ms(t + 250)}"></i></div>
+      <div class="re-next">${next}</div>
+    </div>
+  </div>`;
+}
+
+function recordChips(d: OverData) {
+  const chips = d.fresh.map((f) => `<span class="re-chip re-fresh k-${f.kind}">${icon(f.icon)} ${esc(f.text)}</span>`);
+  const p = d.recap.prev;
+  if (!d.won && !d.fresh.some((f) => f.kind === 'wins') && p.runs > 0)
+    chips.push(`<span class="re-chip">${icon('trophy')} ${L(`สถิติของคุณ: ชนะ ${Math.max(p.bestWins, d.wins)}`, `Your best: ${Math.max(p.bestWins, d.wins)} wins`)}</span>`);
+  if (d.won && d.recap.cur.crowns > 1) chips.push(`<span class="re-chip">${icon('crown')} ${L(`มงกุฎใบที่ ${d.recap.cur.crowns}`, `Crown #${d.recap.cur.crowns}`)}</span>`);
+  if (d.streak >= 3 && !d.fresh.some((f) => f.kind === 'streak'))
+    chips.push(`<span class="re-chip">${icon('fire')} ${L(`ชนะติด ${d.streak}`, `${d.streak} wins in a row`)}</span>`);
+  return chips.length ? `<div class="re-chips re-in" ${at(d.plan.records)}>${chips.join('')}</div>` : '';
+}
+
+function endedBlock(d: OverData) {
+  if (d.won) return '';
+  if (d.conceded)
+    return `<div class="re-ended re-in" ${at(d.plan.records)}><p>${L(
+      `คุณพักรอบนี้ไว้ในวันที่ ${d.days + 1} ไม่เป็นไรเลย รอบหน้าเริ่มใหม่สดใส`,
+      `You set this run aside on day ${d.days + 1}. No worries: the next one starts fresh`,
+    )}</p></div>`;
+  const e = d.ended;
+  if (!e || (!e.why && !e.close)) return '';
+  return `<div class="re-ended re-in" ${at(d.plan.records)}>
+    <h4>${icon('scroll')} ${L(`ไฟต์สุดท้าย · วันที่ ${e.day}`, `The last fight · day ${e.day}`)}</h4>
+    ${e.close ? `<p class="re-close">${L('สูสีมาก! ผู้ชนะเหลือเลือดไม่ถึง 10%', 'So close! The winner had under 10% HP left')}</p>` : ''}
+    ${e.why ? `<p>${esc(e.why)}</p>` : ''}
+    ${e.tip ? `<p class="re-tip">${icon('bulb')} <span><b>${L('ลองดู:', 'Try:')}</b> ${esc(e.tip)}</span></p>` : ''}
+  </div>`;
+}
+
+function defendBlock(d: OverData) {
+  if (!d.won) return '';
+  return `<div class="re-defend re-in" ${at(d.plan.records)}>
+    <div class="re-defend-t">${icon('shield', 28)}<div><b>${L('build ของคุณเฝ้าดวงจันทร์แล้ว', 'Your build now defends the moon')}</b>
+      <span>${L(`ผู้เล่นคนอื่นในวันที่ 1–${d.days} อาจเจอ build ของคุณในสนาม`, `Other players on days 1–${d.days} may meet your builds in the arena`)}</span></div></div>
+    <div class="re-share">
+      <div class="re-card" data-card><span class="muted small">${L('กำลังวาดการ์ด…', 'Drawing your card…')}</span></div>
+      <div class="actions re-share-a"><button class="primary" data-a="shareCard">${L('แชร์การ์ดมงกุฎ', 'Share your crown card')}</button><button class="ghost" data-a="saveCard">${L('บันทึกรูป', 'Save image')}</button></div>
+    </div>
+  </div>`;
 }
 
 export function runOverPage(d: OverData) {
-  const title = d.won ? L(`ชนะครบ ${d.winTarget}!`, `${d.winTarget} wins!`) : d.conceded ? L('จบรอบ (ยอมแพ้)', 'Run over (gave up)') : L('จบรอบแล้ว', 'Run over');
-  const sub = d.won
-    ? L('โมจิของคุณได้รับมงกุฎดวงจันทร์คืนนี้', 'Your mochi wears the moon crown tonight')
-    : d.wins >= d.winTarget / 2
-      ? L('เกือบแล้ว! พักให้นุ่มแล้วกลับมาใหม่', 'So close! Rest up, stay soft and come back')
-      : L('ดวงจันทร์ยังรออยู่ ลองแนว build ใหม่ดูนะ', 'The moon is still waiting: try a new kind of build');
-  const reward =
-    d.reward === undefined
-      ? `<div class="mm-reward pending"><img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true"><span>${L('กำลังนับผงดาว…', 'Counting stardust…')}</span></div>`
-      : d.reward
-        ? `<div class="mm-reward"><img class="mm-dust-img" src="${IMAGES.stardust}" alt="" aria-hidden="true"><div><div class="mm-reward-n">+${d.reward.stardust} <small>${L('ผงดาว', 'stardust')}</small></div>${
-            d.reward.total !== undefined ? `<div class="mm-reward-t">${L(`รวมทั้งหมด ${d.reward.total} ผงดาว`, `${d.reward.total} stardust in total`)}</div>` : ''
-          }</div></div>`
-        : '';
+  const title = overTitle(d);
+  const p = d.plan;
+  const stars = Array.from({ length: d.winTarget }, (_, i) => {
+    const on = i < d.wins;
+    return `<i class="re-star${on ? ' on' : ''}"><span class="e">${icon('star')}</span>${on ? `<span class="f" ${at(p.star0 + i * p.starGap)}>${icon('star')}</span>` : ''}</i>`;
+  }).join('');
+  const quick = d.quick.length
+    ? `<div class="re-quick" role="group" aria-label="${L('เริ่มรอบใหม่ทันทีด้วยฮีโร่', 'Start a new run right away as')}">
+        <span class="re-quick-h">${L('หรือเริ่มทันทีด้วย', 'or jump straight in as')}</span>
+        ${d.quick
+          .map(
+            (h) => `<button class="re-hero" data-a="start" data-i="${h.id}" title="${esc(h.name)}">${h.art}<span class="re-hn">${esc(h.name)}</span>${
+              h.tag === 'again' ? `<span class="re-tag again">${L('ตัวเดิม', 'again')}</span>` : h.tag === 'new' ? `<span class="re-tag new">${L('ใหม่', 'new')}</span>` : ''
+            }</button>`,
+          )
+          .join('')}
+      </div>`
+    : '';
   const best = d.best
     ? `<div class="mm-best"><div class="mm-best-h">🌟 ${L('ช่วงเวลาที่ดีที่สุด · วันที่', 'Best moment · day')} ${d.best.day}</div><p>${esc(noteText(d.best))}</p>${
         d.best.fightId ? `<a class="mm-btn" href="${replayHref(d.best.fightId)}">${L('▶ ดู replay ไฟต์นี้', '▶ Watch this fight')}</a>` : ''
       }</div>`
     : '';
-  const pips = Array.from({ length: d.winTarget }, (_, i) => `<i class="${i < d.wins ? 'on' : ''}"></i>`).join('');
-  return `<div class="over-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="over-box">
+  const banner = d.won ? IMAGES.bannerVictory : IMAGES.bannerDefeat;
+  // profile / town: under "play again"; phones held sideways have them at the end of the right panel instead
+  const sec = `<button class="ghost" data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button><button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>`;
+  return `<div class="over-modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="over-box re-wrap${d.on ? ' re-on' : ''}" style="--el:${ms(d.el)}">
   <section class="mm-over ${d.won ? 'won' : 'lost'}">
     ${sky()}
-    <div class="mm-banner" style="background-image:url('${d.won ? IMAGES.bannerVictory : IMAGES.bannerDefeat}')"><h2 class="mm-over-title">${title}</h2></div>
-    <div class="mm-over-hero">${d.heroArt}</div>
-    <p class="mm-over-sub">${sub}</p>
-    <div class="mm-pips" aria-label="${L(`ชนะ ${d.wins} จาก ${d.winTarget}`, `${d.wins} of ${d.winTarget} wins`)}">${pips}</div>
-    <div class="mm-statgrid">
-      <div><b>${d.wins}</b><span>${L('ชนะ', 'Wins')}</span></div>
-      <div><b>${d.losses}</b><span>${L('แพ้', 'Losses')}</span></div>
-      <div><b>${d.days}</b><span>${L('วัน', 'Days')}</span></div>
-      <div><b>${d.rating}</b><span>${L('คะแนน build', 'Build rating')}</span></div>
+    ${d.won ? `<div class="re-confetti" aria-hidden="true">${CONFETTI}</div>` : ''}
+    <div class="mm-banner re-in" style="--at:0ms;background-image:url('${banner}')"><h2 class="mm-over-title">${title}</h2></div>
+    <div class="mm-over-hero re-in" ${at(p.hero)}>${d.won ? `<span class="re-spot" aria-hidden="true"></span><span class="re-crown" aria-hidden="true">${icon('crown')}</span>` : ''}${d.heroArt}</div>
+    <p class="mm-over-sub re-in" ${at(p.hero + 120)}>${overSub(d)}</p>
+    <div class="mm-pips re-stars" role="img" aria-label="${L(`ชนะ ${d.wins} จาก ${d.winTarget}`, `${d.wins} of ${d.winTarget} wins`)}">${stars}</div>
+    <div class="mm-statgrid re-in" ${at(p.stats)}>
+      ${statCell(d.wins, L('ชนะ', 'Wins'), p.stats)}
+      ${statCell(d.losses, L('แพ้', 'Losses'), p.stats)}
+      ${statCell(d.streak, L('ชนะติดสูงสุด', 'Best streak'), p.stats)}
+      ${statCell(d.rating, L('คะแนน build', 'Build rating'), p.stats, 1000, 600)}
     </div>
-    ${reward}
-    <div class="actions mm-actions">
-      <button class="primary" data-a="home">${L('เล่นอีกรอบ', 'Play again')}</button>
-      <button data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button>
-      <button class="ghost" data-a="town">${L('กลับเมือง', 'Back to town')}</button>
+    <div class="mm-actions re-actions re-in" ${at(p.actions)}>
+      <button class="primary re-again" data-a="home">${L('เล่นอีกรอบ', 'Play again')}<kbd class="re-kbd" aria-hidden="true">Enter</kbd></button>
+      ${quick}
+      <div class="re-sec">${sec}</div>
     </div>
   </section>
   <div class="over-detail">
+  <div class="re-recap">
+    ${rewardBlock(d)}
+    ${recordChips(d)}
+    <p class="re-goal re-in" ${at(p.records + 100)}>${icon('target')} <span>${esc(d.goal)}</span></p>
+  </div>
+  ${endedBlock(d)}
+  ${defendBlock(d)}
+  <div class="re-more re-in" ${at(p.actions)}>
   ${best}
   <h3>${L('build สุดท้าย', 'Final build')} · ${esc(heroName(d.hero))}</h3>
   ${d.buildHTML}
   <h3>${L('ทุกไฟต์ในรอบนี้', 'Every fight of this run')}</h3>
   ${d.historyHTML}
+  <div class="re-sec re-sec-alt">${sec}</div>
+  </div>
   </div>
   </div></div>`;
 }

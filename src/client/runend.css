@@ -1,0 +1,181 @@
+/* ==========================================================================
+   End of run (views/pages.ts runOverPage + runEndFx.ts): staged reveal, crown ceremony, records, quick restart.
+   Loaded after theme.css so it wins. Every staged piece (.re-in) pops in at --at, relative to --el = time already
+   elapsed when the panel was (re-)rendered, so a re-render mid-reveal carries on instead of restarting.
+   ========================================================================== */
+
+/* ---------- the staged reveal ---------- */
+.re-on .re-in { animation: re-pop 0.42s cubic-bezier(0.2, 1.5, 0.45, 1) both; animation-delay: calc(var(--at, 0ms) - var(--el, 0ms)); }
+/* hidden (not just transparent) before its turn: a tap that skips the reveal can't hit a button that isn't shown yet */
+@keyframes re-pop {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); visibility: hidden; }
+  to { opacity: 1; transform: none; visibility: visible; }
+}
+.re-on .mm-banner.re-in { animation-name: re-drop; animation-duration: 0.55s; }
+@keyframes re-drop {
+  from { opacity: 0; transform: translateY(-26px) scale(1.15); }
+  60% { opacity: 1; transform: translateY(3px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- 10 stars ---------- */
+.mm-pips.re-stars { gap: 3px; margin: 6px 0 8px; }
+.over-box .mm-pips i.re-star, .mm-pips i.re-star {
+  position: relative; display: inline-block; width: 26px; height: 26px; background: none; border: 0; border-radius: 0; box-shadow: none;
+}
+.re-star .e, .re-star .f { position: absolute; inset: 0; display: block; }
+.re-star svg { display: block; width: 100%; height: 100%; }
+.re-star .e { filter: grayscale(1) brightness(0.6); opacity: 0.42; }
+.re-star .f { filter: drop-shadow(0 0 5px rgba(255, 213, 114, 0.75)); }
+.re-on .re-star .f { animation: re-star 0.5s cubic-bezier(0.2, 1.8, 0.4, 1) both; animation-delay: calc(var(--at, 0ms) - var(--el, 0ms)); }
+@keyframes re-star {
+  from { opacity: 0; transform: scale(0) rotate(-120deg); }
+  60% { opacity: 1; transform: scale(1.4) rotate(8deg); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- crown ceremony (win) ---------- */
+.mm-over-hero { isolation: isolate; }
+.mm-over-hero .hero-art { position: relative; z-index: 1; }
+.re-spot {
+  position: absolute; left: 50%; top: 52%; width: 300px; aspect-ratio: 1; transform: translate(-50%, -50%); z-index: 0; pointer-events: none;
+  background: repeating-conic-gradient(rgba(255, 227, 163, 0.2) 0 9deg, transparent 9deg 24deg);
+  -webkit-mask: radial-gradient(circle, #000 0 22%, transparent 64%); mask: radial-gradient(circle, #000 0 22%, transparent 64%);
+  animation: re-spin 26s linear infinite;
+}
+.re-spot::after { content: ''; position: absolute; inset: 25%; border-radius: 50%; background: radial-gradient(circle, rgba(255, 236, 190, 0.45), transparent 70%); }
+@keyframes re-spin { to { transform: translate(-50%, -50%) rotate(360deg); } }
+.re-crown {
+  position: absolute; left: 50%; top: -4px; width: 46px; height: 46px; z-index: 2; transform: translateX(-50%) rotate(-8deg);
+  filter: drop-shadow(0 3px 0 var(--ink-deep, #150e27)) drop-shadow(0 0 10px rgba(255, 213, 114, 0.7));
+}
+.re-crown svg { width: 100%; height: 100%; display: block; }
+.re-on .re-crown { animation: re-crown 0.75s cubic-bezier(0.3, 1.6, 0.5, 1) both; animation-delay: calc(var(--at, 0ms) + 350ms - var(--el, 0ms)); }
+@keyframes re-crown {
+  from { opacity: 0; transform: translate(-50%, -130px) rotate(-35deg) scale(1.4); }
+  to { opacity: 1; transform: translateX(-50%) rotate(-8deg); }
+}
+.re-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; border-radius: inherit; }
+.re-wrap:not(.re-on) .re-confetti { display: none; }
+.re-confetti i {
+  position: absolute; top: -16px; left: var(--x); width: 9px; height: 13px; border-radius: 3px; border: 1.5px solid var(--ink-deep, #150e27);
+  animation: re-fall 2.3s cubic-bezier(0.35, 0.1, 0.6, 1) both; animation-delay: calc(var(--d) + 250ms - var(--el, 0ms));
+}
+.re-confetti .c0 { background: var(--m-gold, #ffd572); }
+.re-confetti .c1 { background: var(--m-pink, #ffb3c7); }
+.re-confetti .c2 { background: var(--m-mint, #b2ebcb); }
+.re-confetti .c3 { background: var(--m-sky, #c7e4ff); border-radius: 50%; width: 10px; height: 10px; }
+.re-confetti .c4 { background: var(--m-lav, #d4c8f7); }
+@keyframes re-fall {
+  from { opacity: 1; transform: translateY(0) rotate(var(--r)); }
+  80% { opacity: 1; }
+  to { opacity: 0; transform: translateY(560px) translateX(30px) rotate(calc(var(--r) + 540deg)); }
+}
+
+/* ---------- buttons: one big "play again", the next run's heroes one tap away ---------- */
+.over-box .mm-actions.re-actions { display: flex; flex-direction: column; align-items: center; gap: 7px; width: 100%; margin: 8px 0 0; }
+#panel .re-again { font-size: 19px; min-height: 52px; padding: 8px 30px; display: inline-flex; align-items: center; gap: 10px; }
+.re-wrap:not(.re-on) .re-again { animation: re-breathe 2.8s ease-in-out infinite; }
+@keyframes re-breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+.re-kbd {
+  font: 600 11px/1.2 Kanit, system-ui, sans-serif; padding: 2px 6px; border-radius: 6px; color: var(--ink, #3a2b48);
+  background: rgba(255, 255, 255, 0.55); border: 1.5px solid rgba(58, 43, 72, 0.45); box-shadow: 0 1.5px 0 rgba(58, 43, 72, 0.45);
+}
+@media (pointer: coarse) { .re-kbd { display: none; } }
+.re-quick { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px 8px; }
+.re-quick-h { width: 100%; text-align: center; font-size: 12px; color: #cfc6f5; }
+#panel .re-hero {
+  --fill: #ece4ff; position: relative; display: inline-flex; align-items: center; gap: 2px; min-height: 44px; padding: 2px 10px 2px 2px; font-size: 13px;
+}
+.hero-art.tiny { --s: 1.25; margin: 0; background: none; border-radius: 0; }
+.re-hn { max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.re-tag {
+  position: absolute; top: -9px; right: -6px; font-size: 10.5px; line-height: 1; padding: 3px 6px; border-radius: 99px; font-weight: 600;
+  color: var(--ink, #3a2b48); border: 1.5px solid var(--ink-deep, #150e27);
+}
+.re-tag.again { background: var(--m-mint, #b2ebcb); }
+.re-tag.new { background: var(--m-pink, #ffb3c7); }
+.re-sec { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+#panel .re-sec button { min-height: 36px; font-size: 13px; padding: 3px 14px; }
+.re-sec-alt { display: none; margin-top: 10px; }
+
+/* ---------- right panel: stardust, records, next goal, what ended the run / share card ---------- */
+.re-recap { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.re-dust {
+  display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 18px;
+  background: rgba(255, 213, 114, 0.1); border: 2px solid rgba(255, 213, 114, 0.5);
+}
+.re-dust.pending { opacity: 0.75; font-size: 14px; }
+.re-dust .mm-dust-img { width: 42px; height: auto; flex: none; }
+.re-dust-main { flex: 1; min-width: 0; }
+.re-dust .mm-reward-n { font-size: 24px; line-height: 1.15; }
+.re-dust .mm-reward-n b { font-weight: 600; }
+.re-title-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: #d8cfa8; margin-top: 2px; }
+.re-title { color: var(--m-moon, #ffe3a3); font-weight: 600; }
+.re-total b { color: var(--m-cream, #fff4e4); font-variant-numeric: tabular-nums; }
+.re-bar { height: 12px; margin: 4px 0 3px; border-radius: 99px; background: rgba(21, 14, 39, 0.65); border: 2px solid var(--ink-deep, #150e27); overflow: hidden; }
+.re-bar i { display: block; height: 100%; width: var(--to); border-radius: inherit; background: linear-gradient(90deg, #f2b84b, #ffd572 60%, #fff1b8); }
+.re-on .re-bar i { animation: re-bar 0.9s cubic-bezier(0.3, 0.8, 0.4, 1) both; animation-delay: calc(var(--at, 0ms) - var(--el, 0ms)); }
+@keyframes re-bar { from { width: var(--from); } to { width: var(--to); } }
+.re-next { font-size: 12px; color: #cfc6f5; }
+.re-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.re-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 11px; border-radius: 99px; font-size: 13px; color: var(--m-cream, #fff4e4);
+  background: rgba(255, 255, 255, 0.07); border: 1.5px solid rgba(255, 232, 196, 0.3);
+}
+.re-chip.re-fresh { background: var(--m-moon, #ffe3a3); color: var(--ink, #3a2b48); border: 2px solid var(--ink-deep, #150e27); font-weight: 600; box-shadow: 0 2px 0 var(--ink-deep, #150e27); }
+.re-chip.k-crown, .re-chip.k-flawless { background: var(--m-gold, #ffd572); }
+.re-goal { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 14px; color: var(--m-cream, #fff4e4); }
+.re-goal .ico { flex: none; font-size: 18px; }
+.re-ended, .re-defend { margin: 0 0 10px; padding: 10px 14px; border-radius: 16px; }
+.re-ended { background: rgba(199, 228, 255, 0.08); border: 1.5px solid rgba(199, 228, 255, 0.35); }
+.re-ended h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 4px; font-size: 14px; color: var(--m-sky, #c7e4ff); }
+.re-ended p { margin: 4px 0; font-size: 13.5px; line-height: 1.45; }
+.re-close { color: var(--m-pink, #ffb3c7); font-weight: 600; }
+.re-tip { display: flex; align-items: flex-start; gap: 6px; color: var(--m-mint, #b2ebcb); }
+.re-tip .ico { flex: none; margin-top: 2px; }
+.re-defend { background: rgba(255, 213, 114, 0.08); border: 1.5px solid rgba(255, 213, 114, 0.45); }
+.re-defend-t { display: flex; gap: 10px; align-items: flex-start; }
+.re-defend-t svg { flex: none; }
+.re-defend-t b { display: block; color: var(--m-moon, #ffe3a3); }
+.re-defend-t span { font-size: 13px; color: #cfc6f5; }
+.re-card { max-width: 420px; margin: 8px auto 6px; text-align: center; }
+.re-card img { display: block; width: 100%; height: auto; border-radius: 12px; border: 2.5px solid var(--ink-deep, #150e27); box-shadow: 0 3px 0 var(--ink-deep, #150e27); }
+.re-share-a { justify-content: center; margin: 4px 0 0; }
+
+/* ---------- desktop: everything on the left card fits 1280x720 ---------- */
+.over-box .mm-over .mm-banner { width: min(300px, 100%); }
+.over-box .mm-over-hero .hero-art { --s: 3.3; }
+.over-box .mm-over-sub { margin: 0 0 2px; }
+
+/* ---------- phones held sideways ---------- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .over-box .mm-over .mm-banner { width: min(190px, 100%); margin-bottom: -12px; }
+  .over-box .mm-over.won .mm-banner { width: min(160px, 100%); margin-bottom: -16px; }
+  .over-box .mm-actions .re-sec { display: none; }
+  .re-sec-alt { display: flex; }
+  .over-box .mm-over.won .mm-over-hero { display: flex; }
+  .over-box .mm-over.won .mm-over-hero .hero-art { --s: 1.9; margin: 0; }
+  .re-crown { width: 26px; height: 26px; top: -6px; }
+  .re-spot { width: 150px; }
+  .over-box .mm-pips i.re-star { width: 17px; height: 17px; }
+  .mm-pips.re-stars { margin: 2px 0 4px; gap: 2px; }
+  .over-box .mm-actions.re-actions { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  #panel .re-again { font-size: 16px; min-height: 44px; padding: 4px 18px; }
+  .re-quick { flex-wrap: nowrap; gap: 4px; }
+  .re-quick-h, .re-hn { display: none; }
+  #panel .re-hero { padding: 1px 3px; min-width: 44px; }
+  .hero-art.tiny { --s: 1.15; }
+  .re-dust { padding: 6px 10px; gap: 8px; }
+  .re-dust .mm-dust-img { width: 30px; }
+  .re-dust .mm-reward-n { font-size: 19px; }
+  .re-recap { gap: 6px; }
+  .re-chip { font-size: 12px; padding: 3px 9px; }
+  .re-goal { font-size: 13px; }
+  .re-ended p { font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .re-on .re-in, .re-on .re-star .f, .re-on .re-crown, .re-on .re-bar i, .re-spot, .re-wrap:not(.re-on) .re-again { animation: none !important; }
+  .re-confetti { display: none; }
+}

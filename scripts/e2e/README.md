@@ -29,3 +29,8 @@ phone landscape 844x390 and portrait 390x844 (touch), screenshots every step (`g
 blocking, the server-side training fight (a win) and the "why you won" step, skips it (button and Esc) and checks the
 clickable town map (drag is not a tap, tapping the selected arena enters it). `ONLY=<regex>` runs some parts only.
 `e2e.mjs` skips the guide on its first screen.
+
+`e2e-run-end.mjs` (same setup) checks the end-of-run screen: a won run (10–2) and a lost run (7–5, close last fight)
+in Thai and English at 1280x720, 844x390 and 390x844. It covers the staged reveal (mid and final screenshots), tap to
+skip, reduced motion, no page scroll, "play again" on screen, the records, stardust bar, next goal, last-fight tip and
+share card (PNG plus download), Enter / R to the hero pick, and a one-tap quick start. The reward call is stubbed.

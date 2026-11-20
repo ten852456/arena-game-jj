@@ -106,6 +106,7 @@ const ICONS: Record<string, string> = {
   music: `${line('M12 22.4V7.4l13-3v14.8', C.lav, 2)}${line('M12 10.4l13-3', C.lav, 2)}<ellipse cx="8.8" cy="23.2" rx="4.2" ry="3.4" fill="${C.pink}" ${o()}/><ellipse cx="21.8" cy="20" rx="4.2" ry="3.4" fill="${C.mint}" ${o()}/>`,
   voice: `<path d="M7.6 5.2h16.8a4 4 0 0 1 4 4v9a4 4 0 0 1-4 4H15l-6 5v-5H7.6a4 4 0 0 1-4-4v-9a4 4 0 0 1 4-4Z" fill="${C.cream}" ${o()}/>${face(16, 12.6, 0.95, 'happy')}`,
   trophy: `<path d="M9.4 7.6H5.4c0 4.2 1.8 6.6 5 7.2M22.6 7.6h4c0 4.2-1.8 6.6-5 7.2" fill="none" ${o(2.4)}/><path d="M9 4.6h14v7.6c0 4.6-3 7.6-7 7.6s-7-3-7-7.6Z" fill="${C.gold}" ${o()}/><rect x="13.8" y="19.4" width="4.4" height="4" fill="${C.gold2}" ${o(2)}/><rect x="9.4" y="23.2" width="13.2" height="5.2" rx="2" fill="${C.lav}" ${o()}/>${twinkle(16, 11.4, 3.2, '#fff4c8', 1.4)}${hl(11.6, 8, 1.2, 1.8, 10)}`,
+  crown: `<path d="M4.4 11.8 10 17.2 16 6.8l6 10.4 5.6-5.4-2.6 12.6H7Z" fill="${C.gold}" ${o()}/><rect x="6.4" y="23.2" width="19.2" height="5" rx="2.2" fill="${C.gold2}" ${o(2.2)}/><circle cx="4.4" cy="11" r="2" fill="${C.pink}" ${o(1.6)}/><circle cx="16" cy="5.4" r="2.2" fill="${C.pink}" ${o(1.6)}/><circle cx="27.6" cy="11" r="2" fill="${C.pink}" ${o(1.6)}/><circle cx="16" cy="18.6" r="1.8" fill="${C.sky}" ${o(1.4)}/>${hl(10.6, 15.6, 1.2, 2.2, 20)}`,
   medal1: medal(C.gold, 1),
   medal2: medal('#e6e8f6', 2),
   medal3: medal('#f3b98e', 3),
@@ -139,7 +140,7 @@ const ALIAS: Record<string, string> = { sell: 'jar', reroll: 'dice', gold: 'coin
 
 /** emoji / symbol → icon name */
 const EMOJI: Record<string, string> = {
-  '🔗': 'link', '⚡': 'bolt', '✨': 'sparkle', '🗿': 'stone', '🔥': 'fire', '🌙': 'crescent', '🏆': 'trophy', '✦': 'sparkle',
+  '🔗': 'link', '⚡': 'bolt', '✨': 'sparkle', '🗿': 'stone', '🔥': 'fire', '🌙': 'crescent', '🏆': 'trophy', '👑': 'crown', '✦': 'sparkle',
   '💥': 'boom', '✓': 'check', '⏱': 'clock', '⚔': 'swords', '🛡': 'shield', '🗡': 'sword', '✕': 'close', '🔓': 'unlock',
   '🏳': 'flag', '🎯': 'target', '🌵': 'thorns', 'ⓘ': 'info', '❄': 'snow', '🩸': 'blood', '💪': 'power', '💡': 'bulb',
   '⛨': 'shield', '🧊': 'ice', '🚀': 'rocket', '🔊': 'speaker', '📜': 'scroll', '📖': 'book', '📈': 'chart', '🐌': 'snail',

@@ -269,6 +269,13 @@ export interface FightNote {
   /** Thai (older notes: whatever language they were written in) */
   text: string;
   textEn?: string;
+  /** your biggest single hit of the fight */
+  hit?: number;
+  /** lost fights: the main reason, and what to try (Thai / English), from the fight explanation */
+  why?: string;
+  whyEn?: string;
+  tip?: string;
+  tipEn?: string;
 }
 /** A fight note in the current language. */
 export const noteText = (n: FightNote) => (getLang() === 'en' ? n.textEn ?? n.text : n.text);
