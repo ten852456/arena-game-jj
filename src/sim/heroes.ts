@@ -98,11 +98,14 @@ export const ULT_LV2_POW = 1.4;
 /** pieces needed for ult Lv1 / Lv2 */
 export const ULT_PIECES = [3, 5] as const;
 const r1 = (x: number) => +x.toFixed(1);
-/** trigger amount at a level: counts round, shares stay shares */
+/** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
+const TRIG_BELOW = ['assassin', 'berserker'];
+/** trigger amount at a level: counts round, shares stay shares; Lv2 needs 30% less (HP thresholds: 30% less HP missing) */
 export const ultTrig = (hero: string, lv: number) => {
   const v = T[`ult.${hero}.trig` as keyof typeof T] ?? 0;
   if (lv < 2) return v;
-  return Number.isInteger(v) ? Math.max(1, Math.round(v * ULT_LV2_TRIG)) : r1(1 - (1 - v) * ULT_LV2_TRIG);
+  if (TRIG_BELOW.includes(hero)) return r1(1 - (1 - v) * ULT_LV2_TRIG);
+  return Number.isInteger(v) ? Math.max(1, Math.round(v * ULT_LV2_TRIG)) : +(v * ULT_LV2_TRIG).toFixed(2);
 };
 /** effect power at a level */
 export const ultPow = (hero: string, lv: number) => (T[`ult.${hero}.pow` as keyof typeof T] ?? 0) * (lv >= 2 ? ULT_LV2_POW : 1);
@@ -164,14 +167,14 @@ export const HEROES: HeroDef[] = [
     hooks: { maxHp: hpOf('knight'), startShield: (n, max) => n + Math.round(max * T['knight.shield']) },
     ult: {
       name: 'ป้อมจันทรา',
-      get trigger() { return both((lv) => `ได้โล่รวม (นับโล่เริ่มต้น) ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
+      get trigger() { return both((lv) => `ได้โล่รวม (ไม่นับโล่เริ่มต้น) ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
       get effect() { return both((lv) => `ตีแรงเท่าโล่ที่มี ×${r1(ultPow('knight', lv))} (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) หลบไม่ได้ (โล่ไม่หาย)`); },
     },
   },
   // ---------------- ❤ heal ----------------
   {
     id: 'berserker', day1: ['rampage', 'feast', 'train', 'mend', 'strike'], name: 'นักรบคลั่ง', line: 'heal', unique: 'rampage',
-    passive: `เลือดสูงสุด +${pc(T['hp.berserker'] - 1)}% · โดนตีครบทุก ${T['berserker.hits']} ครั้ง ได้พลังโจมตี +1 · ครั้งแรกที่เลือดต่ำกว่าครึ่ง ได้พลังโจมตีอีก +2 (ทุกการโจมตีของทุก skill จนจบการสู้)`,
+    passive: `${hpTxt('berserker')}โดนตีครบทุก ${T['berserker.hits']} ครั้ง ได้พลังโจมตี +1 · ครั้งแรกที่เลือดต่ำกว่าครึ่ง ได้พลังโจมตีอีก +2 (ทุกการโจมตีของทุก skill จนจบการสู้)`,
     style: 'ดูดเลือดไม่หยุด: ฟื้นและดูดเลือดให้อยู่นาน ยิ่งสู้นานและยิ่งโดนตี ยิ่งตีแรง',
     hooks: {
       maxHp: hpOf('berserker'),
@@ -210,7 +213,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- ☠ poison ----------------
   {
     id: 'thornguard', day1: ['spikewall', 'venom', 'plague', 'thorns', 'strike'], name: 'นักรบหนามพิษ', line: 'poison', unique: 'spikewall',
-    passive: `เลือดสูงสุด +${pc(T['hp.thornguard'] - 1)}% · โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
+    passive: `${hpTxt('thornguard')}โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
     style: 'พิษซ้อนพิษ: ใครตีเราก็ติดพิษ สะสมพิษให้ซ้อนกันนานๆ แล้วระเบิดพิษปิดเกม (พิษไม่สนโล่และหลบไม่ได้)',
     hooks: {
       onDamaged(me, _n, src) {
@@ -231,7 +234,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- ❄ ice ----------------
   {
     id: 'witch', day1: ['shatter', 'frost', 'icelance', 'glacier', 'strike'], name: 'แม่มดน้ำแข็ง', line: 'ice', unique: 'shatter',
-    passive: `เลือดสูงสุด +${pc(T['hp.witch'] - 1)}% · การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ`,
+    passive: `${hpTxt('witch')}การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ`,
     style: 'หยุดเวลา: แช่แข็งศัตรูแล้วทุบน้ำแข็งแรง x3 ระหว่างที่ศัตรูขยับไม่ได้',
     hooks: { maxHp: hpOf('witch'), freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10) },
     ult: {
@@ -243,7 +246,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- 🌪 wind ----------------
   {
     id: 'chrono', day1: ['timewarp', 'chill', 'tailwind', 'dispel', 'jab'], name: 'จอมเวทลม', line: 'wind', unique: 'timewarp',
-    passive: `เลือดสูงสุด +${pc(T['hp.chrono'] - 1)}% · ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%`,
+    passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น 10%`,
     style: 'ลมพัดเวลา: ทำให้ศัตรูช้า ดึงคูลดาวน์ถอยหลัง เร่งตัวเอง และพัดไฟ/พิษทิ้ง',
     hooks: {
       maxHp: hpOf('chrono'),

@@ -153,14 +153,14 @@ export const HEROES_EN: Record<string, HeroEn> = {
     style: 'Shield wall: stack a thick shield, then Shield Slam hits back harder the more shield you have',
     ult: {
       name: 'Moon Fortress',
-      get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield (start shield counts)`); },
+      get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield (the start shield does not count)`); },
       get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? 1.4 : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
     },
   },
   berserker: {
     name: 'Berserker',
     get passive() {
-      return `Max HP +${pc(T['hp.berserker'] - 1)}% · every ${T['berserker.hits']} hits you take give +1 attack power · the first time your HP drops below half, gain +2 more (all hits of all skills until the fight ends)`;
+      return `${hpPlus('berserker')}every ${T['berserker.hits']} hits you take give +1 attack power · the first time your HP drops below half, gain +2 more (all hits of all skills until the fight ends)`;
     },
     style: 'Drain without end: heal and leech to stay alive; the longer you fight and the more you are hit, the harder you hit',
     ult: {
@@ -182,7 +182,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   thornguard: {
     name: 'Venom Thornguard',
     get passive() {
-      return `Max HP +${pc(T['hp.thornguard'] - 1)}% · every 2nd hit you take poisons the attacker 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
+      return `${hpPlus('thornguard')}every 2nd hit you take poisons the attacker 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
     },
     style: 'Poison on poison: whoever hits you gets poisoned; stack long poison, then burst it (poison ignores shields and can’t be dodged)',
     ult: {
@@ -193,7 +193,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   },
   witch: {
     name: 'Ice Witch',
-    get passive() { return `Max HP +${pc(T['hp.witch'] - 1)}% · freezes you apply last ${T['witch.freeze']}s longer`; },
+    get passive() { return `${hpPlus('witch')}freezes you apply last ${T['witch.freeze']}s longer`; },
     style: 'Stop time: freeze the enemy, then Shatter hits ×3 while they cannot move',
     ult: {
       name: 'Ice Age',
@@ -204,7 +204,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   chrono: {
     name: 'Wind Mage',
     get passive() {
-      return `Max HP +${pc(T['hp.chrono'] - 1)}% · your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal 10% more`;
+      return `${hpPlus('chrono')}your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal 10% more`;
     },
     style: 'Wind of time: slow the enemy, push their cooldowns back, speed yourself up and blow burn/poison away',
     ult: {

@@ -157,49 +157,49 @@ Lv2 = เงื่อนไขเร็วขึ้น 30% + ผลแรงข�
 
 ### ตัวเลขที่วัดได้ (`npm run sim -- all --n 200`, tier normal, seed 1, sim v12)
 
-ทุก "ชนะทาง" (`*`) คือคู่ที่ออกแบบไว้ · เป้า 53–58% เฉลี่ยทุกวัน · ผ่าน 4/16 คู่ ส่วนที่เหลืออยู่ระหว่าง 43–69% (ไม่มีคู่ไหนล็อกตายในค่าเฉลี่ย แต่วันที่ 3 ยังแกว่งแรง เพราะบอทอัป unique ถึง Lv3 ภายในวัน 3 และปลด ult ได้แล้ว)
+ทุก "ชนะทาง" (`*`) คือคู่ที่ออกแบบไว้ · เป้า 53–58% เฉลี่ยทุกวัน · ผ่าน 5/16 คู่ ส่วนที่เหลืออยู่ระหว่าง 43–69% (ไม่มีคู่ไหนล็อกตายในค่าเฉลี่ย แต่วันที่ 3 ยังแกว่งแรง เพราะบอทอัป unique ถึง Lv3 ภายในวัน 3 และปลด ult ได้แล้ว)
 
 ```
 Day 3 · 51200 fights · avg 10.2s   line win rate (row vs column) · * = designed counter (row beats column)
                ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
-⚔hit              -     61%      21%      26%*     66%      65%*     30%      27% 
+⚔hit              -     61%      28%      26%*     66%      65%*     30%      27% 
 💨dodge        39%*        -     72%      36%      42%      33%      88%*     91%!
-🛡shield       79%*     27%         -     17%      46%      46%      61%*     58% 
-❤heal          72%      63%      83%!        -     51%*     50%      63%      58%*
-🔥burn         30%      58%*     55%*     48%         -     49%      62%      48% 
-☠poison        37%      67%*     55%*     50%      56%         -     47%      23% 
-❄ice           70%      12%      38%      38%*     39%      53%         -     33%*
-🌪wind         74%      11%      39%      41%      50%*     77%*     64%         -
+🛡shield       74%*     26%         -     18%      47%      48%      62%*     57% 
+❤heal          72%      63%      81%!        -     51%*     50%      63%      58%*
+🔥burn         30%      58%*     53%*     48%         -     49%      62%      48% 
+☠poison        37%      67%*     52%*     50%      56%         -     47%      23% 
+❄ice           70%      12%      39%      38%*     39%      53%         -     33%*
+🌪wind         74%      11%      40%      41%      50%*     77%*     64%         -
 Day 5 · 51200 fights · avg 11.5s   line win rate (row vs column) · * = designed counter (row beats column)
                ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
-⚔hit              -     36%      67%      69%*     58%      71%*     46%      61% 
-💨dodge        64%*        -     76%!     72%      46%      37%      62%*     69% 
-🛡shield       35%*     23%         -     35%      47%      36%      43%*     67% 
-❤heal          30%      25%      63%         -     59%*     22%      30%      44%*
-🔥burn         43%      53%*     54%*     43%         -     62%      46%      55% 
-☠poison        30%      62%*     62%*     77%!     40%         -     38%      47% 
-❄ice           54%      38%      57%      71%*     51%      61%         -     64%*
-🌪wind         41%      31%      35%      51%      47%*     54%*     37%         -
+⚔hit              -     36%      69%      69%*     58%      71%*     46%      61% 
+💨dodge        64%*        -     78%!     72%      46%      37%      62%*     69% 
+🛡shield       32%*     22%         -     33%      44%      31%      40%*     64% 
+❤heal          30%      25%      67%         -     59%*     22%      29%      44%*
+🔥burn         43%      53%*     57%*     43%         -     62%      46%      55% 
+☠poison        30%      62%*     66%*     77%!     40%         -     38%      47% 
+❄ice           54%      38%      58%      71%*     51%      61%         -     64%*
+🌪wind         41%      31%      38%      51%      47%*     54%*     37%         -
 Day 10 · 51200 fights · avg 15.9s   line win rate (row vs column) · * = designed counter (row beats column)
                ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
-⚔hit              -     45%      56%      51%*     44%      53%*     37%      45% 
-💨dodge        55%*        -     56%      46%      43%      30%      41%*     46% 
-🛡shield       45%*     44%         -     30%      57%      48%      61%*     58% 
-❤heal          52%      55%      69%         -     52%*     35%      62%      49%*
-🔥burn         59%      56%*     41%*     49%         -     65%      54%      53% 
-☠poison        43%      74%*     56%*     64%      34%         -     44%      43% 
-❄ice           60%      61%      38%      38%*     45%      57%         -     57%*
-🌪wind         55%      56%      44%      48%      48%*     56%*     44%         -
+⚔hit              -     45%      55%      51%*     44%      53%*     37%      45% 
+💨dodge        55%*        -     56%      46%      44%      29%      41%*     46% 
+🛡shield       46%*     42%         -     28%      59%      47%      59%*     56% 
+❤heal          51%      55%      72%         -     53%*     35%      62%      50%*
+🔥burn         59%      56%*     40%*     49%         -     65%      55%      53% 
+☠poison        43%      74%*     57%*     64%      34%         -     44%      44% 
+❄ice           61%      61%      40%      38%*     45%      57%         -     57%*
+🌪wind         54%      56%      46%      48%      49%*     56%*     43%         -
 Day 13 · 51200 fights · avg 17.8s   line win rate (row vs column) · * = designed counter (row beats column)
                ⚔hit  💨dodge 🛡shield    ❤heal   🔥burn  ☠poison     ❄ice   🌪wind
-⚔hit              -     47%      54%      43%*     39%      50%*     44%      38% 
-💨dodge        53%*        -     48%      35%      38%      28%      37%*     31% 
-🛡shield       48%*     54%         -     25%      69%      54%      72%*     53% 
-❤heal          52%      64%      72%         -     59%*     43%      76%!     48%*
-🔥burn         61%      60%*     32%*     41%         -     68%      65%      42% 
-☠poison        48%      75%*     47%*     58%      31%         -     51%      36% 
-❄ice           58%      62%      31%      25%*     36%      50%         -     49%*
-🌪wind         64%      70%      46%      51%      56%*     66%*     51%         -
+⚔hit              -     48%      51%      43%*     39%      49%*     44%      39% 
+💨dodge        52%*        -     49%      35%      37%      28%      37%*     32% 
+🛡shield       49%*     53%         -     24%      73%      53%      70%*     52% 
+❤heal          53%      65%      73%         -     59%*     43%      76%!     48%*
+🔥burn         61%      61%*     31%*     41%         -     68%      65%      42% 
+☠poison        48%      75%*     48%*     58%      30%         -     52%      36% 
+❄ice           57%      63%      33%      25%*     36%      49%         -     49%*
+🌪wind         63%      69%      48%      51%      56%*     66%*     52%         -
 ```
 
 ฮีโร่ (ชนะทุกฮีโร่อื่น) · เป้า 45–55% ทุกวัน: วัน 10 ผ่านหมด · วัน 3 / 5 / 13 ยังมีหลุด
@@ -207,37 +207,37 @@ Day 13 · 51200 fights · avg 17.8s   line win rate (row vs column) · * = desig
 ```
 Hero overall win rate (vs every other hero) · 0-skill = share of its fights where it cast nothing
 hero             d3     d5    d10    d13      0sk d3   0sk d5  0sk d10  0sk d13
-assassin        42%    58%    47%    45%          0%       0%       0%       0%
+assassin        43%    59%    47%    45%          0%       0%       0%       0%
 duelist         57%    61%    45%    38%          0%       0%       0%       0%
-knight          48%    41%    49%    53%          1%       0%       0%       0%
-berserker       63%    39%    53%    59%          2%       1%       0%       0%
+knight          48%    38%    48%    53%          1%       0%       0%       0%
+berserker       63%    39%    54%    60%          1%       1%       0%       0%
 pyro            50%    51%    54%    53%          1%       1%       0%       0%
-thornguard      48%    51%    51%    49%          0%       0%       0%       0%
+thornguard      47%    51%    51%    49%          0%       0%       0%       0%
 witch           41%    57%    51%    44%          0%       0%       0%       0%
-chrono          51%    42%    50%    58%          1%       1%       0%       0%
-spread          22p    22p     9p    21p
+chrono          51%    43%    50%    58%          1%       1%       0%       0%
+spread          22p    23p     9p    21p
 ```
 
 คู่แก้ทาง:
 
 ```
 pair                   d3    d5   d10   d13     avg
-⚔hit > ❤heal          26%   69%   51%   43%     47% ✘
-⚔hit > ☠poison        65%   71%   53%   50%     60% ✘
-💨dodge > ⚔hit        39%   64%   55%   53%     53% ✘
+⚔hit > ❤heal          26%   69%   51%   43%     48% ✘
+⚔hit > ☠poison        65%   71%   53%   49%     60% ✘
+💨dodge > ⚔hit        39%   64%   55%   52%     52% ✘
 💨dodge > ❄ice        88%   62%   41%   37%     57% ✔
-🛡shield > ⚔hit       79%   35%   45%   48%     52% ✘
-🛡shield > ❄ice       61%   43%   61%   72%     59% ✘
-❤heal > 🔥burn        51%   59%   52%   59%     55% ✔
-❤heal > 🌪wind        58%   44%   49%   48%     50% ✘
-🔥burn > 🛡shield     55%   54%   41%   32%     45% ✘
-🔥burn > 💨dodge      58%   53%   56%   60%     57% ✔
-☠poison > 🛡shield    55%   62%   56%   47%     55% ✔
+🛡shield > ⚔hit       74%   32%   46%   49%     50% ✘
+🛡shield > ❄ice       62%   40%   59%   70%     58% ✔
+❤heal > 🔥burn        51%   59%   53%   59%     55% ✔
+❤heal > 🌪wind        58%   44%   50%   48%     50% ✘
+🔥burn > 🛡shield     53%   57%   40%   31%     45% ✘
+🔥burn > 💨dodge      58%   53%   56%   61%     57% ✔
+☠poison > 🛡shield    52%   66%   57%   48%     56% ✔
 ☠poison > 💨dodge     67%   62%   74%   75%     69% ✘
 ❄ice > 🌪wind         33%   64%   57%   49%     51% ✘
 ❄ice > ❤heal          38%   71%   38%   25%     43% ✘
 🌪wind > ☠poison      77%   54%   56%   66%     63% ✘
-🌪wind > 🔥burn       50%   47%   48%   56%     50% ✘
+🌪wind > 🔥burn       50%   47%   49%   56%     50% ✘
 ```
 
 Ultimate (เป้า: ยิง ≥ 75% เมื่อปลด (นักฆ่า / นักรบคลั่ง ≥ 50%) · เวลายิงกลาง 40–70% ของการสู้):
@@ -246,10 +246,10 @@ Ultimate (เป้า: ยิง ≥ 75% เมื่อปลด (นักฆ
 hero          unl d3  unl d5 unl d10 unl d13    Lv2 d3  Lv2 d5 Lv2 d10 Lv2 d13   fire%  at(med)  win unl/locked
 assassin         88%    100%    100%    100%        0%     35%     96%    100%     88%      63%   48% / 57%
 duelist          89%    100%    100%    100%        0%     38%     97%    100%     65%      50%   50% / 76%
-knight           83%    100%    100%    100%        0%     20%     94%    100%     64%      50%   47% / 71%
-berserker        90%     99%    100%    100%        0%     23%     92%    100%     91%      67%   53% / 50%
-pyro             84%    100%    100%    100%        0%     37%     97%    100%     74%      39%   51% / 58%
-thornguard       90%    100%    100%    100%        0%     45%     98%    100%     78%      45%   49% / 69%
+knight           83%    100%    100%    100%        0%     20%     94%    100%     76%      67%   46% / 69%
+berserker        90%     99%    100%    100%        0%     23%     92%    100%     91%      67%   54% / 48%
+pyro             84%    100%    100%    100%        0%     37%     97%    100%     74%      39%   51% / 57%
+thornguard       90%    100%    100%    100%        0%     45%     98%    100%     78%      46%   49% / 68%
 witch            90%    100%    100%    100%        0%     37%     98%    100%     74%      41%   48% / 59%
 chrono           85%    100%    100%    100%        0%     37%     96%    100%     81%      38%   50% / 58%
 ```
@@ -260,17 +260,17 @@ chrono           85%    100%    100%    100%        0%     37%     96%    100%  
 day   avg   p10   p90  target      fatigue  0-skill locked ctl/side ctlmax  close trig/f chain  ult1+  ult2 fire%
   1   9.2s  5.0s 12.3s  7–13s  ✔     5%✔     3%     1%    0.3s   2.0s    14%    0.1     2     0%    0%    0%
   2  10.2s  6.6s 14.0s  7–13s  ✔    10%✔     1%     0%    0.3s   2.0s    13%    0.1     2     2%    0%   58%
-  3  10.3s  6.0s 15.0s  7–13s  ✔    14%✔     1%     0%    0.4s   2.0s    17%    0.2     3    84%    0%   49%
-  4  11.9s  8.0s 17.0s  10–18s ✔    11%✔     1%     3%    0.6s   4.5s    17%    0.6     3    97%    0%   74%
-  5  11.4s  6.0s 17.2s  10–18s ✔     6%✔     1%     3%    0.7s   4.5s    13%    1.0     4   100%   34%   79%
-  6  12.1s  7.0s 17.9s  10–18s ✔     3%✔     0%     5%    0.8s   4.5s    15%    1.0     4   100%   56%   81%
-  7  11.7s  7.0s 17.2s  10–18s ✔     2%✔     0%     4%    0.8s   4.5s    15%    1.4     4   100%   69%   83%
-  8  16.2s 10.0s 25.0s  15–26s ✔    10%✔     0%     5%    1.2s   6.0s    13%    2.1     4   100%   78%   89%
-  9  16.0s 10.0s 24.1s  15–26s ✔     7%✔     0%     5%    1.3s   6.0s    15%    2.2     4   100%   86%   90%
- 10  15.8s 10.3s 23.0s  15–26s ✔     3%✔     0%     5%    1.3s   6.0s    17%    3.3     4   100%   92%   88%
- 11  17.1s 10.8s 25.9s  15–26s ✔     5%✔     0%     5%    1.5s   6.0s    16%    3.4     5   100%   96%   91%
- 12  16.9s 10.7s 25.7s  15–26s ✔     5%✔     0%     5%    1.4s   6.0s    13%    3.3     4   100%   97%   89%
- 13  17.8s 12.0s 25.4s  15–26s ✔     5%✔     0%     6%    1.6s   6.0s    14%    3.5     4   100%   99%   89%
+  3  10.3s  6.0s 14.8s  7–13s  ✔    13%✔     1%     0%    0.4s   2.0s    17%    0.2     3    84%    0%   49%
+  4  11.9s  8.1s 17.0s  10–18s ✔    10%✔     1%     3%    0.6s   4.5s    17%    0.6     3    97%    0%   73%
+  5  11.5s  6.0s 17.4s  10–18s ✔     7%✔     1%     3%    0.7s   4.5s    14%    1.0     4   100%   34%   78%
+  6  12.1s  7.0s 17.9s  10–18s ✔     4%✔     0%     5%    0.8s   4.5s    15%    1.1     4   100%   56%   81%
+  7  11.6s  7.0s 17.4s  10–18s ✔     2%✔     0%     4%    0.8s   4.5s    15%    1.4     4   100%   69%   83%
+  8  16.2s 10.0s 25.0s  15–26s ✔    11%✔     0%     5%    1.2s   6.0s    13%    2.1     4   100%   78%   89%
+  9  16.1s 10.0s 25.0s  15–26s ✔     8%✔     0%     5%    1.3s   6.0s    14%    2.2     4   100%   86%   92%
+ 10  15.8s 10.0s 23.5s  15–26s ✔     3%✔     0%     5%    1.3s   6.0s    16%    3.3     4   100%   92%   93%
+ 11  17.1s 10.5s 26.1s  15–26s ✔     5%✔     0%     4%    1.5s   6.0s    17%    3.4     5   100%   96%   94%
+ 12  16.8s 10.5s 25.9s  15–26s ✔     4%✔     0%     5%    1.4s   6.0s    13%    3.3     4   100%   97%   93%
+ 13  17.8s 12.0s 25.6s  15–26s ✔     5%✔     0%     6%    1.6s   6.0s    14%    3.5     4   100%   99%   93%
 all  13.6s                            7%      0%     4%    0.9s   6.0s    15%    1.7     5
 ```
 
@@ -279,11 +279,11 @@ all  13.6s                            7%      0%     4%    0.9s   6.0s    15%   
 ✘ day 3: line matchups ≤ 75%                           worst 91%
 ✘ day 3: hero pairs ≤ 75%                              worst 91%
 ✔ day 3: hero spread ≤ 30 pts                          22 pts
-✘ day 3: every hero 45%–55%                            assassin 42%, duelist 57%, berserker 63%, witch 41%
-✘ day 5: line matchups ≤ 75%                           worst 77%
-✘ day 5: hero pairs ≤ 75%                              worst 77%
-✔ day 5: hero spread ≤ 30 pts                          22 pts
-✘ day 5: every hero 45%–55%                            assassin 58%, duelist 61%, knight 41%, berserker 39%, witch 57%, chrono 42%
+✘ day 3: every hero 45%–55%                            assassin 43%, duelist 57%, berserker 63%, witch 41%
+✘ day 5: line matchups ≤ 75%                           worst 78%
+✘ day 5: hero pairs ≤ 75%                              worst 78%
+✔ day 5: hero spread ≤ 30 pts                          23 pts
+✘ day 5: every hero 45%–55%                            assassin 59%, duelist 61%, knight 38%, berserker 39%, witch 57%, chrono 43%
 ✔ day 10: line matchups ≤ 75%                          worst 74%
 ✔ day 10: hero pairs ≤ 75%                             worst 74%
 ✔ day 10: hero spread ≤ 30 pts                         9 pts
@@ -291,39 +291,39 @@ all  13.6s                            7%      0%     4%    0.9s   6.0s    15%   
 ✘ day 13: line matchups ≤ 75%                          worst 76%
 ✘ day 13: hero pairs ≤ 75%                             worst 76%
 ✔ day 13: hero spread ≤ 30 pts                         21 pts
-✘ day 13: every hero 45%–55%                           duelist 38%, berserker 59%, witch 44%, chrono 58%
-✘ counter pairs 53%–58% (avg over days)                4/16 in · miss hit>heal 47%, hit>poison 60%, dodge>hit 53%, shield>hit 52%, shield>ice 59%, heal>wind 50%, burn>shield 45%, poison>dodge 69%, ice>wind 51%, ice>heal 43%, wind>poison 63%, wind>burn 50%
+✘ day 13: every hero 45%–55%                           assassin 45%, duelist 38%, berserker 60%, witch 44%, chrono 58%
+✘ counter pairs 53%–58% (avg over days)                5/16 in · miss hit>heal 48%, hit>poison 60%, dodge>hit 52%, shield>hit 50%, heal>wind 50%, burn>shield 45%, poison>dodge 69%, ice>wind 51%, ice>heal 43%, wind>poison 63%, wind>burn 50%
 ✔ assassin ult fires ≥ 50% when unlocked               88%
 ✔ assassin ult median time 40%–70% of the fight        63%
 ✘ duelist ult fires ≥ 75% when unlocked                65%
 ✔ duelist ult median time 40%–70% of the fight         50%
-✘ knight ult fires ≥ 75% when unlocked                 64%
-✔ knight ult median time 40%–70% of the fight          50%
+✔ knight ult fires ≥ 75% when unlocked                 76%
+✔ knight ult median time 40%–70% of the fight          67%
 ✔ berserker ult fires ≥ 50% when unlocked              91%
 ✔ berserker ult median time 40%–70% of the fight       67%
 ✘ pyro ult fires ≥ 75% when unlocked                   74%
 ✘ pyro ult median time 40%–70% of the fight            39%
 ✔ thornguard ult fires ≥ 75% when unlocked             78%
-✔ thornguard ult median time 40%–70% of the fight      45%
+✔ thornguard ult median time 40%–70% of the fight      46%
 ✘ witch ult fires ≥ 75% when unlocked                  74%
 ✔ witch ult median time 40%–70% of the fight           41%
 ✔ chrono ult fires ≥ 75% when unlocked                 81%
 ✘ chrono ult median time 40%–70% of the fight          38%
 ✔ avg fight length in target every day (1–13)          all days
-✔ fatigue-ended ≤ 20% every day                        worst 14% (day 3)
+✔ fatigue-ended ≤ 20% every day                        worst 13% (day 3)
 ✔ 0-skill fights ≤ 3% (days 1–13)                      0%
-✔ assassin reaches 10 wins in 15%–45% of runs          39%
-✔ duelist reaches 10 wins in 15%–45% of runs           42%
-✔ knight reaches 10 wins in 15%–45% of runs            39%
-✔ berserker reaches 10 wins in 15%–45% of runs         42%
+✔ assassin reaches 10 wins in 15%–45% of runs          37%
+✔ duelist reaches 10 wins in 15%–45% of runs           43%
+✔ knight reaches 10 wins in 15%–45% of runs            41%
+✔ berserker reaches 10 wins in 15%–45% of runs         43%
 ✔ pyro reaches 10 wins in 15%–45% of runs              39%
-✔ thornguard reaches 10 wins in 15%–45% of runs        35%
+✔ thornguard reaches 10 wins in 15%–45% of runs        36%
 ✔ witch reaches 10 wins in 15%–45% of runs             40%
 ✔ chrono reaches 10 wins in 15%–45% of runs            43%
-✔ tiers: hard beats normal ≥ 55% avg, ≥ 50% every day  avg 72%, worst day 61%
-✔ tiers: normal beats easy ≥ 55% avg, ≥ 50% every day  avg 75%, worst day 71%
+✔ tiers: hard beats normal ≥ 55% avg, ≥ 50% every day  avg 72%, worst day 62%
+✔ tiers: normal beats easy ≥ 55% avg, ≥ 50% every day  avg 74%, worst day 71%
 
-✘ 16 of 46 targets missed
+✘ 15 of 46 targets missed
 ```
 
-สิ่งที่ยังไม่ผ่าน (ตรงๆ): ฮีโร่ 45–55% ไม่ผ่านวัน 3/5/13 (หลุดสุด นักรบคลั่ง 39% วัน 5 / 63% วัน 3, นักดาบคู่ 38% วัน 13) · คู่แก้ทาง 12/16 นอก 53–58% (☠>💨 69% แรงไป, ❄>❤ 43% และ 🔥>🛡 45% กลับด้าน) · คู่ฮีโร่ > 75% ในวัน 3/5/13 (แย่สุด นักดาบคู่ > จอมเวทลม 91% วัน 3) · ult นักดาบคู่ / อัศวิน ยิงแค่ ~65% · ult นักเวทเพลิง / จอมเวทลม ยิงเร็วไปนิด (39%, 38% ของการสู้)
+สิ่งที่ยังไม่ผ่าน (ตรงๆ): ฮีโร่ 45–55% ผ่านแค่วัน 10 (หลุดสุด นักรบคลั่ง 63% วัน 3 / 39% วัน 5, อัศวิน 38% วัน 5, นักดาบคู่ 61% วัน 5 / 38% วัน 13; วัน 3 และ 5 แกว่งเพราะบอทอัป unique ถึง Lv3 ภายในวัน 3 และ ult Lv2 เริ่มมีวัน 5) · คู่แก้ทาง 11/16 นอก 53–58% (☠>💨 69% แรงไป, ❄>❤ 43% และ 🔥>🛡 45% กลับด้าน, ที่เหลือ 48–63%) · คู่ฮีโร่ > 75% ในวัน 3/5/13 (แย่สุด นักดาบคู่ > จอมเวทลม 91% วัน 3) · ult นักดาบคู่ยิงแค่ 65%, นักเวทเพลิง / แม่มด 74% · นักเวทเพลิงและจอมเวทลมยิงเร็วไปนิด (39%, 38% ของการสู้) · ผ่าน: ความยาวการสู้ เหนื่อยล้า 0-skill reach-10 และ tier บอท

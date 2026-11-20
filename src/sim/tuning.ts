@@ -39,7 +39,7 @@ export const TUNING = {
   'line.dodge.lv1': 0.8,
   'line.dodge.lv3': 1.45,
   'line.shield.lv1': 1.05,
-  'line.shield.lv3': 1.25,
+  'line.shield.lv3': 1.15,
   'line.heal.lv1': 1.3,
   'line.heal.lv3': 1.15,
   'line.burn.lv1': 1.5,
@@ -121,7 +121,7 @@ export const TUNING = {
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
   'ult.duelist.pow': 0.6,
   /** อัศวิน: shield gained, share of max HP */
-  'ult.knight.trig': 0.15,
+  'ult.knight.trig': 0.2,
   /** อัศวิน: hit = shield × this (the shield stays) */
   'ult.knight.pow': 1.6,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */

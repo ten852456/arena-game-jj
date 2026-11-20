@@ -154,7 +154,7 @@ interface Fighter {
   /** ultimate: level from the build, fired yet, trigger counters */
   ultLv: number;
   ultDone: boolean;
-  /** shield gained this fight (the start shield counts) */
+  /** shield gained this fight (not the start shield) */
   shieldGot: number;
   /** direct hits taken (landed) */
   hitsTaken: number;
@@ -234,7 +234,7 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
     hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
     burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
-    ultLv: ultLevel(b), ultDone: false, shieldGot: start, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
+    ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
     freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat),
     immuneUntil: 0, pendingReact: [], lastFire: 0,
