@@ -565,6 +565,9 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
           emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
           foe.hooks.onDodge?.(hookApi(foe));
+          // a dodge is a graze, not a wall: a share of the hit still lands (no riders, no thorns, no leech)
+          const graze = Math.round(dmg * T['dodge.graze']);
+          if (graze > 0) deal(foe, graze, 1 - (o.pierce ?? 0), inst.id, blk.idx);
           return -1;
         }
         if (o.sure && foe.dodge > 0) emit({ type: 'status', side: foe.side, status: 'sure', value: foe.dodge });
