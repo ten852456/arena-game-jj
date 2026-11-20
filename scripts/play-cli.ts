@@ -10,7 +10,7 @@ import { detailLines, simpleBonus, simpleText } from '../src/client/skillText';
 import { randomAiBuild, type BotTier } from '../src/sim/bot';
 import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
-import { HEROES, HEROES_BY_ID } from '../src/sim/heroes';
+import { HEROES, HEROES_BY_ID, ultLevel, ultPieces } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
 import { SKILLS, VARIANTS, lvOf, nodeOf } from '../src/sim/skills';
@@ -52,7 +52,8 @@ function show(s: R.RunState) {
   p(`Hero: ${h.name} (${h.id}, line ${heroLine(h.id)}) — ${h.passive}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const extra = h as any;
-  if (extra.ult) p(`Ultimate: ${JSON.stringify(extra.ult).slice(0, 300)}`);
+  if (extra.ult) p(`Ultimate: ${JSON.stringify(extra.ult).slice(0, 400)}
+Ult pieces now: ${ultPieces(R.toBuild(s))} (3 = Lv1, 5 = Lv2; a Lv3 skill of your line counts +1) → ult Lv${ultLevel(R.toBuild(s))}`);
   const slots = R.slotsOf(s);
   p(`List (${s.skills.length}/${slots} slots; top to bottom, neighbours can switch on connect bonuses):`);
   s.skills.forEach((k, i) => {
