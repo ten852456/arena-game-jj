@@ -1,6 +1,7 @@
 import { combatSfx, fightSfx, voice } from './audio';
 import Phaser from 'phaser';
 import { DangerVignette } from './danger';
+import { confetti, drawPlate } from './winFx';
 import { ZOOM } from './view';
 import { SKILLS, nodeOf } from '../sim/skills';
 import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '../sim/types';
@@ -65,6 +66,7 @@ export class CombatScene extends Phaser.Scene {
   private skillText!: Phaser.GameObjects.Text;
   private clockText!: Phaser.GameObjects.Text;
   private banner!: Phaser.GameObjects.Text;
+  private bannerPlate!: Phaser.GameObjects.Graphics;
   /** big status over each fighter's head: frozen / cooldowns pushed back / never fired a skill */
   private lockTexts!: Phaser.GameObjects.Text[];
   private casts = [0, 0];
@@ -180,7 +182,8 @@ export class CombatScene extends Phaser.Scene {
     this.hpTexts = [txt(145, 24, 14), txt(495, 24, 14)];
     this.skillText = txt(W / 2, 100, 26).setDepth(20);
     this.clockText = txt(W / 2, 24, 14, '#bbbbbb');
-    this.banner = txt(W / 2, 170, 48).setDepth(22);
+    this.banner = txt(W / 2, 150, 48).setDepth(22);
+    this.bannerPlate = this.add.graphics().setDepth(21);
     this.lockTexts = [0, 1].map((i) =>
       this.add
         .text(POS[i], GROUND - HERO_H - 16, '', {
@@ -218,6 +221,7 @@ export class CombatScene extends Phaser.Scene {
     this.playing = false;
     this.tweens.killAll();
     this.banner.setText('');
+    this.bannerPlate.clear();
     this.endWinner = null;
     this.skillText.setText('');
     this.clockText.setText('');
@@ -271,10 +275,20 @@ export class CombatScene extends Phaser.Scene {
     return w === null ? '' : w === 0 ? L('ชนะ!', 'Victory!') : w === 1 ? L('แพ้', 'Defeat') : L('เสมอ', 'Draw');
   }
 
+  private paintPlate() {
+    const w = this.endWinner;
+    this.banner.setScale(1);
+    drawPlate(this.bannerPlate, this.banner, w === 0 ? 'win' : w === 1 ? 'lose' : 'draw', W);
+    this.banner.setScale((this.banner.getData('fit') as number) ?? 1);
+  }
+
   /** Re-label the fighters and the end banner (language change). */
   setNames(names: [string, string]) {
     names.forEach((n, i) => this.nameTexts[i]?.text && this.nameTexts[i].setText(n));
-    if (this.banner?.text) this.banner.setText(this.bannerText());
+    if (this.banner?.text) {
+      this.banner.setText(this.bannerText());
+      this.paintPlate();
+    }
     this.skillText?.setText(''); // the fading "skill used" line was drawn in the old language
   }
 
@@ -581,10 +595,18 @@ export class CombatScene extends Phaser.Scene {
       case 'end': {
         const w = e.winner;
         this.endWinner = w;
-        this.banner.setText(this.bannerText()).setColor(w === 0 ? '#66ff88' : w === 1 ? '#ff6666' : '#dddddd');
-        this.banner.setScale(0.5);
-        if (w === 0 && !this.quiet) this.life.cheer();
-        this.tweens.add({ targets: this.banner, scale: 1, duration: 250, ease: 'Back.Out' });
+        this.banner.setText(this.bannerText()).setColor(w === 0 ? '#3fbf6a' : w === 1 ? '#ff5a72' : '#8f86b8').setStroke('#3a2b48', 6);
+        this.paintPlate();
+        const fit = (this.banner.getData('fit') as number) ?? 1;
+        this.banner.setScale(0.5 * fit);
+        this.bannerPlate.setScale(0.5);
+        if (w === 0 && !this.quiet) {
+          this.life.cheer();
+          confetti(this, POS[0], GROUND - HERO_H - 10);
+          this.time.delayedCall(180, () => confetti(this, W / 2, 150, 30));
+        }
+        this.tweens.add({ targets: this.banner, scale: fit, duration: 250, ease: 'Back.Out' });
+        this.tweens.add({ targets: this.bannerPlate, scale: 1, duration: 250, ease: 'Back.Out' });
         ([0, 1] as Side[]).forEach((s) => {
           if (w !== -1 && s !== w) {
             const f = this.fighters[s];

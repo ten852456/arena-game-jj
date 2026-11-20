@@ -17,6 +17,7 @@ import { mountSoundPanel } from './soundPanel';
 import { initInfoMode } from './infoMode';
 import { icon, initIcons } from './icons';
 import './theme.css'; // the Mochi Moon look: loaded last so it wins
+import './reward.css';
 
 initIcons();
 
@@ -111,7 +112,12 @@ function paintTagline() {
 type TextFactory = { text: (...a: unknown[]) => Phaser.GameObjects.Text };
 const factory = Phaser.GameObjects.GameObjectFactory.prototype as unknown as TextFactory;
 const addText = factory.text;
+// Phaser measures text height with "|MÉqs", which cuts off Thai marks above and below the line (the ้ in แพ้):
+// measure with tall Thai marks too.
+const TEST = '|MÉqsแพ้ชนะปุ่มฎฐิ์ืู';
 factory.text = function (this: unknown, ...a: unknown[]) {
+  const style = (a[3] ?? {}) as Record<string, unknown>;
+  if (!style.testString) a[3] = { ...style, testString: TEST };
   return addText.apply(this, a).setResolution(ZOOM);
 };
 

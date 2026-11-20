@@ -105,7 +105,10 @@ function onEnterView(v: View) {
       lastShopDay = run.day;
     }
   } else if (v === 'result') {
-    if (last?.won) music('victory');
+    if (last?.won) {
+      music('victory');
+      setTimeout(() => sfx('stardust'), 650); // the prize strip lands
+    }
     if (lastClose) voice('close_fight');
   } else if (v === 'lastchance') {
     sfx('last_chance');
@@ -980,6 +983,7 @@ function renderResult() {
     <p>${L('คู่ต่อสู้', 'Opponent')}: <b class="who s1">${esc(oname)}</b> · ${HEROES_BY_ID[f.opponent.build.hero].name}
      ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
     <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `Wins: ${r.wins}/${R.WIN_TARGET}`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
+  ${f.won ? winRewardHTML(r) : ''}
   </div>
   <div class="actions rv-actions"><button class="primary" data-a="next">${L('ต่อไป ▶', 'Continue ▶')}</button>${x && !x.close ? `<button data-a="rewatch">${L('▶ ดูไฟต์นี้อีกครั้ง', '▶ Watch this fight again')}</button>` : ''}</div>
   </div>
@@ -992,6 +996,26 @@ function renderResult() {
   ${buildList(f.opponent.build)}
   ${link ? `<p class="muted">${L('ลิงก์ replay:', 'Replay link:')} <input class="link" readonly value="${esc(link)}" onclick="this.select()"></p>` : ''}
   </div>
+  </div>`;
+}
+
+/** The prize strip on a won fight: this win's star landing in the 10-star row, tomorrow's coins, the streak,
+ * and how far the crown is. Animated once (CSS), with confetti from the card. */
+function winRewardHTML(r: R.RunState) {
+  const inc = R.incomeFor(r.day, r.streak);
+  const left = Math.max(0, R.WIN_TARGET - r.wins);
+  const stars = Array.from({ length: R.WIN_TARGET }, (_, i) =>
+    `<i class="wr-star${i < r.wins ? ' on' : ''}${i === r.wins - 1 ? ' new' : ''}" style="--i:${i}"></i>`).join('');
+  const bits = Array.from({ length: 18 }, (_, i) => `<b class="wr-bit" style="--i:${i}"></b>`).join('');
+  return `<div class="win-reward" role="status">
+    <div class="wr-burst" aria-hidden="true">${bits}</div>
+    <div class="wr-title">🏆 ${L(`ชนะครั้งที่ ${r.wins}!`, `Win #${r.wins}!`)}</div>
+    <div class="wr-stars" aria-label="${r.wins}/${R.WIN_TARGET}">${stars}</div>
+    <div class="wr-row">
+      <span class="wr-chip wr-gold">🪙 ${L('พรุ่งนี้ได้', 'Tomorrow')} <b>+${inc.base + inc.bonus}</b>${inc.bonus ? ` <small>(${L('โบนัสชนะติด', 'streak bonus')} +${inc.bonus})</small>` : ''}</span>
+      ${r.streak >= 2 ? `<span class="wr-chip wr-streak">🔥 ${L(`ชนะติด ${r.streak}`, `${r.streak} in a row`)}</span>` : ''}
+      <span class="wr-chip wr-crown">👑 ${left ? L(`อีก ${left} ชนะ ได้มงกุฎ`, `${left} more for the crown`) : L('ได้มงกุฎ!', 'Crown!')}</span>
+    </div>
   </div>`;
 }
 

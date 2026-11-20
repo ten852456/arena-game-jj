@@ -1,0 +1,54 @@
+/* Win prize strip on the fight result (ui.ts winRewardHTML) */
+.win-reward {
+  position: relative; margin-top: 10px; padding: 10px 12px 12px; border-radius: 16px; overflow: visible;
+  background: linear-gradient(180deg, rgba(255, 226, 160, 0.18), rgba(255, 226, 160, 0.06));
+  border: 2.5px solid #3a2b48; box-shadow: 0 0 0 2px rgba(255, 207, 107, 0.65) inset, 0 4px 0 #3a2b48;
+  animation: wr-pop 0.55s cubic-bezier(.2, 1.6, .4, 1) both;
+}
+@keyframes wr-pop { from { transform: scale(0.6); opacity: 0; } }
+.wr-title { font-size: 20px; font-weight: 700; color: #ffe2a0; text-shadow: 0 2px 0 #3a2b48; display: flex; align-items: center; gap: 6px; }
+.wr-stars { display: flex; gap: 4px; margin: 8px 0 8px; flex-wrap: wrap; }
+.wr-star {
+  width: 22px; height: 22px; flex: none; background: rgba(255, 255, 255, 0.12);
+  clip-path: polygon(50% 0, 62% 35%, 100% 38%, 70% 60%, 80% 98%, 50% 76%, 20% 98%, 30% 60%, 0 38%, 38% 35%);
+}
+.wr-star.on { background: #ffcf6b; }
+.wr-star.new { animation: wr-star 0.9s 0.35s cubic-bezier(.2, 1.8, .4, 1) both; background: #fff0a8; filter: drop-shadow(0 0 6px #ffcf6b); }
+@keyframes wr-star { 0% { transform: translateY(-40px) scale(2.4) rotate(-120deg); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; } }
+.wr-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.wr-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 14px;
+  background: rgba(20, 14, 50, 0.55); border: 2px solid #3a2b48; color: #fff3e2; animation: wr-pop 0.4s both;
+}
+.wr-chip:nth-child(1) { animation-delay: 0.55s; } .wr-chip:nth-child(2) { animation-delay: 0.7s; } .wr-chip:nth-child(3) { animation-delay: 0.85s; }
+.wr-gold b { color: #ffcf6b; font-size: 16px; }
+.wr-gold small { color: #d8d0f4; }
+.wr-streak { color: #ffb88a; }
+.wr-crown { color: #ffe2a0; }
+.wr-burst { position: absolute; left: 50%; top: 20px; width: 0; height: 0; pointer-events: none; }
+.wr-bit {
+  position: absolute; width: 7px; height: 11px; border-radius: 2px; opacity: 0;
+  background: hsl(calc(var(--i) * 47), 90%, 78%); border: 1px solid rgba(58, 43, 72, 0.6);
+  animation: wr-bit 1.3s calc(var(--i) * 0.02s) ease-out both;
+  --a: calc(var(--i) * 20deg);
+}
+@keyframes wr-bit {
+  0% { opacity: 1; transform: rotate(var(--a)) translateY(0) rotate(0); }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(-110px) rotate(540deg); }
+}
+.mm-result.won { box-shadow: 0 0 0 2px rgba(255, 207, 107, 0.5), 0 0 26px rgba(255, 207, 107, 0.35); }
+@media (max-height: 500px) {
+  .win-reward { padding: 6px 8px 8px; margin-top: 6px; }
+  .wr-title { font-size: 16px; }
+  .wr-star { width: 16px; height: 16px; }
+  .wr-stars { margin: 4px 0; }
+  .wr-chip { font-size: 12px; padding: 2px 8px; }
+}
+@media (prefers-reduced-motion: reduce) { .win-reward, .wr-star.new, .wr-chip, .wr-bit { animation: none; } .wr-bit { display: none; } }
+@media (max-height: 500px) {
+  /* phones on their side: one compact line (title + stars), the "Wins x/10" line is the stars already */
+  .mm-result.won > p:last-of-type { display: none; }
+  .win-reward { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; }
+  .wr-stars { margin: 0; }
+  .wr-row { width: 100%; }
+}
