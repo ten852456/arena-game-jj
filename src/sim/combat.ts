@@ -77,7 +77,8 @@ export const CHAIN_DECAY = T.chainDecay;
 /** ตราศักดิ์สิทธิ์ powers at most this many marked skills */
 export const SIGIL_MAX = 2;
 /** sim v18: a skill of the hero's line fires its first cast at most this many ticks into the fight (slow lines start sooner) */
-export const FIRST_CAST = 4 * TPS;
+export const FIRST_CAST = 4.5 * TPS;
+export const FIRST_CAST_DAYS = 5;
 /** damage sources a spiked shield does not reflect */
 const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
@@ -288,7 +289,8 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   if (relics.has('glasscannon')) maxHp = Math.max(1, Math.round(maxHp * T['relic.glassHp']));
   const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
   const blocks = makeBlocks(b);
-  for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - FIRST_CAST);
+  // early days only: a slow line's first cast comes by FIRST_CAST (fights on days 1–FIRST_CAST_DAYS are short)
+  if (day <= FIRST_CAST_DAYS) for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - FIRST_CAST);
   if (relics.has('quickdraw')) for (const blk of blocks) blk.prog = Math.max(blk.prog, Math.round(blk.cd * T['relic.quickdraw']));
   // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
   if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());

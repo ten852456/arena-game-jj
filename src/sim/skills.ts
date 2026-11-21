@@ -361,13 +361,13 @@ const BASE_LIST: SkillDef[] = [
   }),
   // payoff: hits with the shield you hold
   def('stoneskin', 'shield', {
-    '': N('ผิวหิน', 7, [{ k: 'shield', n: 3 }, hit(2, { shieldPct: 0.4 })]),
-    a: N('หินแกร่ง', 7, [{ k: 'shield', n: 6 }, hit(3, { shieldPct: 0.4 })], 'เกราะ'),
-    a1: N('หินผา', 7, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(4, { shieldPct: 0.4 })]),
-    a2: N('หินฟื้น', 7, [{ k: 'shield', n: 6 }, { k: 'heal', n: 5 }, hit(4, { shieldPct: 0.4 })]),
-    b: N('หินพุ่ง', 7, [{ k: 'shield', n: 3 }, hit(3, { shieldPct: 0.8 })], 'โล่เป็นดาเมจ'),
-    b1: N('หินถล่ม', 7, [{ k: 'shield', n: 3 }, hit(4, { shieldPct: 1 }), { k: 'charge', mult: 1.5, hits: 1 }]),
-    b2: N('หินทะลวง', 7, [{ k: 'shield', n: 3 }, hit(3, { shieldPct: 0.8, pierce: 1 })]),
+    '': N('ผิวหิน', 6.5, [{ k: 'shield', n: 3 }, hit(3, { shieldPct: 0.4 })]),
+    a: N('หินแกร่ง', 6.5, [{ k: 'shield', n: 6 }, hit(3, { shieldPct: 0.4 })], 'เกราะ'),
+    a1: N('หินผา', 6.5, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(4, { shieldPct: 0.4 })]),
+    a2: N('หินฟื้น', 6.5, [{ k: 'shield', n: 6 }, { k: 'heal', n: 5 }, hit(4, { shieldPct: 0.4 })]),
+    b: N('หินพุ่ง', 6.5, [{ k: 'shield', n: 4 }, hit(3, { shieldPct: 0.8 })], 'โล่เป็นดาเมจ'),
+    b1: N('หินถล่ม', 6.5, [{ k: 'shield', n: 4 }, hit(4, { shieldPct: 1 }), { k: 'charge', mult: 1.5, hits: 1 }]),
+    b2: N('หินทะลวง', 6.5, [{ k: 'shield', n: 4 }, hit(3, { shieldPct: 0.8, pierce: 1 })]),
   }),
   // tech: answers 🔥 ☠ (removes burn / poison)
   def('cleanse', 'shield', {
@@ -392,23 +392,23 @@ const BASE_LIST: SkillDef[] = [
   }),
   // payoff: the longer it lasts, the harder it hits
   def('train', 'heal', {
-    '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(3)]),
-    a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(3)], 'พลังก้อนใหญ่'),
+    '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(4)]),
+    a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(4)], 'พลังก้อนใหญ่'),
     a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
     a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
-    b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(3)], 'พลังถี่'),
+    b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(4)], 'พลังถี่'),
     b1: N('ฝึกไม่หยุด', 3.2, [{ k: 'grow', n: 1 }, hit(4)]),
-    b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(3, { leech: 0.3 })]),
+    b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(4, { leech: 0.3 })]),
   }),
   // tech: answers ⚔ ❄ (heals when controlled, shield vs big hits)
   def('mend', 'heal', {
-    '': N('ฟื้นฟู', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast', keep: 0.55 }]),
+    '': N('ฟื้นฟู', 6, [{ k: 'heal', n: 5 }, { k: 'steadfast', keep: 0.55 }, hit(2)]),
     a: N('ฟื้นทันใจ', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast', keep: 0.55 }], 'ฟื้นตอนโดนคุม'),
     a1: N('ฟื้นไม่หยุด', 5, [{ k: 'heal', n: 8 }, { k: 'steadfast', keep: 0.55 }]),
     a2: N('ฟื้นบริสุทธิ์', 6, [{ k: 'heal', n: 6 }, { k: 'steadfast', keep: 0.55 }, { k: 'cleanse', n: 1 }]),
-    b: N('เลือดเหล็ก', 6, [{ k: 'heal', n: 4 }, { k: 'shield', n: 4 }, { k: 'steadfast', keep: 0.55 }], 'กันตีแรง'),
-    b1: N('กายเหล็ก', 6, [{ k: 'heal', n: 4 }, { k: 'shield', n: 7 }, { k: 'steadfast', keep: 0.55 }]),
-    b2: N('เลือดสวน', 6, [{ k: 'heal', n: 4 }, { k: 'steadfast', keep: 0.55 }, hit(5, { leech: 0.3 })]),
+    b: N('เลือดเหล็ก', 6, [{ k: 'heal', n: 5 }, { k: 'shield', n: 4 }, { k: 'steadfast', keep: 0.55 }], 'กันตีแรง'),
+    b1: N('กายเหล็ก', 6, [{ k: 'heal', n: 5 }, { k: 'shield', n: 7 }, { k: 'steadfast', keep: 0.55 }]),
+    b2: N('เลือดสวน', 6, [{ k: 'heal', n: 5 }, { k: 'steadfast', keep: 0.55 }, hit(5, { leech: 0.3 })]),
   }),
   // ======================= 🔥 burn =======================
   // core: start burns
@@ -464,7 +464,7 @@ const BASE_LIST: SkillDef[] = [
   }),
   // tech: answers ⚔ (fast hitters hurt themselves on thorns)
   def('thorns', 'poison', {
-    '': N('เกราะหนามพิษ', 7, [{ k: 'thorns', n: 2 }, hit(4)]),
+    '': N('เกราะหนามพิษ', 7, [{ k: 'thorns', n: 2 }, hit(3)]),
     a: N('หนามแหลม', 7, [{ k: 'thorns', n: 4 }, hit(5)], 'สะท้อนแรง'),
     a1: N('หนามพิษร้าย', 7, [{ k: 'thorns', n: 6 }, hit(5)]),
     a2: N('หนามขัดขวาง', 7, [{ k: 'thorns', n: 5, heal: 0.25 }, hit(6)]),
@@ -583,7 +583,7 @@ const BASE_LIST: SkillDef[] = [
     b2: N('ดาบถ่วง', 5, [hit(4, { times: 3 }), { k: 'delay', secs: 0.3 }]),
   }, 'duelist'),
   def('bulwark', 'shield', {
-    '': N('โล่กระแทก', 6, [hit(6, { shieldPct: 1 })]),
+    '': N('โล่กระแทก', 6, [hit(6, { shieldPct: 0.85 })]),
     a: N('ปะทะ', 6, [hit(8, { shieldPct: 1.3 })], 'โล่เป็นดาเมจ'),
     a1: N('ทลายด้วยโล่', 6, [hit(9, { shieldPct: 1.4 }), { k: 'dispel', n: 1, shield: 0.5 }]),
     a2: N('โล่สะท้าน', 6, [hit(9, { shieldPct: 1.3 }), { k: 'freeze', secs: 0.5 }]),

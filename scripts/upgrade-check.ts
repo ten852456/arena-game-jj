@@ -52,7 +52,7 @@ const must: [string, Variant, Variant, string, boolean][] = [
   ['ironwill', 'a', 'a1', 'steadfast.ignoreFreeze', false],
   ['heavy', '', 'b', 'hit.sure', false],
   ['charge', 'b', 'b2', 'charge.hits', false],
-  ['bulwark', '', 'b', 'hit.shieldPct', true], // 100% → 75% of the shield: worse (it gains shield instead)
+  ['blaze', '', 'b', 'hit.perBurn', true], // per burn stack 1.5 → 1: worse (it hits twice instead)
 ];
 for (const [id, f, v, field, worse] of must) {
   const row = dir(id, f, v).find((x) => x.key.replace(/#\d+/, '') === field);

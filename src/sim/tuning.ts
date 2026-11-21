@@ -21,11 +21,11 @@ export const TUNING = {
   'run.lossEvery': 4,
   // ---- base HP per day (combat.ts HP_BY_DAY × this) ----
   /** days 1–3 */
-  'hp.early': 1.07,
+  'hp.early': 1.15,
   /** days 4–7 */
   'hp.mid': 1.45,
   /** day 8+ */
-  'hp.late': 1.7,
+  'hp.late': 1.85,
   // ---- combat rules (numbers only) ----
   /** each trigger-chain step after the first fires ×this */
   'chainDecay': 0.75,
@@ -37,12 +37,12 @@ export const TUNING = {
   'line.hit.lv1': 0.75,
   'line.hit.lv3': 1.45,
   'line.dodge.lv1': 0.75,
-  'line.dodge.lv3': 1.65,
+  'line.dodge.lv3': 1.75,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.25,
   'line.heal.lv3': 1.15,
-  'line.burn.lv1': 1.18,
+  'line.burn.lv1': 1.08,
   'line.burn.lv3': 0.7,
   'line.poison.lv1': 1.35,
   'line.poison.lv3': 0.8,
@@ -53,7 +53,7 @@ export const TUNING = {
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.65,
   'uniq.knight.lv3': 1.0,
-  'uniq.thornguard.lv1': 1.2,
+  'uniq.thornguard.lv1': 1.0,
   'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.8,
   'uniq.assassin.lv3': 1.6,
@@ -61,7 +61,7 @@ export const TUNING = {
   'uniq.duelist.lv3': 1.4,
   'uniq.berserker.lv1': 1.5,
   'uniq.berserker.lv3': 1.25,
-  'uniq.pyro.lv1': 1.3,
+  'uniq.pyro.lv1': 1.1,
   'uniq.pyro.lv3': 1,
   'uniq.witch.lv1': 1.15,
   'uniq.witch.lv3': 1.3,
@@ -77,17 +77,17 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.1,
-  'hp.thornguard': 1.28,
+  'hp.knight': 1.2,
+  'hp.thornguard': 1.2,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
   'hp.berserker': 1.16,
-  'hp.pyro': 1.45,
-  'hp.witch': 1.52,
+  'hp.pyro': 1.38,
+  'hp.witch': 1.4,
   'hp.chrono': 1.32,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
-  'knight.shield': 0.12,
+  'knight.shield': 0.05,
   /** นักฆ่า: the first hit of the fight × this */
   'assassin.first': 1.5,
   /** นักฆ่า: every this-many-th hit is ×assassin.first too (0 = only the first hit) */
@@ -129,28 +129,28 @@ export const TUNING = {
   /** ★★★ also cuts the skill's cooldown by this share */
   'star.cd3': 0,
   /** ★★★ signature: each cast echoes once more at this power */
-  'star.echo': 0.2,
+  'star.echo': 0.12,
   // ---- run relics (sim v17, relics.ts) ----
-  'relic.whetstone': 0.15,
+  'relic.whetstone': 0.12,
   'relic.executioner': 0.35,
   'relic.counterstep': 1.2,
-  'relic.spikedshield': 0.5,
+  'relic.spikedshield': 0.4,
   'relic.bastion': 0.045,
-  'relic.overflow': 1.5,
+  'relic.overflow': 2,
   'relic.vitality': 0.6,
-  'relic.meltdown': 3,
-  'relic.kindling': 2,
+  'relic.meltdown': 4,
+  'relic.kindling': 1.5,
   'relic.virulence': 1,
-  'relic.rot': 0.25,
+  'relic.rot': 0.2,
   'relic.permafrost': 0.5,
   'relic.permafrostCd': 0,
-  'relic.brittle': 0.3,
+  'relic.brittle': 0.25,
   'relic.gale': 0.15,
-  'relic.tailspin': 0.3,
-  'relic.quickdraw': 0.1,
-  'relic.wanderer': 0.25,
+  'relic.tailspin': 0.2,
+  'relic.quickdraw': 0.07,
+  'relic.wanderer': 0.2,
   'relic.twinline': 0.3,
-  'relic.ironhide': 0.1,
+  'relic.ironhide': 0.08,
   'relic.glassHp': 0.65,
   /** ปืนแก้ว: its extra damage on one hit is at most this share of the enemy's max HP */
   'relic.glassCap': 0.08,
@@ -192,11 +192,11 @@ export const TUNING = {
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 5,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.4,
+  'ult.duelist.pow': 0.5,
   /** อัศวิน: shield gained, share of max HP */
   'ult.knight.trig': 0.05,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 1.2,
+  'ult.knight.pow': 0.6,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
@@ -206,7 +206,7 @@ export const TUNING = {
   /** นักเวทเพลิง: deals the burn still to come × this right away */
   'ult.pyro.pow': 0.27,
   /** นักรบหนาม: direct hits taken */
-  'ult.thornguard.trig': 6,
+  'ult.thornguard.trig': 4,
   /** นักรบหนาม: seconds of poison thorns */
   'ult.thornguard.pow': 3,
   /** หนามพิษ also poisons the enemy this much per second for its duration, at once */
@@ -214,7 +214,7 @@ export const TUNING = {
   /** แม่มดน้ำแข็ง: ice skill casts */
   'ult.witch.trig': 3,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
-  'ult.witch.pow': 1.25,
+  'ult.witch.pow': 1.45,
   /** จอมเวทลม: slows / delays landed */
   'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
