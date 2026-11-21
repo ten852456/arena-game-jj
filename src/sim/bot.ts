@@ -48,8 +48,8 @@ export function botRules(prefer: Line[], tier: BotTier = 'normal'): BotRules {
 
 // ---------------- skill facts read from the skill data (no hard-coded skill lists) ----------------
 
-/** "Fires early": cooldown at most this many ticks (5s). */
-export const EARLY_CD = 50;
+/** "Fires early": cooldown at most this many ticks (6.5s; sim v15: 5s kept slow-line heroes stuck with an off-line hitter) */
+export const EARLY_CD = 65;
 const directDamage = (e: Effect) => (e.k === 'hit' && (e.n > 0 || !!e.shieldPct || !!e.thornsX || !!e.burnPct) && !e.ifSlowed) || e.k === 'burn';
 /** A variant that deals damage on its own and fires within EARLY_CD. */
 export const isEarlyHitter = (k: Pick<SkillInstance, 'id' | 'v'>) => {

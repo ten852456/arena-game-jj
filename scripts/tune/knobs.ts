@@ -53,6 +53,8 @@ export const KNOBS: Knob[] = [
   { key: 'dodge.graze', lo: 0, hi: 0.4, step: 0.05, why: 'share of a dodged hit that still lands (soft 💨)' },
   { key: 'witch.wound', lo: 0, hi: 0.8, step: 0.1, why: 'witch: hits on a frozen enemy cut its healing (❄ > ❤)' },
   ...HEROES.map((h): Knob => ({ key: `aff.${h.id}` as TuningKey, lo: 1.15, hi: 1.4, step: 0.05, why: `${h.id} ถนัดสาย (line pull)` })),
+  { key: 'shield.spend', lo: 0, hi: 0.5, step: 0.05, why: 'shield bash spends this share of the shield it used' },
+  { key: 'shield.guard', lo: 0, hi: 0.35, step: 0.05, why: 'hits on a shielded fighter deal less (🛡 > ⚔)' },
   { key: 'burn.scorch', lo: 0, hi: 2, step: 0.25, why: 'burn ticks also burn shield away (🔥 > 🛡)' },
   { key: 'burn.shield', lo: 0.5, hi: 1, step: 0.05, why: 'shield gains while burning (🔥 > 🛡)' },
   // ultimates (sim v12): trigger amount and effect power per hero

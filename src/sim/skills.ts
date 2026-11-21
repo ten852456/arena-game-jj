@@ -209,8 +209,6 @@ export interface Ctx {
  */
 /** a skill fired at less than this power (engine, echo) gives no dodge charge */
 export const DODGE_MIN_POWER = 0.75;
-/** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
-export const SHIELD_SPEND = 0.25;
 
 export function execNode(node: SkillNode, c: Ctx) {
   let removed = 0;
@@ -228,7 +226,7 @@ export function execNode(node: SkillNode, c: Ctx) {
           if (e.shieldPct) {
             const used = c.me.shield * e.shieldPct;
             n += used;
-            c.spendShield(used * SHIELD_SPEND);
+            c.spendShield(used * T['shield.spend']);
           }
           if (e.thornsX) n += c.me.thorns * e.thornsX;
           if (e.burnPct) n += c.foe.burnLeft * e.burnPct;
@@ -336,9 +334,9 @@ const BASE_LIST: SkillDef[] = [
     a: N('สวนแรง', 5, [hit(5, { perDodge: 3 })], 'สวนหนัก'),
     a1: N('สวนพิฆาต', 5, [hit(7, { perDodge: 5 })]),
     a2: N('สวนทะลุ', 5, [hit(6, { perDodge: 3, pierce: 1 })]),
-    b: N('สวนแล้วหลบ', 5, [hit(3, { perDodge: 2 }), { k: 'dodge', n: 1 }], 'หลบวน'),
-    b1: N('เต้นดาบ', 4.5, [hit(4, { perDodge: 2 }), { k: 'dodge', n: 1 }]),
-    b2: N('สวนดูดเลือด', 5, [hit(4, { perDodge: 2, leech: 0.3 }), { k: 'dodge', n: 1 }]),
+    b: N('สวนแล้วหลบ', 5, [hit(4, { perDodge: 2 }), { k: 'dodge', n: 1 }], 'หลบวน'),
+    b1: N('เต้นดาบ', 4.5, [hit(5, { perDodge: 2 }), { k: 'dodge', n: 1 }]),
+    b2: N('สวนดูดเลือด', 5, [hit(5, { perDodge: 2, leech: 0.3 }), { k: 'dodge', n: 1 }]),
   }),
   // tech: answers 🔥 ☠ (shakes off a burn / poison stack)
   def('sidestep', 'dodge', {
