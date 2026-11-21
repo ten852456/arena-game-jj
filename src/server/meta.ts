@@ -51,7 +51,7 @@ export function handleFinish(body: any): Res {
   if (wins + losses !== day && wins + losses !== day - 1) return bad('wins + losses do not match day');
   const pre = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
   // the final build is judged with the run's record before its last day
-  const build = validateBuild(body?.build, day, recordOf(pre).slice(0, day - 1));
+  const build = validateBuild(body?.build, day, recordOf(pre).slice(0, day - 1), pre?.lastChoice);
   if (typeof build === 'string') return bad(build);
   if (build.hero !== hero) return bad('build hero mismatch');
   if (pre?.hero && pre.hero !== hero) return bad('hero does not match this run');

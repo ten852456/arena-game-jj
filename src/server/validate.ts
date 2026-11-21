@@ -10,37 +10,44 @@ const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];
 export const MAX_DAY = 20;
 
 /**
- * A run's record before `day`: the result of each earlier day (1 = won, 0 = lost or draw). The server knows it from
+ * A run's record before `day`: the result of each earlier day (1 = won, 0 = lost, 2 = draw). The server knows it from
  * the fights it ran (RunTrack.days); scripts that have none use the best honest record (every day won).
  */
-export type RunRecord = (0 | 1)[];
+export type DayResult = 0 | 1 | 2;
+export type RunRecord = DayResult[];
 const allWins = (day: number): RunRecord => Array.from({ length: Math.max(0, day - 1) }, () => 1);
+/** the last chance's choice (run.ts chooseLastChance); 'none' = no last chance yet */
+export type LastChoice = 'none' | 'supply' | 'awaken' | 'mark';
 
 /**
- * What a run with this record can have had in its shop on `day` (sim v15, exact, run.ts rules): the day-1 gold plus each
- * later day's income with the streak bonus it really had, and whether the last chance (เสบียงสุดท้าย +8 gold and +1 slot,
- * or ตื่นพลัง: every Lv1 skill → Lv2) was reached (HP ≤ 0 once). Supply and Awaken are one choice, never both.
+ * What a run with this record can have had by `day`'s shop, following run.ts recordResult exactly: the day-1 gold plus
+ * each later day's income with the streak bonus it really had (a win extends a win streak, a loss a loss streak, a draw
+ * resets it and costs no HP), and the day of the first death (HP ≤ 0 → the last chance), if any.
  */
 export function runMax(day: number, rec: RunRecord = allWins(day)) {
   let gold = 0;
   let streak = 0;
   let hp = START_HP;
-  let lastChance = false;
+  let deathDay = 0;
   for (let d = 1; d <= day; d++) {
     const inc = incomeFor(d, streak);
     gold += inc.base + inc.bonus;
     if (d === day) break;
-    const won = rec[d - 1] === 1;
-    streak = won ? (streak > 0 ? streak + 1 : 1) : streak < 0 ? streak - 1 : -1;
-    if (!won) hp -= damageFor(d);
-    if (hp <= 0 && !lastChance) {
-      lastChance = true;
+    const r = rec[d - 1] ?? 0;
+    if (r === 1) streak = streak > 0 ? streak + 1 : 1;
+    else if (r === 2) streak = 0;
+    else {
+      streak = streak < 0 ? streak - 1 : -1;
+      hp -= damageFor(d);
+    }
+    if (hp <= 0 && !deathDay) {
+      deathDay = d;
       hp = 1;
     }
   }
-  return { gold, lastChance };
+  return { gold, lastChance: deathDay > 0, deathDay };
 }
-/** Most gold a run can have earned by `day`'s shop (all days won, no last chance unless the record says so). */
+/** Most gold a run can have earned by `day`'s shop (all days won unless a record is given). */
 export const goldCap = (day: number, rec?: RunRecord) => runMax(day, rec).gold;
 /** Least gold a build can have cost: each skill's Lv1 + upgrades at shop prices, plus every slot above the day's own. */
 export function buildCost(b: Build, day: number, freeSlots = 0) {
@@ -56,18 +63,80 @@ export function buildCost(b: Build, day: number, freeSlots = 0) {
   return g;
 }
 
+/** One way the run's last chance can have gone, and what it allows: gold cap for n skills, free slots, free marks. */
+export interface Allowance {
+  opt: LastChoice;
+  cap: (n: number) => number;
+  freeSlots: number;
+  marks: number;
+}
 /**
- * Builds come from the client: check the shape, then whether this run could own it on this day: day 1 = the hero's
- * fixed shop, no Lv3 before LV3_DAY, at most 2 bonuses per skill, marks only after a last chance (or all Lv3), and the
- * build's least cost within the gold this run's record can have earned (`rec`; default = every day won). A full server-authoritative
- * run (server rolls the shop and replays every purchase) would close the rest; see docs/DESIGN_LINES_ULT.md §10c.
+ * The ways this run can stand on `day` (sim v15, security review): no last chance → one way. After a death, Supply
+ * (+8 gold, +1 slot), Awaken (every Lv1 skill → Lv2: worth one Lv2 price per skill it could have had, at most the slots of
+ * the death day + 1) or Mark (one mark): ONE of them, never two. `choice` = what the server already pinned down.
  */
-export function validateBuild(x: unknown, day: number, rec?: RunRecord): Build | string {
+export function allowances(day: number, rec?: RunRecord, choice?: LastChoice): Allowance[] {
+  const { gold, lastChance, deathDay } = runMax(day, rec);
+  if (!lastChance) return [{ opt: 'none', cap: () => gold, freeSlots: 0, marks: 0 }];
+  const all: Allowance[] = [
+    { opt: 'supply', cap: () => gold + 8, freeSlots: 1, marks: 0 },
+    { opt: 'awaken', cap: (n) => gold + PRICES[1] * Math.min(n, slotsFor(deathDay) + 1), freeSlots: 0, marks: 0 },
+    { opt: 'mark', cap: () => gold, freeSlots: 0, marks: 1 },
+  ];
+  return choice && choice !== 'none' ? all.filter((a) => a.opt === choice) : all;
+}
+
+/** price paid for a skill from level `from` (0 = not owned) up to its level now */
+const pricesFrom = (id: string, from: number, to: number) => {
+  let g = from === 0 && SKILLS[id]?.hero ? 1 : 0;
+  for (let l = from + 1; l <= to; l++) g += PRICES[l - 1];
+  return g;
+};
+const sameBonus = (a: Build['skills'][number], b: Build['skills'][number]) => JSON.stringify(a.bonus ?? []) === JSON.stringify(b.bonus ?? []);
+/**
+ * Least net gold a run spent between its last fought build and today's (the server keeps the run's last build):
+ * new skills at full price, level-ups at upgrade prices (a skill whose branch or connect bonuses changed was sold and
+ * bought again), sold skills refund 1 / 2 / 3 by level, and slots above the day's own at 4, 6, 8 … (a slot bought once
+ * stays bought: `paidSlots`). The running total must stay within what the run can have earned.
+ */
+export function spendDelta(prev: Build | undefined, cur: Build, day: number, paidSlots = 0, freeSlots = 0) {
+  let g = 0;
+  const kept = new Set<string>();
+  for (const k of cur.skills) {
+    const p = prev?.skills.find((x) => x.id === k.id);
+    const continued = p && sameBonus(p, k) && k.v.startsWith(p.v) && lvOf(k.v) >= lvOf(p.v);
+    if (continued) {
+      kept.add(k.id);
+      g += pricesFrom(k.id, lvOf(p!.v), lvOf(k.v));
+    } else g += pricesFrom(k.id, 0, lvOf(k.v));
+  }
+  for (const p of prev?.skills ?? []) if (!kept.has(p.id)) g -= lvOf(p.v);
+  const need = Math.max(0, cur.skills.length - slotsFor(day) - freeSlots);
+  for (let i = paidSlots; i < need; i++) g += 4 + 2 * i;
+  return { gold: g, paidSlots: Math.max(paidSlots, need) };
+}
+
+/**
+ * Day-by-day spend check for a run (server fight.ts, and the honest-run test): which last-chance ways still fit when
+ * this build is added to what the run already spent. Returns the ways that fit (empty = reject) with their new totals.
+ */
+export function spendCheck(
+  prev: { build?: Build; spent?: number; paidSlots?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
+) {
+  return allowances(day, rec, choice)
+    .map((a) => {
+      const d = spendDelta(prev?.build, build, day, prev?.paidSlots ?? 0, a.freeSlots);
+      return { opt: a.opt, spent: (prev?.spent ?? 0) + d.gold, paidSlots: d.paidSlots, cap: a.cap(build.skills.length) };
+    })
+    .filter((x) => x.spent <= x.cap);
+}
+
+export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
   const b = x as Build;
   if (!b || typeof b !== 'object' || !HEROES_BY_ID[b.hero]) return 'bad hero';
   // bought slots can add more than the day gives, but never past MAX_SLOTS
   if (!Array.isArray(b.skills) || b.skills.length > MAX_SLOTS || b.skills.length > slotsFor(day, MAX_SLOTS)) return 'bad skills';
-  const skills = [];
+  const skills: Build['skills'] = [];
   for (const s of b.skills) {
     if (!SKILLS[s?.id]) return 'unknown skill';
     if (SKILLS[s.id].hero && SKILLS[s.id].hero !== b.hero) return 'skill not allowed for hero';
@@ -82,8 +151,7 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord): Build |
     });
   }
   if (new Set(skills.map((s) => s.id)).size !== skills.length) return 'duplicate skill';
-  // plausibility for this day, from the run's record (sim v15: exact caps, see runMax)
-  const { gold, lastChance } = runMax(day, rec);
+  // plausibility for this day, from the run's record (sim v15: exact caps, see runMax / allowances)
   const lvs = skills.map((s) => lvOf(s.v));
   if (day <= 1) {
     // day 1 is the hero's fixed shop: Lv1 only, only those cards, and at most the day's slots
@@ -93,12 +161,13 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord): Build |
   }
   if (day < LV3_DAY && lvs.some((l) => l >= 3)) return 'implausible: Lv3 before day ' + LV3_DAY;
   if (skills.some((s) => (s.bonus?.length ?? 0) > 2)) return 'implausible: too many bonuses';
-  // marks come from the last chance (one) or from moon wishes once every skill is Lv3
+  // marks come from the last chance (one, if that was its choice) or from moon wishes once every skill is Lv3
   const marks = skills.filter((s) => s.mark).length;
-  if (marks > (lastChance ? 1 : 0) && !lvs.every((l) => l >= 3)) return 'implausible: too many marks';
-  // Awaken (Lv1 → Lv2 for every skill) is worth at most one Lv2 price per skill; Supply is 8 gold + 1 slot: allow the better one
-  const bonusGold = lastChance ? Math.max(8, PRICES[1] * skills.length) : 0;
-  if (buildCost({ hero: b.hero, skills }, day, lastChance ? 1 : 0) > gold + bonusGold) return 'implausible: costs more gold than this run can have';
+  const allLv3 = lvs.every((l) => l >= 3);
+  const ways = allowances(day, rec, choice).filter(
+    (a) => (allLv3 || marks <= a.marks) && buildCost({ hero: b.hero, skills }, day, a.freeSlots) <= a.cap(skills.length),
+  );
+  if (!ways.length) return marks && !allLv3 ? 'implausible: too many marks' : 'implausible: costs more gold than this run can have';
   const look = Number.isInteger(b.look) && b.look! > 0 && b.look! < 2 ** 32 ? b.look : undefined;
   return { hero: b.hero, skills, ...(look ? { look } : {}) };
 }

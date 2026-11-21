@@ -6,7 +6,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
-import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild, type RunRecord } from './validate';
+import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, spendCheck, validateBuild, type RunRecord } from './validate';
 
 export interface Res {
   status: number;
@@ -16,9 +16,9 @@ const bad = (error: string): Res => ({ status: 400, json: { error } });
 
 const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
 
-/** A run's results before today, day 1 first (1 = won, 0 = lost or draw), for validateBuild. */
+/** A run's results before today, day 1 first (1 = won, 0 = lost, 2 = draw), for validateBuild. */
 export const recordOf = (t?: RunTrack): RunRecord =>
-  t ? Object.keys(t.days).map(Number).sort((a, b) => a - b).map((d) => (t.days[d] === 1 ? 1 : 0)) : [];
+  t ? Object.keys(t.days).map(Number).sort((a, b) => a - b).map((d) => (t.days[d] === 1 ? 1 : t.days[d] === 2 ? 2 : 0)) : [];
 
 function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
@@ -63,10 +63,16 @@ export function handleFight(body: any): Res {
   if (!runId || day === null || !playerId) return bad('bad request');
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
   // the build must be one this run could own today, judged from the run's own record (results of earlier days)
-  const build = validateBuild(body?.build, day, recordOf(prev));
+  const build = validateBuild(body?.build, day, recordOf(prev), prev?.lastChoice);
   if (typeof build === 'string') return bad(build);
   // the hero is bound to the run on its first fight: no switching hero (or counter-picking from /api/scout) mid-run
   if (prev?.hero && build.hero !== prev.hero) return bad('hero does not match this run');
+  // day by day, the run pays for every change of its build: the running total must fit what its record earned
+  const ways = spendCheck(prev, build, day, recordOf(prev), prev?.lastChoice);
+  if (!ways.length) return bad('implausible: this run could not have paid for this build');
+  // the last chance's choice is pinned down as soon as only one way still fits (supply, awaken or mark: never two)
+  const way = ways.reduce((a, b) => (b.spent < a.spent ? b : a));
+  const opts = new Set(ways.map((w) => w.opt));
   const name = cleanName(body?.name, playerId ?? runId);
   // matchmaking and AI difficulty use the server's own rating for this run, never the client's
   const rating = prev?.rating ?? 1000;
@@ -123,8 +129,12 @@ export function handleFight(body: any): Res {
   // What this run has met and how each day went (no repeats, streak for the AI tier, verified wins at run end).
   const track = trackOf(runId, playerId, name);
   track.hero ??= build.hero;
+  track.build = build;
+  track.spent = way.spent;
+  track.paidSlots = way.paidSlots;
+  if (opts.size === 1 && way.opt !== 'none') track.lastChoice = way.opt;
   track.rating = newRating;
-  track.days[day] = won ? 1 : 0;
+  track.days[day] = won ? 1 : result.winner === -1 ? 2 : 0;
   if (tutorial) track.tutorial = true;
   // same rules as the client (run.ts recordResult): a loss costs HP by day, the first death is the last chance
   // at 1 HP, the second ends the run, WIN_TARGET wins end it too. A modified client can't fight past its end.

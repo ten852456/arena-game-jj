@@ -5,7 +5,7 @@ import { simulate } from '../src/sim/combat';
 import { applyMark, chooseLastChance, newRun, recordResult, toBuild } from '../src/sim/run';
 import { HEROES } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
-import { validateBuild } from '../src/server/validate';
+import { allowances, buildCost, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/validate';
 import type { Build } from '../src/sim/types';
 
 const bad: string[] = [];
@@ -26,18 +26,27 @@ for (const tier of ['easy', 'normal', 'hard'] as const)
     for (let r = 0; r < 4; r++) {
       const s = newRun(h.id, hashSeed(91, tier, h.id, r), 'v');
       const rules = botRules([h.line], tier);
+      let prev: { build?: Build; spent?: number; paidSlots?: number } | undefined;
       for (let guard = 0; guard < 25 && s.phase !== 'won' && s.phase !== 'dead'; guard++) {
         if (s.phase === 'lastchance') chooseLastChance(s, (['awaken', 'supply', 'mark'] as const)[r % 3]);
         if (s.phase === 'mark') applyMark(s, 0);
         if (s.phase !== 'shop') continue;
         botDay(s, rules);
-        const rec = s.log.map((l) => (l.won ? 1 : 0)) as (0 | 1)[];
+        const rec = s.log.map((l) => (l.won ? 1 : l.draw ? 2 : 0)) as RunRecord;
         const b = toBuild(s);
         const v = validateBuild(b, s.day, rec);
         runsDays++;
+        // the server's day-by-day spend check (fight.ts) must accept every honest run too
+        const ways = spendCheck(prev, b, s.day, rec);
+        if (!ways.length) bad.push(`run ${tier} ${h.id} #${r} day ${s.day}: spend check failed (${JSON.stringify(spendCheck({ ...prev, spent: -999 }, b, s.day, rec))})`);
+        else {
+          const w = ways.reduce((a, c) => (c.spent < a.spent ? c : a));
+          prev = { build: b, spent: w.spent, paidSlots: w.paidSlots };
+        }
         if (typeof v === 'string') bad.push(`run ${tier} ${h.id} #${r} day ${s.day}: ${v} · ${b.skills.map((k) => `${k.id}:${k.v || '1'}${k.mark ? '+' + k.mark : ''}`).join(' ')} · gold ${s.gold}`);
         const opp = randomAiBuild(s.day, hashSeed(92, tier, h.id, r, s.day), tier);
-        recordResult(s, simulate(b, opp, hashSeed(93, r, s.day), s.day).winner === 0, { opp: 'bot', ai: true });
+        const res = simulate(b, opp, hashSeed(93, r, s.day), s.day);
+        recordResult(s, res.winner === 0, { opp: 'bot', ai: true }, res.winner === -1);
       }
     }
 const forged: [string, Build, number][] = [
@@ -50,6 +59,35 @@ const forged: [string, Build, number][] = [
   ['other hero unique', { hero: 'knight', skills: [{ id: 'shatter', v: '' }] }, 2],
 ];
 for (const [name, b, day] of forged) if (typeof validateBuild(b, day) !== 'string') bad.push(`forged "${name}" was accepted`);
+// security review (round 4): a draw costs no HP, so draws never lead to a last chance; and supply + awaken never stack
+if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were counted as losses (last chance from draws)');
+{
+  // a record with a death on day 7: a build that needs the free slot AND the awaken gold must be rejected
+  const rec = [0, 0, 0, 0, 0, 0, 0] as RunRecord;
+  const ways = allowances(8, rec);
+  if (ways.length !== 3 || ways.some((w) => w.opt === 'none')) bad.push('a death on day 7 should give three last-chance ways');
+  const gold = runMax(8, rec).gold;
+  const need = (free: number, b: Build) => buildCost(b, 8, free);
+  // search builds that fit only when supply AND awaken stack: every one of them must be rejected
+  const ids = ['shield', 'stoneskin', 'cleanse', 'bulwark', 'strike', 'jab', 'heavy', 'feast'];
+  let stacked = 0;
+  for (let n = 4; n <= 7; n++)
+    for (let lv3 = 0; lv3 <= n; lv3++) {
+      const lv2 = 0;
+      const sk = ids.slice(0, n).map((id, i) => ({ id, v: i < lv3 ? 'a1' : '' }));
+      const bb: Build = { hero: 'knight', skills: sk };
+      const both = need(1, bb) <= gold + 8 + 4 * Math.min(n, 5);
+      const one = ways.some((w) => need(w.freeSlots, bb) <= w.cap(n));
+      if (both && !one) {
+        stacked++;
+        if (typeof validateBuild(bb, 8, rec) !== 'string') bad.push(`supply and awaken were granted together (${n} skills, ${lv3} Lv3, ${lv2} Lv2)`);
+      }
+    }
+  if (!stacked) bad.push('no build needs supply + awaken stacked: the test proves nothing');
+  const b: Build = { hero: 'knight', skills: ids.slice(0, 6).map((id) => ({ id, v: 'a1' })) };
+  if (typeof validateBuild(b, 8, rec, 'mark') !== 'string' && need(0, b) > gold) bad.push('a pinned last-chance choice was ignored');
+  if (need(0, b) <= gold) bad.push('pinned-choice test build is too cheap');
+}
 if (bad.length) {
   console.error(`validate check: ${bad.length} problem(s)\n  ${bad.slice(0, 30).join('\n  ')}`);
   process.exit(1);

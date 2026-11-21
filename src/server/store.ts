@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
+import type { LastChoice } from './validate';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -51,12 +52,19 @@ export interface RunTrack {
   playerId?: string;
   /** the run's hero, bound on its first fight (sim v15) */
   hero?: string;
+  /** the build of the last day fought, the day, and the least net gold the run has spent on builds so far (sim v15) */
+  build?: Build;
+  spent?: number;
+  /** extra skill slots the run has paid for so far */
+  paidSlots?: number;
+  /** the last chance's choice, once the builds have shown which one it was */
+  lastChoice?: LastChoice;
   name: string;
   /** opponent snapshot ids and opponent run ids already met in this run (no repeats) */
   snaps: string[];
   opps: string[];
   /** day → 1 won, 0 lost/draw (a retried fight on the same day overwrites) */
-  days: Record<string, 0 | 1>;
+  days: Record<string, 0 | 1 | 2>;
   /** day 1 was the guided-tutorial fight (a training bot): it counts for the run, but earns no stardust or rating */
   tutorial?: true;
   /** run state mirrored on the server with the game's own rules (run.ts): HP, last chance used, run over */

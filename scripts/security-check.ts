@@ -63,3 +63,22 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const [s3] = await post('/api/fight', { runId: t + '-b', playerId: t, day: 1, rating: 1000, build: lv3 });
   check('Lv3 on day 1 → 400', s3 === 400, `status ${s3}`);
 }
+// sim v15 (round 4): forge scenarios from the playtest, the hero bound to the run, day-by-day spending
+{
+  const t = 'sec-f4-' + Date.now();
+  const d1forge = { hero: 'knight', skills: ['ignite', 'heavy', 'frost', 'shield'].map((id) => ({ id, v: '' })) };
+  const [f1] = await post('/api/fight', { runId: t + '-a', playerId: t, day: 1, rating: 1000, build: d1forge });
+  check('forge: day-1 build outside the hero shop → 400', f1 === 400, `status ${f1}`);
+  const ok1 = { hero: 'knight', skills: [{ id: 'bulwark', v: '' }, { id: 'shield', v: '' }] };
+  const [o1] = await post('/api/fight', { runId: t + '-b', playerId: t, day: 1, rating: 1000, build: ok1 });
+  check('honest day-1 knight accepted', o1 === 200, `status ${o1}`);
+  const [sw] = await post('/api/fight', { runId: t + '-b', playerId: t, day: 2, rating: 1000, build: { hero: 'pyro', skills: [{ id: 'inferno', v: '' }] } });
+  check('switching hero mid-run → 400', sw === 400, `status ${sw}`);
+  // day 2: the run has at most 13 gold in total; this build needs 7 (day 1) + 4 + 4 + 3 + 3 = 21
+  const rich = { hero: 'knight', skills: [{ id: 'bulwark', v: 'a' }, { id: 'shield', v: 'a' }, { id: 'stoneskin', v: '' }] };
+  const [sp] = await post('/api/fight', { runId: t + '-b', playerId: t, day: 2, rating: 1000, build: { ...rich, skills: [...rich.skills, { id: 'cleanse', v: '' }] } });
+  check('forge: day-2 build the run could not pay for → 400', sp === 400, `status ${sp}`);
+  const d8 = { hero: 'knight', skills: ['charge:a2', 'gear:b2', 'bulwark:a2', 'strike:a1', 'heavy:a2', 'glacier:b2', 'venom:b', 'ignite:a1'].map((x) => ({ id: x.split(':')[0], v: x.split(':')[1] })) };
+  const [s8b] = await post('/api/fight', { runId: t + '-c', playerId: t, day: 1, rating: 1000, build: d8 });
+  check('forge: the 102g day-8 build from the playtest on a fresh run → 400', s8b === 400, `status ${s8b}`);
+}
