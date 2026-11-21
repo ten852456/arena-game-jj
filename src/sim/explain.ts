@@ -690,8 +690,8 @@ export function explain(
     add(
       60,
       L(
-        `ล้มพร้อมกัน แต่${N[me]}เลือดติดลบมากกว่า (${endHp[me]} ต่อ ${endHp[foe]}) → ดาเมจอีกนิดเดียวก็ชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
-        `Both fell at once, but${N[me]}${was(me)} further below zero (${endHp[me]} vs ${endHp[foe]}) → a little more damage wins it: level up your main skill or add shield/healing`,
+        `ล้มพร้อมกัน แต่${N[foe]}ทำดาเมจรวมมากกว่า (${their.dealt} ต่อ ${my.dealt}, ต่างกันเกิน 5% จึงไม่เสมอ) → ดาเมจอีกนิดเดียวก็เสมอหรือชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
+        `Both fell at once, but${N[foe]}dealt more damage in total (${their.dealt} vs ${my.dealt}, more than 5% apart, so not a draw) → a little more damage draws or wins it: level up your main skill or add shield/healing`,
       ),
       'ko',
     );

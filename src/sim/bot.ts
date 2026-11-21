@@ -1,4 +1,4 @@
-import { HEROES, HEROES_BY_ID, ULT_PIECES, ultPieces } from './heroes';
+import { HEROES, HEROES_BY_ID, ULT_LV2_LV3, ULT_PIECES, ultLv3, ultPieces } from './heroes';
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
@@ -262,7 +262,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
         if (!upgradeAllowed(offer.v, s.day, tier)) return;
         score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
         // a Lv3 on a line skill is one more ult piece (5 pieces = ult Lv2)
-        if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultPieces(s) < ULT_PIECES[1]) score += 1;
+        if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultLv3(s) < ULT_LV2_LV3) score += 1;
       } else {
         if (s.skills.some((k) => k.id === id)) return;
         score = full ? 1 : 2; // a free slot is worth filling with anything
@@ -349,7 +349,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
       if (!owned || !upgradeAllowed(o.v, s.day, 'hard')) return 0;
       const gain = nodeValue(nodeOf({ id: o.id, v: o.v }), has) - nodeValue(nodeOf(owned), has);
       // finishing a branch (Lv2 → Lv3) on a skill that fits the build is worth more than spreading gold thin
-      const branch = lvOf(owned.v) === 2 ? (SKILLS[o.id].line === line && ultPieces(s) < ULT_PIECES[1] ? 2.5 : 1.5) : 0.5;
+      const branch = lvOf(owned.v) === 2 ? (SKILLS[o.id].line === line && ultLv3(s) < ULT_LV2_LV3 ? 2.5 : 1.5) : 0.5;
       // a Lv2 variant whose Lv3 children suit the build (best child value) is a coherent branch to start
       const kids = lvOf(o.v) === 2 ? Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (o.v + c) as Variant }), has))) * 0.2 : 0;
       if (gain + kids <= 0) return 0;

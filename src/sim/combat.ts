@@ -76,8 +76,11 @@ export const DRAW_SHARE = 0.05;
 export const CHAIN_DECAY = T.chainDecay;
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
 export const CTL_IMMUNE = 1.5 * TPS;
-/** The control cap also grows with the fight: at tick t at most CTL_BASE + CTL_SHARE × t ticks can have been spent. */
-export const CTL_BASE = 1 * TPS;
+/**
+ * The control cap grows with the fight (sim v16: a flat share): at tick t at most CTL_SHARE × max(t, CTL_MIN_T) ticks of
+ * freeze + delay can have landed, so over a fight longer than CTL_MIN_T control is at most CTL_SHARE of it.
+ */
+export const CTL_MIN_T = 4 * TPS;
 export const CTL_SHARE = 0.25;
 /** A fighter that has not fired any skill for this long shakes off freeze / slow and resists all control until it fires. */
 export const SHAKE_OFF = 4 * TPS;
@@ -535,7 +538,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
   }
   /** freeze / delay ticks that can still land on this fighter now (their shared cap) */
-  const ctlRoom = (x: Fighter) => Math.floor(Math.min(fCap, CTL_BASE + CTL_SHARE * t) - x.frozenTotal);
+  const ctlRoom = (x: Fighter) => Math.floor(Math.min(fCap, CTL_SHARE * Math.max(t, CTL_MIN_T)) - x.frozenTotal);
   /** can freeze / delay land on this fighter now? (counts a resist when not) */
   const shaking = (x: Fighter) => t - x.lastFire >= SHAKE_OFF;
   function canControl(foe: Fighter) {
@@ -676,7 +679,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         foe.slowPct = foe.slowT > 0 ? Math.max(foe.slowPct, p) : p;
         // total slowed time per fight is capped (twice the freeze cap); past it, slows are resisted
         // total slowed time has its own cap (1.75 × the freeze cap), which also grows with the fight
-        const room = shaking(foe) ? 0 : Math.max(0, Math.floor(Math.min(sCap, 2 * CTL_BASE + 2 * CTL_SHARE * t)) - foe.slowTotal - foe.slowT);
+        const room = shaking(foe) ? 0 : Math.max(0, Math.floor(Math.min(sCap, 2 * CTL_SHARE * Math.max(t, CTL_MIN_T))) - foe.slowTotal - foe.slowT);
         const add = Math.min(room, Math.max(0, secs * TPS - foe.slowT));
         if (add <= 0 && foe.slowT <= 0) {
           foe.side_.resisted++;

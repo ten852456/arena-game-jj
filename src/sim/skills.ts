@@ -762,50 +762,98 @@ export function flatNumbers(n: SkillNode): Record<string, number> {
   o.cd = n.cd / 10;
   return o;
 }
-const FIELD_ICON: Record<string, string> = {
-  'hit.n': '⚔', 'hit.times': '⚔×', 'hit.pierce': '🗡', 'hit.shieldPct': '🛡→⚔', 'hit.thornsX': '🌵→⚔', 'hit.burnPct': '🔥→⚔',
-  'hit.poisonPct': '☠→⚔', 'hit.perBurn': '⚔/🔥', 'hit.perDodge': '⚔/💨', 'hit.exec.0': '🎯<', 'hit.exec.1': '🎯×', 'hit.frozen': '🧊×',
-  'hit.noShield': '🛡0×', 'hit.leech': '🩸', 'hit.sure': '👁', 'hit.burn.0': '🔥/hit', 'hit.burn.1': '🔥s', 'hit.poison.0': '☠/hit',
-  'hit.poison.1': '☠s', 'hit.perRemoved': '⚔/✨', 'hit.ifSlowed': '⚔🐌', 'hit': '⚔',
-  'shield.n': '🛡', 'heal.n': '❤', 'burn.dps': '🔥', 'burn.secs': '🔥s', 'burn.stacks': '🔥×', 'burn.growthHalf': '🔥+½💪', 'burn': '🔥',
-  'poison.dps': '☠', 'poison.secs': '☠s', 'poison.stacks': '☠×', 'poison': '☠', 'dodge.n': '💨', 'haste.pct': '⏩', 'haste.secs': '⏩s', 'haste': '⏩',
-  'wound.pct': '🩹', 'wound.secs': '🩹s', 'wound': '🩹', 'freeze.secs': '❄', 'freeze': '❄', 'slow.pct': '🐌', 'slow.secs': '🐌s', 'slow': '🐌',
-  'delay.secs': '⏪', 'delay': '⏪', 'grow.n': '💪', 'grow': '💪', 'charge.mult': '⚡×', 'charge.hits': '⚡⚔×', 'charge': '⚡',
-  'thorns.n': '🌵', 'thorns.perm': '🌵∞', 'thorns.heal': '🌵❤', 'thorns': '🌵', 'steadfast.keep': '🗿', 'steadfast.ignoreFreeze': '🗿❄',
-  'steadfast': '🗿', 'cleanse.n': '✨', 'cleanse.dot': '✨🔥☠', 'cleanse.lineAll': '✨★', 'cleanse': '✨', 'dispel.n': '💥', 'dispel.shield': '💥🛡',
-  'dispel.steal': '💥💪', 'dispel': '💥', 'leech.pct': '🩸', 'leech': '🩸', 'engine.power': '⚙', 'engine.n': '⚙×', 'cd': '⏱',
+/** short label of a field (Thai, English), and how it reads: pct = a share, sec = seconds, flag = on / off */
+const FIELD: Record<string, [string, string, ('pct' | 'sec' | 'flag' | 'num')?]> = {
+  'hit.n': ['ตี', 'hit'], 'hit.times': ['จำนวนครั้ง', 'hits'], 'hit.pierce': ['ทะลุโล่', 'pierce', 'pct'], 'hit.shieldPct': ['ตีจากโล่', 'from shield', 'pct'],
+  'hit.thornsX': ['ตีจากหนาม×', 'from thorns×'], 'hit.burnPct': ['ตีจากไฟ', 'from burn', 'pct'], 'hit.poisonPct': ['ตีจากพิษ', 'from poison', 'pct'],
+  'hit.perBurn': ['ต่อกองไฟ', 'per burn'], 'hit.perDodge': ['ต่อแต้มหลบ', 'per dodge'], 'hit.exec.0': ['ประหารเมื่อเลือด<', 'execute below', 'pct'],
+  'hit.exec.1': ['ประหาร×', 'execute×'], 'hit.frozen': ['ทุบน้ำแข็ง×', 'vs frozen×'], 'hit.noShield': ['ไร้โล่×', 'no shield×'], 'hit.leech': ['ดูดเลือด', 'leech', 'pct'],
+  'hit.sure': ['ไม่พลาด', 'can’t miss', 'flag'], 'hit.burn.0': ['ไฟต่อครั้ง', 'burn per hit'], 'hit.burn.1': ['ไฟนาน', 'burn for', 'sec'],
+  'hit.poison.0': ['พิษต่อครั้ง', 'poison per hit'], 'hit.poison.1': ['พิษนาน', 'poison for', 'sec'], 'hit.perRemoved': ['ต่อดีบัฟที่ล้าง', 'per cleansed'],
+  'hit.ifSlowed': ['ตีเมื่อศัตรูช้า', 'hit if slowed', 'flag'], 'hit': ['การตี', 'hit', 'flag'],
+  'shield.n': ['โล่', 'shield'], 'heal.n': ['ฟื้น', 'heal'], 'burn.dps': ['ไฟ/วิ', 'burn/s'], 'burn.secs': ['ไฟนาน', 'burn for', 'sec'],
+  'burn.stacks': ['กองไฟ', 'burn stacks'], 'burn.growthHalf': ['ไฟ+½พลัง', 'burn +½ power', 'flag'], 'burn': ['ไฟ', 'burn', 'flag'],
+  'poison.dps': ['พิษ/วิ', 'poison/s'], 'poison.secs': ['พิษนาน', 'poison for', 'sec'], 'poison.stacks': ['กองพิษ', 'poison stacks'], 'poison': ['พิษ', 'poison', 'flag'],
+  'dodge.n': ['หลบ', 'dodge'], 'dodge': ['หลบ', 'dodge', 'flag'], 'haste.pct': ['เร่ง', 'haste', 'pct'], 'haste.secs': ['เร่งนาน', 'haste for', 'sec'], 'haste': ['เร่ง', 'haste', 'flag'],
+  'wound.pct': ['แผลลึก', 'wound', 'pct'], 'wound.secs': ['แผลลึกนาน', 'wound for', 'sec'], 'wound': ['แผลลึก', 'wound', 'flag'],
+  'freeze.secs': ['แช่แข็ง', 'freeze', 'sec'], 'freeze': ['แช่แข็ง', 'freeze', 'flag'], 'slow.pct': ['ช้า', 'slow', 'pct'], 'slow.secs': ['ช้านาน', 'slow for', 'sec'],
+  'slow': ['ช้า', 'slow', 'flag'], 'delay.secs': ['ถ่วงเวลา', 'delay', 'sec'], 'delay': ['ถ่วงเวลา', 'delay', 'flag'], 'grow.n': ['พลัง', 'power'], 'grow': ['พลัง', 'power', 'flag'],
+  'charge.mult': ['รวมพลัง×', 'charge×'], 'charge.hits': ['รวมพลังกี่ครั้ง', 'charged hits'], 'charge': ['รวมพลัง', 'charge', 'flag'],
+  'thorns.n': ['หนาม', 'thorns'], 'thorns.perm': ['หนามถาวร', 'permanent thorns', 'flag'], 'thorns.heal': ['ศัตรูฟื้นได้', 'enemy heals', 'pct'], 'thorns': ['หนาม', 'thorns', 'flag'],
+  'steadfast.keep': ['การคุมที่ยังโดน', 'control still taken', 'pct'], 'steadfast.ignoreFreeze': ['กันแช่แข็ง 1 ครั้ง', 'blocks 1 freeze', 'flag'], 'steadfast': ['ใจเหล็ก', 'iron will', 'flag'],
+  'cleanse.n': ['ล้าง', 'cleanse'], 'cleanse.dot': ['ล้างแค่ไฟ/พิษ', 'only burn/poison', 'flag'], 'cleanse.lineAll': ['สายตัวเอง: ล้างหมด', 'own line: all', 'flag'], 'cleanse': ['ล้าง', 'cleanse', 'flag'],
+  'dispel.n': ['สลาย', 'dispel'], 'dispel.shield': ['สลายโล่', 'dispel shield', 'pct'], 'dispel.steal': ['ขโมยพลัง', 'steal power', 'flag'], 'dispel': ['สลาย', 'dispel', 'flag'],
+  'leech.pct': ['ดูดเลือดครั้งหน้า', 'next-hit leech', 'pct'], 'leech': ['ดูดเลือด', 'leech', 'flag'], 'engine.power': ['แรงที่สั่ง', 'engine power', 'pct'], 'engine.n': ['สั่งกี่ตัว', 'fires'],
+  'engine.keep': ['คูลดาวน์ไม่เริ่มใหม่', 'keeps cooldown', 'flag'], 'cd': ['คูลดาวน์', 'cooldown', 'sec'],
 };
-/** fields shown as a percent (shares) */
-const PCT_FIELD = /^(hit\.(pierce|shieldPct|burnPct|poisonPct|leech|exec\.0)|slow\.pct|haste\.pct|wound\.pct|thorns\.heal|steadfast\.keep|dispel\.shield|leech\.pct|engine\.power)$/;
-/** fields where a lower number is better */
-const LOWER_BETTER = /^(cd|thorns\.heal|steadfast\.keep|hit\.exec\.0)$/;
+/** fields where a lower number is better (sim v16 audit: cooldown, what the enemy keeps, the control that still lands) */
+export const LOWER_BETTER = new Set(['cd', 'thorns.heal', 'steadfast.keep', 'cleanse.dot']);
+/** defaults the data leaves out (so a branch that spells one out is not "new") */
+const DEFAULTS: Record<string, number> = { 'steadfast.keep': 0.4, 'hit.times': 1, 'charge.hits': 1, 'dispel.shield': 0.2, 'thorns.heal': 0.5 };
 const fieldOf = (key: string) => key.replace(/#\d+/, '');
-/** "35%" / "1.25" */
-export const fmtField = (key: string, v: number) => (PCT_FIELD.test(fieldOf(key)) ? `${Math.round(v * 100)}%` : String(+v.toFixed(2)));
+const effOf = (key: string) => key.split('.')[0];
+const ALL = 99;
+/** "35%", "1.5 วิ", "ทั้งหมด", "5" */
+export function fmtField(key: string, v: number, th = true) {
+  const kind = FIELD[fieldOf(key)]?.[2] ?? 'num';
+  if (v >= ALL) return th ? 'ทั้งหมด' : 'all';
+  if (kind === 'pct') return `${Math.round(v * 100)}%`;
+  if (kind === 'sec') return `${+v.toFixed(2)}${th ? ' วิ' : 's'}`;
+  return String(+v.toFixed(2));
+}
+export interface DiffRow { key: string; label: string; from: number; to: number; worse: boolean; fromText: string; toText: string; text: string }
 /**
- * Before → after of an upgrade: EVERY number that changes (upgrade cards, play CLI; scripts/upgrade-check.ts proves
- * none is missing). worse = this number got worse (lower, or higher for a cooldown / what the enemy keeps).
+ * Before → after of an upgrade, in short words: every number that changes (scripts/upgrade-check.ts proves none is
+ * missing and that ▼ only marks what really gets worse). An effect the new level adds is one "+…" row, one it drops is
+ * one "−…" row (worse); otherwise one row per changed number.
  */
-export function upgradeDiff(from: SkillNode, to: SkillNode): { key: string; icon: string; from: number; to: number; worse: boolean; fromText: string; toText: string }[] {
+export function upgradeDiff(from: SkillNode, to: SkillNode, th = true): DiffRow[] {
   const a = flatNumbers(from);
   const b = flatNumbers(to);
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
-  const out = [];
-  for (const key of keys) {
+  for (const m of [a, b]) for (const k of Object.keys(m)) if (!k.includes('.')) for (const [f, d] of Object.entries(DEFAULTS)) {
+    const [kind, field] = f.split('.');
+    if (k.startsWith(kind + '#')) m[`${k}.${field}`] ??= d;
+  }
+  const label = (key: string) => FIELD[fieldOf(key)]?.[th ? 0 : 1] ?? fieldOf(key);
+  const out: DiffRow[] = [];
+  const effs = [...new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !k.includes('.') && k !== 'cd'))];
+  const done = new Set<string>();
+  for (const e of effs) {
+    if (a[e] && !b[e]) {
+      out.push({ key: e, label: label(e), from: 1, to: 0, worse: true, fromText: '', toText: '', text: `−${label(e)}` });
+      done.add(e);
+    } else if (!a[e] && b[e]) {
+      // the new effect with its headline number
+      const nums = Object.keys(b).filter((k) => k.startsWith(e + '.') && FIELD[fieldOf(k)]?.[2] !== 'flag' && !(fieldOf(k) in DEFAULTS));
+      const main = nums[0];
+      const extra = main ? ` ${fmtField(main, b[main], th)}` : '';
+      out.push({ key: e, label: label(e), from: 0, to: 1, worse: false, fromText: '', toText: '', text: `+${label(main ?? e)}${extra}` });
+      done.add(e);
+    }
+  }
+  for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    if (!key.includes('.') && key !== 'cd') continue;
+    if (done.has(effOf(key))) continue;
     const f = a[key] ?? 0;
     const t = b[key] ?? 0;
     if (Math.abs(f - t) < 1e-9) continue;
     const field = fieldOf(key);
-    // an effect that appears or goes away is shown by its own numbers; the bare presence key only when it has none
-    if (!field.includes('.') && field !== 'cd' && keys.some((k) => k.startsWith(key + '.') && Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > 1e-9)) continue;
-    const worse = LOWER_BETTER.test(field) ? t > f : t < f;
-    out.push({ key, icon: FIELD_ICON[field] ?? field, from: f, to: t, worse, fromText: fmtField(key, f), toText: fmtField(key, t) });
+    const kind = FIELD[field]?.[2];
+    const worse = LOWER_BETTER.has(field) ? t > f : t < f;
+    if (kind === 'flag') out.push({ key, label: label(key), from: f, to: t, worse, fromText: '', toText: '', text: `${t ? '+' : '−'}${label(key)}` });
+    else if (!(key in a)) out.push({ key, label: label(key), from: f, to: t, worse: false, fromText: '', toText: '', text: `+${label(key)} ${fmtField(key, t, th)}` });
+    else if (!(key in b)) out.push({ key, label: label(key), from: f, to: t, worse: true, fromText: '', toText: '', text: `−${label(key)}` });
+    else {
+      const fromText = fmtField(key, f, th);
+      const toText = fmtField(key, t, th);
+      out.push({ key, label: label(key), from: f, to: t, worse, fromText, toText, text: `${label(key)} ${fromText}→${toText}` });
+    }
   }
   return out;
 }
-/** "⚔4→9 ⏱4.3→5▼" (▼ = got worse) */
-export const upgradeDiffText = (from: SkillNode, to: SkillNode) =>
-  upgradeDiff(from, to).map((d) => `${d.icon}${d.fromText}→${d.toText}${d.worse ? '▼' : ''}`).join(' ');
+/** "ตี 4→9 · คูลดาวน์ 4.3 วิ→5 วิ▼" (▼ = got worse) */
+export const upgradeDiffText = (from: SkillNode, to: SkillNode, th = true) =>
+  upgradeDiff(from, to, th).map((d) => `${d.text}${d.worse ? '▼' : ''}`).join(' · ');
 
 /**
  * Rarity of a tree variant (a label for the shop and the list; no rule depends on it): Lv1/Lv2 common, Lv3 rare,

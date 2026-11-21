@@ -100,9 +100,9 @@ export const ULT_LV2_TRIG = 0.75;
 /** Lv2 effect power × this */
 export const ULT_LV2_POW = 1.3;
 /** pieces needed for ult Lv1 / Lv2 */
-export const ULT_PIECES = [4, 5] as const;
-/** how many Lv3 skills of the line give the +1 piece */
-export const ULT_LV3_FOR_BONUS = 4;
+export const ULT_PIECES = [3, 4] as const;
+/** Lv2 also needs this many line skills at Lv3 */
+export const ULT_LV2_LV3 = 2;
 const r1 = (x: number) => +x.toFixed(1);
 /** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
 const TRIG_BELOW = ['assassin'];
@@ -290,23 +290,15 @@ export const HEROES: HeroDef[] = [
 export const HEROES_BY_ID: Record<string, HeroDef> = Object.fromEntries(HEROES.map((h) => [h.id, h]));
 
 /**
- * Ultimate pieces of a build: every skill of the hero's main line (its unique counts) is 1 piece, and ONE Lv3 skill of
- * that line adds +1 more (a line has 3 shared skills + the unique, so the most is 5 = Lv2).
+ * Ultimate pieces (sim v16, one rule for code and text): every skill of the hero's line you own is one piece (the unique
+ * is one of them), at most 4. Lv1 = ULT_PIECES[0] pieces; Lv2 = all 4 pieces AND ULT_LV2_LV3 of them at Lv3.
  * Pure function of the build, so the server and the replay agree.
  */
 export function ultPieces(b: Pick<Build, 'hero' | 'skills'>): number {
-  const line = HEROES_BY_ID[b.hero]?.line;
-  if (!line) return 0;
-  let n = 0;
-  let lv3 = 0;
-  for (const k of b.skills) {
-    if (!inLine(b.hero, k.id)) continue;
-    n++;
-    if (lvOf(k.v) >= 3) lv3++;
-  }
-  // sim v15: the +1 needs all FOUR line skills at Lv3 (one Lv3 gave Lv2 by day 4)
-  return n + (lv3 >= ULT_LV3_FOR_BONUS ? 1 : 0);
+  return b.skills.filter((k) => inLine(b.hero, k.id)).length;
 }
+/** line skills of the build that are Lv3 */
+export const ultLv3 = (b: Pick<Build, 'hero' | 'skills'>) => b.skills.filter((k) => inLine(b.hero, k.id) && lvOf(k.v) >= 3).length;
 /** ถนัดสาย of a hero: its line skills work at this power (tuning.ts `aff.<hero>`, default `line.affinity`) */
 export const lineAffinity = (hero: string) => T[`aff.${hero}` as keyof typeof T] ?? T['line.affinity'];
 /** Is this skill one of the hero's line pieces (a shared skill of its main line, or its own unique)? */
@@ -325,10 +317,25 @@ export function ultGain(b: Pick<Build, 'hero' | 'skills'>, offer: { id: string; 
     ? [...b.skills, { id: offer.id, v: '' }]
     : b.skills.map((k) => (k.id === offer.id ? { ...k, v: offer.v } : k));
   const next = { hero: b.hero, skills: after };
-  return { pieces: ultPieces(next) - ultPieces(b), lv: ultLevel(next) };
+  // pieces gained, or (for an upgrade to Lv3) a Lv3 toward Lv2
+  return { pieces: ultPieces(next) - ultPieces(b) + (ultLv3(next) > ultLv3(b) && ultLv3(b) < ULT_LV2_LV3 ? 1 : 0), lv: ultLevel(next) };
 }
-/** 0 = locked, 1 = 3 pieces, 2 = 5 pieces */
+/** 0 = locked, 1 = 3 line pieces, 2 = 4 line pieces with 2 of them at Lv3 */
 export const ultLevel = (b: Pick<Build, 'hero' | 'skills'>) => {
   const p = ultPieces(b);
-  return p >= ULT_PIECES[1] ? 2 : p >= ULT_PIECES[0] ? 1 : 0;
+  return p >= ULT_PIECES[1] && ultLv3(b) >= ULT_LV2_LV3 ? 2 : p >= ULT_PIECES[0] ? 1 : 0;
 };
+/** "Lv1 ✓ · Lv2: 4/4 ชิ้น · Lv3 1/2" — the progress line for the shop, HUD and play CLI */
+export function ultProgressText(b: Pick<Build, 'hero' | 'skills'>, th = true) {
+  const p = ultPieces(b);
+  const l3 = Math.min(ultLv3(b), ULT_LV2_LV3);
+  const lv = ultLevel(b);
+  if (lv >= 2) return th ? 'Lv2 ✓ (เต็ม)' : 'Lv2 ✓ (max)';
+  if (lv === 1) return th ? `Lv1 ✓ · Lv2: ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} ชิ้น · Lv3 ${l3}/${ULT_LV2_LV3}` : `Lv1 ✓ · Lv2: ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} pieces · Lv3 ${l3}/${ULT_LV2_LV3}`;
+  return th ? `Lv1: ${p}/${ULT_PIECES[0]} ชิ้น` : `Lv1: ${p}/${ULT_PIECES[0]} pieces`;
+}
+/** the rule in one line */
+export const ultRuleText = (th = true) =>
+  th
+    ? `skill สายหลักที่มี (รวมสกิลประจำตัว) = 1 ชิ้น · ${ULT_PIECES[0]} ชิ้น = Lv1 · ครบ ${ULT_PIECES[1]} ชิ้นและ Lv3 ${ULT_LV2_LV3} ตัว = Lv2`
+    : `each line skill you own (unique included) = 1 piece · ${ULT_PIECES[0]} pieces = Lv1 · all ${ULT_PIECES[1]} pieces with ${ULT_LV2_LV3} at Lv3 = Lv2`;

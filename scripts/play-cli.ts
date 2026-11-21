@@ -14,7 +14,7 @@ import { aiBuild, type BotTier } from '../src/sim/bot';
 import { LINES } from '../src/sim/types';
 import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
-import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLevel, ultPieces } from '../src/sim/heroes';
+import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
@@ -88,7 +88,7 @@ function show(s: R.RunState) {
   const ulv = ultLevel(b0);
   p(`Ultimate ★ ${h.ult.name} — Lv1: when ${h.ult.trigger.split(' · Lv2 ')[0]} → ${h.ult.effect.split(' · Lv2 ')[0]}`);
   p(`   Lv2: when ${h.ult.trigger.split(' · Lv2 ')[1] ?? '-'} → ${h.ult.effect.split(' · Lv2 ')[1] ?? '-'}`);
-  p(`Ult pieces now: ${ultPieces(b0)} (${ULT_PIECES[0]} = Lv1, ${ULT_PIECES[1]} = Lv2; each ${heroLine(h.id)} skill or your unique = 1, your first Lv3 one +1) → ult ${ulv ? `Lv${ulv}` : 'locked'} · ${heroLine(h.id)} skills are also stronger (line mastery)`);
+  p(`Ult: ${ultProgressText(b0, false)} → ult ${ulv ? `Lv${ulv}` : 'locked'} (${ultRuleText(false)}) · ${heroLine(h.id)} skills are also stronger (line mastery)`);
   const slots = R.slotsOf(s);
   if (s.day > 1 && R.slotsFor(s.day) > R.slotsFor(s.day - 1)) p(`★ New today: +1 skill slot (${slots} now)`);
   if (s.phase === 'shop' && s.skills.length < slots) p(`⚠ ${slots - s.skills.length} empty skill slot(s): buy something before you fight`);
@@ -100,15 +100,15 @@ function show(s: R.RunState) {
     p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
-    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotPrice(s)}g · wish ${R.wishPrice(s)}g = upgrades a RANDOM skill of yours below Lv3 to a random next branch):`);
+    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g`} · wish ${R.wishPrice(s)}g = upgrades a RANDOM skill of yours below Lv3 to a random next branch):`);
     s.shop.forEach((o, i) => {
       if (!o) return p(`   ${i}. (sold)`);
       const up = R.upgradeOf(s, o);
       const k = { id: o.id, v: o.v, bonus: o.bonus };
       const bon = (o.bonus ?? []).map((b) => simpleBonus(b, lv(o.v))).join(' | ');
       const g = ultGain(b0, o);
-      const tag = g.pieces ? ` ★ +1 ult piece${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
-      const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k)) : '';
+      const tag = g.pieces ? ` ★ ${o.v ? 'Lv3 toward ult Lv2' : '+1 ult piece'}${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
+      const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k), false) : '';
       p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''}${rarityOf(o.id, o.v) !== 'common' ? ` [${rarityOf(o.id, o.v).toUpperCase()}]` : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff}${diff.includes('▼') ? ' (▼ = worse)' : ''}` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
@@ -192,7 +192,7 @@ switch (cmd) {
     else if (cmd === 'wish') {
       const w = R.wish(st);
       if ('err' in w) err = w.err;
-      else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]))})`);
+      else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]), false)})`);
       else p(`wish: ${nodeOf(st.skills[w.idx]).name} got the mark${markText(w.mark)}`);
     } else if (cmd === 'chance') R.chooseLastChance(st, args[0] as R.LastChanceOption);
     else if (cmd === 'mark') R.applyMark(st, n(args[0]));

@@ -1,5 +1,5 @@
 import { Rng, hashSeed } from './rng';
-import { HEROES, HEROES_BY_ID } from './heroes';
+import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultPieces } from './heroes';
 import { rollBonuses } from './links';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
@@ -167,6 +167,13 @@ export function beginDay(s: RunState) {
   s.phase = 'shop';
 }
 
+/**
+ * Connect bonuses of a skill's card in this run (sim v16): rolled once per run and skill, so the same card shows the
+ * same bonuses on every day and every reroll (before, each roll re-rolled them and the text seemed to change).
+ * Selling and buying the skill again gives the same bonuses back.
+ */
+export const bonusOf = (s: RunState, id: string) => rollBonuses(new Rng(hashSeed(s.seed, 'bonus', id)), id, s.hero);
+
 /** Is this offer an upgrade that still applies to what you own? */
 export function upgradeOf(s: RunState, o: Offer): SkillInstance | null {
   if (o.v === '') return null;
@@ -181,8 +188,7 @@ export function upgradeOf(s: RunState, o: Offer): SkillInstance | null {
 function rollShop(s: RunState) {
   if (s.day <= 1) {
     // same skills every run; their connect bonuses are rolled per run
-    const brng = new Rng(hashSeed(s.seed, 'day1'));
-    s.shop = (HEROES_BY_ID[s.hero]?.day1 ?? []).slice(0, SHOP_SIZE).map((id) => ({ id, v: '', bonus: rollBonuses(brng, id, s.hero) }));
+    s.shop = (HEROES_BY_ID[s.hero]?.day1 ?? []).slice(0, SHOP_SIZE).map((id) => ({ id, v: '', bonus: bonusOf(s, id) }));
     s.locks = [];
     return;
   }
@@ -204,7 +210,7 @@ function rollShop(s: RunState) {
   const uniq = HEROES_BY_ID[s.hero]?.unique;
   if (uniq && s.day >= UNIQUE_BACK_DAY && fresh.includes(uniq) && need > 0) {
     fresh.splice(fresh.indexOf(uniq), 1);
-    picks.push({ id: uniq, v: '', bonus: rollBonuses(rng, uniq, s.hero) });
+    picks.push({ id: uniq, v: '', bonus: bonusOf(s, uniq) });
   }
   /** weighted pick of a new skill: the hero's own line counts LINE_WEIGHT times */
   const pickFresh = () => {
@@ -221,7 +227,18 @@ function rollShop(s: RunState) {
     if (ids.length) {
       const id = ids[rng.int(ids.length)];
       fresh.splice(fresh.indexOf(id), 1);
-      picks.push({ id, v: '', bonus: rollBonuses(rng, id, s.hero) });
+      picks.push({ id, v: '', bonus: bonusOf(s, id) });
+    }
+  }
+  // sim v16: once the four line pieces are owned, every roll has an upgrade of a line skill (while one can still go up)
+  const lineUp = (o: Offer | null) => !!o && o.v !== '' && inLine(s.hero, o.id);
+  if (picks.length < need && ultPieces(s) >= ULT_PIECES[1] && !picks.some(lineUp) && !kept.some(lineUp)) {
+    const ids = ups.filter((id) => inLine(s.hero, id));
+    if (ids.length) {
+      const id = ids[rng.int(ids.length)];
+      ups.splice(ups.indexOf(id), 1);
+      const k = s.skills.find((x) => x.id === id)!;
+      picks.push({ id, v: rng.pick(nextVariants(k.v)) });
     }
   }
   while (picks.length < need && (fresh.length || ups.length)) {
@@ -232,7 +249,7 @@ function rollShop(s: RunState) {
       picks.push({ id, v: rng.pick(nextVariants(k.v)) });
     } else {
       const id = pickFresh();
-      picks.push({ id, v: '', bonus: rollBonuses(rng, id, s.hero) });
+      picks.push({ id, v: '', bonus: bonusOf(s, id) });
     }
   }
   if (!keptIds.size) {

@@ -1,6 +1,6 @@
 import { randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
-import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLevel, ultPieces } from '../sim/heroes';
+import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../sim/heroes';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
 import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
@@ -167,7 +167,7 @@ const playerName = () => (fetchStore(NAME_KEY) || 'ผู้เล่น').slice
 // ---------- helpers ----------
 /** "★ ท่าไม้ตาย เงาจันทร์: when · what" for hero cards */
 function ultHTML(h: (typeof HEROES)[number]) {
-  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · skill สายนี้ Lv3 ตัวแรกนับ +1 · skill สายนี้แรงขึ้น ${Math.round((lineAffinity(h.id) - 1) * 100)}% (ถนัดสาย)`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · your first Lv3 skill of this line counts +1 · skills of this line are ${Math.round((lineAffinity(h.id) - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
+  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`${ultRuleText(true)} · skill สาย${LINE_NAME[h.line]}แรงขึ้น ${Math.round((lineAffinity(h.id) - 1) * 100)}% (ถนัดสาย)`, `${ultRuleText(false)} · ${LINE_NAME[h.line]} skills are ${Math.round((lineAffinity(h.id) - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
 }
 /** rarity of an upgrade branch (rare = any Lv3, epic = the big ones): a gold / purple tag */
 function rarityTag(k: { id: string; v: string } | null) {
@@ -177,9 +177,9 @@ function rarityTag(k: { id: string; v: string } | null) {
 }
 /** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
 function upDiffHTML(owned: SkillInstance, o: R.Offer) {
-  const diff = upgradeDiff(nodeOf(owned), nodeOf({ id: o.id, v: o.v }));
+  const diff = upgradeDiff(nodeOf(owned), nodeOf({ id: o.id, v: o.v }), getLang() !== 'en');
   if (!diff.length) return '';
-  return `<div class="up-diff">${diff.map((d) => `<span class="${d.worse ? 'worse' : 'better'}">${d.icon}${d.fromText}→<b>${d.toText}</b>${d.worse ? '▼' : ''}</span>`).join(' ')}</div>`;
+  return `<div class="up-diff">${diff.map((d) => `<span class="${d.worse ? 'worse' : 'better'}">${esc(d.text)}${d.worse ? '▼' : ''}</span>`).join(' · ')}</div>`;
 }
 /** selling list skill i lowers the ultimate: "★ Lv2 → Lv1" (empty when it doesn't) */
 function sellDrop(r: R.RunState, i: number) {
@@ -197,7 +197,9 @@ function ultTagHTML(r: R.RunState, o: R.Offer) {
   const aff = `${L('ถนัดสาย', 'line mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%`;
   if (!g.pieces) return `<span class="mark ult-aff" title="${esc(aff)}">${L('ถนัด', 'mastery')}</span>`;
   const up = g.lv > ultLevel(b);
-  const txt = up ? L(`★ +1 ชิ้น · ปลด Lv${g.lv}!`, `★ +1 piece · ult Lv${g.lv}!`) : L('★ +1 ชิ้น', '★ +1 piece');
+  // a new line skill = +1 piece; an upgrade to Lv3 = one of the 2 Lv3 that Lv2 needs
+  const what = o.v ? L('★ Lv3 สู่ท่าไม้ตาย Lv2', '★ Lv3 toward ult Lv2') : L('★ +1 ชิ้น', '★ +1 piece');
+  const txt = up ? `${what} · ${L(`ปลด Lv${g.lv}!`, `ult Lv${g.lv}!`)}` : what;
   return `<span class="mark ult-piece${up ? ' ult-up' : ''}" title="${esc(`${L('ชิ้นท่าไม้ตาย', 'ultimate piece')} · ${aff}`)}">${txt}</span>`;
 }
 /** shop: "★ เงาจันทร์ 2/3" ult piece counter for the run's build */
@@ -205,10 +207,8 @@ function ultProgressHTML(r: R.RunState) {
   const h = HEROES_BY_ID[r.hero];
   if (!h) return '';
   const b = R.toBuild(r);
-  const p = ultPieces(b);
   const lv = ultLevel(b);
-  const need = lv >= 2 ? ULT_PIECES[1] : lv === 1 ? ULT_PIECES[1] : ULT_PIECES[0];
-  return `<span title="${esc(`${h.ult.trigger} → ${h.ult.effect}`)}">★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ยังไม่ปลด', 'locked')} · ${LINE_ICON[h.line]} ${Math.min(p, need)}/${need}</span>`;
+  return `<span title="${esc(`${L(ultRuleText(true), ultRuleText(false))} · ${h.ult.trigger} → ${h.ult.effect}`)}">★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ยังไม่ปลด', 'locked')} · ${LINE_ICON[h.line]} ${L(ultProgressText(b, true), ultProgressText(b, false))}</span>`;
 }
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);

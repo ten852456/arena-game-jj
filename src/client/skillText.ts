@@ -6,7 +6,7 @@
  * Pure text in the current language (L from i18n.ts): no DOM, so scripts/skilltext-check.ts can test every skill.
  */
 import { L } from '../i18n';
-import { cdTicks, CTL_BASE, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
+import { cdTicks, CTL_MIN_T, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, bonusValue } from '../sim/links';
 import { LINE_NAME, SKILLS, nodeOf, type Effect, type SkillNode } from '../sim/skills';
 import { T } from '../sim/tuning';
@@ -224,7 +224,7 @@ export function detailLines(k: K, haste = 0): string[] {
   }
   for (const e of n.fx) out.push(effectDetail(e));
   if (n.fx.some((e) => e.k === 'freeze' || e.k === 'delay'))
-    out.push(L(`เพดานแช่แข็ง+ถ่วง: ${CTL_BASE} tick + ${pct(CTL_SHARE)} ของเวลาที่สู้ · ศัตรูที่ไม่ได้ใช้ skill ${SHAKE_OFF} tick จะสะบัดหลุด`, `freeze+delay cap: ${CTL_BASE} ticks + ${pct(CTL_SHARE)} of fight time · an enemy idle for ${SHAKE_OFF} ticks shakes it off`));
+    out.push(L(`เพดานแช่แข็ง+ถ่วง: ไม่เกิน ${pct(CTL_SHARE)} ของเวลาที่สู้ (ช่วง ${CTL_MIN_T / 10} วิแรกนับเป็น ${CTL_MIN_T / 10} วิ) · ศัตรูที่ไม่ได้ใช้ skill ${SHAKE_OFF} tick จะสะบัดหลุด`, `freeze+delay cap: at most ${pct(CTL_SHARE)} of the fight time (the first ${CTL_MIN_T / 10}s count as ${CTL_MIN_T / 10}s) · an enemy idle for ${SHAKE_OFF} ticks shakes it off`));
   if (k.mark === 'echo') out.push(L('ตรา ตีซ้ำ: ทำงานซ้ำทันทีที่แรง 50% (โบนัสดาเมจ ×0.5)', 'Echo mark: works again right away at 50% (bonus damage ×0.5)'));
   if (k.mark === 'burn') out.push(L('ตรา เผาไหม้: ทุกครั้งที่ใช้ ไฟ 1/วิ 3 วิ', 'Burn mark: each use burns 1/s for 3s'));
   if (k.mark === 'steadfast') out.push(L('ตรา ไม่หวั่นไหว: คูลดาวน์เดินต่อตอนโดนแช่แข็ง', 'Steadfast mark: cooldown keeps counting while frozen'));
