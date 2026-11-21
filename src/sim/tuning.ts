@@ -16,95 +16,95 @@
 export const TUNING = {
   // ---- run (run.ts) ----
   /** HP at the start of a run */
-  'run.startHp': 18,
+  'run.startHp': 16,
   /** HP lost on a defeat = min(5, 1 + ceil(day / lossEvery)) */
-  'run.lossEvery': 3,
+  'run.lossEvery': 4,
   // ---- base HP per day (combat.ts HP_BY_DAY × this) ----
   /** days 1–3 */
-  'hp.early': 1.08,
+  'hp.early': 1.07,
   /** days 4–7 */
-  'hp.mid': 1.2,
+  'hp.mid': 1.18,
   /** day 8+ */
-  'hp.late': 1.3,
+  'hp.late': 1.35,
   // ---- combat rules (numbers only) ----
   /** each trigger-chain step after the first fires ×this */
   'chainDecay': 0.75,
   /** engine skill power (ฟันเฟือง / เร่งเครื่อง) × this */
-  'engine': 0.95,
+  'engine': 0.9,
   /** freeze / slow / delay seconds of every skill × this */
-  'control': 0.8,
+  'control': 0.9,
   // ---- shared skills of each line: power multiplier at Lv1 and Lv3 ----
-  'line.hit.lv1': 0.65,
-  'line.hit.lv3': 1.5,
-  'line.dodge.lv1': 0.65,
-  'line.dodge.lv3': 1.3,
+  'line.hit.lv1': 0.75,
+  'line.hit.lv3': 1.45,
+  'line.dodge.lv1': 0.75,
+  'line.dodge.lv3': 1.55,
   'line.shield.lv1': 1.15,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.25,
-  'line.heal.lv3': 1.15,
-  'line.burn.lv1': 0.9,
-  'line.burn.lv3': 0.85,
-  'line.poison.lv1': 1.35,
-  'line.poison.lv3': 1.15,
-  'line.ice.lv1': 1.5,
-  'line.ice.lv3': 1.45,
-  'line.wind.lv1': 1.25,
-  'line.wind.lv3': 0.8,
+  'line.heal.lv3': 1.05,
+  'line.burn.lv1': 1.15,
+  'line.burn.lv3': 0.7,
+  'line.poison.lv1': 1.45,
+  'line.poison.lv3': 0.8,
+  'line.ice.lv1': 1.45,
+  'line.ice.lv3': 1.55,
+  'line.wind.lv1': 1.3,
+  'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
-  'uniq.knight.lv1': 0.6,
-  'uniq.knight.lv3': 0.75,
-  'uniq.thornguard.lv1': 1.3,
-  'uniq.thornguard.lv3': 1.35,
+  'uniq.knight.lv1': 0.8,
+  'uniq.knight.lv3': 0.8,
+  'uniq.thornguard.lv1': 1.2,
+  'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.85,
-  'uniq.assassin.lv3': 1.4,
-  'uniq.duelist.lv1': 0.85,
-  'uniq.duelist.lv3': 1.5,
+  'uniq.assassin.lv3': 1.6,
+  'uniq.duelist.lv1': 0.95,
+  'uniq.duelist.lv3': 1.55,
   'uniq.berserker.lv1': 1.65,
-  'uniq.berserker.lv3': 1.4,
-  'uniq.pyro.lv1': 1.1,
-  'uniq.pyro.lv3': 0.95,
+  'uniq.berserker.lv3': 1.25,
+  'uniq.pyro.lv1': 1.3,
+  'uniq.pyro.lv3': 1,
   'uniq.witch.lv1': 1.15,
-  'uniq.witch.lv3': 0.9,
-  'uniq.chrono.lv1': 1.8,
+  'uniq.witch.lv3': 1.3,
+  'uniq.chrono.lv1': 1.55,
   'uniq.chrono.lv3': 1.25,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
   'cd.knight': 1,
-  'cd.thornguard': 1.15,
+  'cd.thornguard': 1.1,
   'cd.assassin': 0.9,
   'cd.duelist': 0.95,
   'cd.berserker': 0.85,
-  'cd.pyro': 0.75,
+  'cd.pyro': 0.8,
   'cd.witch': 1.1,
-  'cd.chrono': 1,
+  'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.4,
+  'hp.knight': 1.3,
   'hp.thornguard': 1.34,
-  'hp.assassin': 1.1,
-  'hp.duelist': 0.94,
-  'hp.berserker': 1.2,
-  'hp.pyro': 1.52,
+  'hp.assassin': 1.18,
+  'hp.duelist': 0.9,
+  'hp.berserker': 1.16,
+  'hp.pyro': 1.64,
   'hp.witch': 1.56,
-  'hp.chrono': 1.2,
+  'hp.chrono': 1.22,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
   'knight.shield': 0.16,
   /** นักฆ่า: the first hit of the fight × this */
   'assassin.first': 1.5,
   /** นักฆ่า: every this-many-th hit is ×assassin.first too (0 = only the first hit) */
-  'assassin.every': 5,
+  'assassin.every': 6,
   /** นักรบคลั่ง: +1 พลัง per this many hits taken */
   'berserker.hits': 5,
   /** นักเวทเพลิง: burns last × this */
-  'pyro.burn': 1.25,
+  'pyro.burn': 1.1,
   /** แม่มดน้ำแข็ง: freezes last + this many seconds */
   'witch.freeze': 0.2,
   /** แม่มดน้ำแข็ง: a hit on a frozen enemy cuts its healing by this share for 3 s */
-  'witch.wound': 0.7,
+  'witch.wound': 0.5,
   /** นักฆ่า: every landed hit cuts enemy healing by this share for 2 s */
   'assassin.wound': 0.4,
   /** นักดาบคู่: after a dodge, the next hit × this */
   /** นักดาบคู่: +1 dodge every this many seconds (0 = off) */
-  'duelist.regen': 8,
+  'duelist.regen': 9,
   'duelist.counter': 1.8,
   /** นักรบหนาม: each hit taken poisons the attacker 1/s for this many seconds */
   'thornguard.poison': 2,
@@ -112,69 +112,69 @@ export const TUNING = {
   /** most dodge charges a fighter can hold (+1 for a hero of the 💨 line) */
   'dodge.cap': 1,
   /** share of a dodged hit that still lands (its riders, thorns and leech don't) */
-  'dodge.graze': 0.3,
+  'dodge.graze': 0.25,
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
-  'shield.guard': 0.25,
+  'shield.guard': 0.3,
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
-  'aff.assassin': 1.4,
-  'aff.duelist': 1.35,
-  'aff.knight': 1.25,
+  'aff.assassin': 1.3,
+  'aff.duelist': 1.4,
+  'aff.knight': 1.35,
   'aff.berserker': 1.4,
   'aff.pyro': 1.25,
   'aff.thornguard': 1.35,
-  'aff.witch': 1.3,
-  'aff.chrono': 1.25,
+  'aff.witch': 1.35,
+  'aff.chrono': 1.2,
   /** a charge (รวมพลัง) waits for a hit of at least this much (before power and charge) */
   'charge.min': 4,
   /** จอมเวทลม: hits on a slowed / frozen enemy deal this much more */
   'chrono.slowHit': 0.05,
   /** a burning fighter's shield gains × this (ไฟละลายโล่) */
   /** each burn tick also removes this × the burn per second of shield (ไฟเผาโล่) */
-  'burn.scorch': 1,
+  'burn.scorch': 0.5,
   'burn.shield': 0.95,
   /** a poisoned fighter's healing × this */
-  'poison.heal': 0.75,
+  'poison.heal': 0.65,
   /** most haste a fighter can have (share faster) */
   'haste.cap': 0.6,
   // ---- ultimates: trigger amount (Lv1; Lv2 needs 30% less) and effect power (Lv1; Lv2 ×1.4) ----
   /** damage ultimates (นักฆ่า, อัศวิน) deal at most this share of the enemy's max HP (Lv2 ×1.4) */
   'ult.cap': 0.3,
   /** นักฆ่า: enemy HP below this share */
-  'ult.assassin.trig': 0.25,
+  'ult.assassin.trig': 0.3,
   /** นักฆ่า: hit = this × the HP the enemy has lost (capped by ult.cap; ignores shield; a dodge halves it) */
   'ult.assassin.pow': 0.2,
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 5,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.3,
+  'ult.duelist.pow': 0.55,
   /** อัศวิน: shield gained, share of max HP */
-  'ult.knight.trig': 0.1,
+  'ult.knight.trig': 0.05,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 1.6,
+  'ult.knight.pow': 1.4,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
-  'ult.berserker.pow': 0.08,
+  'ult.berserker.pow': 0.15,
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,
   /** นักเวทเพลิง: deals the burn still to come × this right away */
-  'ult.pyro.pow': 0.4,
+  'ult.pyro.pow': 0.35,
   /** นักรบหนาม: direct hits taken */
   'ult.thornguard.trig': 6,
   /** นักรบหนาม: seconds of poison thorns */
-  'ult.thornguard.pow': 2.5,
+  'ult.thornguard.pow': 3,
   /** แม่มดน้ำแข็ง: ice skill casts */
   'ult.witch.trig': 5,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
   'ult.witch.pow': 1.25,
   /** จอมเวทลม: slows / delays landed */
-  'ult.chrono.trig': 4,
+  'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
-  'ult.chrono.pow': 0.35,
+  'ult.chrono.pow': 0.4,
 };
 // </tuned>
 
