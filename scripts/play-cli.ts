@@ -1,8 +1,8 @@
 // Text play for AI playtesters: one run of the real game rules (shop, list order, fights vs bot builds), saved to a
 // JSON file between commands. Usage: npx tsx scripts/play-cli.ts <state.json> <command> [args]
 //   new <seed> [auto|easy|normal|hard]  start (auto = the server's AI tiers) · pick <heroId>
-//   show                            shop, list, gold, scouting       buy <shopIdx> | sell <listIdx> | move <listIdx> <up|down>
-//   reroll | lock <shopIdx> | slot | wish                             fight   (then: chance awaken|mark|supply · mark <listIdx>)
+//   show                            shop, list, gold, relics, scouting  buy <shopIdx> [branch] | sell <listIdx> | move <listIdx> <up|down>
+//   reroll | lock <shopIdx> | slot | wish | relic <i> (-1 = skip)     fight   (then: chance awaken|mark|supply · mark <listIdx>)
 //   skill <id>                      full tree of a skill              heroes  all heroes
 // Indexes are 0-based and do NOT shift: a bought card leaves an empty place, so the other shop indexes stay the same.
 // Scouting shows only the next opponent's hero, line and ult level (like the real game; the server rolls the fight
@@ -16,6 +16,7 @@ import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
 import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
+import { RELICS_BY_ID, relicFits, relicText } from '../src/sim/relics';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
 import { SKILLS, VARIANTS, epicAfter, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
@@ -75,9 +76,10 @@ function ultText(hero: string, lv: number) {
   return `${u.name}: when ${at(u.trigger)} → ${at(u.effect)}`;
 }
 
+const starText = (n?: number) => (n ? ` ${'★'.repeat(n)} (+${Math.round(T['star.pow'] * 100 * n)}% numbers${n >= 3 ? `, cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''})` : '');
 function describeBuild(b: Build, title: string) {
-  p(`${title}: ${HEROES_BY_ID[b.hero].name} (${b.hero}, line ${heroLine(b.hero)})`);
-  b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${markText(k.mark)} ${simpleText(k)}`));
+  p(`${title}: ${HEROES_BY_ID[b.hero].name} (${b.hero}, line ${heroLine(b.hero)})${b.relics?.length ? ` · relics: ${b.relics.map((r) => relicText(r, false)).join(' | ')}` : ''}`);
+  b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${starText(k.star)}${markText(k.mark)} ${simpleText(k)}`));
 }
 
 function show(s: R.RunState) {
@@ -92,12 +94,13 @@ function show(s: R.RunState) {
   const slots = R.slotsOf(s);
   if (s.day > 1 && R.slotsFor(s.day) > R.slotsFor(s.day - 1)) p(`★ New today: +1 skill slot (${slots} now)`);
   if (s.phase === 'shop' && s.skills.length < slots) p(`⚠ ${slots - s.skills.length} empty skill slot(s): buy something before you fight`);
+  p(`Relics (${(s.relics ?? []).length}/3, picked on days 4, 7, 10): ${(s.relics ?? []).map((r) => relicText(r, false)).join(' | ') || 'none'}`);
   p(`List (${s.skills.length}/${slots} slots; top to bottom, neighbours can switch on connect bonuses):`);
   s.skills.forEach((k, i) => {
     const bon = (k.bonus ?? []).map((b) => simpleBonus(b, lv(k.v))).join(' | ');
     const after = ultLevel({ hero: s.hero, skills: s.skills.filter((_, j) => j !== i).slice(0, slots) });
     const drop = after < ulv ? ` (selling it drops the ult Lv${ulv} → ${after ? 'Lv' + after : 'locked'})` : '';
-    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
+    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${starText(k.star)}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
     p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g`} · wish ${R.wishPrice(s)}g = upgrades a RANDOM skill of yours below Lv3 to a random next branch):`);
@@ -108,12 +111,29 @@ function show(s: R.RunState) {
       const bon = (o.bonus ?? []).map((b) => simpleBonus(b, lv(o.v))).join(' | ');
       const g = ultGain(b0, o);
       const tag = g.pieces ? ` ★ ${o.v ? 'Lv3 toward ult Lv2' : '+1 ult piece'}${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
+      const choices = R.offerChoices(s, o);
+      if (up && o.star) {
+        p(`   ${i}. STAR ★${o.star} for ${nodeOf(up).name} [${o.id} Lv3] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}\n        change: all numbers +${Math.round(T['star.pow'] * 100)}%${o.star >= 3 ? `, cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''}`);
+        return;
+      }
+      if (up && choices.length > 1) {
+        p(`   ${i}. UPGRADE Lv${lv(up.v)} → Lv${lv(o.v)} ${nodeOf(up).name} [${o.id} ${lineOf(o.id)}] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag} — choose a branch: \`buy ${i} <branch>\``);
+        for (const v of choices) {
+          const d = upgradeDiffText(nodeOf(up), nodeOf({ id: o.id, v }), false);
+          p(`        ${v}: ${nodeOf({ id: o.id, v }).name}${rarityOf(o.id, v) !== 'common' ? ` [${rarityOf(o.id, v).toUpperCase()}]` : ''}${epicAfter(o.id, v) ? ` [leads to EPIC ${SKILLS[o.id].tree[epicAfter(o.id, v)!].name}]` : ''} · ${simpleText({ id: o.id, v })}${d ? ` · change: ${d}` : ''}`);
+        }
+        return;
+      }
       const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k), false) : '';
       p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''}${rarityOf(o.id, o.v) !== 'common' ? ` [${rarityOf(o.id, o.v).toUpperCase()}]` : ''}${epicAfter(o.id, o.v) ? ` [leads to EPIC ${SKILLS[o.id].tree[epicAfter(o.id, o.v)!].name}]` : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff}${diff.includes('▼') ? ' (▼ = worse)' : ''}` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
     const oh = oppHero(s);
     p(`Next opponent (scouted): ${HEROES_BY_ID[oh.hero].name} (${oh.hero}, line ${heroLine(oh.hero)}) · AI ${oh.tier} (its build is rolled when you fight)`);
+  }
+  if (s.phase === 'relic') {
+    p('Relic day: pick one with `relic <i>` (-1 = skip). It lasts the whole run (at most 3).');
+    (s.relicOffer ?? []).forEach((id, i) => p(`   ${i}. ${relicText(id, false)}${relicFits(id, h.line) ? ' (your line)' : RELICS_BY_ID[id]?.group === 'cheese' ? ' (risky cheese)' : ''}`));
   }
   if (s.phase === 'lastchance') p('You died once: choose `chance awaken` (all Lv1 → Lv2), `chance mark` (a random mark), or `chance supply` (+8 gold, +1 slot).');
   if (s.phase === 'mark') p(`Place mark ${s.pendingMark}: \`mark <listIdx>\` (-1 = skip). ${R.MARK_INFO[s.pendingMark!].name}: ${R.MARK_INFO[s.pendingMark!].desc}`);
@@ -181,8 +201,11 @@ switch (cmd) {
     if (cmd === 'show') {
       // nothing
     } else if (cmd === 'buy') {
-      err = R.buy(st, n(args[0]));
-      if (!err) p(`bought shop card ${n(args[0])} (the other cards keep their indexes)`);
+      err = R.buy(st, n(args[0]), args[1]);
+      if (!err) p(`bought shop card ${n(args[0])}${args[1] ? ` (branch ${args[1]})` : ''} (the other cards keep their indexes)`);
+    } else if (cmd === 'relic') {
+      err = R.pickRelic(st, n(args[0]));
+      if (!err) p(n(args[0]) >= 0 ? `took relic ${relicText(st.relics![st.relics!.length - 1], false)}` : 'skipped the relic');
     }
     else if (cmd === 'sell') R.sell(st, n(args[0]));
     else if (cmd === 'move') R.moveSkill(st, n(args[0]), args[1] === 'up' ? -1 : 1);

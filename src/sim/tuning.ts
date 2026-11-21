@@ -23,9 +23,9 @@ export const TUNING = {
   /** days 1–3 */
   'hp.early': 1.07,
   /** days 4–7 */
-  'hp.mid': 1.4,
+  'hp.mid': 1.45,
   /** day 8+ */
-  'hp.late': 1.6,
+  'hp.late': 1.7,
   // ---- combat rules (numbers only) ----
   /** each trigger-chain step after the first fires ×this */
   'chainDecay': 0.75,
@@ -37,11 +37,11 @@ export const TUNING = {
   'line.hit.lv1': 0.75,
   'line.hit.lv3': 1.45,
   'line.dodge.lv1': 0.75,
-  'line.dodge.lv3': 1.8,
+  'line.dodge.lv3': 1.65,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.25,
-  'line.heal.lv3': 1.05,
+  'line.heal.lv3': 1.15,
   'line.burn.lv1': 1.18,
   'line.burn.lv3': 0.7,
   'line.poison.lv1': 1.35,
@@ -58,7 +58,7 @@ export const TUNING = {
   'uniq.assassin.lv1': 0.8,
   'uniq.assassin.lv3': 1.6,
   'uniq.duelist.lv1': 0.95,
-  'uniq.duelist.lv3': 1.55,
+  'uniq.duelist.lv3': 1.4,
   'uniq.berserker.lv1': 1.5,
   'uniq.berserker.lv3': 1.25,
   'uniq.pyro.lv1': 1.3,
@@ -77,7 +77,7 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.15,
+  'hp.knight': 1.1,
   'hp.thornguard': 1.28,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
@@ -150,8 +150,8 @@ export const TUNING = {
   'relic.twinline': 0.3,
   'relic.ironhide': 0.1,
   'relic.glassHp': 0.65,
-  'relic.glassDmg': 0.7,
-  'relic.lonewolf': 0.7,
+  'relic.glassDmg': 0.65,
+  'relic.lonewolf': 1.1,
   'relic.sigil': 0.8,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
