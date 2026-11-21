@@ -333,9 +333,12 @@ export function ultProgressText(b: Pick<Build, 'hero' | 'skills'>, th = true) {
   const p = ultPieces(b);
   const l3 = Math.min(ultLv3(b), ULT_LV2_LV3);
   const lv = ultLevel(b);
-  if (lv >= 2) return th ? 'Lv2 ✓ (เต็ม)' : 'Lv2 ✓ (max)';
-  if (lv === 1) return th ? `Lv1 ✓ · Lv2: ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} ชิ้น · Lv3 ${l3}/${ULT_LV2_LV3}` : `Lv1 ✓ · Lv2: ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} pieces · Lv3 ${l3}/${ULT_LV2_LV3}`;
-  return th ? `Lv1: ${p}/${ULT_PIECES[0]} ชิ้น` : `Lv1: ${p}/${ULT_PIECES[0]} pieces`;
+  if (lv >= 2) return th ? 'ท่าไม้ตาย Lv2 ✓ (เต็ม)' : 'Ult Lv2 ✓ (max)';
+  if (lv === 1)
+    return th
+      ? `ท่าไม้ตาย Lv1 ✓ · Lv2: สกิลสาย ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} · อัป Lv3 แล้ว ${l3}/${ULT_LV2_LV3}`
+      : `Ult Lv1 ✓ · Lv2: line skills ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} · upgraded to Lv3 ${l3}/${ULT_LV2_LV3}`;
+  return th ? `ท่าไม้ตาย Lv1: สกิลสาย ${p}/${ULT_PIECES[0]}` : `Ult Lv1: line skills ${p}/${ULT_PIECES[0]}`;
 }
 /** the rule in one line */
 export const ultRuleText = (th = true) =>

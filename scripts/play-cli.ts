@@ -76,7 +76,7 @@ function ultText(hero: string, lv: number) {
   return `${u.name}: when ${at(u.trigger)} → ${at(u.effect)}`;
 }
 
-const starText = (n?: number) => (n ? ` ${'★'.repeat(n)} (+${Math.round(T['star.pow'] * 100 * n)}% numbers${n >= 3 ? `, cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''})` : '');
+const starText = (n?: number) => (n ? ` ${'★'.repeat(n)} (+${Math.round(T['star.pow'] * 100 * n)}% numbers${n >= 3 ? `, every cast repeats at ${Math.round(T['star.echo'] * 100)}%` : ''})` : '');
 function describeBuild(b: Build, title: string) {
   p(`${title}: ${HEROES_BY_ID[b.hero].name} (${b.hero}, line ${heroLine(b.hero)})${b.relics?.length ? ` · relics: ${b.relics.map((r) => relicText(r, false)).join(' | ')}` : ''}`);
   b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${starText(k.star)}${markText(k.mark)} ${simpleText(k)}`));
@@ -84,7 +84,7 @@ function describeBuild(b: Build, title: string) {
 
 function show(s: R.RunState) {
   const h = HEROES_BY_ID[s.hero];
-  p(`== Day ${s.day} · run HP (lives) ${s.hp}/${R.START_HP} · wins ${s.wins}/${R.WIN_TARGET} · losses ${s.losses} · gold ${s.gold} · streak ${s.streak} · phase ${s.phase}${s.ghost ? ' · LAST LIFE' : ''}`);
+  p(`== Day ${s.day} · run HP (lives) ${s.phase === 'lastchance' ? `0/${R.START_HP} (out of lives: pick your last chance, then you play on 1 HP)` : `${s.hp}/${R.START_HP}`} · wins ${s.wins}/${R.WIN_TARGET} · losses ${s.losses} · gold ${s.gold} · streak ${s.streak} · phase ${s.phase}${s.ghost ? ' · LAST LIFE' : ''}`);
   p(`Hero: ${h.name} (${h.id}, line ${heroLine(h.id)}) — ${h.passive}`);
   const b0 = R.toBuild(s);
   const ulv = ultLevel(b0);
@@ -93,7 +93,7 @@ function show(s: R.RunState) {
   p(`Ult: ${ultProgressText(b0, false)} → ult ${ulv ? `Lv${ulv}` : 'locked'} (${ultRuleText(false)}) · ${heroLine(h.id)} skills are also stronger (line mastery)`);
   const slots = R.slotsOf(s);
   if (s.day > 1 && R.slotsFor(s.day) > R.slotsFor(s.day - 1)) p(`★ New today: +1 skill slot (${slots} now)`);
-  if (s.phase === 'shop' && s.skills.length < slots) p(`⚠ ${slots - s.skills.length} empty skill slot(s): buy something before you fight`);
+  if (s.phase === 'shop' && s.skills.length < slots && !(s.relics ?? []).includes('lonewolf')) p(`⚠ ${slots - s.skills.length} empty skill slot(s): buy something before you fight`);
   p(`Relics (${(s.relics ?? []).length}/3, picked on days 4, 7, 10): ${(s.relics ?? []).map((r) => relicText(r, false)).join(' | ') || 'none'}`);
   p(`List (${s.skills.length}/${slots} slots; top to bottom, neighbours can switch on connect bonuses):`);
   s.skills.forEach((k, i) => {
@@ -103,7 +103,7 @@ function show(s: R.RunState) {
     p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${starText(k.star)}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
-    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g`} · wish ${R.wishPrice(s)}g = upgrades a RANDOM skill of yours below Lv3 to a random next branch):`);
+    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g, next one ${R.slotPrice(s) + 2}g`} · wish ${R.wishKind(s) ? `${R.wishPrice(s)}g` : 'not available'} = ${R.wishKind(s) === 'mark' ? `once every skill is Lv3: carves a RANDOM mark into a random unmarked skill (${R.WISH_MARKS_MAX - (s.wishMarks ?? 0)} of ${R.WISH_MARKS_MAX} mark wishes left this run)` : 'upgrades a RANDOM skill of yours below Lv3 to a random next branch'}; each wish today costs +2g more):`);
     s.shop.forEach((o, i) => {
       if (!o) return p(`   ${i}. (sold)`);
       const up = R.upgradeOf(s, o);
@@ -113,7 +113,7 @@ function show(s: R.RunState) {
       const tag = g.pieces ? ` ★ ${o.v ? 'Lv3 toward ult Lv2' : '+1 ult piece'}${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
       const choices = R.offerChoices(s, o);
       if (up && o.star) {
-        p(`   ${i}. STAR ★${o.star} for ${nodeOf(up).name} [${o.id} Lv3] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}\n        change: all numbers +${Math.round(T['star.pow'] * 100)}%${o.star >= 3 ? `, cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''}`);
+        p(`   ${i}. STAR ★${o.star} for ${nodeOf(up).name} [${o.id} Lv3] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}\n        change: all numbers +${Math.round(T['star.pow'] * 100)}%${o.star >= 3 ? `, and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`);
         return;
       }
       if (up && choices.length > 1) {
@@ -216,7 +216,7 @@ switch (cmd) {
       const w = R.wish(st);
       if ('err' in w) err = w.err;
       else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]), false)})`);
-      else p(`wish: ${nodeOf(st.skills[w.idx]).name} got the mark${markText(w.mark)}`);
+      else p(`wish: ${nodeOf(st.skills[w.idx]).name} got${markText(w.mark)}`);
     } else if (cmd === 'chance') R.chooseLastChance(st, args[0] as R.LastChanceOption);
     else if (cmd === 'mark') R.applyMark(st, n(args[0]));
     else if (cmd === 'fight') {

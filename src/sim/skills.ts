@@ -395,7 +395,7 @@ const BASE_LIST: SkillDef[] = [
     '': N('ฝึกฝน', 6, [{ k: 'grow', n: 1 }, hit(4)]),
     a: N('ฝึกหนัก', 6.5, [{ k: 'grow', n: 3 }, hit(4)], 'พลังก้อนใหญ่'),
     a1: N('ฝึกสุดขีด', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
-    a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(5)]),
+    a2: N('ฝึกต่อสู้', 6.5, [{ k: 'grow', n: 3 }, hit(4), { k: 'shield', n: 4 }]),
     b: N('ฝึกเร็ว', 3.5, [{ k: 'grow', n: 1 }, hit(4)], 'พลังถี่'),
     b1: N('ฝึกไม่หยุด', 3.2, [{ k: 'grow', n: 1 }, hit(4)]),
     b2: N('ซ้อมจริง', 3.5, [{ k: 'grow', n: 1 }, hit(4, { leech: 0.3 })]),
@@ -781,7 +781,7 @@ const FIELD: Record<string, [string, string, ('pct' | 'sec' | 'flag' | 'num')?]>
   'charge.mult': ['รวมพลัง×', 'charge×'], 'charge.hits': ['รวมพลังกี่ครั้ง', 'charged hits'], 'charge': ['รวมพลัง', 'charge', 'flag'],
   'thorns.n': ['หนาม', 'thorns'], 'thorns.perm': ['หนามถาวร', 'permanent thorns', 'flag'], 'thorns.heal': ['ศัตรูฟื้นได้', 'enemy heals', 'pct'], 'thorns': ['หนาม', 'thorns', 'flag'],
   'steadfast.keep': ['การคุมที่ยังโดน', 'control still taken', 'pct'], 'steadfast.ignoreFreeze': ['กันแช่แข็ง 1 ครั้ง', 'blocks 1 freeze', 'flag'], 'steadfast': ['ใจเหล็ก', 'iron will', 'flag'],
-  'cleanse.n': ['ล้าง', 'cleanse'], 'cleanse.dot': ['ล้างแค่ไฟ/พิษ', 'only burn/poison', 'flag'], 'cleanse.lineAll': ['สายตัวเอง: ล้างหมด', 'own line: all', 'flag'], 'cleanse': ['ล้าง', 'cleanse', 'flag'],
+  'cleanse.n': ['ล้าง', 'cleanse'], 'cleanse.dot': ['ล้างแค่ไฟ/พิษ', 'only burn/poison', 'flag'], 'cleanse.lineAll': ['ล้างหมดเมื่อเป็นสายฮีโร่', 'clears all for your hero’s line', 'flag'], 'cleanse': ['ล้าง', 'cleanse', 'flag'],
   'dispel.n': ['สลาย', 'dispel'], 'dispel.shield': ['สลายโล่', 'dispel shield', 'pct'], 'dispel.steal': ['ขโมยพลัง', 'steal power', 'flag'], 'dispel': ['สลาย', 'dispel', 'flag'],
   'leech.pct': ['ดูดเลือดครั้งหน้า', 'next-hit leech', 'pct'], 'leech': ['ดูดเลือด', 'leech', 'flag'], 'engine.power': ['แรงที่สั่ง', 'engine power', 'pct'], 'engine.n': ['สั่งกี่ตัว', 'fires'],
   'engine.keep': ['คูลดาวน์ไม่เริ่มใหม่', 'keeps cooldown', 'flag'], 'cd': ['คูลดาวน์', 'cooldown', 'sec'],
@@ -820,6 +820,13 @@ export function upgradeDiff(from: SkillNode, to: SkillNode, th = true): DiffRow[
   const effs = [...new Set([...Object.keys(a), ...Object.keys(b)].filter((k) => !k.includes('.') && k !== 'cd'))];
   const done = new Set<string>();
   for (const e of effs) {
+    // an effect that moved into the hit (e.g. poison → "poison per hit") is not a loss
+    const moved = Object.keys(b).some((k) => k.startsWith('hit#') && k.split('.')[1] === effOf(e).replace(/#\d+$/, ''));
+    if (a[e] && !b[e] && moved) {
+      out.push({ key: e, label: label(e), from: 1, to: 1, worse: false, fromText: '', toText: '', text: `${label(e)} → ${th ? 'ติดไปกับการตี' : 'now on the hit'}` });
+      done.add(e);
+      continue;
+    }
     if (a[e] && !b[e]) {
       out.push({ key: e, label: label(e), from: 1, to: 0, worse: true, fromText: '', toText: '', text: `−${label(e)}` });
       done.add(e);
