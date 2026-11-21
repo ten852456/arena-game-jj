@@ -123,7 +123,14 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
 export function spendCheck(
   prev: { build?: Build; spent?: number; paidSlots?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
 ) {
+  // ONE last-chance way must allow the whole build at once (security review): its marks, the build's own cost and the
+  // running spend are all checked against the same way, never one way for one check and another for the next
+  const lvs = build.skills.map((k) => lvOf(k.v));
+  const marks = build.skills.filter((k) => k.mark).length;
+  const allLv3 = lvs.length > 0 && lvs.every((l) => l >= 3);
   return allowances(day, rec, choice)
+    .filter((a) => allLv3 || marks <= a.marks)
+    .filter((a) => buildCost(build, day, a.freeSlots) <= a.cap(build.skills.length))
     .map((a) => {
       const d = spendDelta(prev?.build, build, day, prev?.paidSlots ?? 0, a.freeSlots);
       return { opt: a.opt, spent: (prev?.spent ?? 0) + d.gold, paidSlots: d.paidSlots, cap: a.cap(build.skills.length) };

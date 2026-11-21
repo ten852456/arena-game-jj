@@ -87,6 +87,14 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
   const b: Build = { hero: 'knight', skills: ids.slice(0, 6).map((id) => ({ id, v: 'a1' })) };
   if (typeof validateBuild(b, 8, rec, 'mark') !== 'string' && need(0, b) > gold) bad.push('a pinned last-chance choice was ignored');
   if (need(0, b) <= gold) bad.push('pinned-choice test build is too cheap');
+  // the two checks must agree on ONE way: a build with a mark (only the Mark way allows it) and a running spend that only
+  // Supply's +8 gold covers passes each check under a different way, so the fight must be rejected
+  const marked: Build = { hero: 'knight', skills: [{ id: 'shield', v: 'a', mark: 'echo' }, { id: 'bulwark', v: '' }] };
+  if (typeof validateBuild(marked, 8, rec) === 'string') bad.push('mixed-way test: the marked build should pass validateBuild alone');
+  const prevSpent = { build: marked, spent: gold + 5, paidSlots: 0 };
+  const mixed = spendCheck(prevSpent, marked, 8, rec);
+  if (mixed.length) bad.push(`a build passed with marks from one last-chance way and gold from another (${mixed.map((w) => w.opt).join(', ')})`);
+  if (!spendCheck({ build: marked, spent: gold - 1, paidSlots: 0 }, marked, 8, rec).some((w) => w.opt === 'mark')) bad.push('mixed-way test: the honest Mark way should pass');
 }
 if (bad.length) {
   console.error(`validate check: ${bad.length} problem(s)\n  ${bad.slice(0, 30).join('\n  ')}`);

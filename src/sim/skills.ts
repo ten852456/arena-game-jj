@@ -737,31 +737,77 @@ export function mainNumbers(n: SkillNode): Partial<Record<MainKey, number>> {
   return o;
 }
 
-const MAIN_ICON: Record<MainKey, string> = {
-  hit: '⚔', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', dodge: '💨', grow: '💪', thorns: '🌵', freeze: '❄', delay: '⏪',
-  charge: '⚡×', engine: '⚙', cd: '⏱',
-};
 /**
- * Before → after of an upgrade, number by number (upgrade cards, play CLI). worse = this number got worse
- * (lower, or a longer cooldown). A number the new level drops entirely shows as → 0.
+ * Every number of a variant, flattened (sim v15 round 4): "<effect kind>#<n>.<field>" → value, e.g. "hit#0.n" 14,
+ * "hit#0.pierce" 1, "hit#0.exec.1" 1.6, "burn#0.dps" 2, "cd" 5. Flags (sure, perm, dot, lineAll) count as 1.
+ * The n-th effect of a kind keeps its index, so a branch that keeps a hit and adds a second one compares the first.
  */
-export function upgradeDiff(from: SkillNode, to: SkillNode): { key: MainKey; icon: string; from: number; to: number; worse: boolean }[] {
-  const a = mainNumbers(from);
-  const b = mainNumbers(to);
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])] as MainKey[];
-  const order = Object.keys(MAIN_ICON) as MainKey[];
-  keys.sort((x, y) => order.indexOf(x) - order.indexOf(y));
-  return keys
-    .map((key) => {
-      const f = a[key] ?? 0;
-      const t = b[key] ?? 0;
-      return { key, icon: MAIN_ICON[key], from: f, to: t, worse: key === 'cd' ? t > f + 1e-9 : t < f - 1e-9 };
-    })
-    .filter((d) => d.from !== d.to);
+export function flatNumbers(n: SkillNode): Record<string, number> {
+  const o: Record<string, number> = {};
+  const seen: Record<string, number> = {};
+  for (const e of n.fx) {
+    const i = (seen[e.k] = (seen[e.k] ?? -1) + 1);
+    for (const [f, v] of Object.entries(e)) {
+      if (f === 'k') continue;
+      const key = `${e.k}#${i}.${f}`;
+      if (typeof v === 'number') o[key] = v;
+      else if (typeof v === 'boolean') o[key] = v ? 1 : 0;
+      else if (Array.isArray(v)) v.forEach((x, j) => (o[`${key}.${j}`] = x));
+    }
+    // defaults a branch may spell out (1 hit, a charge for 1 hit)
+    if (e.k === 'hit') o[`hit#${i}.times`] ??= 1;
+    if (e.k === 'charge') o[`charge#${i}.hits`] ??= 1;
+    // presence of the effect itself (a steadfast or cleanse without numbers still shows when it comes or goes)
+    o[`${e.k}#${i}`] = 1;
+  }
+  if (n.engine) for (const [f, v] of Object.entries(n.engine)) if (typeof v === 'number') o[`engine.${f}`] = v;
+  o.cd = n.cd / 10;
+  return o;
+}
+const FIELD_ICON: Record<string, string> = {
+  'hit.n': '⚔', 'hit.times': '⚔×', 'hit.pierce': '🗡', 'hit.shieldPct': '🛡→⚔', 'hit.thornsX': '🌵→⚔', 'hit.burnPct': '🔥→⚔',
+  'hit.poisonPct': '☠→⚔', 'hit.perBurn': '⚔/🔥', 'hit.perDodge': '⚔/💨', 'hit.exec.0': '🎯<', 'hit.exec.1': '🎯×', 'hit.frozen': '🧊×',
+  'hit.noShield': '🛡0×', 'hit.leech': '🩸', 'hit.sure': '👁', 'hit.burn.0': '🔥/hit', 'hit.burn.1': '🔥s', 'hit.poison.0': '☠/hit',
+  'hit.poison.1': '☠s', 'hit.perRemoved': '⚔/✨', 'hit.ifSlowed': '⚔🐌', 'hit': '⚔',
+  'shield.n': '🛡', 'heal.n': '❤', 'burn.dps': '🔥', 'burn.secs': '🔥s', 'burn.stacks': '🔥×', 'burn.growthHalf': '🔥+½💪', 'burn': '🔥',
+  'poison.dps': '☠', 'poison.secs': '☠s', 'poison.stacks': '☠×', 'poison': '☠', 'dodge.n': '💨', 'haste.pct': '⏩', 'haste.secs': '⏩s', 'haste': '⏩',
+  'wound.pct': '🩹', 'wound.secs': '🩹s', 'wound': '🩹', 'freeze.secs': '❄', 'freeze': '❄', 'slow.pct': '🐌', 'slow.secs': '🐌s', 'slow': '🐌',
+  'delay.secs': '⏪', 'delay': '⏪', 'grow.n': '💪', 'grow': '💪', 'charge.mult': '⚡×', 'charge.hits': '⚡⚔×', 'charge': '⚡',
+  'thorns.n': '🌵', 'thorns.perm': '🌵∞', 'thorns.heal': '🌵❤', 'thorns': '🌵', 'steadfast.keep': '🗿', 'steadfast.ignoreFreeze': '🗿❄',
+  'steadfast': '🗿', 'cleanse.n': '✨', 'cleanse.dot': '✨🔥☠', 'cleanse.lineAll': '✨★', 'cleanse': '✨', 'dispel.n': '💥', 'dispel.shield': '💥🛡',
+  'dispel.steal': '💥💪', 'dispel': '💥', 'leech.pct': '🩸', 'leech': '🩸', 'engine.power': '⚙', 'engine.n': '⚙×', 'cd': '⏱',
+};
+/** fields shown as a percent (shares) */
+const PCT_FIELD = /^(hit\.(pierce|shieldPct|burnPct|poisonPct|leech|exec\.0)|slow\.pct|haste\.pct|wound\.pct|thorns\.heal|steadfast\.keep|dispel\.shield|leech\.pct|engine\.power)$/;
+/** fields where a lower number is better */
+const LOWER_BETTER = /^(cd|thorns\.heal|steadfast\.keep|hit\.exec\.0)$/;
+const fieldOf = (key: string) => key.replace(/#\d+/, '');
+/** "35%" / "1.25" */
+export const fmtField = (key: string, v: number) => (PCT_FIELD.test(fieldOf(key)) ? `${Math.round(v * 100)}%` : String(+v.toFixed(2)));
+/**
+ * Before → after of an upgrade: EVERY number that changes (upgrade cards, play CLI; scripts/upgrade-check.ts proves
+ * none is missing). worse = this number got worse (lower, or higher for a cooldown / what the enemy keeps).
+ */
+export function upgradeDiff(from: SkillNode, to: SkillNode): { key: string; icon: string; from: number; to: number; worse: boolean; fromText: string; toText: string }[] {
+  const a = flatNumbers(from);
+  const b = flatNumbers(to);
+  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
+  const out = [];
+  for (const key of keys) {
+    const f = a[key] ?? 0;
+    const t = b[key] ?? 0;
+    if (Math.abs(f - t) < 1e-9) continue;
+    const field = fieldOf(key);
+    // an effect that appears or goes away is shown by its own numbers; the bare presence key only when it has none
+    if (!field.includes('.') && field !== 'cd' && keys.some((k) => k.startsWith(key + '.') && Math.abs((a[k] ?? 0) - (b[k] ?? 0)) > 1e-9)) continue;
+    const worse = LOWER_BETTER.test(field) ? t > f : t < f;
+    out.push({ key, icon: FIELD_ICON[field] ?? field, from: f, to: t, worse, fromText: fmtField(key, f), toText: fmtField(key, t) });
+  }
+  return out;
 }
 /** "⚔4→9 ⏱4.3→5▼" (▼ = got worse) */
 export const upgradeDiffText = (from: SkillNode, to: SkillNode) =>
-  upgradeDiff(from, to).map((d) => `${d.icon}${+d.from.toFixed(2)}→${+d.to.toFixed(2)}${d.worse ? '▼' : ''}`).join(' ');
+  upgradeDiff(from, to).map((d) => `${d.icon}${d.fromText}→${d.toText}${d.worse ? '▼' : ''}`).join(' ');
 
 export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
 

@@ -70,6 +70,7 @@ export function handleFight(body: any): Res {
   // day by day, the run pays for every change of its build: the running total must fit what its record earned
   const ways = spendCheck(prev, build, day, recordOf(prev), prev?.lastChoice);
   if (!ways.length) return bad('implausible: this run could not have paid for this build');
+  // spendCheck re-checks marks and the build's cost per way, so the ways left are the ones that allow ALL of it;
   // the last chance's choice is pinned down as soon as only one way still fits (supply, awaken or mark: never two)
   const way = ways.reduce((a, b) => (b.spent < a.spent ? b : a));
   const opts = new Set(ways.map((w) => w.opt));
