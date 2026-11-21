@@ -20,6 +20,7 @@ import './theme.css'; // the Mochi Moon look: loaded last so it wins
 import './reward.css';
 import './runend.css'; // end of run: after theme.css so it wins
 import './depth.css'; // relics, stars, marks, branch picker, build card, codex
+import { initCodex } from './codex';
 
 initIcons();
 
@@ -93,6 +94,7 @@ async function boot() {
   };
   startUI(stage);
   initTutorial({ onHelp: openHelp });
+  initCodex(); // 📖 คู่มือ in the header + every [data-codex] link
   initGuide();
   mountLangSwitch();
   initInfoMode(); // simple / detailed skill info: ⓘ in the header, Alt to peek
