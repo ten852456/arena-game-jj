@@ -53,7 +53,7 @@ export const TUNING = {
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.9,
   'uniq.knight.lv3': 1.1,
-  'uniq.thornguard.lv1': 0.7,
+  'uniq.thornguard.lv1': 1.0,
   'uniq.thornguard.lv3': 1.35,
   'uniq.assassin.lv1': 0.75,
   'uniq.assassin.lv3': 1.85,
@@ -116,7 +116,7 @@ export const TUNING = {
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
-  'shield.guard': 0.15,
+  'shield.guard': 0.25,
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
   'aff.assassin': 1.4,
   'aff.duelist': 1.35,
@@ -132,8 +132,8 @@ export const TUNING = {
   'chrono.slowHit': 0.05,
   /** a burning fighter's shield gains × this (ไฟละลายโล่) */
   /** each burn tick also removes this × the burn per second of shield (ไฟเผาโล่) */
-  'burn.scorch': 1.25,
-  'burn.shield': 0.75,
+  'burn.scorch': 0.5,
+  'burn.shield': 0.85,
   /** a poisoned fighter's healing × this */
   'poison.heal': 0.75,
   /** most haste a fighter can have (share faster) */
@@ -142,9 +142,9 @@ export const TUNING = {
   /** damage ultimates (นักฆ่า, อัศวิน) deal at most this share of the enemy's max HP (Lv2 ×1.4) */
   'ult.cap': 0.3,
   /** นักฆ่า: enemy HP below this share */
-  'ult.assassin.trig': 0.35,
+  'ult.assassin.trig': 0.3,
   /** นักฆ่า: hit = this × the HP the enemy has lost (capped by ult.cap; ignores shield; a dodge halves it) */
-  'ult.assassin.pow': 0.3,
+  'ult.assassin.pow': 0.2,
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 3,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */

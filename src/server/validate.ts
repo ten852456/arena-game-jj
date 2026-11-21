@@ -63,6 +63,12 @@ export function buildCost(b: Build, day: number, freeSlots = 0) {
   return g;
 }
 
+/** Could a run have had MAX_SLOTS slots on `day` with `gold` earned by then (every missing slot bought at 4, 6, 8 …)? */
+export function couldBeFull(day: number, gold: number) {
+  let cost = 0;
+  for (let i = 0; i < MAX_SLOTS - slotsFor(day); i++) cost += 4 + 2 * i;
+  return cost <= gold;
+}
 /** One way the run's last chance can have gone, and what it allows: gold cap for n skills, free slots, free marks. */
 export interface Allowance {
   opt: LastChoice;
@@ -79,8 +85,10 @@ export function allowances(day: number, rec?: RunRecord, choice?: LastChoice): A
   const { gold, lastChance, deathDay } = runMax(day, rec);
   if (!lastChance) return [{ opt: 'none', cap: () => gold, freeSlots: 0, marks: 0 }];
   const all: Allowance[] = [
-    // 8 gold + a slot, or 12 gold when the slots were already full (run.ts SUPPLY_GOLD_FULL)
-    { opt: 'supply', cap: () => gold + SUPPLY_GOLD_FULL, freeSlots: 1, marks: 0 },
+    // Supply is +8 gold and +1 slot, OR (only when the slots were already full) SUPPLY_GOLD_FULL gold and no slot:
+    // two separate ways, never combined (security review)
+    { opt: 'supply', cap: () => gold + 8, freeSlots: 1, marks: 0 },
+    ...(couldBeFull(deathDay, runMax(deathDay, rec).gold) ? [{ opt: 'supply' as const, cap: () => gold + SUPPLY_GOLD_FULL, freeSlots: 0, marks: 0 }] : []),
     { opt: 'awaken', cap: (n) => gold + PRICES[1] * Math.min(n, slotsFor(deathDay) + 1), freeSlots: 0, marks: 0 },
     { opt: 'mark', cap: () => gold, freeSlots: 0, marks: 1 },
   ];

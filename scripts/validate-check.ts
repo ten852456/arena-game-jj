@@ -5,7 +5,8 @@ import { simulate } from '../src/sim/combat';
 import { applyMark, chooseLastChance, newRun, recordResult, toBuild } from '../src/sim/run';
 import { HEROES } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
-import { allowances, buildCost, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/validate';
+import { allowances, buildCost, couldBeFull, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/validate';
+import { SUPPLY_GOLD_FULL } from '../src/sim/run';
 import type { Build } from '../src/sim/types';
 
 const bad: string[] = [];
@@ -65,7 +66,7 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
   // a record with a death on day 7: a build that needs the free slot AND the awaken gold must be rejected
   const rec = [0, 0, 0, 0, 0, 0, 0] as RunRecord;
   const ways = allowances(8, rec);
-  if (ways.length !== 3 || ways.some((w) => w.opt === 'none')) bad.push('a death on day 7 should give three last-chance ways');
+  if (new Set(ways.map((w) => w.opt)).size !== 3 || ways.some((w) => w.opt === 'none')) bad.push('a death on day 7 should give the three last-chance choices');
   const gold = runMax(8, rec).gold;
   const need = (free: number, b: Build) => buildCost(b, 8, free);
   // search builds that fit only when supply AND awaken stack: every one of them must be rejected
@@ -87,6 +88,19 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
   const b: Build = { hero: 'knight', skills: ids.slice(0, 6).map((id) => ({ id, v: 'a1' })) };
   if (typeof validateBuild(b, 8, rec, 'mark') !== 'string' && need(0, b) > gold) bad.push('a pinned last-chance choice was ignored');
   if (need(0, b) <= gold) bad.push('pinned-choice test build is too cheap');
+  // supply: either +8 gold and a slot, or 12 gold (slots full) and no slot, never both
+  const sup = allowances(8, rec, 'supply');
+  if (sup.some((w) => w.freeSlots > 0 && w.cap(6) > gold + 8)) bad.push('supply gave a free slot together with the full-slots gold');
+  if (sup.length !== 2) bad.push(`supply should give two separate ways here (got ${sup.length})`);
+  if (couldBeFull(1, 7)) bad.push('couldBeFull: a day-1 run with 7 gold cannot have 8 slots');
+  if (!couldBeFull(7, 60)) bad.push('couldBeFull: 60 gold buys the 3 missing slots on day 7');
+  // a build that needs the free slot AND more than 8 extra gold must fail with supply pinned
+  for (let k = 0; k < 40; k++) {
+    const n = 6;
+    const bb: Build = { hero: 'knight', skills: ids.slice(0, n).map((id, i) => ({ id, v: i < k % 7 ? 'a1' : i < (k % 7) + 2 ? 'a' : '' })) };
+    const withSlot = need(1, bb);
+    if (withSlot > gold + 8 && withSlot <= gold + SUPPLY_GOLD_FULL && need(0, bb) > gold + SUPPLY_GOLD_FULL && typeof validateBuild(bb, 8, rec, 'supply') !== 'string') bad.push('supply slot + full-slots gold were combined');
+  }
   // the two checks must agree on ONE way: a build with a mark (only the Mark way allows it) and a running spend that only
   // Supply's +8 gold covers passes each check under a different way, so the fight must be rejected
   const marked: Build = { hero: 'knight', skills: [{ id: 'shield', v: 'a', mark: 'echo' }, { id: 'bulwark', v: '' }] };

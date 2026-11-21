@@ -210,7 +210,7 @@ export interface Ctx {
 /** a skill fired at less than this power (engine, echo) gives no dodge charge */
 export const DODGE_MIN_POWER = 0.75;
 /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
-export const SHIELD_SPEND = 0.5;
+export const SHIELD_SPEND = 0.25;
 
 export function execNode(node: SkillNode, c: Ctx) {
   let removed = 0;
@@ -415,7 +415,7 @@ const BASE_LIST: SkillDef[] = [
   // ======================= 🔥 burn =======================
   // core: start burns
   def('ignite', 'burn', {
-    '': N('จุดไฟ', 4.5, [{ k: 'burn', dps: 2, secs: 4 }]),
+    '': N('จุดไฟ', 5, [{ k: 'burn', dps: 2, secs: 4 }]),
     a: N('ไฟลุก', 5.5, [{ k: 'burn', dps: 3, secs: 6 }], 'ไฟแรง'),
     a1: N('ไฟนรก', 5.5, [{ k: 'burn', dps: 6, secs: 6 }]),
     a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 4, secs: 6, growthHalf: true }]),
