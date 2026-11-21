@@ -25,7 +25,7 @@ export const TUNING = {
   /** days 4–7 */
   'hp.mid': 1.18,
   /** day 8+ */
-  'hp.late': 1.14,
+  'hp.late': 1.4,
   // ---- combat rules (numbers only) ----
   /** each trigger-chain step after the first fires ×this */
   'chainDecay': 0.75,
@@ -48,7 +48,7 @@ export const TUNING = {
   'line.poison.lv3': 0.95,
   'line.ice.lv1': 1.15,
   'line.ice.lv3': 1.55,
-  'line.wind.lv1': 0.8,
+  'line.wind.lv1': 0.95,
   'line.wind.lv3': 1.05,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.9,
@@ -56,7 +56,7 @@ export const TUNING = {
   'uniq.thornguard.lv1': 0.7,
   'uniq.thornguard.lv3': 1.35,
   'uniq.assassin.lv1': 0.75,
-  'uniq.assassin.lv3': 1.1,
+  'uniq.assassin.lv3': 1.5,
   'uniq.duelist.lv1': 0.85,
   'uniq.duelist.lv3': 1.65,
   'uniq.berserker.lv1': 1.65,
@@ -103,6 +103,8 @@ export const TUNING = {
   /** นักฆ่า: every landed hit cuts enemy healing by this share for 2 s */
   'assassin.wound': 0.4,
   /** นักดาบคู่: after a dodge, the next hit × this */
+  /** นักดาบคู่: +1 dodge every this many seconds (0 = off) */
+  'duelist.regen': 6,
   'duelist.counter': 1.8,
   /** นักรบหนาม: each hit taken poisons the attacker 1/s for this many seconds */
   'thornguard.poison': 2,
@@ -116,7 +118,7 @@ export const TUNING = {
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
   'aff.assassin': 1.4,
   'aff.duelist': 1.35,
-  'aff.knight': 1.25,
+  'aff.knight': 1.35,
   'aff.berserker': 1.3,
   'aff.pyro': 1.25,
   'aff.thornguard': 1.3,
@@ -144,7 +146,7 @@ export const TUNING = {
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 3,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.5,
+  'ult.duelist.pow': 0.4,
   /** อัศวิน: shield gained, share of max HP */
   'ult.knight.trig': 0.1,
   /** อัศวิน: hit = shield × this (the shield stays) */

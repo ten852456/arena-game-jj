@@ -461,9 +461,9 @@ const BASE_LIST: SkillDef[] = [
     a: N('หนามแหลม', 7, [{ k: 'thorns', n: 4 }, hit(5)], 'สะท้อนแรง'),
     a1: N('หนามพิษร้าย', 7, [{ k: 'thorns', n: 6 }, hit(5)]),
     a2: N('หนามขัดขวาง', 7, [{ k: 'thorns', n: 4, heal: 0.25 }, hit(5)]),
-    b: N('หนามถาวร', 7, [{ k: 'thorns', n: 2, perm: true }, hit(4)], 'สะสมถาวร'),
-    b1: N('ดงหนาม', 7, [{ k: 'thorns', n: 3, perm: true }, hit(5)]),
-    b2: N('หนามหุ้มเกราะ', 7, [{ k: 'thorns', n: 2, perm: true }, { k: 'shield', n: 3 }, hit(5)]),
+    b: N('หนามถาวร', 7, [{ k: 'thorns', n: 2, perm: true }], 'สะสมถาวร'),
+    b1: N('ดงหนาม', 7, [{ k: 'thorns', n: 3, perm: true }]),
+    b2: N('หนามหุ้มเกราะ', 7, [{ k: 'thorns', n: 2, perm: true }, { k: 'shield', n: 3 }]),
   }),
   // ======================= ❄ ice =======================
   // core: hit + freeze

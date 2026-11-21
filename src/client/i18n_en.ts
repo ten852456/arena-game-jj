@@ -139,7 +139,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   },
   duelist: {
     name: 'Duelist',
-    get passive() { return `${hpPlus('duelist')}Start with 1 dodge · hold up to ${T['dodge.cap'] + 1} dodges · after you dodge, shake off 1 poison stack and your next hit deals ×${T['duelist.counter']}`; },
+    get passive() { return `${hpPlus('duelist')}Start with 1 dodge${T['duelist.regen'] ? ` and gain +1 every ${T['duelist.regen']}s` : ''} · hold up to ${T['dodge.cap'] + 1} dodges · after you dodge, shake off 1 poison stack and your next hit deals ×${T['duelist.counter']}`; },
     style: 'Dodge and counter: fast hits stack dodge charges so enemy hits miss, then counter harder the more dodges you hold',
     ult: {
       name: 'Blade Dance',

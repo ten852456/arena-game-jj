@@ -65,6 +65,8 @@ export interface CombatHooks {
   onDodge?(me: HookFighter): void;
   /** a direct hit of this fighter landed (was not dodged) */
   onLanded?(me: HookFighter): void;
+  /** once every second of the fight (sec = whole seconds since the start) */
+  onSecond?(me: HookFighter, sec: number): void;
 }
 
 /** What a hero's ultimate does, in words (Thai; client/i18n_en.ts has English). Numbers come from tuning.ts. */
@@ -144,12 +146,17 @@ export const HEROES: HeroDef[] = [
   // ---------------- 💨 dodge ----------------
   {
     id: 'duelist', day1: ['flurry', 'jab', 'riposte', 'sidestep', 'strike'], name: 'นักดาบคู่', line: 'dodge', unique: 'flurry',
-    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1 · เก็บแต้มหลบได้ ${T['dodge.cap'] + 1} · หลบได้แล้ว สะบัดพิษทิ้ง 1 กอง และการตีครั้งถัดไปแรง ×${T['duelist.counter']}`,
+    passive: `${hpTxt('duelist')}เริ่มสู้พร้อมหลบ 1${T['duelist.regen'] ? ` และได้หลบ +1 ทุก ${T['duelist.regen']} วิ` : ''} · เก็บแต้มหลบได้ ${T['dodge.cap'] + 1} · หลบได้แล้ว สะบัดพิษทิ้ง 1 กอง และการตีครั้งถัดไปแรง ×${T['duelist.counter']}`,
     style: 'หลบแล้วสวน: ตีเร็วสะสมแต้มหลบ ให้การตีของศัตรูพลาด แล้วสวนกลับแรงตามแต้มหลบที่มี',
     hooks: {
       maxHp: hpOf('duelist'),
       onStart(me) {
         me.dodge(1);
+      },
+      // ร่างเงา: a dodge charge every N seconds, so the duelist keeps dodging in long late fights
+      onSecond(me, sec) {
+        const n = T['duelist.regen'];
+        if (n > 0 && sec > 0 && sec % n === 0) me.dodge(1);
       },
       onDodge(me) {
         me.flags.counter = 1;

@@ -926,6 +926,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
 
     if (t % TPS === 0) {
+      for (const f of F) if (f.hp > 0) f.hooks.onSecond?.(hookApi(f), t / TPS);
       for (const f of F) {
         // credit each burn / poison stack's owner, then tick them down
         const foeStats = F[1 - f.side].stats;

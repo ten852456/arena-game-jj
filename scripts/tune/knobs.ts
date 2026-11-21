@@ -43,6 +43,7 @@ export const KNOBS: Knob[] = [
   around('knight.shield', 0.5, 0.02, 'knight start shield'),
   { key: 'assassin.first', lo: 1.3, hi: 2, step: 0.1, why: 'assassin first-hit burst (early)' },
   { key: 'assassin.every', lo: 0, hi: 6, step: 1, why: 'assassin: every Nth hit bursts too (late scaling)' },
+  { key: 'duelist.regen', lo: 3, hi: 10, step: 1, why: 'duelist: +1 dodge every N seconds (late scaling)' },
   { key: 'duelist.counter', lo: 1.2, hi: 2, step: 0.1, why: 'duelist counter hit after a dodge' },
   { key: 'thornguard.poison', lo: 1, hi: 4, step: 1, why: 'thornguard poison seconds per hit taken' },
   { key: 'poison.heal', lo: 0.4, hi: 0.8, step: 0.05, why: 'healing while poisoned' },
