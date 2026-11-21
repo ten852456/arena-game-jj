@@ -216,7 +216,8 @@ export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0):
 }
 
 /** ถนัดสาย: a skill of the hero's own line (shared or its unique) works at this power (tuning.ts `line.affinity`). */
-export const affinityOf = (hero: string, id: string) => (inLine(hero, id) ? lineAffinity(hero) : 1);
+export const affinityOf = (hero: string, id: string, v = '') =>
+  inLine(hero, id) ? lineAffinity(hero) * (lvOf(v) >= 3 ? T['line.lv3'] : 1) : 1;
 /** most dodge charges a hero can hold: +1 for the 💨 line */
 export const dodgeCap = (hero: string) => T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0);
 
@@ -229,7 +230,7 @@ function makeBlocks(b: Build): Block[] {
     const t = bonusTotals(skills, out.length, act);
     out.push({
       inst: { ...inst }, idx, cd: cdTicks(inst, t.haste), prog: 0,
-      power: t.power * affinityOf(b.hero, inst.id), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      power: t.power * affinityOf(b.hero, inst.id, inst.v), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
@@ -243,8 +244,11 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   const hooks = HEROES_BY_ID[b.hero]?.hooks ?? {};
   const maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
   const start = hooks.startShield ? hooks.startShield(0, maxHp) : 0;
+  const blocks = makeBlocks(b);
+  // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
+  if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
   return {
-    side, hero: b.hero, hooks, blocks: makeBlocks(b),
+    side, hero: b.hero, hooks, blocks,
     hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
     burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
@@ -472,6 +476,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       case 'thornguard':
         f.ultUntil = t + Math.round(pow * TPS);
         addWound(foe, 1, pow);
+        // sim v16: it also poisons at once (it used to need hits on you, so a burn build that rarely hits shrugged it off)
+        addPoison(foe, T['ult.thornguard.poison'], pow, -1);
         break;
       case 'witch': {
         // no diminishing returns and no immunity window, but still under the control cap (and ใจเหล็ก)

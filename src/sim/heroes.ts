@@ -67,6 +67,8 @@ export interface CombatHooks {
   onLanded?(me: HookFighter): void;
   /** once every second of the fight (sec = whole seconds since the start) */
   onSecond?(me: HookFighter, sec: number): void;
+  /** share of its cooldown the top skill of the list has already done when the fight starts */
+  headStart?(): number;
 }
 
 /** What a hero's ultimate does, in words (Thai; client/i18n_en.ts has English). Numbers come from tuning.ts. */
@@ -102,7 +104,7 @@ export const ULT_LV2_POW = 1.3;
 /** pieces needed for ult Lv1 / Lv2 */
 export const ULT_PIECES = [3, 4] as const;
 /** Lv2 also needs this many line skills at Lv3 */
-export const ULT_LV2_LV3 = 2;
+export const ULT_LV2_LV3 = 3;
 const r1 = (x: number) => +x.toFixed(1);
 /** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
 const TRIG_BELOW = ['assassin'];
@@ -231,7 +233,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- ☠ poison ----------------
   {
     id: 'thornguard', day1: ['spikewall', 'venom', 'plague', 'thorns', 'strike'], name: 'นักรบหนามพิษ', line: 'poison', unique: 'spikewall',
-    passive: `${hpTxt('thornguard')}โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
+    passive: `${hpTxt('thornguard')}skill บนสุดเริ่มสู้ด้วยคูลดาวน์ไปแล้ว ${pc(T['thornguard.head'])}% · โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
     style: 'พิษซ้อนพิษ: ใครตีเราก็ติดพิษ สะสมพิษให้ซ้อนกันนานๆ แล้วระเบิดพิษปิดเกม (พิษไม่สนโล่และหลบไม่ได้)',
     hooks: {
       onDamaged(me, _n, src) {
@@ -241,12 +243,13 @@ export const HEROES: HeroDef[] = [
       },
       thornsSecs: 13,
       maxHp: hpOf('thornguard'),
+      headStart: () => T['thornguard.head'],
     },
     botWant: ['venom', 'spikewall', 'plague'],
     ult: {
       name: 'หนามพิษ',
       get trigger() { return both((lv) => `โดนตีครบ ${ultTrig('thornguard', lv)} ครั้ง`); },
-      get effect() { return both((lv) => `${r1(ultPow('thornguard', lv))} วิ: ทุกครั้งที่โดนตี ศัตรูติดพิษอีก 2 กอง และฟื้นเลือดไม่ได้`); },
+      get effect() { return both((lv) => `${r1(ultPow('thornguard', lv))} วิ: ศัตรูติดพิษ ${T['ult.thornguard.poison']}/วิ ทันที · ทุกครั้งที่โดนตี ศัตรูติดพิษอีก 2 กอง และฟื้นเลือดไม่ได้`); },
     },
   },
   // ---------------- ❄ ice ----------------

@@ -1,6 +1,6 @@
 // Matchmaking: same day, closest rating, no repeat opponents within a run, AI with a difficulty tier as the fallback.
 import { randomInt } from 'node:crypto';
-import { randomAiBuild } from '../sim/bot';
+import { lossDrop, randomAiBuild } from '../sim/bot';
 import { simulate } from '../sim/combat';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { SKILLS } from '../sim/skills';
@@ -41,7 +41,8 @@ export function streakOf(t?: RunTrack): number {
 export function tierFor(day: number, rating: number, streak: number): BotTier {
   if (day <= 2) return 'easy';
   if (streak >= 3 || rating >= 1120) return 'hard';
-  if (streak <= -2 || rating < 940) return 'easy';
+  // sim v16: a loss streak drops to easy only at −3, or at −2 from day 5 (an off-line build rode −2 down to easy bots)
+  if (lossDrop(day, streak) || rating < 940) return 'easy';
   return 'normal';
 }
 

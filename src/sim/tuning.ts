@@ -38,24 +38,24 @@ export const TUNING = {
   'line.hit.lv3': 1.45,
   'line.dodge.lv1': 0.75,
   'line.dodge.lv3': 1.55,
-  'line.shield.lv1': 1.15,
+  'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.25,
   'line.heal.lv3': 1.05,
-  'line.burn.lv1': 1.15,
+  'line.burn.lv1': 1.18,
   'line.burn.lv3': 0.7,
-  'line.poison.lv1': 1.45,
+  'line.poison.lv1': 1.35,
   'line.poison.lv3': 0.8,
-  'line.ice.lv1': 1.45,
+  'line.ice.lv1': 1.28,
   'line.ice.lv3': 1.55,
   'line.wind.lv1': 1.3,
   'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
-  'uniq.knight.lv1': 0.8,
+  'uniq.knight.lv1': 0.72,
   'uniq.knight.lv3': 0.8,
   'uniq.thornguard.lv1': 1.2,
   'uniq.thornguard.lv3': 1.8,
-  'uniq.assassin.lv1': 0.85,
+  'uniq.assassin.lv1': 0.8,
   'uniq.assassin.lv3': 1.6,
   'uniq.duelist.lv1': 0.95,
   'uniq.duelist.lv3': 1.55,
@@ -77,14 +77,14 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.3,
+  'hp.knight': 1.2,
   'hp.thornguard': 1.34,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
   'hp.berserker': 1.16,
-  'hp.pyro': 1.64,
-  'hp.witch': 1.56,
-  'hp.chrono': 1.22,
+  'hp.pyro': 1.45,
+  'hp.witch': 1.45,
+  'hp.chrono': 1.32,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
   'knight.shield': 0.16,
@@ -108,6 +108,8 @@ export const TUNING = {
   'duelist.counter': 1.8,
   /** นักรบหนาม: each hit taken poisons the attacker 1/s for this many seconds */
   'thornguard.poison': 2,
+  /** sim v16: thornguard's top skill starts the fight this share of its cooldown in (a fast first cast) */
+  'thornguard.head': 0.35,
   // ---- new mechanics (sim v12) ----
   /** most dodge charges a fighter can hold (+1 for a hero of the 💨 line) */
   'dodge.cap': 1,
@@ -115,6 +117,10 @@ export const TUNING = {
   'dodge.graze': 0.25,
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
+  /** sim v16: พลัง from a skill outside your hero's line is this share (a generic grow pile out-scaled every line) */
+  'grow.offline': 0.7,
+  /** sim v16: a Lv3 skill of your hero's line is this much stronger again (mastery grows with the line) */
+  'line.lv3': 1.25,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
@@ -124,10 +130,10 @@ export const TUNING = {
   'aff.duelist': 1.4,
   'aff.knight': 1.35,
   'aff.berserker': 1.4,
-  'aff.pyro': 1.25,
+  'aff.pyro': 1.4,
   'aff.thornguard': 1.35,
-  'aff.witch': 1.35,
-  'aff.chrono': 1.2,
+  'aff.witch': 1.45,
+  'aff.chrono': 1.3,
   /** a charge (รวมพลัง) waits for a hit of at least this much (before power and charge) */
   'charge.min': 4,
   /** จอมเวทลม: hits on a slowed / frozen enemy deal this much more */
@@ -167,6 +173,8 @@ export const TUNING = {
   'ult.thornguard.trig': 6,
   /** นักรบหนาม: seconds of poison thorns */
   'ult.thornguard.pow': 3,
+  /** หนามพิษ also poisons the enemy this much per second for its duration, at once */
+  'ult.thornguard.poison': 2,
   /** แม่มดน้ำแข็ง: ice skill casts */
   'ult.witch.trig': 5,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */

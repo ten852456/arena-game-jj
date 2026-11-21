@@ -259,7 +259,7 @@ export function execNode(node: SkillNode, c: Ctx) {
       case 'slow': c.slow(e.pct, e.secs); break;
       case 'delay': if (!missed()) c.delay(e.secs); break;
       // พลัง from a part-power fire (engine, echo) is that part, not a whole point (sim v14: before, any fire gave ≥ 1)
-      case 'grow': c.grow(+(e.n * c.power).toFixed(2)); break;
+      case 'grow': c.grow(+(e.n * c.power * (c.inLine ? 1 : T['grow.offline'])).toFixed(2)); break;
       case 'charge': c.charge(e.mult, e.hits ?? 1); break;
       case 'thorns': c.thorns(c.v(e.n), !!e.perm, e.heal); break;
       case 'steadfast': c.steadfast(e.keep ?? 0.4, !!e.ignoreFreeze); break;

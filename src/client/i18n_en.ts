@@ -182,13 +182,13 @@ export const HEROES_EN: Record<string, HeroEn> = {
   thornguard: {
     name: 'Venom Thornguard',
     get passive() {
-      return `${hpPlus('thornguard')}every 2nd hit you take poisons the attacker 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
+      return `${hpPlus('thornguard')}your top skill starts the fight ${Math.round(T['thornguard.head'] * 100)}% through its cooldown · every 2nd hit you take poisons the attacker 1/s for ${T['thornguard.poison']}s · your thorns last 13s and Dispel removes only half a stack`;
     },
     style: 'Poison on poison: whoever hits you gets poisoned; stack long poison, then burst it (poison ignores shields and can’t be dodged)',
     ult: {
       name: 'Venom Thorns',
       get trigger() { return both((lv) => `${ultTrig('thornguard', lv)} hits taken`); },
-      get effect() { return both((lv) => `${r1(ultPow('thornguard', lv))}s: every hit on you poisons the attacker 2 more stacks and they can’t heal`); },
+      get effect() { return both((lv) => `${r1(ultPow('thornguard', lv))}s: the enemy is poisoned ${T['ult.thornguard.poison']}/s at once · every hit on you poisons the attacker 2 more stacks and they can’t heal`); },
     },
   },
   witch: {

@@ -457,3 +457,6 @@ export function randomAiBuild(day: number, seed: number, tier: BotTier = 'normal
   const second = rng.pick(LINES.filter((a) => a !== hero.line));
   return aiBuild(hero.id, day, [hero.line, second], hashSeed(seed, 'ai'), tier);
 }
+
+/** Does this loss streak drop the AI to easy? (sim v16: at −3, or at −2 from day 5; server tierFor and play-cli share it) */
+export const lossDrop = (day: number, streak: number) => streak <= -3 || (streak <= -2 && day >= 5);

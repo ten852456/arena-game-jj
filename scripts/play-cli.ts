@@ -10,7 +10,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { detailLines, simpleBonus, simpleText } from '../src/client/skillText';
-import { aiBuild, type BotTier } from '../src/sim/bot';
+import { aiBuild, lossDrop, type BotTier } from '../src/sim/bot';
 import { LINES } from '../src/sim/types';
 import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
@@ -44,7 +44,7 @@ const heroLine = (id: string): string => ((HEROES_BY_ID[id] as any)?.line ?? (HE
 const lv = (v: string) => lvOf(v);
 
 /** the server's AI tier rule (src/server/match.ts tierFor) without a rating: easy on days 1–2 or after 2 losses in a row, hard after 3 wins in a row */
-const autoTier = (s: R.RunState): BotTier => (s.day <= 2 || s.streak <= -2 ? 'easy' : s.streak >= 3 ? 'hard' : 'normal');
+const autoTier = (s: R.RunState): BotTier => (s.day <= 2 || lossDrop(s.day, s.streak) ? 'easy' : s.streak >= 3 ? 'hard' : 'normal');
 /**
  * Today's opponent: its hero (and tier) is rolled once per day with a real random number and saved, so scouting can show
  * it; its build is rolled only when you fight, with a fresh random seed, so nothing in the save predicts it.
