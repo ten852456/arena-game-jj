@@ -31,7 +31,7 @@ for (const tier of ['easy', 'normal', 'hard'] as const)
       for (let guard = 0; guard < 25 && s.phase !== 'won' && s.phase !== 'dead'; guard++) {
         if (s.phase === 'lastchance') chooseLastChance(s, (['awaken', 'supply', 'mark'] as const)[r % 3]);
         if (s.phase === 'mark') applyMark(s, 0);
-        if (s.phase !== 'shop') continue;
+        if (s.phase !== 'shop' && s.phase !== 'relic') continue;
         botDay(s, rules);
         const rec = s.log.map((l) => (l.won ? 1 : l.draw ? 2 : 0)) as RunRecord;
         const b = toBuild(s);

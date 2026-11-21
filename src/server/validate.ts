@@ -2,7 +2,8 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { LV3_DAY, MAX_SLOTS, PRICES, START_HP, SUPPLY_GOLD_FULL, damageFor, incomeFor, slotsFor } from '../sim/run';
+import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, damageFor, incomeFor, slotsFor } from '../sim/run';
+import { RELIC_DAYS, isRelic, relicsAllowed } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
@@ -56,6 +57,7 @@ export function buildCost(b: Build, day: number, freeSlots = 0) {
     const lv = lvOf(s.v);
     for (let l = 1; l <= lv; l++) g += PRICES[l - 1];
     if (SKILLS[s.id]?.hero) g += 1;
+    g += starCost(0, s.star ?? 0);
   }
   // slot prices are 4, 6, 8 … (the last chance's supply can give one for free)
   const extra = Math.max(0, b.skills.length - slotsFor(day) - freeSlots);
@@ -95,6 +97,8 @@ export function allowances(day: number, rec?: RunRecord, choice?: LastChoice): A
   return choice && choice !== 'none' ? all.filter((a) => a.opt === choice) : all;
 }
 
+/** gold for stars from..to (sim v17: 5 / 6 / 7) */
+export const starCost = (from: number, to: number) => STAR_PRICES.slice(from, to).reduce((a, b) => a + b, 0);
 /** price paid for a skill from level `from` (0 = not owned) up to its level now */
 const pricesFrom = (id: string, from: number, to: number) => {
   let g = from === 0 && SKILLS[id]?.hero ? 1 : 0;
@@ -114,12 +118,14 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
   for (const k of cur.skills) {
     const p = prev?.skills.find((x) => x.id === k.id);
     const continued = p && sameBonus(p, k) && k.v.startsWith(p.v) && lvOf(k.v) >= lvOf(p.v);
-    if (continued) {
+    // stars stay only on the same Lv3 branch; a star count that went down means the skill was sold and bought again
+    const starKept = continued && p!.v === k.v && (k.star ?? 0) >= (p!.star ?? 0);
+    if (continued && (p!.v !== k.v || starKept)) {
       kept.add(k.id);
-      g += pricesFrom(k.id, lvOf(p!.v), lvOf(k.v));
-    } else g += pricesFrom(k.id, 0, lvOf(k.v));
+      g += pricesFrom(k.id, lvOf(p!.v), lvOf(k.v)) + starCost(starKept ? p!.star ?? 0 : 0, k.star ?? 0);
+    } else g += pricesFrom(k.id, 0, lvOf(k.v)) + starCost(0, k.star ?? 0);
   }
-  for (const p of prev?.skills ?? []) if (!kept.has(p.id)) g -= lvOf(p.v);
+  for (const p of prev?.skills ?? []) if (!kept.has(p.id)) g -= lvOf(p.v) + (p.star ?? 0);
   const need = Math.max(0, cur.skills.length - slotsFor(day) - freeSlots);
   for (let i = paidSlots; i < need; i++) g += 4 + 2 * i;
   return { gold: g, paidSlots: Math.max(paidSlots, need) };
@@ -137,6 +143,8 @@ export function spendCheck(
   const lvs = build.skills.map((k) => lvOf(k.v));
   const marks = build.skills.filter((k) => k.mark).length;
   const allLv3 = lvs.length > 0 && lvs.every((l) => l >= 3);
+  // relics stay for the whole run and come one per relic day (sim v17): none may vanish, and today adds at most one
+  if (!relicsFollow(prev?.build?.relics ?? [], build.relics ?? [], day, !!prev?.build)) return [];
   return allowances(day, rec, choice)
     .filter((a) => allLv3 || marks <= a.marks)
     .filter((a) => buildCost(build, day, a.freeSlots) <= a.cap(build.skills.length))
@@ -145,6 +153,14 @@ export function spendCheck(
       return { opt: a.opt, spent: (prev?.spent ?? 0) + d.gold, paidSlots: d.paidSlots, cap: a.cap(build.skills.length) };
     })
     .filter((x) => x.spent <= x.cap);
+}
+
+/** relics `cur` can have after `prev` (the run's last fought build): every old relic kept, at most one new and only on a relic day */
+export function relicsFollow(prev: string[], cur: string[], day: number, hasPrev: boolean) {
+  if (prev.some((r) => !cur.includes(r))) return false;
+  const added = cur.filter((r) => !prev.includes(r)).length;
+  if (!hasPrev) return added <= relicsAllowed(day);
+  return added === 0 || (added === 1 && RELIC_DAYS.includes(day));
 }
 
 export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
@@ -158,15 +174,23 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
     if (SKILLS[s.id].hero && SKILLS[s.id].hero !== b.hero) return 'skill not allowed for hero';
     if (!isVariant(s.v)) return 'bad level';
     if (s.mark !== undefined && !MARKS.includes(s.mark)) return 'bad mark';
+    // ★ only on a Lv3 skill, 1–3, from STAR_DAY (sim v17)
+    if (s.star !== undefined && (!Number.isInteger(s.star) || s.star < 1 || s.star > STAR_MAX || lvOf(s.v) < 3)) return 'bad star';
+    if (s.star && day < STAR_DAY) return 'implausible: star before day ' + STAR_DAY;
     const bonus = s.bonus ?? [];
     if (!Array.isArray(bonus) || bonus.length > MAX_BONUS) return 'bad bonus';
     for (const x of bonus) if (!BONUS_KINDS.includes(x?.e) || !validTarget(String(x?.t), b.hero)) return 'bad bonus';
     skills.push({
-      id: s.id, v: s.v, ...(s.mark ? { mark: s.mark } : {}),
+      id: s.id, v: s.v, ...(s.mark ? { mark: s.mark } : {}), ...(s.star ? { star: s.star } : {}),
       ...(bonus.length ? { bonus: bonus.map((x) => ({ t: String(x.t), e: x.e })) } : {}),
     });
   }
   if (new Set(skills.map((s) => s.id)).size !== skills.length) return 'duplicate skill';
+  // relics: known ids, no duplicates, at most one per relic day reached (sim v17)
+  const relics = b.relics ?? [];
+  if (!Array.isArray(relics) || relics.some((r) => !isRelic(r))) return 'bad relic';
+  if (new Set(relics).size !== relics.length) return 'duplicate relic';
+  if (relics.length > relicsAllowed(day)) return 'implausible: too many relics for day ' + day;
   // plausibility for this day, from the run's record (sim v15: exact caps, see runMax / allowances)
   const lvs = skills.map((s) => lvOf(s.v));
   if (day <= 1) {
@@ -183,9 +207,10 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
   const ways = allowances(day, rec, choice).filter(
     (a) => (allLv3 || marks <= a.marks) && buildCost({ hero: b.hero, skills }, day, a.freeSlots) <= a.cap(skills.length),
   );
+
   if (!ways.length) return marks && !allLv3 ? 'implausible: too many marks' : 'implausible: costs more gold than this run can have';
   const look = Number.isInteger(b.look) && b.look! > 0 && b.look! < 2 ** 32 ? b.look : undefined;
-  return { hero: b.hero, skills, ...(look ? { look } : {}) };
+  return { hero: b.hero, skills, ...(look ? { look } : {}), ...(relics.length ? { relics: [...relics] } : {}) };
 }
 
 /** Run ids and player ids: 1–64 chars of letters, digits, `-` and `_`. */

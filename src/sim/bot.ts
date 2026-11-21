@@ -2,10 +2,12 @@ import { HEROES, HEROES_BY_ID, ULT_LV2_LV3, ULT_PIECES, ultLv3, ultPieces } from
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
-  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
+  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
-import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, type Effect, type SkillNode, type Variant } from './skills';
+import { RELICS_BY_ID, RELIC_DAYS, rollRelicOffer } from './relics';
+import { T } from './tuning';
+import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, rarityOf, epicAfter, type Effect, type SkillNode, type Variant } from './skills';
 import { LINES, type Build, type Line, type SkillInstance } from './types';
 
 /**
@@ -169,6 +171,62 @@ function linkGain(skills: SkillInstance[], extra: SkillInstance, drop = -1) {
   return best - base;
 }
 
+// ---------------- branch choice and relics (sim v17) ----------------
+
+/**
+ * Which branch a bot takes when it buys an upgrade: easy at random, normal the stronger one by its numbers half the time
+ * (else random), hard the stronger one by its numbers (a Lv2 branch counts its best Lv3 child too) with a small pull
+ * toward rare / epic branches. Deterministic from the run seed.
+ */
+export function botBranch(s: RunState, o: Offer, tier: BotTier): string | undefined {
+  const opts = offerChoices(s, o);
+  if (opts.length < 2) return undefined;
+  const rng = new Rng(hashSeed(s.seed, 'branch', s.day, o.id, tier));
+  if (tier === 'easy' || (tier === 'normal' && rng.next() < 0.5)) return rng.pick(opts);
+  const has = effectsOf(s.skills);
+  const val = (v: Variant) => {
+    let x = nodeValue(nodeOf({ id: o.id, v }), has);
+    if (v.length === 1) x += 0.25 * Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (v + c) as Variant }), has)));
+    const r = rarityOf(o.id, v);
+    if (tier === 'hard') x *= r === 'epic' ? 1.08 : r === 'rare' ? 1.04 : epicAfter(o.id, v) ? 1.03 : 1;
+    return x * (0.92 + 0.16 * rng.next());
+  };
+  return opts.reduce((a, b) => (val(b) > val(a) ? b : a));
+}
+
+/** the relic a bot takes from today's offer (-1 = skip): easy at random, normal its line or a generic one, hard by fit */
+export function botRelic(s: RunState, tier: BotTier): number {
+  const offer = s.relicOffer ?? [];
+  if (!offer.length) return -1;
+  const rng = new Rng(hashSeed(s.seed, 'relicpick', s.day, tier));
+  if (tier === 'easy') return rng.int(offer.length);
+  const line = HEROES_BY_ID[s.hero]?.line;
+  const counts: Record<string, number> = {};
+  for (const k of s.skills) counts[SKILLS[k.id].line] = (counts[SKILLS[k.id].line] ?? 0) + 1;
+  const fit = (id: string) => {
+    const g = RELICS_BY_ID[id].group;
+    if (g === line) return 3;
+    if (g === 'cheese') {
+      if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0;
+      if (id === 'lonewolf') return 0;
+      return tier === 'hard' ? 1.5 : 0.5;
+    }
+    if (g === 'any') {
+      if (id === 'twinline') return Math.max(...Object.entries(counts).filter(([l]) => l !== line && l !== 'none').map(([, n]) => n), 0) >= 2 ? 2.8 : 1;
+      if (id === 'wanderer') return s.skills.filter((k) => SKILLS[k.id].line !== line).length >= 3 ? 2.6 : 1.2;
+      return 2;
+    }
+    return 1 + 0.6 * (counts[g] ?? 0);
+  };
+  let best = 0;
+  let bv = -Infinity;
+  offer.forEach((id, i) => {
+    const v = fit(id) + rng.next() * (tier === 'hard' ? 1.2 : 1.8);
+    if (v > bv) [best, bv] = [i, v];
+  });
+  return best;
+}
+
 // ---------------- shop turn ----------------
 
 /** Bots ramp up gently: no Lv3 before day 5 (any tier), easy bots no Lv2 before day 3. */
@@ -260,7 +318,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
       if (offer.v !== '') {
         if (!upgradeOf(s, offer) || lazy) return; // lazy easy bots do not upgrade early either
         if (!upgradeAllowed(offer.v, s.day, tier)) return;
-        score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
+        score = easy ? 1.5 : offer.star ? 2 : 3; // an upgrade of something we own (easy undervalues upgrades; a star is a late gold sink)
         // a Lv3 on a line skill is one more ult piece (ult Lv2 needs ULT_LV2_LV3 of them)
         if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultLv3(s) < ULT_LV2_LV3) score += 1;
       } else {
@@ -294,7 +352,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
           }
         }
       }
-      buy(s, best);
+      buy(s, best, botBranch(s, offer, tier));
       bought++;
       continue;
     }
@@ -347,11 +405,13 @@ function hardShopTurn(s: RunState, rules: BotRules) {
     if (o.v !== '') {
       const owned = upgradeOf(s, o);
       if (!owned || !upgradeAllowed(o.v, s.day, 'hard')) return 0;
-      const gain = nodeValue(nodeOf({ id: o.id, v: o.v }), has) - nodeValue(nodeOf(owned), has);
+      if (o.star) return (nodeValue(nodeOf(owned), has) * T['star.pow'] * (o.star >= 3 ? 1.8 : 1) + 0.5 + pref(o.id) * 0.3) / priceOf(o);
+      const pick = (botBranch(s, o, 'hard') ?? o.v) as Variant;
+      const gain = nodeValue(nodeOf({ id: o.id, v: pick }), has) - nodeValue(nodeOf(owned), has);
       // finishing a branch (Lv2 → Lv3) on a skill that fits the build is worth more than spreading gold thin
       const branch = lvOf(owned.v) === 2 ? (SKILLS[o.id].line === line && ultLv3(s) < ULT_LV2_LV3 ? 2.5 : 1.5) : 0.5;
       // a Lv2 variant whose Lv3 children suit the build (best child value) is a coherent branch to start
-      const kids = lvOf(o.v) === 2 ? Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (o.v + c) as Variant }), has))) * 0.2 : 0;
+      const kids = lvOf(pick) === 2 ? Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (pick + c) as Variant }), has))) * 0.2 : 0;
       if (gain + kids <= 0) return 0;
       return (gain + kids + branch + pref(o.id) * 0.5) / priceOf(o);
     }
@@ -402,7 +462,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
           }
         }
       }
-      buy(s, best);
+      buy(s, best, botBranch(s, o, 'hard'));
       version++;
       continue;
     }
@@ -423,6 +483,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
 
 /** One full shop day for a bot: shop, then sort the list (easy keeps buy order). */
 export function botDay(s: RunState, rules: BotRules) {
+  if (s.phase === 'relic') pickRelic(s, botRelic(s, rules.tier ?? 'normal'));
   botShopTurn(s, rules);
   if ((rules.tier ?? 'normal') !== 'easy') arrangeList(s.skills);
 }
@@ -443,6 +504,12 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
       s.rolls = 0;
       reroll(s); // costs 1, but gives a fresh shop for the day
       s.gold += 1;
+      // relic days: the same 3-card offer a player gets (sim v17)
+      if (RELIC_DAYS.includes(d)) {
+        s.relicDays = [...(s.relicDays ?? []), d];
+        s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? []);
+        if (s.relicOffer.length) s.phase = 'relic';
+      }
     }
     botDay(s, rules);
   }

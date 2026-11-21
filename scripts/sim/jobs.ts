@@ -210,7 +210,7 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
     while (s.day <= MAX_DAY) {
       if (s.phase === 'lastchance') chooseLastChance(s, (['awaken', 'supply', 'mark'] as const)[r % 3]);
       if (s.phase === 'mark') applyMark(s, 0);
-      if (s.phase !== 'shop') break;
+      if (s.phase !== 'shop' && s.phase !== 'relic') break;
       botDay(s, rules);
       const day = Math.min(s.day, MAX_DAY);
       const oi = rng.int(j.pool[day].length);

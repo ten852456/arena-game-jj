@@ -1,6 +1,7 @@
 import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultPieces } from './heroes';
 import { rollBonuses } from './links';
+import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
@@ -29,6 +30,14 @@ export const LINE_WEIGHT = 2;
 export const UNIQUE_BACK_DAY = 3;
 /** can a skill at variant v be upgraded on this day? */
 export const canUpgrade = (v: string, day: number) => lvOf(v) < MAX_LV && (lvOf(v) < 2 || day >= LV3_DAY);
+/** ★ after Lv3 (sim v17): a Lv3 skill's duplicate card adds a star, up to STAR_MAX, offered from STAR_DAY */
+export const STAR_MAX = 3;
+export const STAR_DAY = 7;
+/** price of the 1st / 2nd / 3rd star */
+export const STAR_PRICES = [5, 6, 7];
+/** at most this many star cards in one shop roll (so they never crowd out line and ult cards) */
+export const STAR_PER_ROLL = 1;
+export const canStar = (k: SkillInstance, day: number) => lvOf(k.v) >= MAX_LV && (k.star ?? 0) < STAR_MAX && day >= STAR_DAY;
 
 /**
  * Shop offer: a skill at a tree variant. v = '' is a new Lv1 skill (with its rolled connect bonuses); any other v is
@@ -36,9 +45,18 @@ export const canUpgrade = (v: string, day: number) => lvOf(v) < MAX_LV && (lvOf(
  */
 export interface Offer {
   id: string;
+  /** '' = new Lv1 skill; an upgrade carries the FIRST of the two next branches, the buyer picks either (sim v17) */
   v: string;
   bonus?: Bonus[];
+  /** a star card: the star the owned Lv3 skill gets (1–3) */
+  star?: number;
 }
+/** the branches an upgrade offer lets the buyer pick from (empty for a new skill or a star) */
+export const offerChoices = (s: RunState, o: Offer): Variant[] => {
+  if (o.v === '' || o.star) return [];
+  const owned = s.skills.find((k) => k.id === o.id);
+  return owned ? nextVariants(owned.v) : [];
+};
 
 /** Heroes offered when a run starts (5 later with the pass). */
 export const HERO_CHOICES = 3;
@@ -75,7 +93,7 @@ export interface LogEntry {
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
-export const RUN_VERSION = 9;
+export const RUN_VERSION = 10;
 
 export interface RunState {
   v: typeof RUN_VERSION;
@@ -100,7 +118,7 @@ export interface RunState {
   rolls: number;
   ghost: boolean;
   pendingMark: Mark | null;
-  phase: 'shop' | 'lastchance' | 'mark' | 'won' | 'dead';
+  phase: 'shop' | 'relic' | 'lastchance' | 'mark' | 'won' | 'dead';
   rating: number;
   log: LogEntry[];
   /** the player gave up this run */
@@ -109,6 +127,12 @@ export interface RunState {
   locks?: boolean[];
   /** moon wishes bought today (the price goes up with each one) */
   wishes?: number;
+  /** run relics owned (relics.ts), at most MAX_RELICS */
+  relics?: string[];
+  /** the 3 relics offered today (phase 'relic') */
+  relicOffer?: string[];
+  /** relic days already offered (picked or skipped) */
+  relicDays?: number[];
 }
 
 /** Skill slots on a day: 3 on days 1–3, 4 on 4–6, 5 on 7–9, 6 from day 10, plus bonus slots (max MAX_SLOTS). */
@@ -130,9 +154,9 @@ export function buySlot(s: RunState): string | null {
   s.slotBuys++;
   return null;
 }
-export const priceOf = (o: Offer) => PRICES[lvOf(o.v) - 1] + (SKILLS[o.id].hero ? 1 : 0);
-/** gold back when selling: 1 / 2 / 3 by level */
-export const sellPrice = (k: SkillInstance) => lvOf(k.v);
+export const priceOf = (o: Offer) => (o.star ? STAR_PRICES[o.star - 1] : PRICES[lvOf(o.v) - 1] + (SKILLS[o.id].hero ? 1 : 0));
+/** gold back when selling: 1 / 2 / 3 by level, +1 per star */
+export const sellPrice = (k: SkillInstance) => lvOf(k.v) + (k.star ?? 0);
 /**
  * HP lost on a defeat: 2 on days 1–3, 3 on days 4–6, 4 on days 7–9, 5 from day 10 (capped), so a good run to 10 wins
  * (≈ day 13–16) survives 3–4 defeats, plus the last chance.
@@ -165,6 +189,25 @@ export function beginDay(s: RunState) {
   s.wishes = 0;
   rollShop(s);
   s.phase = 'shop';
+  // relic days (sim v17): pick 1 of 3 relics (or skip) before the shop opens
+  if (RELIC_DAYS.includes(s.day) && !(s.relicDays ?? []).includes(s.day) && (s.relics ?? []).length < MAX_RELICS) {
+    s.relicDays = [...(s.relicDays ?? []), s.day];
+    s.relicOffer = rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? []);
+    if (s.relicOffer.length) s.phase = 'relic';
+  }
+}
+
+/** Take relic i of today's offer (-1 = skip). Then the shop opens. */
+export function pickRelic(s: RunState, i: number): string | null {
+  if (s.phase !== 'relic') return 'ไม่มีของวิเศษให้เลือก';
+  const id = s.relicOffer?.[i];
+  if (i >= 0) {
+    if (!isRelic(id)) return 'ไม่มีของชิ้นนี้';
+    s.relics = [...(s.relics ?? []), id];
+  }
+  s.relicOffer = [];
+  s.phase = 'shop';
+  return null;
 }
 
 /**
@@ -178,8 +221,11 @@ export const bonusOf = (s: RunState, id: string) => rollBonuses(new Rng(hashSeed
 export function upgradeOf(s: RunState, o: Offer): SkillInstance | null {
   if (o.v === '') return null;
   const owned = s.skills.find((k) => k.id === o.id);
+  if (o.star) return owned && owned.v === o.v && (owned.star ?? 0) + 1 === o.star ? owned : null;
   return owned && nextVariants(owned.v).includes(o.v as never) ? owned : null;
 }
+/** an upgrade card for owned skill k: its first next branch (the buyer picks a or b), or its next star */
+const upOffer = (k: SkillInstance): Offer => (lvOf(k.v) >= MAX_LV ? { id: k.id, v: k.v, star: (k.star ?? 0) + 1 } : { id: k.id, v: nextVariants(k.v)[0] });
 
 /**
  * Day 1: the hero's fixed shop (same every run). Day 2+: 5 random offers, a mix of new Lv1 skills and upgrades
@@ -203,6 +249,9 @@ function rollShop(s: RunState) {
   const owned = new Set(s.skills.map((k) => k.id));
   const fresh = SKILL_LIST.filter((d) => (!d.hero || d.hero === s.hero) && !owned.has(d.id) && !keptIds.has(d.id)).map((d) => d.id);
   const ups = s.skills.filter((k) => canUpgrade(k.v, s.day) && !keptIds.has(k.id)).map((k) => k.id);
+  // star cards (sim v17): Lv3 skills below ★★★, at most STAR_PER_ROLL per roll, and only in a share of rolls
+  const starIds = s.skills.filter((k) => canStar(k, s.day) && !keptIds.has(k.id)).map((k) => k.id);
+  let stars = starIds.length && rng.next() < (ups.length ? 0.5 : 0.8) ? STAR_PER_ROLL : 0;
   const picks: Offer[] = [];
   const need = SHOP_SIZE - keptIds.size;
   const line = HEROES_BY_ID[s.hero]?.line;
@@ -238,15 +287,22 @@ function rollShop(s: RunState) {
       const id = ids[rng.int(ids.length)];
       ups.splice(ups.indexOf(id), 1);
       const k = s.skills.find((x) => x.id === id)!;
-      picks.push({ id, v: rng.pick(nextVariants(k.v)) });
+      picks.push(upOffer(k));
     }
   }
-  while (picks.length < need && (fresh.length || ups.length)) {
+  while (picks.length < need && (fresh.length || ups.length || (stars > 0 && starIds.length))) {
+    if (stars > 0 && starIds.length && (rng.next() < 0.35 || (!fresh.length && !ups.length))) {
+      const id = starIds.splice(rng.int(starIds.length), 1)[0];
+      picks.push(upOffer(s.skills.find((x) => x.id === id)!));
+      stars--;
+      continue;
+    }
     const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < 0.5);
+    if (!takeUp && !fresh.length) break;
     if (takeUp) {
       const id = ups.splice(rng.int(ups.length), 1)[0];
       const k = s.skills.find((x) => x.id === id)!;
-      picks.push({ id, v: rng.pick(nextVariants(k.v)) });
+      picks.push(upOffer(k));
     } else {
       const id = pickFresh();
       picks.push({ id, v: '', bonus: bonusOf(s, id) });
@@ -307,7 +363,7 @@ export function wish(s: RunState): WishResult {
     // an upgrade card in the shop (locked or not) for this skill no longer fits: turn it into its next level (or drop it)
     s.shop.forEach((o, j) => {
       if (!o || o.id !== k.id || o.v === '') return;
-      s.shop[j] = canUpgrade(k.v, s.day) ? { id: k.id, v: rng.pick(nextVariants(k.v)) } : null;
+      s.shop[j] = canUpgrade(k.v, s.day) ? upOffer(k) : null;
       if (!s.shop[j] && s.locks?.[j]) s.locks[j] = false;
     });
     return { idx: i, from, v: k.v };
@@ -318,6 +374,7 @@ export function wish(s: RunState): WishResult {
 
 export function reroll(s: RunState): string | null {
   if (s.day <= 1) return 'วันแรกเป็นร้านประจำฮีโร่ สุ่มใหม่ได้ตั้งแต่วันที่ 2';
+  if (s.phase === 'relic') return 'เลือกของวิเศษก่อน';
   if (s.gold < REROLL) return 'เงินไม่พอ';
   s.gold -= REROLL;
   s.rolls++;
@@ -325,10 +382,14 @@ export function reroll(s: RunState): string | null {
   return null;
 }
 
-/** Buy offer i: a new skill needs a free slot; an upgrade replaces the owned skill's variant (same slot and mark). */
-export function buy(s: RunState, i: number): string | null {
+/**
+ * Buy offer i: a new skill needs a free slot; an upgrade replaces the owned skill's variant (same slot and mark) with
+ * the branch `pick` (one of the two next branches; default the card's first), a star card adds one ★.
+ */
+export function buy(s: RunState, i: number, pick?: string): string | null {
   const offer = s.shop[i];
   if (!offer) return 'ไม่มีของ';
+  if (s.phase === 'relic') return 'เลือกของวิเศษก่อน';
   const price = priceOf(offer);
   if (s.gold < price) return 'เงินไม่พอ';
   if (offer.v === '') {
@@ -338,7 +399,12 @@ export function buy(s: RunState, i: number): string | null {
   } else {
     const owned = upgradeOf(s, offer);
     if (!owned) return 'อัปเกรดนี้ใช้กับ skill ที่มีอยู่ไม่ได้แล้ว';
-    owned.v = offer.v;
+    if (offer.star) owned.star = offer.star;
+    else {
+      const v = pick ?? offer.v;
+      if (!nextVariants(owned.v).includes(v as Variant)) return 'ไม่มีทางนี้';
+      owned.v = v;
+    }
   }
   s.gold -= price;
   s.shop[i] = null;
@@ -369,6 +435,7 @@ export const toBuild = (s: RunState): Build => ({
   hero: s.hero,
   skills: s.skills.slice(0, slotsOf(s)).map((k) => ({ ...k })),
   look: lookOf(s),
+  ...(s.relics?.length ? { relics: [...s.relics] } : {}),
 });
 
 /** draw = the fight ended in a draw (a near-even double KO): it is not a win, but costs no HP and resets the streak (sim v15) */

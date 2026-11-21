@@ -123,6 +123,36 @@ export const TUNING = {
   'grow.offline': 0.5,
   /** sim v16: a Lv3 skill of your hero's line is this much stronger again (mastery grows with the line) */
   'line.lv3': 1.25,
+  // ---- stars after Lv3 (sim v17, run.ts / combat.ts) ----
+  /** each ★ on a Lv3 skill: all its numbers ×(1 + this) */
+  'star.pow': 0.08,
+  /** ★★★ also cuts the skill's cooldown by this share */
+  'star.cd3': 0.08,
+  // ---- run relics (sim v17, relics.ts) ----
+  'relic.whetstone': 0.5,
+  'relic.executioner': 0.25,
+  'relic.counterstep': 0.5,
+  'relic.spikedshield': 0.2,
+  'relic.bastion': 0.12,
+  'relic.overflow': 0.6,
+  'relic.vitality': 0.25,
+  'relic.meltdown': 2,
+  'relic.kindling': 2,
+  'relic.virulence': 1,
+  'relic.rot': 0.15,
+  'relic.permafrost': 0.3,
+  'relic.permafrostCd': 0.1,
+  'relic.brittle': 0.3,
+  'relic.gale': 0.1,
+  'relic.tailspin': 1,
+  'relic.quickdraw': 0.4,
+  'relic.wanderer': 0.15,
+  'relic.twinline': 0.2,
+  'relic.ironhide': 0.15,
+  'relic.glassHp': 0.65,
+  'relic.glassDmg': 0.4,
+  'relic.lonewolf': 0.7,
+  'relic.sigil': 0.8,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,

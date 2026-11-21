@@ -30,6 +30,8 @@ export interface SkillInstance {
   mark?: Mark;
   /** connect bonuses rolled when this copy was bought (kept through upgrades) */
   bonus?: Bonus[];
+  /** ★ after Lv3 (sim v17): 1–3 duplicate cards bought on top of the Lv3 skill */
+  star?: number;
 }
 
 /** A build is a hero plus its skill list, top to bottom. Neighbours (above / below) can turn on connect bonuses. */
@@ -38,6 +40,8 @@ export interface Build {
   skills: SkillInstance[];
   /** cosmetic look seed for the chibi art (colours, ears, face, outfit); never read by the sim */
   look?: number;
+  /** run relics (sim v17, relics.ts): run-long rule tweaks picked on days 4, 7 and 10, at most 3 */
+  relics?: string[];
 }
 
 export type Side = 0 | 1;

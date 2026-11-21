@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 16;
+export const SIM_VERSION = 17;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -74,6 +74,8 @@ export const ENGINE_GAP = 3 * TPS;
 export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
+/** damage sources a spiked shield does not reflect */
+const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
 export const CTL_IMMUNE = 1.5 * TPS;
 /**
@@ -129,6 +131,8 @@ interface Stack {
 interface Fighter {
   side: Side;
   hero: string;
+  /** the build's run relics (relics.ts) */
+  relics: Set<string>;
   hooks: CombatHooks;
   blocks: Block[];
   hp: number;
@@ -210,8 +214,8 @@ const dps = (xs: Dot[]) => xs.reduce((n, x) => n + x.dps, 0);
 const dotLeft = (xs: Dot[]) => xs.reduce((n, b) => n + b.dps * Math.ceil(b.t / TPS), 0);
 
 /** haste = cooldown cut from connect bonuses (0.2 per haste bonus, at most halved) */
-export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0): number {
-  const base = nodeOf(k).cd * (k.mark === 'quick' ? 0.6 : 1) * Math.max(0.5, 1 - haste);
+export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'star'>, haste = 0): number {
+  const base = nodeOf(k).cd * (k.mark === 'quick' ? 0.6 : 1) * Math.max(0.5, 1 - haste) * ((k.star ?? 0) >= 3 ? 1 - T['star.cd3'] : 1);
   return Math.max(5, Math.round(base));
 }
 
@@ -219,7 +223,38 @@ export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0):
 export const affinityOf = (hero: string, id: string, v = '') =>
   inLine(hero, id) ? lineAffinity(hero) * (lvOf(v) >= 3 ? T['line.lv3'] : 1) : 1;
 /** most dodge charges a hero can hold: +1 for the 💨 line */
-export const dodgeCap = (hero: string) => T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0);
+export const dodgeCap = (hero: string, relics: readonly string[] = []) =>
+  T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0) + (relics.includes('featherstep') ? 1 : 0);
+/** ★ on a Lv3 skill: its numbers ×(1 + star.pow) per star */
+export const starPower = (star = 0) => 1 + T['star.pow'] * Math.max(0, Math.min(3, star));
+/**
+ * Power from the build's relics for one skill (sim v17): wanderer (off-line skills), twin line (the second line),
+ * lone wolf (≤ 3 skills), sigil (marked skills).
+ */
+export function relicPower(b: Build, inst: SkillInstance): number {
+  const rs = b.relics ?? [];
+  if (!rs.length) return 1;
+  let m = 1;
+  const line = SKILLS[inst.id]?.line;
+  if (rs.includes('wanderer') && !inLine(b.hero, inst.id)) m *= 1 + T['relic.wanderer'];
+  if (rs.includes('twinline') && line && line === secondLine(b)) m *= 1 + T['relic.twinline'];
+  if (rs.includes('lonewolf') && b.skills.length <= 3) m *= 1 + T['relic.lonewolf'];
+  if (rs.includes('sigil') && inst.mark) m *= 1 + T['relic.sigil'];
+  return m;
+}
+/** the line (not the hero's own, not 'none') the build owns most skills of; ties: first in the list */
+export function secondLine(b: Build): string | null {
+  const main = HEROES_BY_ID[b.hero]?.line;
+  const n: Record<string, number> = {};
+  let best: string | null = null;
+  for (const k of b.skills) {
+    const l = SKILLS[k.id]?.line;
+    if (!l || l === 'none' || l === main) continue;
+    n[l] = (n[l] ?? 0) + 1;
+    if (!best || n[l] > n[best]) best = l;
+  }
+  return best;
+}
 
 function makeBlocks(b: Build): Block[] {
   const skills = b.skills.filter((k) => SKILLS[k.id]);
@@ -229,8 +264,8 @@ function makeBlocks(b: Build): Block[] {
     if (!SKILLS[inst.id]) return;
     const t = bonusTotals(skills, out.length, act);
     out.push({
-      inst: { ...inst }, idx, cd: cdTicks(inst, t.haste), prog: 0,
-      power: t.power * affinityOf(b.hero, inst.id, inst.v), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      inst: { ...inst }, idx, cd: Math.round(cdTicks(inst, t.haste) * ((b.relics ?? []).includes('permafrost') ? 1 + T['relic.permafrostCd'] : 1)), prog: 0,
+      power: t.power * affinityOf(b.hero, inst.id, inst.v) * (lvOf(inst.v) >= 3 ? starPower(inst.star) : 1) * relicPower(b, inst), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
@@ -242,16 +277,20 @@ const emptyStat = (): BlockStat => ({ c: 0, tc: 0, d: 0, bd: 0, bf: 0, h: 0, sh:
 
 function makeFighter(b: Build, side: Side, day: number): Fighter {
   const hooks = HEROES_BY_ID[b.hero]?.hooks ?? {};
-  const maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
-  const start = hooks.startShield ? hooks.startShield(0, maxHp) : 0;
+  const relics = new Set((b.relics ?? []).filter((r) => typeof r === 'string'));
+  let maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
+  if (relics.has('ironhide')) maxHp = Math.round(maxHp * (1 + T['relic.ironhide']));
+  if (relics.has('glasscannon')) maxHp = Math.max(1, Math.round(maxHp * T['relic.glassHp']));
+  const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
   const blocks = makeBlocks(b);
+  if (relics.has('quickdraw')) for (const blk of blocks) blk.prog = Math.max(blk.prog, Math.round(blk.cd * T['relic.quickdraw']));
   // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
   if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
   return {
-    side, hero: b.hero, hooks, blocks,
+    side, hero: b.hero, hooks, blocks, relics,
     hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
-    burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
+    burns: [], poisons: [], dodge: relics.has('featherstep') ? 1 : 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
     ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
     freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat), dealtTotal: 0,
@@ -373,6 +412,11 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       target.shield -= blocked;
     }
     target.hp -= amount - blocked;
+    // โล่หนาม: part of what the shield blocked goes back to the attacker (not from DoTs, thorns or fatigue)
+    if (blocked > 0 && target.relics.has('spikedshield') && !NO_REFLECT.has(src)) {
+      const back = Math.round(blocked * T['relic.spikedshield']);
+      if (back > 0) deal(F[1 - target.side], back, true, 'thorns');
+    }
     const st = F[1 - target.side].stats[owner];
     if (st) {
       st.d += amount;
@@ -398,10 +442,11 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     emit({ type: 'status', side: foe.side, status: 'poison', value: dps(foe.poisons) });
   }
   function addDodge(f: Fighter, n: number) {
-    f.dodge = Math.min(dodgeCap(f.hero), f.dodge + n);
+    f.dodge = Math.min(dodgeCap(f.hero, [...f.relics]), f.dodge + n);
     emit({ type: 'status', side: f.side, status: 'dodge', value: f.dodge });
   }
   function addHaste(f: Fighter, pct: number, secs: number) {
+    if (f.relics.has('tailspin')) [pct, secs] = [pct + 0.1, secs + T['relic.tailspin']];
     f.hasteP = Math.min(T['haste.cap'], f.hasteT > 0 ? Math.max(f.hasteP, pct) : pct);
     f.hasteT = Math.max(f.hasteT, Math.round(secs * TPS));
     emit({ type: 'status', side: f.side, status: 'haste', value: Math.round(f.hasteP * 100) });
@@ -423,6 +468,20 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       removed++;
     }
     return removed;
+  }
+
+  /** damage multiplier of f's relics on one of its hits (sim v17) */
+  function relicHit(f: Fighter, foe: Fighter) {
+    let m = 1;
+    if (f.relics.has('executioner') && foe.hp < foe.maxHp * 0.4) m *= 1 + T['relic.executioner'];
+    if (f.relics.has('rot') && foe.poisons.length) m *= 1 + T['relic.rot'];
+    if (f.relics.has('brittle') && foe.frozen > 0) m *= 1 + T['relic.brittle'];
+    if (f.relics.has('glasscannon')) m *= 1 + T['relic.glassDmg'];
+    if (f.relics.has('counterstep') && f.flags.counter) {
+      m *= 1 + T['relic.counterstep'];
+      f.flags.counter = 0;
+    }
+    return m;
   }
 
   // ---------------- ultimates ----------------
@@ -574,6 +633,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         const mult = useCharge ? f.charge : 1;
         let dmg = Math.round((n + sum(f.growth) + bonusDmg) * mult);
         if (f.hooks.onHit) dmg = Math.max(0, Math.round(f.hooks.onHit(hookApi(f), dmg)));
+        if (f.relics.size) dmg = Math.round(dmg * relicHit(f, foe));
         if (!o.sure && foe.dodge > 0) {
           // dodged: the whole hit misses (a charge is spent on it too), no thorns, no leech
           if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
@@ -587,6 +647,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
           emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
           foe.hooks.onDodge?.(hookApi(foe));
+          if (foe.relics.has('counterstep')) foe.flags.counter = 1;
           // a dodge is a graze, not a wall: a share of the hit still lands (no riders, no thorns, no leech)
           // sim v16: a slowed enemy dodges the wind badly (จอมเวทลม: more of the hit still lands)
           const graze = Math.round(dmg * (f.hero === 'chrono' && foe.slowT > 0 ? T['chrono.graze'] : T['dodge.graze']));
@@ -638,20 +699,26 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       },
       heal(n) {
         // the enemy's thorns, poison on you and wounds all cut healing
-        let m = 1;
+        let m = f.relics.has('vitality') ? 1 + T['relic.vitality'] : 1;
         if (foe.thorns.length) m *= foe.thornsHeal;
         if (f.poisons.length) m *= T['poison.heal'];
         if (f.woundT > 0) m *= 1 - f.woundP;
-        if (m < 1) n = m > 0 ? Math.max(1, Math.round(n * m)) : 0;
+        if (m !== 1) n = m > 0 ? Math.max(1, Math.round(n * m)) : 0;
         const h = Math.min(n, f.maxHp - f.hp);
         if (h > 0) {
           f.hp += h;
           st.h += h;
           emit({ type: 'heal', side: f.side, amount: h });
         }
+        // ถ้วยล้น: healing past full HP becomes shield
+        const over = Math.round((n - Math.max(0, h)) * T['relic.overflow']);
+        if (over > 0 && f.relics.has('overflow')) ctx.shield(over);
       },
-      burn(d, secs) { addBurn(foe, d, f.hooks.burnSecs ? f.hooks.burnSecs(secs) : secs, blk.idx); },
-      poison(d, secs) { addPoison(foe, d, secs, blk.idx); },
+      burn(d, secs) {
+        const s2 = secs + (f.relics.has('kindling') ? T['relic.kindling'] : 0);
+        addBurn(foe, d, f.hooks.burnSecs ? f.hooks.burnSecs(s2) : s2, blk.idx);
+      },
+      poison(d, secs) { addPoison(foe, d + (f.relics.has('virulence') ? T['relic.virulence'] : 0), secs, blk.idx); },
       dodge(n) { addDodge(f, n); },
       haste(pct, secs) { addHaste(f, pct * Math.min(1, power), secs); },
       wound(pct, secs) { addWound(foe, pct, secs * ctl); },
@@ -666,7 +733,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
           return;
         }
-        let ticks = secs * ctl * TPS;
+        let ticks = (secs + (f.relics.has('permafrost') ? T['relic.permafrost'] : 0)) * ctl * TPS;
         if (f.hooks.freezeTicks) ticks = f.hooks.freezeTicks(ticks);
         ticks *= Math.pow(FREEZE_DR, foe.freezeN) * foe.ctlKeep; // diminishing returns (recovers over time), ใจเหล็ก
         ticks = Math.max(0, Math.min(MAX_FREEZE_TICKS, ctlRoom(foe), Math.round(ticks)));
@@ -681,6 +748,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         if (ticks >= REACT_MIN) controlled(foe);
       },
       slow(pct0, secs0) {
+        if (f.relics.has('gale')) [pct0, secs0] = [pct0 + T['relic.gale'], secs0 + 1];
         const [pct, secs] = f.hooks.slow ? f.hooks.slow(pct0, secs0 * ctl) : [pct0, secs0 * ctl];
         const p = Math.min(SLOW_CAP, pct * foe.ctlKeep);
         foe.slowPct = foe.slowT > 0 ? Math.max(foe.slowPct, p) : p;
@@ -811,6 +879,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const blk = f.blocks[q.bi];
     const inst = blk.inst;
     const st = f.stats[blk.idx];
+    // หินลับมีด: the first cast of each skill in the fight is stronger
+    const firstCast = st.c + st.tc === 0 && f.relics.has('whetstone');
     if (q.from === undefined) st.c++;
     else {
       st.tc++;
@@ -826,7 +896,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       ...(q.from !== undefined ? { from: f.blocks[q.from].idx } : {}),
       ...(q.react ? { react: true } : {}),
     });
-    const power = blk.power * q.mult;
+    const power = blk.power * q.mult * (firstCast ? 1 + T['relic.whetstone'] : 1);
     runSkill(f, foe, blk, power, Math.round(blk.dmg * q.mult));
     if (blk.shieldOnFire > 0 && f.hp > 0) {
       const n = meltShield(f, Math.max(1, Math.round(blk.shieldOnFire * q.mult)));
@@ -953,7 +1023,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
           // ไฟเผาโล่: each burn tick also burns away shield (tuning.ts `burn.scorch` × the burn per second);
           // done before the burn damage so that damage event's snapshot already shows the smaller shield
-          f.shield -= Math.min(f.shield, Math.round(dps(f.burns) * T['burn.scorch']));
+          f.shield -= Math.min(f.shield, Math.round(dps(f.burns) * T['burn.scorch'] * (F[1 - f.side].relics.has('meltdown') ? T['relic.meltdown'] : 1)));
           deal(f, dps(f.burns), false, 'burn');
           f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
         }
