@@ -225,7 +225,7 @@ function ultProgressHTML(r: R.RunState) {
   if (!h) return '';
   const b = R.toBuild(r);
   const lv = ultLevel(b);
-  return `<span title="${esc(`${L(ultRuleText(true), ultRuleText(false))} · ${h.ult.trigger} → ${h.ult.effect}`)}">★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ยังไม่ปลด', 'locked')} · ${LINE_ICON[h.line]} ${L(ultProgressText(b, true), ultProgressText(b, false))}</span>`;
+  return `<span title="${esc(`${L(ultRuleText(true), ultRuleText(false))} · ${h.ult.trigger} → ${h.ult.effect}`)}">★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ยังไม่ปลด', 'locked')} · ${LINE_ICON[h.line]} ${L(ultProgressText(b, true), ultProgressText(b, false)).replace(/^(ท่าไม้ตาย|Ult) /, '')}</span>`;
 }
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -610,7 +610,7 @@ function slotCard(r: R.RunState) {
   return `<div class="card offer expand extra${!maxed && r.gold < price ? ' poor' : ''}" title="${L('ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', '+1 skill slot for the whole run; the price goes up each time')}">
     <div class="offer-art" aria-hidden="true">＋</div>
     <div class="offer-name">${L('ช่อง skill +1', '+1 skill slot')}</div>
-    <div class="offer-desc">${maxed ? L(`มีครบ ${R.MAX_SLOTS} ช่องแล้ว`, `All ${R.MAX_SLOTS} slots owned`) : L(`ถาวรทั้งรอบ · ตอนนี้ ${R.slotsOf(r)}/${R.MAX_SLOTS} ช่อง · ช่องต่อไปราคา ${price + 2}`, `For the whole run · now ${R.slotsOf(r)}/${R.MAX_SLOTS} slots · the next one costs ${price + 2}`)}</div>
+    <div class="offer-desc">${maxed ? L(`มีครบ ${R.MAX_SLOTS} ช่องแล้ว`, `All ${R.MAX_SLOTS} slots owned`) : L(`ถาวรทั้งรอบ · ${R.slotsOf(r)}/${R.MAX_SLOTS} ช่อง · ถัดไป ${price + 2}`, `Whole run · ${R.slotsOf(r)}/${R.MAX_SLOTS} slots · next ${price + 2}`)}</div>
     <button class="buy" data-a="slot" ${why ? 'disabled' : ''}>${buyLabel(why, L('ซื้อ', 'Buy'), price, !maxed && r.gold < price)}</button>
   </div>`;
 }
