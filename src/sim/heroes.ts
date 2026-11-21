@@ -223,7 +223,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'สุริยะดับ',
       get trigger() { return both((lv) => `ไฟบนศัตรูครบ ${ultTrig('pyro', lv)} กอง`); },
-      get effect() { return both((lv) => `ไฟที่ยังเหลือทั้งหมดระเบิดทันที ×${r1(ultPow('pyro', lv))} (ไม่สนโล่ ไฟกองนั้นหมดไป)`); },
+      get effect() { return both((lv) => `ระเบิดทันทีเท่ากับไฟที่ยังเหลือ ×${r1(ultPow('pyro', lv))} (ไม่สนโล่ และไฟยังติดอยู่ต่อ)`); },
     },
   },
   // ---------------- ☠ poison ----------------

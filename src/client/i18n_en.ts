@@ -176,7 +176,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Sunfall',
       get trigger() { return both((lv) => `${ultTrig('pyro', lv)} burn stacks on the enemy`); },
-      get effect() { return both((lv) => `all burn still to come lands now ×${r1(ultPow('pyro', lv))} (ignores shields; those burns are used up)`); },
+      get effect() { return both((lv) => `a blast of the burn still to come ×${r1(ultPow('pyro', lv))} (ignores shields; the burns keep burning)`); },
     },
   },
   thornguard: {

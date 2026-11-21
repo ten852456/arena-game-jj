@@ -455,10 +455,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         break;
       }
       case 'pyro': {
-        // the burn still to come lands now (× pow) and those burns are used up
+        // a share (pow) of the burn still to come lands now as one blast; the burns keep burning (sim v14: before, they were used up)
         const left = dotLeft(foe.burns);
-        foe.burns = [];
-        emit({ type: 'status', side: foe.side, status: 'burn', value: 0 });
         deal(foe, Math.max(1, Math.round(pow * left)), false, 'ult');
         break;
       }
