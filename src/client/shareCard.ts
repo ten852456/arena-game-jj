@@ -18,6 +18,9 @@ export interface CardData {
   streak: number;
   /** skill ids of the final build, top to bottom */
   skills: string[];
+  /** ★ count per skill (same order as skills) and the run's relics as "icon name" (sim v17) */
+  stars?: number[];
+  relics?: string[];
   /** localized lines */
   title: string;
   sub: string;
@@ -140,7 +143,18 @@ async function draw(d: CardData): Promise<Blob | null> {
     g.strokeStyle = '#150e27';
     rr(g, bx, by, sz, sz, 14);
     g.stroke();
+    const st = d.stars?.[i] ?? 0;
+    if (st > 0) {
+      g.font = '700 18px Kanit, sans-serif';
+      g.fillStyle = '#ffd34d';
+      g.fillText('★'.repeat(st), bx + 4, by + sz - 4);
+    }
   });
+  if (d.relics?.length) {
+    g.font = '500 22px Kanit, sans-serif';
+    g.fillStyle = '#e9dcff';
+    g.fillText(fit(g, d.relics.join('  ·  '), maxW), x, 462);
+  }
   g.font = '500 34px Mitr, Kanit, sans-serif';
   g.fillStyle = '#fff4e4';
   g.fillText(fit(g, d.player, maxW), x, 500);

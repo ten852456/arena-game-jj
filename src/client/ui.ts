@@ -1279,7 +1279,8 @@ function cardData(r: R.RunState): CardData {
   return {
     runId: r.id, heroSvg: renderChibi(rollLook(r.hero, R.lookOf(r))), heroName: HEROES_BY_ID[r.hero].name,
     player: displayName(M.serverName() ?? playerName()), wins: r.wins, losses: r.losses, winTarget: R.WIN_TARGET,
-    streak: RC.bestStreakOf(r.log), skills: r.skills.map((k) => k.id),
+    streak: RC.bestStreakOf(r.log), skills: r.skills.map((k) => k.id), stars: r.skills.map((k) => k.star ?? 0),
+    relics: (r.relics ?? []).map((id) => `${RELICS_BY_ID[id]?.icon ?? ''} ${L(RELICS_BY_ID[id]?.name[0] ?? id, RELICS_BY_ID[id]?.name[1] ?? id)}`),
     title: flawless ? L('มงกุฎไร้พ่าย!', 'Flawless crown!') : L('มงกุฎดวงจันทร์!', 'Moon crown!'),
     sub: L(`ชนะครบ ${R.WIN_TARGET} ในสนามดวงจันทร์`, `All ${R.WIN_TARGET} wins in the moon arena`),
     recordLine: L(`ชนะ ${r.wins} · แพ้ ${r.losses} · ชนะติด ${RC.bestStreakOf(r.log)}`, `${r.wins} wins · ${r.losses} losses · best streak ${RC.bestStreakOf(r.log)}`),
