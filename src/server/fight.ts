@@ -21,23 +21,53 @@ export const recordOf = (t?: RunTrack): RunRecord =>
   t ? Object.keys(t.days).map(Number).sort((a, b) => a - b).map((d) => (t.days[d] === 1 ? 1 : t.days[d] === 2 ? 2 : 0)) : [];
 
 /**
- * Replace the build's hidden marks by the server's rolls (sim v20, security review: the kinds used to be sent ahead in
- * every fight response): the last chance's mark gets the run's 'last' roll, wish marks the run's next wish rolls in list
- * order. A run without a server seed yet (its first fight) cannot have marks.
+ * Reveal the build's hidden marks with the server's rolls (sim v20, security review). Once the run has a server seed:
+ * - a newly gained mark must arrive hidden (`markHidden`); one with an explicit kind is refused with one error that does
+ *   not depend on the kind (otherwise accept / reject would reveal the roll);
+ * - the server, not the client's label, decides each hidden mark's source from the ledger: the last chance's free mark
+ *   first (when a way still has it), then the run's wish marks in order. It keeps the first assignment that the run can
+ *   own and has paid for (validateBuild + spendCheck).
+ * Returns the build with kinds filled in (or null when a gained mark was explicit) and what it revealed.
  */
-function revealMarks(build: unknown, prev?: RunTrack): { idx: number; mark: string }[] {
-  const skills = (build as { skills?: unknown })?.skills;
-  if (!Array.isArray(skills)) return [];
-  const out: { idx: number; mark: string }[] = [];
-  let w = prev?.wishMarks ?? 0;
-  skills.forEach((k: { markHidden?: unknown; mark?: unknown }, idx) => {
-    if (!k || typeof k !== 'object' || k.markHidden === undefined) return;
-    if (prev?.relicSeed === undefined || (k.markHidden !== 'wish' && k.markHidden !== 'last')) return; // left in place: validateBuild rejects it
-    k.mark = markKindFor(prev.relicSeed, k.markHidden === 'last' ? 'last' : w++);
-    delete k.markHidden;
-    out.push({ idx, mark: k.mark as string });
-  });
-  return out;
+export function resolveMarks(
+  raw: unknown, prev: RunTrack | undefined, day: number,
+): { build: unknown; revealed: { idx: number; mark: string }[] } | null {
+  const skills = (raw as { skills?: unknown })?.skills;
+  if (!Array.isArray(skills) || prev?.relicSeed === undefined) return { build: raw, revealed: [] };
+  const seed = prev.relicSeed;
+  // an explicit mark is only allowed where yesterday's build already had that same mark on that same branch line
+  for (const k of skills as { id?: unknown; v?: unknown; mark?: unknown; markHidden?: unknown }[]) {
+    if (!k || typeof k !== 'object' || k.mark === undefined) continue;
+    const p = prev.build?.skills.find((x) => x.id === k.id);
+    const kept = !!p && p.mark === k.mark && typeof k.v === 'string' && k.v.startsWith(p.v) && k.v.length >= p.v.length;
+    if (!kept) return null;
+  }
+  const hidden = (skills as { markHidden?: unknown }[]).map((k, idx) => (k && typeof k === 'object' && k.markHidden !== undefined ? idx : -1)).filter((i) => i >= 0);
+  if (!hidden.length) return { build: raw, revealed: [] };
+  const fill = (freeFirst: boolean, wishFrom: number) => {
+    const b = JSON.parse(JSON.stringify(raw)) as { skills: { mark?: string; markHidden?: unknown }[] };
+    let w = wishFrom;
+    const revealed: { idx: number; mark: string }[] = [];
+    hidden.forEach((idx, j) => {
+      const k = b.skills[idx];
+      k.mark = markKindFor(seed, freeFirst && j === 0 ? 'last' : w++);
+      delete k.markHidden;
+      revealed.push({ idx, mark: k.mark });
+    });
+    return { build: b, revealed };
+  };
+  const rec = recordOf(prev);
+  const candidates: { build: unknown; revealed: { idx: number; mark: string }[] }[] = [];
+  // ways that still have the free last-chance mark (their own ledger), then plain wish marks
+  for (const [key, L] of Object.entries(prev.ledger ?? {})) if (key.startsWith('mark:') && L.freeMarks < 1) candidates.push(fill(true, L.wishMarks));
+  const wishFroms = [...new Set(Object.values(prev.ledger ?? {}).map((L) => L.wishMarks).concat(prev.wishMarks ?? 0))];
+  for (const w of wishFroms) candidates.push(fill(false, w));
+  if (prev.ghost && !prev.ledger) candidates.unshift(fill(true, prev.wishMarks ?? 0));
+  for (const c of candidates) {
+    const v = validateBuild(c.build, day, rec, prev.lastChoice);
+    if (typeof v !== 'string' && spendCheck(prev, v, day, rec, prev.lastChoice).length) return c;
+  }
+  return candidates.at(-1) ?? { build: raw, revealed: [] };
 }
 
 function trackOf(runId: string, playerId: string, name: string): RunTrack {
@@ -93,9 +123,11 @@ export function handleFight(body: any): Res {
   const fought = prev ? Object.keys(prev.days).length : 0;
   if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   // sim v20: reveal hidden marks with the server's rolls (the kind is decided here, never by the client)
-  const revealed = revealMarks(body?.build, prev);
+  const resolved = resolveMarks(body?.build, prev, day);
+  if (!resolved) return bad('bad mark');
+  const revealed = resolved.revealed;
   // the build must be one this run could own today, judged from the run's own record (results of earlier days)
-  const build = validateBuild(body?.build, day, recordOf(prev), prev?.lastChoice);
+  const build = validateBuild(resolved.build, day, recordOf(prev), prev?.lastChoice);
   if (typeof build === 'string') return bad(build);
   // the hero is bound to the run on its first fight: no switching hero (or counter-picking from /api/scout) mid-run
   if (prev?.hero && build.hero !== prev.hero) return bad('hero does not match this run');

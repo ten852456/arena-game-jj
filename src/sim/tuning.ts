@@ -21,7 +21,7 @@ export const TUNING = {
   'run.lossEvery': 4,
   // ---- base HP per day (combat.ts HP_BY_DAY × this) ----
   /** days 1–3 */
-  'hp.early': 1.4,
+  'hp.early': 1.6,
   /** days 4–7 */
   'hp.mid': 1.6,
   /** day 8+ */
@@ -37,7 +37,7 @@ export const TUNING = {
   'line.hit.lv1': 0.75,
   'line.hit.lv3': 1.45,
   'line.dodge.lv1': 0.85,
-  'line.dodge.lv3': 1.75,
+  'line.dodge.lv3': 1.8,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.12,
@@ -52,7 +52,7 @@ export const TUNING = {
   'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.65,
-  'uniq.knight.lv3': 1.15,
+  'uniq.knight.lv3': 1.25,
   'uniq.thornguard.lv1': 1.15,
   'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.8,
@@ -77,7 +77,7 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.12,
+  'hp.knight': 1.16,
   'hp.thornguard': 1.15,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
@@ -165,13 +165,13 @@ export const TUNING = {
   'shield.guard': 0.4,
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
   'aff.assassin': 1.3,
-  'aff.duelist': 1.4,
+  'aff.duelist': 1.42,
   'aff.knight': 1.35,
-  'aff.berserker': 1.3,
+  'aff.berserker': 1.25,
   'aff.pyro': 1.4,
   'aff.thornguard': 1.35,
   'aff.witch': 1.45,
-  'aff.chrono': 1.3,
+  'aff.chrono': 1.35,
   /** a charge (รวมพลัง) waits for a hit of at least this much (before power and charge) */
   'charge.min': 4,
   /** จอมเวทลม: hits on a slowed / frozen enemy deal this much more */
@@ -205,7 +205,7 @@ export const TUNING = {
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
   /** นักรบคลั่ง ult: +power for the rest of the fight = this share of max HP (×1.5 at Lv2), at least 2 */
-  'ult.berserker.grow': 0.009,
+  'ult.berserker.grow': 0.006,
   'ult.berserker.pow': 0.08,
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,

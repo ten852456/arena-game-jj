@@ -269,6 +269,44 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
     revealedKinds = hid.s.skills.filter((k) => k.mark).map((k) => k.mark).join(',');
     check('honest: a wish mark is carved hidden and the next fight reveals the server kind', hid.res.every((r) => r.status === 200) && !hid.s.skills.some((k) => k.markHidden) && revealedKinds.length > 0, `revealed ${revealedKinds || 'none'}`);
   }
+  // round 9 security review: explicit kinds are no oracle; the source label is the server's call
+  {
+    const id = t + '-or9';
+    const s = newRun('knight', 4242, id);
+    const errs = new Set<string>();
+    let hiddenOk = false;
+    let lieOk = false;
+    while (s.phase !== 'won' && s.phase !== 'dead' && s.day <= 12) {
+      if (s.phase === 'lastchance') { chooseLastChance(s, 'supply'); continue; }
+      if (s.phase === 'mark') { applyMark(s, 0); continue; }
+      if (s.day >= 9) lv3Only(s); else botDay(s, botRules(['shield'], 'hard'));
+      if (s.day >= 9 && !hiddenOk && wishKind(s) === 'mark' && s.gold >= wishPrice(s)) {
+        s.online = true;
+        wish(s); // carved hidden
+        const hb = toBuild(s);
+        const idx = hb.skills.findIndex((k) => k.markHidden);
+        // the same gained mark with each explicit kind: one answer for all four (one of them is the real roll)
+        for (const m of ['burn', 'echo', 'quick', 'steadfast'] as const) {
+          const [st, f] = await post('/api/fight', { runId: id, playerId: t, name: '', day: s.day, rating: 1000, build: { ...hb, skills: hb.skills.map((k, i) => (i === idx ? { id: k.id, v: k.v, ...(k.bonus ? { bonus: k.bonus } : {}), mark: m } : k)) } });
+          errs.add(`${st} ${f?.error}`);
+        }
+        // a lying source label ('last' on a run that never had a last chance) changes nothing: accepted as a wish mark
+        const [st2, f2] = await post('/api/fight', { runId: id, playerId: t, name: '', day: s.day, rating: 1000, build: { ...hb, skills: hb.skills.map((k, i) => (i === idx ? { ...k, markHidden: 'last' as const } : k)) } });
+        lieOk = st2 === 200 && (f2.revealed ?? []).length === 1;
+        hiddenOk = lieOk;
+        if (st2 !== 200) break;
+        for (const x of f2.revealed ?? []) { const k = s.skills[x.idx]; if (k) { k.mark = x.mark; delete k.markHidden; } }
+        recordResult(s, f2.won, { opp: f2.opponent.name, ai: true }, f2.result.winner === -1);
+        continue;
+      }
+      const [st, f] = await post('/api/fight', { runId: id, playerId: t, name: '', day: s.day, rating: s.rating, build: toBuild(s) });
+      if (st !== 200) break;
+      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      recordResult(s, f.won, { opp: f.opponent.name, ai: true }, f.result.winner === -1);
+    }
+    check('oracle: a gained mark with an explicit kind gets one error for every kind', errs.size === 1 && [...errs][0].startsWith('400'), [...errs].join(' | '));
+    check('a gained mark sent hidden is accepted, and a lying source label has no effect', hiddenOk && lieOk, `hidden ${hiddenOk}`);
+  }
   // 4 the client's wish rules match the server's: no mark wish before every skill is Lv3
   const early = newRun('knight', 77, t + '-ew');
   early.day = 3; early.gold = 50;
