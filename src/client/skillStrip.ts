@@ -23,8 +23,8 @@ const ICON_SMALL = 30;
 const GAP = 3;
 const SIDE_X = [160, 480];
 const SIDE_LINE = [0x9fd3ff, 0xffaaaa];
-export const ARCH_HEX: Record<string, number> = {
-  tank: 0x9ccbff, burst: 0xffa6ba, scaling: 0xffd98f, control: 0x9df0df, none: 0xc6c1e8,
+export const LINE_HEX: Record<string, number> = {
+  hit: 0xff9a9a, dodge: 0xb6f0c8, shield: 0x9ccbff, heal: 0xffb3d9, burn: 0xffb070, poison: 0xc49cff, ice: 0x9df0ff, wind: 0xd8f5a2, none: 0xc6c1e8,
 };
 const TOP = -Math.PI / 2;
 
@@ -163,7 +163,7 @@ export class SkillStrip {
         const m = this.icons[s][i];
         const cx = this.slotX(s, i);
         const cy = this.rowY;
-        const color = ARCH_HEX[SKILLS[k.id]?.arch ?? 'none'];
+        const color = LINE_HEX[SKILLS[k.id]?.line ?? 'none'];
         const until = st.glow[s].get(i) ?? -1;
         const lit = until >= st.clock;
         const base = (m.getData('s') as number) ?? ICON / 128;

@@ -1,8 +1,8 @@
-import { HEROES_BY_ID, type CombatHooks, type HookFighter } from './heroes';
+import { HEROES_BY_ID, ULT_LV2_POW, inLine, lineAffinity, ultLevel, ultPow, ultTrig, type CombatHooks, type HookFighter } from './heroes';
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
-import { SKILLS, execNode, lvOf, nodeOf, reacts, type Ctx, type FighterView } from './skills';
+import { SKILLS, execNode, lvOf, nodeOf, rarityOf, reacts, type Ctx, type FighterView } from './skills';
 import type {
   BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
 } from './types';
@@ -25,17 +25,21 @@ import type {
  *   to freeze and delay for CTL_IMMUNE ticks;
  * - skills with ✨ ชำระ or 🗿 ใจเหล็ก react: when control lands on their owner they fire right away
  *   (at most once per their cooldown, and their cooldown restarts).
+ *
+ * Lines (sim v12): dodge charges negate whole direct hits (not burn, poison, thorns, fatigue or ultimates); poison is a
+ * long, weak DoT that ignores shields and cuts healing; haste speeds up your own cooldowns. Each hero's ultimate is
+ * unlocked by the build (heroes.ts ultLevel) and fires at most once per fight when its trigger is met.
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 11;
+export const SIM_VERSION = 20;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
  * Base HP per day, tuned with `npm run balance` so fights last ≈10–13s on days 1–3,
  * 15–22s on days 4–7 and 23–30s on day 8+ (bot damage per second grows about linearly with the day).
  */
-const HP_BY_DAY = [16, 18, 21, 39, 50, 61, 72, 127, 135, 156, 176, 198, 220];
+const HP_BY_DAY = [15, 20, 26, 44, 57, 68, 80, 127, 135, 156, 176, 198, 220];
 /** HP added per day after the table */
 const HP_LATE_STEP = 60;
 /** tuning.ts multiplier of the base HP on a day */
@@ -50,8 +54,8 @@ export const fatigueStart = (day: number) => Math.round(Math.min(30, day <= 3 ? 
 /** Fatigue damage in the n-th second = n × step, so it ends a fight a few seconds after it starts on every day. */
 export const fatigueStep = (day: number) => Math.max(1, Math.ceil(hpFor(day) / 30));
 const MAX_FREEZE_TICKS = 15;
-const FREEZE_DR = 0.6; // each recent freeze makes the next one 40% shorter
-const FREEZE_DR_DECAY = 4 * TPS; // one stack of diminishing returns wears off every 4s
+const FREEZE_DR = 0.5; // each recent freeze makes the next one half as long (sim v19: was 40% shorter)
+const FREEZE_DR_DECAY = 6 * TPS; // one stack of diminishing returns wears off every 6s (sim v19: 4s)
 /** Total frozen time per fight (≈25% of the target fight length); after that freezes are resisted. */
 export const freezeCap = (day: number) => (day <= 3 ? 2 : day <= 7 ? 4.5 : 6) * TPS;
 const SLOW_CAP = 0.5;
@@ -64,13 +68,35 @@ const MAX_CHAIN = 8;
  */
 export const TRIGGER_GAP = 2 * TPS;
 export const TRIGGER_GAP_MAX = 4 * TPS;
+/** a skill set off by an engine (ฟันเฟือง / เร่งเครื่อง) can't be set off again for at least this long (sim v14) */
+export const ENGINE_GAP = 3 * TPS;
+/** a double KO where the damage dealt is this close (share of the bigger) is a draw */
+export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
+/** ร่ายไว mark: cooldown × this (sim v19: 0.6 was the one mark everyone wanted) */
+export const QUICK_MARK = 0.75;
+/** ตราศักดิ์สิทธิ์ powers at most this many marked skills */
+export const SIGIL_MAX = 2;
+/** sim v18: a skill of the hero's line fires its first cast at most this many ticks into the fight (slow lines start sooner) */
+export const FIRST_CAST = 3.5 * TPS;
+export const FIRST_CAST_STEP = 1 * TPS;
+export const FIRST_CAST_MAX = 6.5 * TPS;
+/** a cleanse removes at most this many burn / poison stacks per cast */
+export const CLEANSE_MAX = 4;
+/** no ultimate fires before this tick */
+export const ULT_MIN_T = 6 * TPS;
+export const FIRST_CAST_DAYS = 7;
+/** damage sources a spiked shield does not reflect */
+const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
 export const CTL_IMMUNE = 1.5 * TPS;
-/** The control cap also grows with the fight: at tick t at most CTL_BASE + CTL_SHARE × t ticks can have been spent. */
-export const CTL_BASE = 1 * TPS;
-export const CTL_SHARE = 0.3;
+/**
+ * The control cap grows with the fight (sim v16: a flat share): at tick t at most CTL_SHARE × max(t, CTL_MIN_T) ticks of
+ * freeze + delay can have landed, so over a fight longer than CTL_MIN_T control is at most CTL_SHARE of it.
+ */
+export const CTL_MIN_T = 4 * TPS;
+export const CTL_SHARE = 0.25;
 /** A fighter that has not fired any skill for this long shakes off freeze / slow and resists all control until it fires. */
 export const SHAKE_OFF = 4 * TPS;
 /** control shorter than this does not set off ✨/🗿 reactions */
@@ -118,6 +144,8 @@ interface Stack {
 interface Fighter {
   side: Side;
   hero: string;
+  /** the build's run relics (relics.ts) */
+  relics: Set<string>;
   hooks: CombatHooks;
   blocks: Block[];
   hp: number;
@@ -136,7 +164,34 @@ interface Fighter {
   /** block that set the current charge (credit for buff damage) */
   chargeIdx: number;
   thorns: Stack[];
-  burns: { dps: number; t: number; idx: number }[];
+  burns: Dot[];
+  poisons: Dot[];
+  /** dodge charges, and hits dodged this fight */
+  dodge: number;
+  dodges: number;
+  /** damage this fighter dealt (pre-shield, no fatigue): decides a double KO */
+  dealtTotal: number;
+  /** haste share and ticks left */
+  hasteP: number;
+  hasteT: number;
+  /** healing cut share and ticks left */
+  woundP: number;
+  woundT: number;
+  /** ultimate: level from the build, fired yet, trigger counters */
+  ultLv: number;
+  ultDone: boolean;
+  /** shield gained this fight (not the start shield) */
+  shieldGot: number;
+  /** direct hits taken (landed) */
+  hitsTaken: number;
+  /** casts of this hero's line skills */
+  lineCasts: number;
+  /** slows / delays this fighter landed on the enemy */
+  ctlLanded: number;
+  /** biggest single hit this fighter dealt */
+  bigHit: number;
+  /** นักรบหนาม ult: poison thorns active until this tick */
+  ultUntil: number;
   freezeN: number;
   /** share of control (freeze / slow / delay) that still lands on this fighter: 1 = all, 0.4 = ใจเหล็ก */
   ctlKeep: number;
@@ -159,12 +214,64 @@ interface Fighter {
   side_: SideStat;
 }
 
+interface Dot {
+  dps: number;
+  /** ticks left */
+  t: number;
+  idx: number;
+}
+
 const sum = (xs: Stack[]) => xs.reduce((n, x) => n + x.v, 0);
+const dps = (xs: Dot[]) => xs.reduce((n, x) => n + x.dps, 0);
+/** damage still to come from a list of DoT stacks */
+const dotLeft = (xs: Dot[]) => xs.reduce((n, b) => n + b.dps * Math.ceil(b.t / TPS), 0);
 
 /** haste = cooldown cut from connect bonuses (0.2 per haste bonus, at most halved) */
-export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0): number {
-  const base = nodeOf(k).cd * (k.mark === 'quick' ? 0.6 : 1) * Math.max(0.5, 1 - haste);
+export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'star'>, haste = 0): number {
+  const base = nodeOf(k).cd * (k.mark === 'quick' ? QUICK_MARK : 1) * Math.max(0.5, 1 - haste) * ((k.star ?? 0) >= 3 ? 1 - T['star.cd3'] : 1);
   return Math.max(5, Math.round(base));
+}
+
+/** ถนัดสาย: a skill of the hero's own line (shared or its unique) works at this power (tuning.ts `line.affinity`). */
+export const affinityOf = (hero: string, id: string, v = '') =>
+  inLine(hero, id) ? lineAffinity(hero) * (lvOf(v) >= 3 ? T['line.lv3'] : 1) : 1;
+/** most dodge charges a hero can hold: +1 for the 💨 line */
+export const dodgeCap = (hero: string, relics: readonly string[] = []) =>
+  T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0) + (relics.includes('featherstep') ? 1 : 0);
+/** ★ on a Lv3 skill: its numbers ×(1 + star.pow) per star */
+export const starPower = (star = 0) => {
+  const n = Math.max(0, Math.min(3, star));
+  // sim v20: ★ and ★★ are small (+8% each), ★★★ is the spike (+12% more, and the echo)
+  return 1 + T['star.pow'] * Math.min(2, n) + (n >= 3 ? T['star.pow3'] : 0);
+};
+/**
+ * Power from the build's relics for one skill (sim v17): wanderer (off-line skills), twin line (the second line),
+ * lone wolf (≤ 3 skills), sigil (marked skills).
+ */
+export function relicPower(b: Build, inst: SkillInstance): number {
+  const rs = b.relics ?? [];
+  if (!rs.length) return 1;
+  // ตราศักดิ์สิทธิ์ (sim v18): only the first SIGIL_MAX marked skills of the list
+  let m = 1;
+  const line = SKILLS[inst.id]?.line;
+  if (rs.includes('wanderer') && !inLine(b.hero, inst.id)) m *= 1 + T['relic.wanderer'];
+  if (rs.includes('twinline') && line && line === secondLine(b)) m *= 1 + T['relic.twinline'];
+  if (rs.includes('lonewolf') && b.skills.length <= 3) m *= 1 + T['relic.lonewolf'];
+  if (rs.includes('sigil') && inst.mark && b.skills.filter((k) => k.mark).slice(0, SIGIL_MAX).includes(inst)) m *= 1 + T['relic.sigil'];
+  return m;
+}
+/** the line (not the hero's own, not 'none') the build owns most skills of; ties: first in the list */
+export function secondLine(b: Build): string | null {
+  const main = HEROES_BY_ID[b.hero]?.line;
+  const n: Record<string, number> = {};
+  let best: string | null = null;
+  for (const k of b.skills) {
+    const l = SKILLS[k.id]?.line;
+    if (!l || l === 'none' || l === main) continue;
+    n[l] = (n[l] ?? 0) + 1;
+    if (!best || n[l] > n[best]) best = l;
+  }
+  return best;
 }
 
 function makeBlocks(b: Build): Block[] {
@@ -175,8 +282,8 @@ function makeBlocks(b: Build): Block[] {
     if (!SKILLS[inst.id]) return;
     const t = bonusTotals(skills, out.length, act);
     out.push({
-      inst: { ...inst }, idx, cd: cdTicks(inst, t.haste), prog: 0,
-      power: t.power, dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      inst: { ...inst }, idx, cd: Math.round(cdTicks(inst, t.haste) * ((b.relics ?? []).includes('permafrost') ? 1 + T['relic.permafrostCd'] : 1)), prog: 0,
+      power: t.power * affinityOf(b.hero, inst.id, inst.v) * (lvOf(inst.v) >= 3 ? starPower(inst.star) : 1) * relicPower(b, inst) * (inst.mark === 'steadfast' ? 1.25 : 1), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
@@ -188,33 +295,54 @@ const emptyStat = (): BlockStat => ({ c: 0, tc: 0, d: 0, bd: 0, bf: 0, h: 0, sh:
 
 function makeFighter(b: Build, side: Side, day: number): Fighter {
   const hooks = HEROES_BY_ID[b.hero]?.hooks ?? {};
-  const maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
+  const relics = new Set((b.relics ?? []).filter((r) => typeof r === 'string'));
+  let maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
+  if (relics.has('ironhide')) maxHp = Math.round(maxHp * (1 + T['relic.ironhide']));
+  if (relics.has('glasscannon')) maxHp = Math.max(1, Math.round(maxHp * T['relic.glassHp']));
+  const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
+  const blocks = makeBlocks(b);
+  // early days only: a slow line's first cast comes by FIRST_CAST (fights on days 1–FIRST_CAST_DAYS are short)
+  // sim v19: staggered by list order (3.5 s, 4 s, 4.5 s, 5 s …) so the line's first casts don't land as one volley with the ult
+  if (day <= FIRST_CAST_DAYS) {
+    let n = 0;
+    for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - Math.min(FIRST_CAST_MAX, FIRST_CAST + FIRST_CAST_STEP * n++));
+  }
+  if (relics.has('quickdraw')) for (const blk of blocks) blk.prog = Math.max(blk.prog, Math.round(blk.cd * T['relic.quickdraw']));
+  // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
+  if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
   return {
-    side, hero: b.hero, hooks, blocks: makeBlocks(b),
-    hp: maxHp, maxHp, shield: hooks.startShield ? hooks.startShield(0, maxHp) : 0,
+    side, hero: b.hero, hooks, blocks, relics,
+    hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
-    burns: [], freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
-    stats: b.skills.map(emptyStat),
+    burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
+    ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
+    freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
+    stats: b.skills.map(emptyStat), dealtTotal: 0,
     immuneUntil: 0, pendingReact: [], lastFire: 0,
-    side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0 },
+    side_: { casts: 0, never: [], fr: 0, dl: 0, sl: 0, ctl: 0, resisted: 0, ultLv: ultLevel(b), ult: -1, dodged: 0 },
   };
 }
 
-export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trace?: boolean } = {}): CombatResult {
+export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trace?: boolean; /** simulator only: these sides fight with their ultimate locked */ noUlt?: [boolean, boolean] } = {}): CombatResult {
   const rng = new Rng(seed);
   const F: [Fighter, Fighter] = [makeFighter(a, 0, day), makeFighter(b, 1, day)];
+  for (const f of F) if (opts.noUlt?.[f.side]) f.ultLv = f.side_.ultLv = 0;
   const events: CombatEvent[] = [];
   let t = 0;
 
   const fx = (f: Fighter): Fx => ({
-    g: sum(f.growth),
+    g: Math.round(sum(f.growth)),
     c: f.charge,
     th: sum(f.thorns),
     sf: f.ctlKeep < 1 ? 1 : 0,
-    b: f.burns.reduce((n, x) => n + x.dps, 0),
+    b: dps(f.burns),
     fr: f.frozen,
     sl: f.slowT > 0 ? Math.round(f.slowPct * 100) : 0,
     slt: f.slowT,
+    dg: f.dodge,
+    p: dps(f.poisons),
+    hs: f.hasteT > 0 ? Math.round(f.hasteP * 100) : 0,
+    hst: f.hasteT,
   });
   const snap = (): Snap => ({ hp: [F[0].hp, F[1].hp], sh: [F[0].shield, F[1].shield], fx: [fx(F[0]), fx(F[1])] });
   const emit = (e: EventBody) => {
@@ -222,7 +350,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   };
   const view = (x: Fighter): FighterView => ({
     hp: x.hp, maxHp: x.maxHp, shield: x.shield, frozen: x.frozen > 0, slowed: x.slowT > 0, hero: x.hero,
-    thorns: sum(x.thorns), growth: sum(x.growth), burnLeft: x.burns.reduce((n, b) => n + b.dps * Math.ceil(b.t / TPS), 0),
+    thorns: sum(x.thorns), growth: sum(x.growth), burnLeft: dotLeft(x.burns), burnStacks: x.burns.length,
+    poisonLeft: dotLeft(x.poisons), dodge: x.dodge,
   });
   const hookApi = (f: Fighter): HookFighter => ({
     get hero() { return f.hero; },
@@ -239,10 +368,31 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     },
     addShield(n) {
       f.shield += n;
+      f.shieldGot += n;
       emit({ type: 'shield', side: f.side, amount: n });
     },
     status(kind: StatusKind, value: number) {
       emit({ type: 'status', side: f.side, status: kind, value });
+    },
+    dodge(n) {
+      addDodge(f, n);
+    },
+    shedPoison() {
+      if (!f.poisons.length) return;
+      let k = 0;
+      f.poisons.forEach((x, i) => { if (x.dps > f.poisons[k].dps) k = i; });
+      f.poisons.splice(k, 1);
+      emit({ type: 'status', side: f.side, status: 'cleanse', value: 1 });
+    },
+    poisonFoe(d, secs) {
+      addPoison(F[1 - f.side], d, secs, -1);
+    },
+    woundFoe(pct, secs) {
+      const foe = F[1 - f.side];
+      if (foe.hp <= 0) return;
+      // quiet: no status event for every hit (the wound chip is enough)
+      foe.woundP = foe.woundT > 0 ? Math.max(foe.woundP, pct) : pct;
+      foe.woundT = Math.max(foe.woundT, Math.round(secs * TPS));
     },
   });
   const init = snap();
@@ -266,6 +416,10 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   const first = rng.int(2); // who acts first on even ticks
   const fStart = fatigueStart(day);
   const fStep = fatigueStep(day);
+  // ใจเหล็ก works from the start of the fight when the build owns a skill with it (sim v15: before, only after it fired)
+  for (const f of F)
+    for (const blk of f.blocks)
+      for (const e of nodeOf(blk.inst).fx) if (e.k === 'steadfast') f.ctlKeep = Math.min(f.ctlKeep, e.keep ?? 0.4);
   const fCap = freezeCap(day);
   const sCap = Math.round(fCap * 1.75);
   for (const f of F) f.hooks.onStart?.(hookApi(f));
@@ -274,6 +428,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   /** shieldable: true / false, or the share of the hit (0..1) that shields can block */
   function deal(target: Fighter, amount: number, shieldable: boolean | number, src: string, owner = -1, bonusPart = 0) {
     if (amount <= 0 || target.hp <= 0) return;
+    if (src !== 'fatigue') F[1 - target.side].dealtTotal += amount;
     let blocked = 0;
     const share = shieldable === true ? 1 : shieldable === false ? 0 : shieldable;
     if (share > 0 && target.shield > 0) {
@@ -281,18 +436,190 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       target.shield -= blocked;
     }
     target.hp -= amount - blocked;
+    // โล่หนาม: part of what the shield blocked goes back to the attacker (not from DoTs, thorns or fatigue)
+    if (blocked > 0 && target.relics.has('spikedshield') && !NO_REFLECT.has(src)) {
+      const back = Math.round(blocked * T['relic.spikedshield']);
+      if (back > 0) deal(F[1 - target.side], back, true, 'thorns');
+    }
     const st = F[1 - target.side].stats[owner];
     if (st) {
       st.d += amount;
       st.bd += Math.min(amount, bonusPart);
     }
+    // นักรบคลั่ง's ultimate: a killing blow leaves 1 HP instead (once per fight)
+    const undying = target.hp <= 0 && target.hero === 'berserker' && target.ultLv > 0 && !target.ultDone;
+    if (undying) target.hp = 1;
     emit({ type: 'damage', side: target.side, amount: amount - blocked, blocked, src });
+    if (undying) fireUlt(target);
     target.hooks.onDamaged?.(hookApi(target), amount - blocked, src);
   }
 
-  function addBurn(foe: Fighter, dps: number, secs: number, idx: number) {
-    foe.burns.push({ dps, t: secs * TPS, idx });
-    emit({ type: 'status', side: foe.side, status: 'burn', value: foe.burns.reduce((n, x) => n + x.dps, 0) });
+  /** ไฟ/พิษละลายโล่: a burning or poisoned fighter gains less shield (tuning.ts `burn.shield`) */
+  const meltShield = (f: Fighter, n: number) => ((f.burns.length || f.poisons.length) && n > 0 ? Math.max(1, Math.round(n * T['burn.shield'])) : n);
+  function addBurn(foe: Fighter, d: number, secs: number, idx: number) {
+    foe.burns.push({ dps: d, t: secs * TPS, idx });
+    emit({ type: 'status', side: foe.side, status: 'burn', value: dps(foe.burns) });
+  }
+  function addPoison(foe: Fighter, d: number, secs: number, idx: number) {
+    if (foe.hp <= 0) return;
+    foe.poisons.push({ dps: d, t: Math.round(secs * TPS), idx });
+    emit({ type: 'status', side: foe.side, status: 'poison', value: dps(foe.poisons) });
+  }
+  function addDodge(f: Fighter, n: number) {
+    f.dodge = Math.min(dodgeCap(f.hero, [...f.relics]), f.dodge + n);
+    emit({ type: 'status', side: f.side, status: 'dodge', value: f.dodge });
+  }
+  function addHaste(f: Fighter, pct: number, secs: number) {
+    if (f.relics.has('tailspin')) [pct, secs] = [pct + 0.1, secs + T['relic.tailspin']];
+    f.hasteP = Math.min(T['haste.cap'], f.hasteT > 0 ? Math.max(f.hasteP, pct) : pct);
+    f.hasteT = Math.max(f.hasteT, Math.round(secs * TPS));
+    emit({ type: 'status', side: f.side, status: 'haste', value: Math.round(f.hasteP * 100) });
+  }
+  function addWound(foe: Fighter, pct: number, secs: number) {
+    foe.woundP = foe.woundT > 0 ? Math.max(foe.woundP, pct) : pct;
+    foe.woundT = Math.max(foe.woundT, Math.round(secs * TPS));
+    emit({ type: 'status', side: foe.side, status: 'wound', value: Math.round(foe.woundP * 100) });
+  }
+  /** remove up to n burn / poison stacks, strongest first (burn wins ties) */
+  function removeDots(f: Fighter, n: number) {
+    let removed = 0;
+    for (let r = 0; r < n && (f.burns.length || f.poisons.length); r++) {
+      const all = [...f.burns.map((x) => ({ x, list: f.burns })), ...f.poisons.map((x) => ({ x, list: f.poisons }))];
+      let k = 0;
+      all.forEach((y, i) => { if (y.x.dps > all[k].x.dps) k = i; });
+      const { x, list } = all[k];
+      list.splice(list.indexOf(x), 1);
+      removed++;
+    }
+    return removed;
+  }
+
+  /** damage multiplier of f's relics on one of its hits (sim v17) */
+  function relicHit(f: Fighter, foe: Fighter) {
+    let m = 1;
+    if (f.relics.has('executioner') && foe.hp < foe.maxHp * 0.4) m *= 1 + T['relic.executioner'];
+    if (f.relics.has('rot') && foe.poisons.length) m *= 1 + T['relic.rot'];
+    if (f.relics.has('brittle') && foe.frozen > 0) m *= 1 + T['relic.brittle'];
+    // ปืนแก้ว: its extra is added in hit() with a per-hit cap (glassCap × the enemy's max HP)
+    if (f.relics.has('counterstep') && f.flags.counter) {
+      m *= 1 + T['relic.counterstep'];
+      f.flags.counter = 0;
+    }
+    return m;
+  }
+
+  // ---------------- ultimates ----------------
+  /** most damage one damage ultimate can deal: a share of the enemy's max HP (Lv2 × ULT_LV2_POW) */
+  const ultCap = (f: Fighter, foe: Fighter) => foe.maxHp * T['ult.cap'] * (f.ultLv >= 2 ? ULT_LV2_POW : 1);
+  /** Fire f's ultimate now (its trigger was met). */
+  function fireUlt(f: Fighter) {
+    const foe = F[1 - f.side];
+    f.ultDone = true;
+    f.side_.ult = t;
+    emit({ type: 'ult', side: f.side, hero: f.hero, lv: f.ultLv });
+    const pow = ultPow(f.hero, f.ultLv);
+    switch (f.hero) {
+      case 'assassin': {
+        // sim v15: hits harder the more HP the enemy is missing (a finisher), ignores shields; a dodge charge halves it
+        let n = Math.min(pow * (foe.maxHp - foe.hp), ultCap(f, foe));
+        if (foe.dodge > 0) {
+          foe.dodge--;
+          foe.dodges++;
+          foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
+          emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
+          n /= 2;
+        }
+        deal(foe, Math.max(1, Math.round(n)), false, 'ult');
+        break;
+      }
+      case 'duelist':
+        addHaste(f, pow, 3);
+        addDodge(f, 2);
+        break;
+      case 'knight':
+        // sim v18: shield plus a share of max HP (late shields are small next to late HP, so Lv2 did almost nothing)
+        deal(foe, Math.max(1, Math.round(Math.min(pow * (f.shield + f.maxHp * T['ult.knight.hp']), ultCap(f, foe)))), true, 'ult');
+        break;
+      case 'berserker': {
+        const h = Math.min(f.maxHp - f.hp, Math.round(pow * f.maxHp));
+        if (h > 0) {
+          f.hp += h;
+          emit({ type: 'heal', side: f.side, amount: h });
+        }
+        // sim v19: a bigger payoff (+power for the rest of the fight scales with the day's HP)
+        const g = Math.max(2, Math.round(f.maxHp * T['ult.berserker.grow'] * (f.ultLv >= 2 ? 1.5 : 1)));
+        f.growth.push({ v: g, idx: -1 });
+        emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
+        break;
+      }
+      case 'pyro': {
+        // a share (pow) of the burn still to come lands now as one blast; the burns keep burning (sim v14: before, they were used up)
+        const left = dotLeft(foe.burns);
+        deal(foe, Math.max(1, Math.round(pow * left)), false, 'ult');
+        break;
+      }
+      case 'thornguard':
+        f.ultUntil = t + Math.round(pow * TPS);
+        addWound(foe, 1, pow);
+        // sim v16: it also poisons at once (it used to need hits on you, so a burn build that rarely hits shrugged it off)
+        addPoison(foe, T['ult.thornguard.poison'], pow, -1);
+        break;
+      case 'witch': {
+        // no diminishing returns and no immunity window, but still under the control cap (and ใจเหล็ก)
+        let ticks = Math.round(pow * TPS * foe.ctlKeep);
+        ticks = Math.max(0, Math.min(ticks, ctlRoom(foe) + foe.frozen));
+        if (ticks > foe.frozen) {
+          foe.frozenTotal += ticks - foe.frozen;
+          foe.frozen = ticks;
+          emit({ type: 'status', side: foe.side, status: 'freeze', value: ticks });
+          if (ticks >= REACT_MIN) controlled(foe);
+        } else {
+          foe.side_.resisted++;
+          emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
+        }
+        const m = f.ultLv >= 2 ? 2.4 : 2;
+        if (m >= f.charge) {
+          f.charge = m;
+          f.chargeIdx = -1;
+          f.chargeHits = 1;
+        }
+        emit({ type: 'status', side: f.side, status: 'charge', value: m });
+        break;
+      }
+      case 'chrono': {
+        // sim v15: every cooldown jumps forward by pow of its length (was: all ready at once), then cleanse all
+        for (const b of f.blocks) b.prog = Math.min(b.cd, b.prog + Math.round(b.cd * pow));
+        let n = removeDots(f, 99);
+        if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
+        if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
+        if (f.woundT > 0) { f.woundT = 0; n++; }
+        emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
+        break;
+      }
+    }
+  }
+  /** Has f's trigger been met? (นักรบคลั่ง's also fires inside deal on a killing blow) */
+  function ultReady(f: Fighter): boolean {
+    if (f.ultLv <= 0 || f.ultDone || f.hp <= 0) return false;
+    const foe = F[1 - f.side];
+    if (foe.hp <= 0) return false;
+    const need = ultTrig(f.hero, f.ultLv);
+    switch (f.hero) {
+      case 'assassin': return f.bigHit > 0 && foe.hp < foe.maxHp * need;
+      case 'duelist': return f.dodges >= need;
+      case 'knight': return f.shieldGot >= f.maxHp * need && f.shield > 0;
+      case 'berserker': return f.hp < f.maxHp * need;
+      case 'pyro': return foe.burns.length >= need;
+      case 'thornguard': return f.hitsTaken >= need;
+      case 'witch': return f.lineCasts >= need;
+      case 'chrono': return f.ctlLanded >= need;
+      default: return false;
+    }
+  }
+  function ultCheck() {
+    // sim v19: no ultimate before ULT_MIN_T (it landed in the same second as the first casts: one-volley fights)
+    if (t < ULT_MIN_T) return;
+    for (const f of F) if (ultReady(f)) fireUlt(f);
   }
 
   /** power = cast power (connect bonus × echo); bonusDmg = + damage per hit from connect bonuses */
@@ -304,7 +631,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
   }
   /** freeze / delay ticks that can still land on this fighter now (their shared cap) */
-  const ctlRoom = (x: Fighter) => Math.floor(Math.min(fCap, CTL_BASE + CTL_SHARE * t) - x.frozenTotal);
+  const ctlRoom = (x: Fighter) => Math.floor(Math.min(fCap, CTL_SHARE * Math.max(t, CTL_MIN_T)) - x.frozenTotal);
   /** can freeze / delay land on this fighter now? (counts a resist when not) */
   const shaking = (x: Fighter) => t - x.lastFire >= SHAKE_OFF;
   function canControl(foe: Fighter) {
@@ -322,27 +649,59 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const ctl = Math.min(1, power);
     const thornsUntil = () => t + (f.hooks.thornsSecs ? f.hooks.thornsSecs * TPS : THORNS_TICKS);
     const ctx: Ctx = {
+      inLine: inLine(f.hero, inst.id),
+      power,
       v: (n) => Math.max(1, Math.round(n * power)),
       get me() { return view(f); },
       get foe() { return view(foe); },
       hit(n, o = {}) {
         if (foe.hp <= 0 || f.hp <= 0) return 0;
-        const mult = f.charge;
+        // a charge waits for a real hit: hits below charge.min (before power and charge) don't use it up
+        const useCharge = f.charge > 1 && n + bonusDmg >= T['charge.min'];
+        const mult = useCharge ? f.charge : 1;
         let dmg = Math.round((n + sum(f.growth) + bonusDmg) * mult);
         if (f.hooks.onHit) dmg = Math.max(0, Math.round(f.hooks.onHit(hookApi(f), dmg)));
+        if (f.relics.size) dmg = Math.round(dmg * relicHit(f, foe));
+        if (f.relics.has('glasscannon')) dmg = Math.round(Math.min(dmg * (1 + T['relic.glassDmg']), Math.max(dmg, dmg + foe.maxHp * T['relic.glassCap'])));
+        if (!o.sure && foe.dodge > 0) {
+          // dodged: the whole hit misses (a charge is spent on it too), no thorns, no leech
+          if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
+          else {
+            f.charge = 1;
+            f.chargeIdx = -1;
+            f.chargeHits = 0;
+          }
+          foe.dodge--;
+          foe.dodges++;
+          foe.side_.dodged = (foe.side_.dodged ?? 0) + 1;
+          emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
+          foe.hooks.onDodge?.(hookApi(foe));
+          if (foe.relics.has('counterstep')) foe.flags.counter = 1;
+          // a dodge is a graze, not a wall: a share of the hit still lands (no riders, no thorns, no leech)
+          // sim v16: a slowed enemy dodges the wind badly (จอมเวทลม: more of the hit still lands)
+          const graze = Math.round(dmg * (f.hero === 'chrono' && foe.slowT > 0 ? T['chrono.graze'] : T['dodge.graze']));
+          if (graze > 0) deal(foe, graze, 1 - (o.pierce ?? 0), inst.id, blk.idx);
+          return -1;
+        }
+        if (o.sure && foe.dodge > 0) emit({ type: 'status', side: foe.side, status: 'sure', value: foe.dodge });
+        f.bigHit = Math.max(f.bigHit, dmg);
+        foe.hitsTaken++;
+        f.hooks.onLanded?.(hookApi(f));
         // credit for connect bonuses: the +damage bonus plus the share added by power bonuses
         const fromPower = blk.power > 1 ? n - n / blk.power : 0;
         const bonusPart = Math.round((bonusDmg + fromPower) * mult);
         // credit for buffs: each พลัง stack's owner gets its share, the charge's owner gets the multiplier's extra
         for (const g of f.growth) if (f.stats[g.idx]) f.stats[g.idx].bf += Math.round(g.v * mult);
         if (mult > 1 && f.stats[f.chargeIdx]) f.stats[f.chargeIdx].bf += dmg - Math.round(dmg / mult);
-        if (f.chargeHits > 1) f.chargeHits--;
+        if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
         else {
           f.charge = 1;
           f.chargeIdx = -1;
           f.chargeHits = 0;
         }
         const pierce = o.pierce ?? 0;
+        // ตั้งรับ: a fighter behind a shield takes less from a direct hit that doesn't fully pierce (🛡 > ⚔)
+        if (foe.shield > 0 && pierce < 1) dmg = Math.max(1, Math.round(dmg * (1 - T['shield.guard'])));
         const hpBefore = foe.hp;
         deal(foe, dmg, 1 - pierce, inst.id, blk.idx, bonusPart);
         const dealt = Math.max(0, hpBefore - Math.max(0, foe.hp)) + 0;
@@ -353,24 +712,45 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         let th = Math.min(sum(foe.thorns), Math.ceil(dmg * THORNS_MAX));
         if (foe.hooks.thornsReflect) th = foe.hooks.thornsReflect(th, sum(foe.thorns), dmg);
         if (th > 0 && f.hp > 0) deal(f, th, true, 'thorns', foe.thorns[0]?.idx ?? -1);
+        // นักรบหนาม's ultimate: poison thorns
+        if (foe.ultUntil > t && f.hp > 0) for (let i = 0; i < 2; i++) addPoison(f, 1, 4, -1);
         return dealt;
       },
+      spendShield(n) {
+        f.shield = Math.max(0, f.shield - Math.round(n));
+      },
       shield(n) {
+        n = meltShield(f, n);
         f.shield += n;
+        f.shieldGot += n;
         st.sh += n;
         emit({ type: 'shield', side: f.side, amount: n });
       },
       heal(n) {
-        // the enemy's thorns also wound: healing is reduced while they have any
-        if (foe.thorns.length) n = Math.max(1, Math.round(n * foe.thornsHeal));
+        // the enemy's thorns, poison on you and wounds all cut healing
+        let m = f.relics.has('vitality') ? 1 + T['relic.vitality'] : 1;
+        if (foe.thorns.length) m *= foe.thornsHeal;
+        if (f.poisons.length) m *= T['poison.heal'];
+        if (f.woundT > 0) m *= 1 - f.woundP;
+        if (m !== 1) n = m > 0 ? Math.max(1, Math.round(n * m)) : 0;
         const h = Math.min(n, f.maxHp - f.hp);
         if (h > 0) {
           f.hp += h;
           st.h += h;
           emit({ type: 'heal', side: f.side, amount: h });
         }
+        // ถ้วยล้น: healing past full HP becomes shield
+        const over = Math.round((n - Math.max(0, h)) * T['relic.overflow']);
+        if (over > 0 && f.relics.has('overflow')) ctx.shield(over);
       },
-      burn(dps, secs) { addBurn(foe, dps, f.hooks.burnSecs ? f.hooks.burnSecs(secs) : secs, blk.idx); },
+      burn(d, secs) {
+        const s2 = secs + (f.relics.has('kindling') ? T['relic.kindling'] : 0);
+        addBurn(foe, d, f.hooks.burnSecs ? f.hooks.burnSecs(s2) : s2, blk.idx);
+      },
+      poison(d, secs) { addPoison(foe, d + (f.relics.has('virulence') ? T['relic.virulence'] : 0), secs, blk.idx); },
+      dodge(n) { addDodge(f, n); },
+      haste(pct, secs) { addHaste(f, pct * Math.min(1, power), secs); },
+      wound(pct, secs) { addWound(foe, pct, secs * ctl); },
       freeze(secs) {
         if (!canControl(foe)) {
           emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
@@ -382,7 +762,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           emit({ type: 'status', side: foe.side, status: 'freeze', value: 0 });
           return;
         }
-        let ticks = secs * ctl * TPS;
+        let ticks = (secs + (f.relics.has('permafrost') ? T['relic.permafrost'] : 0)) * ctl * TPS;
         if (f.hooks.freezeTicks) ticks = f.hooks.freezeTicks(ticks);
         ticks *= Math.pow(FREEZE_DR, foe.freezeN) * foe.ctlKeep; // diminishing returns (recovers over time), ใจเหล็ก
         ticks = Math.max(0, Math.min(MAX_FREEZE_TICKS, ctlRoom(foe), Math.round(ticks)));
@@ -397,12 +777,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         if (ticks >= REACT_MIN) controlled(foe);
       },
       slow(pct0, secs0) {
+        if (f.relics.has('gale')) [pct0, secs0] = [pct0 + T['relic.gale'], secs0 + 1];
         const [pct, secs] = f.hooks.slow ? f.hooks.slow(pct0, secs0 * ctl) : [pct0, secs0 * ctl];
         const p = Math.min(SLOW_CAP, pct * foe.ctlKeep);
         foe.slowPct = foe.slowT > 0 ? Math.max(foe.slowPct, p) : p;
         // total slowed time per fight is capped (twice the freeze cap); past it, slows are resisted
         // total slowed time has its own cap (1.75 × the freeze cap), which also grows with the fight
-        const room = shaking(foe) ? 0 : Math.max(0, Math.floor(Math.min(sCap, 2 * CTL_BASE + 2 * CTL_SHARE * t)) - foe.slowTotal - foe.slowT);
+        const room = shaking(foe) ? 0 : Math.max(0, Math.floor(Math.min(sCap, 2 * CTL_SHARE * Math.max(t, CTL_MIN_T))) - foe.slowTotal - foe.slowT);
         const add = Math.min(room, Math.max(0, secs * TPS - foe.slowT));
         if (add <= 0 && foe.slowT <= 0) {
           foe.side_.resisted++;
@@ -410,6 +791,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           return;
         }
         foe.slowT += add;
+        if (add > 0) f.ctlLanded++;
         emit({ type: 'status', side: foe.side, status: 'slow', value: Math.round(p * 100) });
         if (add >= REACT_MIN && p >= 0.3) controlled(foe);
       },
@@ -428,13 +810,14 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           st.fz += ticks;
           for (const b of foe.blocks) b.prog = Math.max(0, b.prog - ticks);
           foe.immuneUntil = t + CTL_IMMUNE;
+          f.ctlLanded++;
         } else foe.side_.resisted++;
         emit({ type: 'status', side: foe.side, status: 'delay', value: ticks });
         if (ticks >= REACT_MIN) controlled(foe);
       },
       grow(n) {
         f.growth.push({ v: n, idx: blk.idx });
-        emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
+        emit({ type: 'status', side: f.side, status: 'grow', value: Math.round(sum(f.growth)) });
       },
       charge(m, hits) {
         const mult = f.hooks.chargeMult ? f.hooks.chargeMult(m) : m;
@@ -457,25 +840,15 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         if (f.frozen > 0) f.frozen = Math.max(1, Math.round(f.frozen * keep));
         emit({ type: 'status', side: f.side, status: 'steadfast', value: 1 });
       },
-      amplify(cap0) {
-        const cap = Math.max(1, Math.round(cap0 * ctl));
-        const g = Math.min(cap, sum(f.growth));
-        const th = Math.min(cap, sum(f.thorns));
-        if (g > 0) f.growth.push({ v: g, idx: blk.idx });
-        if (th > 0) f.thorns.push({ v: th, idx: blk.idx, until: thornsUntil() });
-        if (f.charge > 1) f.charge = 1 + Math.min(cap, (f.charge - 1) * 2);
-        emit({ type: 'status', side: f.side, status: 'amplify', value: g + th });
-        return g + th;
-      },
-      cleanse(stacks) {
-        let n = 0;
-        // remove the strongest burn stacks
-        for (let r = 0; r < stacks && f.burns.length; r++) {
-          let k = 0;
-          f.burns.forEach((x, i) => { if (x.dps > f.burns[k].dps) k = i; });
-          f.burns.splice(k, 1);
-          n++;
+      cleanse(stacks, dotOnly) {
+        // the strongest burn / poison stacks, then slow, freeze and wounds (sim v20: at most CLEANSE_MAX stacks a cast,
+        // one feast cleansed 10 burns)
+        let n = removeDots(f, Math.min(stacks, CLEANSE_MAX));
+        if (dotOnly) {
+          emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
+          return n;
         }
+        if (f.woundT > 0) { f.woundT = 0; f.woundP = 0; n++; }
         if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
         if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
         emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
@@ -536,24 +909,31 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const blk = f.blocks[q.bi];
     const inst = blk.inst;
     const st = f.stats[blk.idx];
+    // หินลับมีด: the first cast of each skill in the fight is stronger
+    const firstCast = st.c + st.tc === 0 && f.relics.has('whetstone');
     if (q.from === undefined) st.c++;
     else {
       st.tc++;
-      blk.trigAt = t + Math.min(TRIGGER_GAP_MAX, Math.max(TRIGGER_GAP, blk.cd));
+      const byEngine = !!nodeOf(f.blocks[q.from].inst).engine;
+      blk.trigAt = t + Math.min(TRIGGER_GAP_MAX, Math.max(byEngine ? ENGINE_GAP : TRIGGER_GAP, blk.cd));
       if (q.restart) blk.prog = 0;
     }
     f.side_.casts++;
     f.lastFire = t;
+    if (SKILLS[inst.id].line === HEROES_BY_ID[f.hero]?.line) f.lineCasts++;
     emit({
       type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx,
+      ...(rarityOf(inst.id, inst.v) === 'epic' ? { epic: true } : {}),
       ...(q.from !== undefined ? { from: f.blocks[q.from].idx } : {}),
       ...(q.react ? { react: true } : {}),
     });
-    const power = blk.power * q.mult;
+    const power = blk.power * q.mult * (firstCast ? 1 + T['relic.whetstone'] : 1);
+    const dealtBefore = f.dealtTotal;
     runSkill(f, foe, blk, power, Math.round(blk.dmg * q.mult));
     if (blk.shieldOnFire > 0 && f.hp > 0) {
-      const n = Math.max(1, Math.round(blk.shieldOnFire * q.mult));
+      const n = meltShield(f, Math.max(1, Math.round(blk.shieldOnFire * q.mult)));
       f.shield += n;
+      f.shieldGot += n;
       st.sh += n;
       emit({ type: 'shield', side: f.side, amount: n });
     }
@@ -561,7 +941,17 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
       runSkill(f, foe, blk, power * 0.5, Math.round(blk.dmg * q.mult * 0.5));
     }
-    if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1, 3, blk.idx);
+    // sim v20: only the skill's own casts (an engine or a trigger setting it off does not burn again)
+    if (inst.mark === 'burn' && foe.hp > 0 && q.from === undefined) addBurn(foe, 1 + Math.floor(day / 3), 4, blk.idx);
+    // ★★★ signature (sim v18): every cast echoes once more at star.echo power
+    if ((inst.star ?? 0) >= 3 && lvOf(inst.v) >= 3 && foe.hp > 0 && f.hp > 0) {
+      // sim v19: a true share of the damage the cast dealt (no rounding up, no DoT / buff / cleanse repeat)
+      const extra = Math.floor((f.dealtTotal - dealtBefore) * T['star.echo']);
+      if (extra > 0) {
+        emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true, star3: true });
+        deal(foe, extra, true, inst.id, blk.idx);
+      }
+    }
 
     // trigger bonuses fire at the same power, but deeper chain steps get weaker
     const tm = q.depth >= 1 ? q.mult * T.chainDecay : q.mult;
@@ -617,7 +1007,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       f.frozen = 0;
       f.slowT = 0;
       f.slowPct = 0;
-      emit({ type: 'status', side: f.side, status: 'cleanse', value: 1 });
+      emit({ type: 'status', side: f.side, status: 'shake', value: 1 });
     }
     const frozen = f.frozen > 0;
     if (frozen) {
@@ -625,7 +1015,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       f.side_.fr++;
       if (f.frozen === 0) f.immuneUntil = t + CTL_IMMUNE;
     }
-    const rate = f.slowT > 0 ? 1 - f.slowPct : 1;
+    const rate = (f.slowT > 0 ? 1 - f.slowPct : 1) * (f.hasteT > 0 ? 1 + f.hasteP : 1);
     if (f.slowT > 0) f.side_.ctl += f.slowPct;
     const ready: number[] = [];
     f.blocks.forEach((blk, bi) => {
@@ -647,6 +1037,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       act(F[s]);
       reactAll(F[1 - s]);
       reactAll(F[s]);
+      ultCheck();
     }
     record();
     for (const f of F) {
@@ -655,6 +1046,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         f.slowTotal++;
         f.side_.sl++;
       }
+      if (f.hasteT > 0) f.hasteT--;
+      if (f.woundT > 0) f.woundT--;
       if (t % FREEZE_DR_DECAY === 0 && f.freezeN > 0) f.freezeN--;
       if (t % FREEZE_DR_DECAY === 0 && f.delayN > 0) f.delayN--;
       if (f.thorns.some((x) => x.until !== undefined && x.until <= t)) {
@@ -664,15 +1057,25 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
 
     if (t % TPS === 0) {
+      for (const f of F) if (f.hp > 0) f.hooks.onSecond?.(hookApi(f), t / TPS);
       for (const f of F) {
-        if (!f.burns.length || f.hp <= 0) continue;
-        // credit each burn stack's owner, then tick them down
-        const total = f.burns.reduce((n, x) => n + x.dps, 0);
+        // credit each burn / poison stack's owner, then tick them down
         const foeStats = F[1 - f.side].stats;
-        for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
-        deal(f, total, false, 'burn');
-        f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        if (f.burns.length && f.hp > 0) {
+          for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
+          // ไฟเผาโล่: each burn tick also burns away shield (tuning.ts `burn.scorch` × the burn per second);
+          // done before the burn damage so that damage event's snapshot already shows the smaller shield
+          f.shield -= Math.min(f.shield, Math.round(dps(f.burns) * T['burn.scorch'] * (F[1 - f.side].relics.has('meltdown') ? T['relic.meltdown'] : 1)));
+          deal(f, dps(f.burns), false, 'burn');
+          f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        }
+        if (f.poisons.length && f.hp > 0) {
+          for (const x of f.poisons) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
+          deal(f, dps(f.poisons), false, 'poison');
+          f.poisons = f.poisons.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
+        }
       }
+      ultCheck();
     }
 
     if (t >= fStart && (t - fStart) % TPS === 0) {
@@ -682,7 +1085,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
 
     if (F[0].hp <= 0 || F[1].hp <= 0) {
-      winner = F[0].hp === F[1].hp ? -1 : F[0].hp > F[1].hp ? 0 : 1;
+      // one side down: the other wins. Both down in the same tick (double KO): the side that dealt more damage in the
+      // whole fight wins, then the one less below zero, else a draw (sim v14; before: only "less below zero")
+      // (sim v15) damage within DRAW_SHARE of each other is a draw (costs no run HP): "who went further below zero" no longer decides
+      if (F[0].hp <= 0 && F[1].hp <= 0) {
+        const d = F[0].dealtTotal - F[1].dealtTotal;
+        winner = Math.abs(d) <= DRAW_SHARE * Math.max(F[0].dealtTotal, F[1].dealtTotal) ? -1 : d > 0 ? 0 : 1;
+      } else winner = F[0].hp > 0 ? 0 : 1;
       decided = true;
       break;
     }

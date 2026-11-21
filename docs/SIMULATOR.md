@@ -8,6 +8,7 @@ any number of workers), so two reports can be diffed.
 npm run sim                                   # = all, n 200, days 3,5,10,13, normal bots (~20 s on 12 cores)
 npm run sim -- matchups --n 300               # only matchups + fight length / health
 npm run sim -- runs --tier mix                # whole runs, bots of mixed difficulty
+npm run sim -- lines --n 100                  # in-line vs off-line builds, ult value, day-1 openings
 npm run sim -- all --json before.json         # save a machine-readable report
 # ... change numbers in combat.ts / skills.ts ...
 npm run sim -- all --json after.json --compare before.json   # print what moved
@@ -21,11 +22,12 @@ A baseline from the code this tool was written on is kept in `scripts/sim/baseli
 
 | mode | what it does |
 |---|---|
-| `matchups` | Per day in `--days`: `n` bot builds per hero, every hero vs every hero (2 opponents × both sides each, like `npm run balance`). Prints the archetype matrix per day, each hero's overall win rate per day, the share of its fights where it cast **no skill**, and every hero pair over 70%. Then a **fight length & health** table for days 1–13 (max(300, 2n) random fights per day). `--full` also prints the full hero × hero matrices. |
+| `matchups` | Per day in `--days`: `n` bot builds per hero, every hero vs every hero (2 opponents × both sides each, like `npm run balance`). Prints the **line × line matrix** per day (by hero main line; `*` marks a designed counter pair "row beats column"), each hero's overall win rate per day, the share of its fights where it cast **no skill**, and every hero pair over 75%. Then the **counter web** (each of the 16 designed "beats" pairs per day and averaged), the **ultimates** table and a **fight length & health** table for days 1–13 (max(300, 2n) random fights per day). `--full` also prints the full hero × hero matrices. |
 | `runs` | Bots play whole runs through the run API (shop → fight → result, day by day, last chance and marks included, like `scripts/runs.ts`) against a same-day pool of `--pool` bot builds (pool slot *i* is "the same opponent" on every day). Per hero: share of all 8-win runs, reach-8 rate, avg wins, avg days. Also: how often a run meets one opponent ≥ 3 times, how often a lost run lost twice to the same opponent / mostly to one opponent, and health numbers of all run fights. With `--tier mix` it also prints reach-8 by the runner's tier. |
 | `skills` | From the same bot runs, per skill: how many 8-win runs owned it at the end (pick in 8-win), how many runs owned it at all, the fight win rate of run builds that had it, and its average share of its side's damage. Hero-unique skills (`*`) use only that hero's runs. |
 | `tiers` | Bot difficulty check: for each day in `--days`, `n` random hero pairs per tier pair (hard vs normal, normal vs easy, hard vs easy), both sides. Prints win rates per day and on average, and the average unspent gold, skill count and summed skill levels of each tier's builds. |
-| `all` | All four (runs and skills share one simulation). |
+| `lines` | Does following the hero's line pay off? (sim v13) Per hero per day in `--days`: `n` **in-line** bot builds (prefer the hero's line, as usual) vs `n` **off-line** builds of the same hero (bot rule `avoid`: never buys a skill of the hero's line or its unique, so it picks the best generic skills by numbers). Bots are `normal` (`--tier hard` for numbers-aware bots). Prints in-line vs off-line head to head, both vs random normal bots of the day, the **ult value** (in-line builds with an unlocked ult vs the pool, with the ult and with it locked via `simulate(..., { noUlt })`, by ult level), the skills off-line / in-line builds own (Lv2+ keep the branch letter, e.g. `strike-b`), and **day 1**: every affordable opening (2 cards, ≤ 7 gold) of each hero's fixed day-1 shop vs random day-1 bots (easy / normal), best and worst. |
+| `all` | All five (runs and skills share one simulation). |
 
 ## Options
 
@@ -42,6 +44,37 @@ A baseline from the code this tool was written on is kept in `scripts/sim/baseli
 | `--strict` | | exit code 1 when any target is missed |
 | `--full` | | full hero × hero matrices, and no row limit in `--compare` |
 
+## Lines report targets (sim v13)
+
+| target | value |
+|---|---|
+| in-line beats off-line (average of days ≥ 5) | ≥ 55% |
+| ult worth (with − locked, every hero, Lv1 and Lv2) | ≤ 15 pts |
+| best day-1 opening of every hero vs normal day-1 bots | 50–70% |
+
+`runs` also prints the **ult unlock day** per hero: median (p25–p75) first day the run's build had ult Lv1 / Lv2, and the share of runs that never got there.
+
+## Counter web (sim v12, 8 lines)
+
+`BEATS` in `scripts/sim/targets.ts` is the designed web from docs/DESIGN_LINES_ULT.md §3 (each line beats 2, loses to
+2). The table prints the win rate of the row line vs the column line for every designed pair on every matchup day and
+the average; the target is 53–58% on the average (a soft counter, not a lock). Bots prefer only their hero's line, so a
+hero's builds are close to "pure line" builds and the matrix is a line-vs-line measurement.
+
+## Ultimates table
+
+Per hero, from the matchup builds of every day in `--days`:
+
+| column | meaning |
+|---|---|
+| unl dN | share of that day's bot builds with the ultimate unlocked (3+ pieces = Lv1) |
+| Lv2 dN | share with 5+ pieces (Lv2) |
+| fire% | fights where the ultimate fired / fights where it was unlocked (all days) |
+| at(med) | median fire tick / fight length |
+| win unl/locked | win rate of fights with the ult unlocked vs locked (locked is usually only early days) |
+
+Targets: fire% ≥ 75% (นักฆ่า / นักรบคลั่ง ≥ 50%, their ults are a finisher and a last stand), median fire time 40–70%.
+
 ## Health metrics (fight length & health table)
 
 | column | meaning |
@@ -53,14 +86,19 @@ A baseline from the code this tool was written on is kept in `scripts/sim/baseli
 | ctl/side, ctlmax | freeze + cast-delay ticks a side received (from the per-block `fz` stat): average and the worst single fight |
 | close | share of decided fights the winner ended at ≤ 10% HP |
 | trig/f, chain | casts set off by trigger connect bonuses per fight; the biggest trigger chain in one tick |
+| ult1+ / ult2 / fire% | sides of random bot builds (random heroes, normal tier) with the ult unlocked at Lv1+ / Lv2 = the **ult unlock rate by day**, and the fire rate of those |
 
 ## Targets
 
 | target | limit |
 |---|---|
-| archetype vs archetype (each day) | ≤ 65% |
-| hero vs hero pair (each day) | ≤ 70% |
-| hero spread, best − worst overall (each day) | ≤ 15 points |
+| line vs line (each day) | ≤ 75% |
+| hero vs hero pair (each day) | ≤ 75% |
+| hero spread, best − worst overall (each day) | ≤ 30 points |
+| every hero's overall win rate (each matchup day) | 45–55% |
+| designed counter pairs (average over the days) | 53–58% each |
+| ultimate fire rate when unlocked | ≥ 75% (นักฆ่า, นักรบคลั่ง ≥ 50%) |
+| ultimate median fire time | 40–70% of the fight |
 | fight length in target | every day 1–13 |
 | fatigue-ended | ≤ 20% every day |
 | 0-skill sides | ≤ 3% over days 1–13 |
@@ -77,14 +115,17 @@ Limits live in `scripts/sim/targets.ts`. `lengthTarget` there is a copy of the o
 
 - **easy** — no rerolls, noisy picks, undervalues upgrades, never makes room for a new skill, at most 1 purchase a day on
   days 1–3 and 2 later; 70% of easy bots leave one slot empty and skip upgrades on days 1–3. Keeps its list in buy order.
-- **normal** — the original bot (archetype + hero preferences, 2 rerolls a day, sorts the list for connect bonuses).
+- **normal** — line + hero preferences (`prefer` is a list of lines), 2 rerolls a day, sorts the list for connect
+  bonuses, +1 for its line's skills while the ultimate is locked and for Lv3 upgrades of line skills until ult Lv2.
 - **hard** — scores offers by their numbers per gold (damage, shield, heal, burn, control per second of cooldown; Lv2
   variants also count what their Lv3 children would be worth for this build, finishing a branch is worth more than
-  spreading gold), counts connect bonuses a new skill would switch on, buys anti-control when its archetype has no
+  spreading gold), counts connect bonuses a new skill would switch on, buys toward the ultimate (its line's skills while
+  locked, Lv3 on line skills until Lv2), likes its line's tech skill from day 3, buys anti-control when its line has no
   anti-control skill of its own (skills whose Lv1 has a `cleanse` or `steadfast` effect, read from `skills.ts`), buys
   slots from day 3 and rerolls up to 8 times so little gold is left over.
 - **every tier** owns at least one damage skill whose cooldown is ≤ 5 s (`isEarlyHitter`), bought first and never sold,
-  so no AI build is left without a skill that fires early.
+  so no AI build is left without a skill that fires early. It picks the hitter it likes most (its line / unique), the
+  cheaper one on a tie.
 
 ## How it works
 

@@ -55,3 +55,6 @@
   .xv-callout { padding: 6px 8px; margin-bottom: 6px; }
   .xv-facts { grid-template-columns: 1fr; }
 }
+
+/* 8 lines */
+.xv-a-hit { --xa: #ff9a9a; } .xv-a-dodge { --xa: #b6f0c8; } .xv-a-shield { --xa: #9ccbff; } .xv-a-heal { --xa: #ffb3d9; } .xv-a-burn { --xa: #ffb070; } .xv-a-poison { --xa: #c49cff; } .xv-a-ice { --xa: #9df0ff; } .xv-a-wind { --xa: #d8f5a2; } .xv-a-none { --xa: #c6c1e8; }

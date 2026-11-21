@@ -3,7 +3,8 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
-import type { Archetype, Build } from '../sim/types';
+import type { Build, Line } from '../sim/types';
+import type { LastChoice } from './validate';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -49,12 +50,26 @@ export interface FightRec {
 /** What the server saw of a run while it was being played: opponents met and result per day. */
 export interface RunTrack {
   playerId?: string;
+  /** the run's hero, bound on its first fight (sim v15) */
+  hero?: string;
+  /** the build of the last day fought, the day, and the least net gold the run has spent on builds so far (sim v15) */
+  build?: Build;
+  spent?: number;
+  /** extra skill slots the run has paid for so far */
+  paidSlots?: number;
+  /** marks paid as moon wishes so far, and the last chance's free mark if used (sim v18 ledger) */
+  wishMarks?: number;
+  freeMarks?: number;
+  /** per last-chance way (validate.ts wayKey): its own running spend, paid slots and marks */
+  ledger?: Record<string, { spent: number; paidSlots: number; wishMarks: number; freeMarks: number }>;
+  /** the last chance's choice, once the builds have shown which one it was */
+  lastChoice?: LastChoice;
   name: string;
   /** opponent snapshot ids and opponent run ids already met in this run (no repeats) */
   snaps: string[];
   opps: string[];
   /** day → 1 won, 0 lost/draw (a retried fight on the same day overwrites) */
-  days: Record<string, 0 | 1>;
+  days: Record<string, 0 | 1 | 2>;
   /** day 1 was the guided-tutorial fight (a training bot): it counts for the run, but earns no stardust or rating */
   tutorial?: true;
   /** run state mirrored on the server with the game's own rules (run.ts): HP, last chance used, run over */
@@ -65,6 +80,12 @@ export interface RunTrack {
   rating?: number;
   /** set when POST /api/run/finish recorded this run */
   finished?: number;
+  /**
+   * Server-only seed of the run's relic offers (sim v17, security review): crypto random, made on the run's first fight,
+   * never sent. Each relic day's 3 offers are rollRelicOffer(relicSeed, hero, day, owned); the client only gets the
+   * offer itself (fight response `nextRelics`). First step of docs/SERVER_RUN.md (the server owns the run's seed).
+   */
+  relicSeed?: number;
   t: number;
 }
 export interface FinishedRun {
@@ -72,7 +93,8 @@ export interface FinishedRun {
   playerId: string;
   name: string;
   hero: string;
-  arch: Archetype;
+  /** main line of the build (runs finished before sim v12 have an old `arch` field instead and no line) */
+  line?: Line;
   wins: number;
   losses: number;
   day: number;

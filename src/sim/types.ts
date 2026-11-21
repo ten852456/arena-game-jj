@@ -1,5 +1,10 @@
-export type Archetype = 'tank' | 'burst' | 'scaling' | 'control';
-export const ARCHES: Archetype[] = ['tank', 'burst', 'scaling', 'control'];
+/**
+ * The 8 lines (สาย): the identity system of skills and heroes. Each line beats 2 others and loses to 2 (softly,
+ * through mechanics: shields block hits, burn/poison ignore shields and cannot be dodged, dodge negates hits,
+ * heal out-sustains DoT, wind cleanses DoT, ice stops fast and healing cooldowns). docs/DESIGN_LINES_ULT.md.
+ */
+export type Line = 'hit' | 'dodge' | 'shield' | 'heal' | 'burn' | 'poison' | 'ice' | 'wind';
+export const LINES: Line[] = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind'];
 
 export type Mark = 'burn' | 'echo' | 'quick' | 'steadfast';
 
@@ -11,7 +16,7 @@ export type Mark = 'burn' | 'echo' | 'quick' | 'steadfast';
  */
 export type BonusKind = 'dmg' | 'shield' | 'haste' | 'power' | 'trigger';
 
-/** Active when the skill right above or right below matches t: a skill id, or 'arch:<archetype>'. */
+/** Active when the skill right above or right below matches t: a skill id, or 'line:<line>'. */
 export interface Bonus {
   t: string;
   e: BonusKind;
@@ -25,6 +30,14 @@ export interface SkillInstance {
   mark?: Mark;
   /** connect bonuses rolled when this copy was bought (kept through upgrades) */
   bonus?: Bonus[];
+  /** ★ after Lv3 (sim v17): 1–3 duplicate cards bought on top of the Lv3 skill */
+  star?: number;
+  /**
+   * sim v20: a mark carved in a ranked run whose kind the server has not revealed yet (it rolls the kind from its own
+   * seed and reveals it in the response of the next fight): 'wish' (moon wish) or 'last' (the last chance's mark).
+   * A hidden mark does nothing in a fight until it is revealed.
+   */
+  markHidden?: 'wish' | 'last';
 }
 
 /** A build is a hero plus its skill list, top to bottom. Neighbours (above / below) can turn on connect bonuses. */
@@ -33,6 +46,8 @@ export interface Build {
   skills: SkillInstance[];
   /** cosmetic look seed for the chibi art (colours, ears, face, outfit); never read by the sim */
   look?: number;
+  /** run relics (sim v17, relics.ts): run-long rule tweaks picked on days 4, 7 and 10, at most 3 */
+  relics?: string[];
 }
 
 export type Side = 0 | 1;
@@ -46,10 +61,16 @@ export type StatusKind =
   | 'thorns' // side = self, value = total thorns
   | 'steadfast' // side = self
   | 'rage' // side = self (hero passive)
-  | 'amplify' // side = self
   | 'cleanse' // side = self, value = debuffs removed
   | 'dispel' // side = target, value = buffs removed
-  | 'delay'; // side = target, value = cooldown ticks pushed back (0 = resisted)
+  | 'delay' // side = target, value = cooldown ticks pushed back (0 = resisted)
+  | 'dodge' // side = self, value = dodge charges now (after gaining)
+  | 'evade' // side = the fighter that dodged a hit, value = dodge charges left
+  | 'shake' // side = a fighter that went 4 s without a skill and shook off freeze / slow (sim v15; was 'cleanse')
+  | 'sure' // side = a fighter holding dodge charges hit by a 👁 hit that can't be dodged, value = dodge charges kept (sim v13)
+  | 'poison' // side = target, value = total poison per second
+  | 'haste' // side = self, value = percent faster cooldowns
+  | 'wound'; // side = target, value = percent less healing
 
 /** Buffs and debuffs on one fighter right after an event (for the status UI). */
 export interface Fx {
@@ -68,6 +89,13 @@ export interface Fx {
   /** slow percent (0 = not slowed) and ticks left */
   sl: number;
   slt: number;
+  /** dodge charges (added in sim v12) */
+  dg: number;
+  /** total poison per second */
+  p: number;
+  /** haste percent (0 = none) and ticks left */
+  hs: number;
+  hst: number;
 }
 
 /** Per-block stats for the post-fight breakdown. Index = build.skills index. */
@@ -100,8 +128,10 @@ export type EventBody =
   /** idx = index into that side's build.skills */
   | {
       type: 'cast'; side: Side; skill: string; lv: number; idx: number; echo?: boolean;
-      /** set off by this skill (its trigger bonus, or an engine: ฟันเฟือง / เร่งเครื่อง) */
       from?: number;
+      /** sim v19: the ★★★ repeat (a share of the cast's damage), and a cast of an epic branch (shown in the fight) */
+      star3?: boolean;
+      epic?: boolean;
       /** fired early as a reaction to control (skills with ✨ ชำระ or 🗿 ใจเหล็ก) */
       react?: boolean;
     }
@@ -110,6 +140,8 @@ export type EventBody =
   | { type: 'heal'; side: Side; amount: number }
   | { type: 'status'; side: Side; status: StatusKind; value: number }
   | { type: 'fatigue'; amount: number }
+  /** the hero's ultimate fired (once per fight at most); its effects follow as normal events */
+  | { type: 'ult'; side: Side; hero: string; lv: number }
   | { type: 'end'; winner: Side | -1 };
 
 /** t = tick (10 ticks per second). s = HP/shield snapshot AFTER the event. */
@@ -131,6 +163,12 @@ export interface SideStat {
   ctl: number;
   /** control effects resisted (control cap, the control-immunity window, ใจเหล็ก's ignore) */
   resisted: number;
+  /** ultimate level unlocked by the build (0 = none; added in sim v12) */
+  ultLv?: number;
+  /** tick the ultimate fired, -1 = it did not */
+  ult?: number;
+  /** hits this side dodged */
+  dodged?: number;
 }
 
 export interface CombatResult {

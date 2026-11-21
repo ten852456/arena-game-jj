@@ -37,20 +37,22 @@ export type ImageKey = keyof typeof IMAGES;
 /** Every skill that has an icon (same ids as src/sim/skills.ts). */
 export const SKILL_ICON_IDS = [
   'strike', 'jab', 'heavy', 'charge', 'shield', 'thorns', 'stoneskin', 'cleanse', 'train', 'ignite', 'feast',
-  'amplify', 'frost', 'chill', 'dispel', 'ironwill', 'gear', 'overclock', 'bulwark', 'spikewall', 'execute',
+  'frost', 'chill', 'dispel', 'ironwill', 'gear', 'overclock', 'bulwark', 'spikewall', 'execute',
   'flurry', 'rampage', 'inferno', 'shatter', 'timewarp',
+  // sim v12 line skills (icons are placeholders copied from a related skill until real art exists)
+  'riposte', 'sidestep', 'mend', 'blaze', 'scorch', 'venom', 'plague', 'icelance', 'glacier', 'tailwind',
 ] as const;
 export type SkillIconId = (typeof SKILL_ICON_IDS)[number];
 /** Round skill badge (archetype colour ring + symbol), transparent 128x128 webp; looks right from 32 to 128 px. */
 export const skillIcon = (id: SkillIconId | string) => `${BASE}img/skills/${id}.webp`;
 
-export const ARCH_ICON_IDS = ['tank', 'burst', 'scaling', 'control', 'none'] as const;
-export type ArchIconId = (typeof ARCH_ICON_IDS)[number];
-/** Archetype emblem in the same badge style, transparent 128x128 webp. */
-export const archIcon = (arch: ArchIconId) => `${BASE}img/arch/${arch}.webp`;
-/** Archetype ring colours used by the badges (handy for matching UI borders / synergy chips). */
-export const ARCH_COLORS: Record<ArchIconId, string> = {
-  tank: '#9ccbff', burst: '#ffa6ba', scaling: '#ffd98f', control: '#9df0df', none: '#c6c1e8',
+export const LINE_ICON_IDS = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind', 'none'] as const;
+export type LineIconId = (typeof LINE_ICON_IDS)[number];
+/** Line emblem in the same badge style, transparent 128x128 webp (placeholders copied from the old archetype badges). */
+export const lineIcon = (line: LineIconId) => `${BASE}img/line/${line}.webp`;
+/** Line ring colours used by the badges (handy for matching UI borders / synergy chips). */
+export const LINE_COLORS: Record<LineIconId, string> = {
+  hit: '#ff9a9a', dodge: '#b6f0c8', shield: '#9ccbff', heal: '#ffb3d9', burn: '#ffb070', poison: '#c49cff', ice: '#9df0ff', wind: '#d8f5a2', none: '#c6c1e8',
 };
 
 export const SFX_NAMES = [

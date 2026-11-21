@@ -1,4 +1,4 @@
-import type { Archetype, Build, CombatResult } from '../sim/types';
+import type { Build, CombatResult, Line } from '../sim/types';
 
 /** AI opponent difficulty (same values as `BotTier` in src/sim/bot.ts). */
 export type AiTier = 'easy' | 'normal' | 'hard';
@@ -14,7 +14,7 @@ export interface FightResponse {
     ai: boolean;
     /** only for AI opponents */
     tier?: AiTier;
-    arch?: Archetype;
+    line?: Line;
     build: Build;
     rating: number;
   };
@@ -43,10 +43,10 @@ export interface ScoutResponse {
   /** player builds this run could meet next */
   total: number;
   window: number | null;
-  counts: Record<Archetype, number>;
-  /** whole percents per archetype (0 when total is 0) */
-  pct: Record<Archetype, number>;
-  top: Archetype | null;
+  counts: Record<Line, number>;
+  /** whole percents per line (0 when total is 0) */
+  pct: Record<Line, number>;
+  top: Line | null;
   /** set when there are no player builds: the next fight is an AI of this tier */
   ai: { tier: AiTier } | null;
 }
@@ -55,7 +55,8 @@ export interface RunRow {
   runId: string;
   name: string;
   hero: string;
-  arch: Archetype;
+  /** null for runs finished before the 8 lines */
+  line: Line | null;
   wins: number;
   losses: number;
   day: number;
@@ -129,7 +130,7 @@ export const api = {
   fight: (body: { runId: string; name: string; day: number; rating: number; build: Build; playerId?: string; tutorial?: boolean }) =>
     req<FightResponse>('/api/fight', { method: 'POST', body: JSON.stringify(body) }),
   replay: (id: string) => req<ReplayRecord>('/api/replay/' + encodeURIComponent(id)),
-  /** archetype mix of the player builds the next fight could meet */
+  /** line mix of the player builds the next fight could meet */
   scout: (q: { day: number; rating: number; runId?: string; playerId?: string }) => req<ScoutResponse>('/api/scout?' + qs(q)),
   /** record a finished run once (idempotent per runId) and get the ผงดาว reward + totals */
   finishRun: (body: FinishRunRequest) => req<FinishRunResponse>('/api/run/finish', { method: 'POST', body: JSON.stringify(body) }),

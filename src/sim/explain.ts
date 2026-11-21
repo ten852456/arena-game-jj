@@ -37,10 +37,11 @@ export interface Explanation {
 
 /** Topic of one explanation line. Reasons put "what to try" after " → ". */
 export type LineKind =
-  | 'damage' | 'hit' | 'defence' | 'burn' | 'control' | 'chain' | 'speed' | 'thorns' | 'heal' | 'growth' | 'fatigue' | 'ko' | 'idle';
+  | 'damage' | 'hit' | 'defence' | 'burn' | 'control' | 'chain' | 'speed' | 'thorns' | 'heal' | 'growth' | 'fatigue' | 'ko' | 'idle'
+  | 'poison' | 'dodge' | 'ult';
 
 export interface Moment {
-  kind: 'hit' | 'chain' | 'comeback' | 'lock';
+  kind: 'hit' | 'chain' | 'comeback' | 'lock' | 'ult';
   icon: string;
   title: string;
   text: string;
@@ -87,6 +88,18 @@ interface SideTotals {
   thornsTaken: number;
   burnTaken: number;
   fatigueTaken: number;
+  poisonTaken: number;
+  /** enemy hits this side dodged */
+  dodged: number;
+  /** 👁 hits this side took while holding dodge charges (they could not be dodged) */
+  sureTaken: number;
+  /** debuffs this side removed from itself (✨ / blown away) */
+  cleansed: number;
+  /** damage this side's ultimate dealt */
+  ultDealt: number;
+  /** this side's ultimate: tick it fired (-1 = no) and its level */
+  ultT: number;
+  ultLv: number;
   healed: number;
   shielded: number;
   bigHit: number;
@@ -99,7 +112,8 @@ interface SideTotals {
 const sec = (ticks: number) => (ticks / TPS).toFixed(1);
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 const skillName = (id: string) =>
-  id === 'thorns' ? L('หนาม', 'Thorns') : id === 'burn' ? L('ไฟ', 'Burn') : id === 'fatigue' ? L('ความเหนื่อยล้า', 'Fatigue') : SKILLS[id]?.name ?? id;
+  id === 'thorns' ? L('หนาม', 'Thorns') : id === 'burn' ? L('ไฟ', 'Burn') : id === 'poison' ? L('พิษ', 'Poison') : id === 'ult' ? L('ท่าไม้ตาย', 'Ultimate')
+    : id === 'fatigue' ? L('ความเหนื่อยล้า', 'Fatigue') : SKILLS[id]?.name ?? id;
 const hasFx = (k: Pick<SkillInstance, 'id' | 'v'>, kind: string) => nodeOf(k).fx.some((e) => e.k === kind);
 
 /**
@@ -125,7 +139,7 @@ export function reflectEvents(events: CombatEvent[]): Set<CombatEvent> {
 function totals(r: CombatResult): [SideTotals, SideTotals] {
   const refl = reflectEvents(r.events);
   const t = [0, 1].map(() => ({
-    dealt: 0, blockedByFoe: 0, thornsTaken: 0, burnTaken: 0, fatigueTaken: 0, healed: 0, shielded: 0,
+    dealt: 0, blockedByFoe: 0, thornsTaken: 0, burnTaken: 0, fatigueTaken: 0, poisonTaken: 0, dodged: 0, sureTaken: 0, cleansed: 0, ultDealt: 0, ultT: -1, ultLv: 0, healed: 0, shielded: 0,
     bigHit: 0, bigHitSrc: '', bigHitT: 0, casts: 0, growth: 0,
   })) as [SideTotals, SideTotals];
   for (const e of r.events) {
@@ -135,16 +149,25 @@ function totals(r: CombatResult): [SideTotals, SideTotals] {
       if (e.src === 'fatigue') victim.fatigueTaken += e.amount;
       else if (refl.has(e)) victim.thornsTaken += e.amount + e.blocked;
       else if (e.src === 'burn') victim.burnTaken += e.amount;
+      else if (e.src === 'poison') victim.poisonTaken += e.amount;
+      if (e.src === 'ult') attacker.ultDealt += e.amount + e.blocked;
       if (e.src !== 'fatigue') {
         attacker.dealt += e.amount + e.blocked;
         attacker.blockedByFoe += e.blocked;
-        if (e.src !== 'burn' && !refl.has(e) && e.amount + e.blocked > attacker.bigHit) {
+        if (e.src !== 'burn' && e.src !== 'poison' && !refl.has(e) && e.amount + e.blocked > attacker.bigHit) {
           attacker.bigHit = e.amount + e.blocked;
           attacker.bigHitSrc = e.src;
           attacker.bigHitT = e.t;
         }
       }
     } else if (e.type === 'heal') t[e.side].healed += e.amount;
+    else if (e.type === 'status' && e.status === 'evade') t[e.side].dodged++;
+    else if (e.type === 'status' && e.status === 'sure') t[e.side].sureTaken++;
+    else if (e.type === 'status' && e.status === 'cleanse') t[e.side].cleansed += e.value;
+    else if (e.type === 'ult') {
+      t[e.side].ultT = e.t;
+      t[e.side].ultLv = e.lv;
+    }
     else if (e.type === 'shield') t[e.side].shielded += e.amount;
     else if (e.type === 'cast' && !e.echo) t[e.side].casts++;
   }
@@ -172,11 +195,10 @@ export function skillDamage(r: CombatResult, b: Build, s: Side): SkillDamage[] {
   }
   const st = r.stats[s];
   const fires = (i: number) => (st[i]?.c ?? 0) + (st[i]?.tc ?? 0);
-  // who gave thorns: skills with a thorns effect (perm stacks count double), amplify (doubles stacks), the thorns hero
+  // who gave thorns: skills with a thorns effect (perm stacks count double), the thorns hero
   const weight = b.skills.map((k, i) => {
     const th = nodeOf(k).fx.find((e) => e.k === 'thorns') as { n: number; perm?: boolean } | undefined;
     if (th) return th.n * (th.perm ? 2 : 1) * fires(i);
-    if (hasFx(k, 'amplify') && b.skills.some((x) => hasFx(x, 'thorns'))) return fires(i);
     return 0;
   });
   const heroThorns = HEROES_BY_ID[b.hero]?.hooks.thornsSecs ? 3 : 0;
@@ -206,7 +228,7 @@ function lockWindows(r: CombatResult, s: Side): [number, number][] {
       const end = e.t + e.value;
       if (open && e.t <= open[1]) open[1] = Math.max(open[1], end);
       else raw.push((open = [e.t, end]));
-    } else if (e.status === 'cleanse' && e.value > 0 && open && e.t < open[1]) open[1] = e.t;
+    } else if ((e.status === 'cleanse' || e.status === 'shake') && e.value > 0 && open && e.t < open[1]) open[1] = e.t;
     else if (e.status === 'delay' && e.value > 0) raw.push([e.t, e.t + e.value]);
   }
   raw.sort((a, b) => a[0] - b[0]);
@@ -268,10 +290,10 @@ export function explain(
   let tiebreak: string | undefined;
   if (bothDown)
     tiebreak = L(
-      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกาตัดสินจากเลือดที่ติดลบน้อยกว่า: ${N[me]} ${endHp[me]} · ${N[foe]} ${endHp[foe]}${
+      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ใครทำดาเมจรวมทั้งการสู้มากกว่าชนะ (ต่างกันไม่เกิน 5% = เสมอ ไม่เสียเลือดของรอบ): ดาเมจ ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? ` เท่ากันพอดีจึง${drawWord}` : ` → ${N[r.winner as Side]} ชนะ`
       }`,
-      `Both sides ran out of HP in the same second (${sec(len)}s); the rule picks the side less below zero: ${N[me]} ${endHp[me]} · ${N[foe]} ${endHp[foe]}${
+      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: whoever dealt more damage over the whole fight wins (within 5% it is a draw that costs no run HP): damage ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? `, exactly equal, so it is a ${drawWord}` : ` → ${N[r.winner as Side]} wins`
       }`,
     );
@@ -300,12 +322,17 @@ export function explain(
     const list = dmg[s];
     const total = list.reduce((n, x) => n + x.total, 0);
     const best = list.reduce<SkillDamage | null>((b, x) => (!b || x.total > b.total ? x : b), null);
+    // the ultimate is not a skill, but when it out-damaged every skill it is the top source
+    const ult = T[s].ultDealt;
+    if (ult > 0 && ult >= (best?.total ?? 0))
+      return `★ ${HEROES_BY_ID[builds[s].hero]?.ult.name ?? ''} ${ult} (${pct(ult, total + ult)}%)`;
     if (!best || best.total <= 0) return '';
     const parts = [
       best.reflect ? L(`สะท้อนหนาม ${best.reflect}`, `thorns ${best.reflect}`) : '',
-      best.burn ? L(`ไฟ ${best.burn}`, `burn ${best.burn}`) : '',
+      best.burn ? L(`ไฟ/พิษ ${best.burn}`, `burn/poison ${best.burn}`) : '',
     ].filter(Boolean);
-    return `${best.name} ${best.total} (${pct(best.total, total)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
+    // the same denominator as the "why" line: all damage, the ultimate included
+    return `${best.name} ${best.total} (${pct(best.total, total + ult)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
   };
   fact('damage', L(`ดาเมจรวม: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`, `Total damage: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`));
   const mt = top(me);
@@ -324,10 +351,28 @@ export function explain(
         `Controlled (freeze/delay): ${N[me]} ${sec(myCtl)}s · ${N[foe]} ${sec(theirCtl)}s`,
       ),
     );
+  if (my.dodged || their.dodged || my.sureTaken || their.sureTaken) {
+    const d = (s: Side) => `${N[s]} ${T[s].dodged}${T[s].sureTaken ? L(` (โดน 👁 ตีไม่พลาด ${T[s].sureTaken})`, ` (took ${T[s].sureTaken} 👁 undodgeable)`) : ''}`;
+    fact('dodge', L(`หลบการตีได้: ${d(me)} · ${d(foe)}`, `Hits dodged: ${d(me)} · ${d(foe)}`));
+  }
+  if (my.cleansed || their.cleansed)
+    fact('defence', L(`ล้างดีบัฟ (ไฟ/พิษ/การคุม): ${N[me]} ${my.cleansed} · ${N[foe]} ${their.cleansed}`, `Debuffs cleansed (burn/poison/control): ${N[me]} ${my.cleansed} · ${N[foe]} ${their.cleansed}`));
   if (my.bigHit || their.bigHit) {
     const hits = `${N[me]} ${my.bigHit}${my.bigHitSrc ? ` (${srcName(me, my.bigHitSrc)})` : ''} · ${N[foe]} ${their.bigHit}${their.bigHitSrc ? ` (${srcName(foe, their.bigHitSrc)})` : ''}`;
     fact('hit', L(`ตีแรงสุด: ${hits}`, `Biggest hit: ${hits}`));
   }
+  // ultimates (sim v12): who fired theirs, when
+  const ultName = (s: Side) => HEROES_BY_ID[builds[s].hero]?.ult.name ?? '';
+  const ultTxt = (s: Side) =>
+    T[s].ultT >= 0
+      ? L(`${N[s]} ${ultName(s)} Lv${T[s].ultLv} ที่ ${sec(T[s].ultT)} วิ`, `${N[s]} ${ultName(s)} Lv${T[s].ultLv} at ${sec(T[s].ultT)}s`)
+      : (r.sides?.[s].ultLv ?? 0) > 0
+        ? L(`${N[s]} ปลดแล้วแต่ไม่ได้ใช้`, `${N[s]} unlocked but did not fire`)
+        : '';
+  /** the effect text of side s's ultimate at the level it fired */
+  const ultEffect = (s: Side) => (HEROES_BY_ID[builds[s].hero]?.ult.effect ?? '').split(' · Lv2 ')[T[s].ultLv >= 2 ? 1 : 0] ?? '';
+  const ults = [ultTxt(me), ultTxt(foe)].filter(Boolean);
+  if (ults.length) fact('ult', L(`ท่าไม้ตาย: ${ults.join(' · ')}`, `Ultimates: ${ults.join(' · ')}`));
   if (fatigued)
     fact(
       'fatigue',
@@ -364,6 +409,21 @@ export function explain(
   const slowed = r.events.some((e) => e.type === 'status' && e.side === me && e.status === 'slow' && e.value > 0);
   const lockedTicks = myWin.reduce((n, w) => n + (w[1] - w[0]), 0);
   const ownIdx = (id: string) => mySkills.findIndex((k) => k.id === id);
+  /** HP of both sides when fatigue started (or at the end) */
+  const fatE = r.events.find((e) => e.type === 'fatigue');
+  const fatHp = (fatE?.s.hp ?? endHp).map((h) => Math.max(0, h)) as [number, number];
+  /** the enemy's นักรบคลั่ง ult saved it from a killing blow */
+  const survived = builds[foe].hero === 'berserker' && their.ultT >= 0;
+  /** what to level up when the enemy out-damaged you: name the top skill, or say it is maxed */
+  const topTip = (() => {
+    const b = dmg[me].reduce<SkillDamage | null>((x, y) => (!x || y.total > x.total ? y : x), null);
+    const k = b && b.idx >= 0 ? mySkills[b.idx] : null;
+    if (k && lvOf(k.v) < 3) return { th: `อัป ${b!.name} (skill ทำดาเมจมากสุด, Lv${lvOf(k.v)}) หรือซื้อช่อง skill เพิ่มในร้าน`, en: `level up ${b!.name} (your top damage skill, Lv${lvOf(k.v)}), or buy another skill slot in the shop` };
+    return { th: 'skill หลักเต็มขั้นแล้ว: ซื้อช่อง skill เพิ่ม หรือเพิ่ม skill สายหลักให้ปลดท่าไม้ตาย', en: 'your main skill is maxed: buy another skill slot, or add line skills toward the ultimate' };
+  })();
+  /** the build already deals burn / poison (don't tell it to "use burn") */
+  const myDot = mySkills.some((k) => nodeOf(k).fx.some((e) => e.k === 'burn' || e.k === 'poison' || (e.k === 'hit' && (!!e.burn || !!e.poison))));
+  const dotOpts = (o: [string, string][]) => (myDot ? o.filter(([id]) => id !== 'ignite' && id !== 'venom') : o);
   const firesOf = (i: number) => (r.stats[me][i]?.c ?? 0) + (r.stats[me][i]?.tc ?? 0);
   /** why skill i of `me` never fired */
   const idleWhy = (i: number) => {
@@ -394,7 +454,7 @@ export function explain(
       const i = ownIdx(id);
       if (i < 0) continue;
       const base = nodeOf(mySkills[i]).name;
-      const nm = `${base}${base !== skillName(id) ? L(` (สาย${skillName(id)})`, ` (${skillName(id)} line)`) : ''}`;
+      const nm = `${base}${base !== skillName(id) ? L(` (อัปจาก ${skillName(id)})`, ` (upgraded ${skillName(id)})`) : ''}`;
       const f = firesOf(i);
       if (f === 0) reported.add(i);
       if (f === 0) {
@@ -417,6 +477,28 @@ export function explain(
   const add = (score: number, text: string, kind: LineKind) => score > 0 && out.push([score, text, kind]);
   const lostHp = r.maxHp[me];
   if (!won) {
+    // sim v19 (playtest: "lost in 4.5s at full HP, no idea why"): a burst inside one second, and poison that shields can't stop
+    const hits = r.events.filter((e) => e.type === 'damage' && e.side === me) as Extract<CombatEvent, { type: 'damage' }>[];
+    const burst = hits.filter((e) => e.t >= len - 10).reduce((n, e) => n + e.amount, 0);
+    if (len <= 80 && burst >= lostHp * 0.5)
+      add(
+        95,
+        L(
+          `โดนรวม ${burst} ดาเมจใน 1 วินาทีสุดท้าย (${sec(Math.max(0, len - 10))}–${sec(len)} วิ): skill ของศัตรูยิงพร้อมกันเป็นชุด → เพิ่มโล่/ฟื้นเลือดช่วงต้น หรือ skill ที่ใช้ได้เร็วกว่า ${sec(len)} วิ`,
+          `You took ${burst} damage in the last second (${sec(Math.max(0, len - 10))}–${sec(len)}s): the enemy's skills landed together in one volley → add early shield/healing, or a skill that fires before ${sec(len)}s`,
+        ),
+        'ko',
+      );
+    const poisonDmg = hits.filter((e) => e.src === 'poison').reduce((n, e) => n + e.amount, 0);
+    if (poisonDmg >= lostHp * 0.35 && r.events.some((e) => e.type === 'shield' && e.side === me))
+      add(
+        60,
+        L(
+          `พิษทำดาเมจ ${poisonDmg} และพิษไม่สนโล่ (โล่ของคุณกันไม่ได้) → ชำระ/ล้างพิษ หรือฟื้นเลือด`,
+          `Poison dealt ${poisonDmg} and poison ignores shields (yours could not stop it) → cleanse it, or heal`,
+        ),
+        'poison',
+      );
     if (pct(myCtl, len) >= 20) {
       const tip = advise(
         [['ironwill', L('การควบคุมอ่อนลง 60%', 'control 60% weaker')], ['cleanse', L('ลบการแช่แข็ง', 'removes freeze')]],
@@ -433,12 +515,12 @@ export function explain(
     }
     if (pct(my.blockedByFoe, my.dealt) >= 30) {
       const tip = advise(
-        [
+        dotOpts([
           ['heavy', L('ทะลุโล่ครึ่งหนึ่ง', 'pierces half the shield')],
           ['ignite', L('ไฟไม่สนโล่', 'burn ignores shields')],
           ['dispel', L('ลบโล่ 20%', 'removes 20% of the shield')],
-        ],
-        L('อัปสาย ทะลุ ของ skill โจมตี', 'upgrade an attack skill along a pierce branch'),
+        ]),
+        L('อัปทาง ทะลุ ของ skill โจมตี', 'upgrade an attack skill along a pierce branch'),
       );
       add(
         pct(my.blockedByFoe, my.dealt),
@@ -474,6 +556,38 @@ export function explain(
         'heal',
       );
     }
+    if (pct(my.poisonTaken, lostHp) >= 25) {
+      const tip = advise(
+        [['tailwind', L('พัดไฟ/พิษทิ้ง', 'blows burn/poison away')], ['cleanse', L('ลบพิษกองที่แรงสุด', 'removes the strongest poison')]],
+        L('ตีให้จบเร็วก่อนพิษซ้อน', 'end it before the poison stacks up'),
+      );
+      add(
+        pct(my.poisonTaken, lostHp),
+        L(`พิษทำดาเมจ${N[me]} ${my.poisonTaken} (ไม่สนโล่ หลบไม่ได้ และลดการฟื้น) → ${tip}`, `Poison dealt ${my.poisonTaken} to${N[me]}(it ignores shields, can't be dodged and cuts healing) → ${tip}`),
+        'poison',
+      );
+    }
+    if (their.dodged >= 3) {
+      const tip = advise(
+        dotOpts([['heavy', L('ทาง ทุบแม่น ตีไม่พลาด', 'the Sure Smash branch never misses')], ['ignite', L('ไฟหลบไม่ได้', "burn can't be dodged")], ['venom', L('พิษหลบไม่ได้', "poison can't be dodged")]]),
+      );
+      const use = myDot ? L('เพิ่มการตีที่หลบไม่ได้ (👁) หรือตีครั้งละแรงๆ ให้แต้มหลบหมดไว', "add hits that can't be dodged (👁) or a few big hits that use up the dodges") : L('ใช้ไฟ/พิษ หรือการตีที่หลบไม่ได้ (👁)', "use burn/poison or hits that can't be dodged (👁)");
+      add(
+        their.dodged * 6,
+        L(`${N[foe]}หลบการตีของ${N[me]}ได้ ${their.dodged} ครั้ง → ${use} · ${tip}`, `${N[foe]}dodged ${their.dodged} hits from${N[me]}→ ${use} · ${tip}`),
+        'dodge',
+      );
+    }
+    if (their.ultT >= 0) {
+      add(
+        12,
+        L(
+          `${N[foe]}ใช้ท่าไม้ตาย ${ultName(foe)} ที่ ${sec(their.ultT)} วิ (${ultEffect(foe)})`,
+          `${N[foe]}fired the ultimate ${ultName(foe)} at ${sec(their.ultT)}s (${ultEffect(foe)})`,
+        ),
+        'ult',
+      );
+    }
     if (pct(my.burnTaken, lostHp) >= 25) {
       const tip = advise([['cleanse', L('ลบไฟกองที่แรงสุด', 'removes the strongest burn')]], L('เร่งดาเมจให้จบก่อนไฟซ้อน', 'end the fight before burns stack up'));
       add(
@@ -492,6 +606,15 @@ export function explain(
         'growth',
       );
     }
+    if (fatigued && my.dealt >= their.dealt)
+      add(
+        30,
+        L(
+          `แพ้ช่วงเหนื่อยล้า: ตั้งแต่ ${sec(fStart)} วิ ทั้งสองฝ่ายเสียเลือดเท่ากันและแรงขึ้นทุกวิ ใครเลือดเหลือน้อยกว่าก็ล้มก่อน · ตอนเริ่มเหนื่อยล้า${N[me]}เหลือ ${fatHp[me]} ·${N[foe]}เหลือ ${fatHp[foe]} · ${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}มีเลือดสูงสุด ${r.maxHp[foe]} (ของ${N[me]} ${r.maxHp[me]}) ฟื้น ${their.healed} โล่ ${their.shielded}${survived ? ` และ ${ultName(foe)} รอดด้วย 1 เลือด` : ''} → ทำดาเมจให้จบก่อน ${sec(fStart)} วิ หรือเพิ่มการฟื้น/โล่`,
+          `Lost in fatigue: from ${sec(fStart)}s both sides lose the same HP, more every second, so whoever has less HP left falls first · when fatigue started${N[me]}had ${fatHp[me]} and${N[foe]}${fatHp[foe]} ·${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}had ${r.maxHp[foe]} max HP (${N[me]}: ${r.maxHp[me]}), healed ${their.healed} and shielded ${their.shielded}${survived ? `, and ${ultName(foe)} survived on 1 HP` : ''} → end it before ${sec(fStart)}s, or add healing / shield`,
+        ),
+        'fatigue',
+      );
     if (fatigued && my.dealt < their.dealt)
       add(
         30,
@@ -512,14 +635,23 @@ export function explain(
         'speed',
       );
     }
-    if (!out.length)
+    if (!out.length && their.dealt > my.dealt)
       add(
         1,
         L(
-          `${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → อัปเลเวล skill ที่ทำดาเมจมากสุด หรือซื้อช่อง skill เพิ่มในร้าน`,
-          `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → level up your top damage skill, or buy another skill slot in the shop`,
+          `${N[foe]}ทำดาเมจได้มากกว่า (${their.dealt} ต่อ ${my.dealt}) → ${topTip.th}`,
+          `${N[foe]}dealt more damage (${their.dealt} vs ${my.dealt}) → ${topTip.en}`,
         ),
         'damage',
+      );
+    else if (!out.length)
+      add(
+        1,
+        L(
+          `${N[me]}ทำดาเมจมากกว่า (${my.dealt} ต่อ ${their.dealt}) แต่${N[foe]}อึดกว่า (เลือดสูงสุด ${r.maxHp[foe]} ต่อ ${r.maxHp[me]} · โล่ ${their.shielded} · ฟื้นเลือด ${their.healed}${survived ? ` · ${ultName(foe)} รอดด้วย 1 เลือด` : ''}) → เพิ่มการทะลุโล่${myDot ? '' : ' ไฟ/พิษ'} หรือแผลลึก`,
+          `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt}) but${N[foe]}lasted longer (max HP ${r.maxHp[foe]} vs ${r.maxHp[me]} · shield ${their.shielded} · healing ${their.healed}${survived ? ` · ${ultName(foe)} survived on 1 HP` : ''}) → add pierce${myDot ? '' : ', burn/poison'} or wounds`,
+        ),
+        'defence',
       );
   } else {
     if (pct(theirCtl, len) >= 20)
@@ -537,10 +669,18 @@ export function explain(
         pct(their.thornsTaken, r.maxHp[foe]),
         L(`หนามของ${N[me]}สะท้อนใส่${N[foe]} ${their.thornsTaken}`, `The thorns of${N[me]}reflected ${their.thornsTaken} onto${N[foe]}`), 'thorns',
       );
+    if (my.ultT >= 0) add(15, L(`${N[me]}ใช้ท่าไม้ตาย ${ultName(me)} Lv${my.ultLv} ที่ ${sec(my.ultT)} วิ`, `${N[me]}fired the ultimate ${ultName(me)} Lv${my.ultLv} at ${sec(my.ultT)}s`), 'ult');
+    if (my.dodged >= 3) add(my.dodged * 5, L(`${N[me]}หลบการตีได้ ${my.dodged} ครั้ง`, `${N[me]}dodged ${my.dodged} hits`), 'dodge');
     if (my.growth >= 8) add(my.growth * 2, L(`${N[me]}สะสมพลังโจมตีได้ถึง +${my.growth} ต่อการตี`, `${N[me]}stacked attack power up to +${my.growth} per hit`), 'growth');
     const best = dmg[me].reduce<SkillDamage | null>((b, x) => (!b || x.total > b.total ? x : b), null);
-    const total = dmg[me].reduce((n, x) => n + x.total, 0);
-    if (best && pct(best.total, total) >= 40)
+    // "of all the damage" includes the ultimate; when the ultimate out-damaged every skill, it is the one named
+    const total = dmg[me].reduce((n, x) => n + x.total, 0) + my.ultDealt;
+    if (my.ultDealt > (best?.total ?? 0) && pct(my.ultDealt, total) >= 40)
+      add(
+        pct(my.ultDealt, total),
+        L(`ท่าไม้ตาย ${ultName(me)} ของ${N[me]}ทำดาเมจ ${pct(my.ultDealt, total)}% ของทั้งหมด`, `The ultimate ${ultName(me)} of${N[me]}dealt ${pct(my.ultDealt, total)}% of all the damage`), 'ult',
+      );
+    else if (best && pct(best.total, total) >= 40)
       add(
         pct(best.total, total),
         L(`${best.name} ของ${N[me]}ทำดาเมจ ${pct(best.total, total)}% ของทั้งหมด`, `${best.name} of${N[me]}dealt ${pct(best.total, total)}% of all the damage`), 'damage',
@@ -548,7 +688,7 @@ export function explain(
     if (bothDown)
       add(
         50,
-        L(`ล้มพร้อมกัน แต่${N[me]}เลือดติดลบน้อยกว่า (${endHp[me]} ต่อ ${endHp[foe]})`, `Both fell at once, but${N[me]}${was(me)} less below zero (${endHp[me]} vs ${endHp[foe]})`), 'ko',
+        L(`ล้มพร้อมกัน แต่${N[me]}ทำดาเมจรวมมากกว่า (${my.dealt} ต่อ ${their.dealt})`, `Both fell at once, but${N[me]}dealt more damage in total (${my.dealt} vs ${their.dealt})`), 'ko',
       );
     if (!out.length) {
       if (my.dealt >= their.dealt) add(1, L(`${N[me]}ทำดาเมจได้มากกว่า (${my.dealt} ต่อ ${their.dealt})`, `${N[me]}dealt more damage (${my.dealt} vs ${their.dealt})`), 'damage');
@@ -572,8 +712,8 @@ export function explain(
     add(
       60,
       L(
-        `ล้มพร้อมกัน แต่${N[me]}เลือดติดลบมากกว่า (${endHp[me]} ต่อ ${endHp[foe]}) → ดาเมจอีกนิดเดียวก็ชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
-        `Both fell at once, but${N[me]}${was(me)} further below zero (${endHp[me]} vs ${endHp[foe]}) → a little more damage wins it: level up your main skill or add shield/healing`,
+        `ล้มพร้อมกัน แต่${N[foe]}ทำดาเมจรวมมากกว่า (${their.dealt} ต่อ ${my.dealt}, ต่างกันเกิน 5% จึงไม่เสมอ) → ดาเมจอีกนิดเดียวก็เสมอหรือชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
+        `Both fell at once, but${N[foe]}dealt more damage in total (${their.dealt} vs ${my.dealt}, more than 5% apart, so not a draw) → a little more damage draws or wins it: level up your main skill or add shield/healing`,
       ),
       'ko',
     );
@@ -648,6 +788,12 @@ export function explain(
         ),
       });
   }
+  for (const s of [me, foe])
+    if (T[s].ultT >= 0)
+      moments.push({
+        kind: 'ult', icon: '★', title: L('ท่าไม้ตาย', 'Ultimate'), side: s, t: T[s].ultT,
+        text: L(`${N[s]} ${ultName(s)} Lv${T[s].ultLv} ที่ ${sec(T[s].ultT)} วิ`, `${N[s]} ${ultName(s)} Lv${T[s].ultLv} at ${sec(T[s].ultT)}s`),
+      });
   for (const s of [me, foe]) {
     const w = longest(s);
     if (w && w[1] - w[0] >= 3 * TPS)
@@ -660,6 +806,8 @@ export function explain(
       });
   }
 
+  // the same reason twice (two checks can word it alike) is shown once
+  const uniqOut = out.filter((x, i) => out.findIndex((y) => y[1] === x[1]) === i);
   const sq = (t: string) => {
     const s = t.replace(/ {2,}/g, ' ').replace(/ ([,):])/g, '$1').trim();
     return getLang() === 'en' ? s.replace(/\( /g, '(') : s; // English pads every name with spaces
@@ -667,7 +815,7 @@ export function explain(
   for (const m of moments) m.text = sq(m.text);
   for (const l of locks) l.text = sq(l.text);
   return {
-    headline: sq(headline), facts: facts.map(sq), reasons: out.slice(0, 3).map((x) => sq(x[1])), reasonKinds: out.slice(0, 3).map((x) => x[2]), close,
+    headline: sq(headline), facts: facts.map(sq), reasons: uniqOut.slice(0, 3).map((x) => sq(x[1])), reasonKinds: uniqOut.slice(0, 3).map((x) => x[2]), close,
     tiebreak: tiebreak && sq(tiebreak), moments, locks, hpShare, factKinds, names: [names[me], names[foe]],
   };
 }

@@ -18,6 +18,9 @@ export interface FightFacts {
   fatigue: boolean;
   /** winner ended at ≤ 10% HP */
   close: boolean;
+  /** ultimate level per side (0 = locked) and the tick it fired (-1 = no) */
+  ultLv: [number, number];
+  ult: [number, number];
 }
 
 export function factsOf(r: CombatResult, day: number): FightFacts {
@@ -50,6 +53,8 @@ export function factsOf(r: CombatResult, day: number): FightFacts {
     ctl: [sumFz(1), sumFz(0)],
     dmg: [r.stats[0].map((s) => s.d), r.stats[1].map((s) => s.d)],
     fatigue, close,
+    ultLv: [r.sides?.[0].ultLv ?? 0, r.sides?.[1].ultLv ?? 0],
+    ult: [r.sides?.[0].ult ?? -1, r.sides?.[1].ult ?? -1],
   };
 }
 
@@ -70,10 +75,14 @@ export interface Health {
   ticks: number;
   /** fight lengths in seconds (for percentiles) */
   lens: number[];
+  /** sides with ult Lv1+ / Lv2, and sides whose ult fired */
+  ult1: number;
+  ult2: number;
+  ultFired: number;
 }
 
 export const newHealth = (): Health => ({
-  fights: 0, sides: 0, zeroSides: 0, lockedSides: 0, ctlTicks: 0, ctlMax: 0, fatigue: 0, close: 0, decided: 0, trig: 0, chainMax: 0, ticks: 0, lens: [],
+  fights: 0, sides: 0, zeroSides: 0, lockedSides: 0, ctlTicks: 0, ctlMax: 0, fatigue: 0, close: 0, decided: 0, trig: 0, chainMax: 0, ticks: 0, lens: [], ult1: 0, ult2: 0, ultFired: 0,
 });
 
 export function addFight(h: Health, f: FightFacts, keepLen = true) {
@@ -91,6 +100,9 @@ export function addFight(h: Health, f: FightFacts, keepLen = true) {
     h.ctlMax = Math.max(h.ctlMax, f.ctl[s]);
     h.trig += f.trig[s];
     h.chainMax = Math.max(h.chainMax, f.chain[s]);
+    if (f.ultLv[s] >= 1) h.ult1++;
+    if (f.ultLv[s] >= 2) h.ult2++;
+    if (f.ultLv[s] >= 1 && f.ult[s] >= 0) h.ultFired++;
   }
 }
 
@@ -99,7 +111,7 @@ export function mergeHealth(a: Health, b: Health): Health {
     fights: a.fights + b.fights, sides: a.sides + b.sides, zeroSides: a.zeroSides + b.zeroSides, lockedSides: a.lockedSides + b.lockedSides,
     ctlTicks: a.ctlTicks + b.ctlTicks, ctlMax: Math.max(a.ctlMax, b.ctlMax), fatigue: a.fatigue + b.fatigue, close: a.close + b.close,
     decided: a.decided + b.decided, trig: a.trig + b.trig, chainMax: Math.max(a.chainMax, b.chainMax), ticks: a.ticks + b.ticks,
-    lens: a.lens.concat(b.lens),
+    lens: a.lens.concat(b.lens), ult1: a.ult1 + b.ult1, ult2: a.ult2 + b.ult2, ultFired: a.ultFired + b.ultFired,
   };
 }
 
@@ -121,6 +133,10 @@ export function healthSummary(h: Health) {
     close: h.close / Math.max(1, h.decided),
     trigPerFight: h.trig / n,
     chainMax: h.chainMax,
+    /** share of sides with the ult unlocked (Lv1+, Lv2) and the fire rate among those */
+    ult1: h.ult1 / Math.max(1, h.sides),
+    ult2: h.ult2 / Math.max(1, h.sides),
+    ultFire: h.ultFired / Math.max(1, h.ult1),
   };
 }
 export type HealthSummary = ReturnType<typeof healthSummary>;

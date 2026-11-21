@@ -1,5 +1,5 @@
 // Fast balance simulator: matchups, whole bot runs, per-skill stats, bot tier check. Uses every CPU core.
-// Usage: npm run sim -- [matchups|runs|skills|tiers|all] [--n 200] [--days 3,5,10,13] [--tier easy|normal|hard|mix]
+// Usage: npm run sim -- [matchups|runs|skills|tiers|lines|all] [--n 200] [--days 3,5,10,13] [--tier easy|normal|hard|mix]
 //          [--seed 1] [--pool 24] [--workers N] [--json out.json] [--compare old.json] [--strict] [--full]
 // See docs/SIMULATOR.md.
 import { WIN_TARGET } from '../src/sim/run';
@@ -7,13 +7,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { BOT_TIERS, type BotTier } from '../src/sim/bot';
 import { SIM_VERSION } from '../src/sim/combat';
-import { HEROES } from '../src/sim/heroes';
-import { SKILLS, SKILL_LIST } from '../src/sim/skills';
-import { ARCHES, type Build } from '../src/sim/types';
+import { HEROES, ultLevel } from '../src/sim/heroes';
+import { LINE_ICON, SKILLS, SKILL_LIST } from '../src/sim/skills';
+import { LINES, type Build, type Line } from '../src/sim/types';
 import { MAX_DAY, type Ctx, type Job, type MatchRes, type RunsRes, type SkillAcc, type TierSpec, type TiersRes } from './sim/jobs';
 import { healthSummary, mergeHealth, newHealth, type Health, type HealthSummary } from './sim/metrics';
 import { runJobs } from './sim/pool';
-import { TARGETS, lengthTarget } from './sim/targets';
+import type { LinesRes } from './sim/lines';
+import { BEATS, TARGETS, ULT_LOW, lengthTarget } from './sim/targets';
 
 // ---------------- options ----------------
 const argv = process.argv.slice(2);
@@ -27,9 +28,9 @@ const opt = (name: string, def: string) => {
 const VALUED = new Set(['n', 'days', 'tier', 'seed', 'pool', 'workers', 'json', 'compare']);
 const positional = argv.filter((a, i) => !a.startsWith('--') && !(i > 0 && VALUED.has(argv[i - 1].replace(/^--/, ''))));
 const MODE = positional[0] ?? 'all';
-const MODES = ['matchups', 'runs', 'skills', 'tiers', 'all'];
+const MODES = ['matchups', 'runs', 'skills', 'tiers', 'lines', 'all'];
 if (!MODES.includes(MODE) || flag('help')) {
-  console.log('usage: npm run sim -- [matchups|runs|skills|tiers|all] [--n 200] [--days 3,5,10,13] [--tier normal|easy|hard|mix]\n' +
+  console.log('usage: npm run sim -- [matchups|runs|skills|tiers|lines|all] [--n 200] [--days 3,5,10,13] [--tier normal|easy|hard|mix]\n' +
     '                        [--seed 1] [--pool 24] [--workers N] [--json out.json] [--compare old.json] [--strict] [--full]');
   process.exit(flag('help') ? 0 : 2);
 }
@@ -48,6 +49,11 @@ const ctx: Ctx = { seed: SEED, tier: TIER };
 const CHUNK = 25;
 
 // ---------------- formatting ----------------
+const median = (xs: number[]) => {
+  if (!xs.length) return NaN;
+  const a = [...xs].sort((x, y) => x - y);
+  return a[Math.floor(a.length / 2)];
+};
 const pct = (x: number, w = 6) => (Number.isFinite(x) ? (x * 100).toFixed(0) + '%' : '-').padStart(w);
 const num = (x: number, d = 1, w = 6) => x.toFixed(d).padStart(w);
 const ok = (b: boolean) => (b ? '✔' : '✘');
@@ -100,6 +106,9 @@ async function matchups() {
   log('fights done');
 
   const out: Record<string, unknown> = {};
+  const beatsAcc: Record<string, number[]> = {};
+  const ultByHero: Record<string, { on: number; fired: number; at: number[]; uScore: number; lScore: number; lN: number; unlock: Record<number, number>; unlock2: Record<number, number> }> = {};
+  const ultDay: Record<number, Record<string, { on: number; fired: number; at: number }>> = {};
   const overallByDay: Record<number, Record<string, number>> = {};
   const zeroByDay: Record<number, Record<string, number>> = {};
   const pairsOver: string[] = [];
@@ -116,29 +125,46 @@ async function matchups() {
       ticks += r.ticks;
       (zeroByDay[day] ??= {})[h.id] = r.zero / r.sides;
     });
-    // archetype matrix
-    const arch: Record<string, Record<string, number>> = {};
-    console.log(`\nDay ${day} · ${games} fights · avg ${(ticks / games / 10).toFixed(1)}s   archetype win rate (row vs column)`);
-    console.log('          ' + ARCHES.map((a) => a.padStart(8)).join(''));
-    let archWorst = 0;
-    for (const a of ARCHES) {
-      arch[a] = {};
-      const row = ARCHES.map((b) => {
+    // line matrix (by hero main line; one hero per line, so it is the hero matrix grouped by line)
+    const line: Record<string, Record<string, number>> = {};
+    console.log(`\nDay ${day} · ${games} fights · avg ${(ticks / games / 10).toFixed(1)}s   line win rate (row vs column) · * = designed counter (row beats column)`);
+    console.log('          ' + LINES.map((a) => `${LINE_ICON[a]}${a}`.padStart(9)).join(''));
+    let lineWorst = 0;
+    for (const a of LINES) {
+      line[a] = {};
+      const row = LINES.map((b) => {
         let s = 0;
         let n = 0;
-        for (const A of HEROES.filter((h) => h.arch === a))
-          for (const B of HEROES.filter((h) => h.arch === b)) {
+        for (const A of HEROES.filter((h) => h.line === a))
+          for (const B of HEROES.filter((h) => h.line === b)) {
             s += score[A.id][B.id];
             n += count[A.id][B.id];
           }
         const r = s / n;
-        arch[a][b] = r;
-        if (a !== b) archWorst = Math.max(archWorst, r);
-        return a === b ? '       -' : pct(r, 7) + (r > TARGETS.arch ? '!' : ' ');
+        line[a][b] = r;
+        if (a !== b) lineWorst = Math.max(lineWorst, r);
+        (beatsAcc[`${a}>${b}`] ??= []).push(r);
+        return a === b ? '        -' : pct(r, 8) + (BEATS[a]?.includes(b) ? '*' : r > TARGETS.line ? '!' : ' ');
       });
-      console.log(a.padEnd(10) + row.join(''));
+      console.log(`${LINE_ICON[a]}${a}`.padEnd(10) + row.join(''));
     }
-    target(`day ${day}: archetype matchups ≤ ${pct(TARGETS.arch, 0)}`, archWorst, archWorst <= TARGETS.arch, `worst ${pct(archWorst, 0)}`);
+    target(`day ${day}: line matchups ≤ ${pct(TARGETS.line, 0)}`, lineWorst, lineWorst <= TARGETS.line, `worst ${pct(lineWorst, 0)}`);
+    // ultimates: unlock share of the bot builds, fire rate and fire time
+    for (const h of HEROES) {
+      const bs = builds[day][h.id];
+      const lv = bs.map((b) => ultLevel(b));
+      const r = mres[di * HEROES.length + HEROES.indexOf(h)];
+      const u = (ultByHero[h.id] ??= { on: 0, fired: 0, at: [], uScore: 0, lScore: 0, lN: 0, unlock: {}, unlock2: {} });
+      u.on += r.ultOn;
+      u.fired += r.ultFired;
+      u.at.push(...r.ultAt);
+      u.uScore += r.ultScore;
+      u.lScore += r.lockScore;
+      u.lN += r.lockN;
+      u.unlock[day] = lv.filter((x) => x >= 1).length / lv.length;
+      u.unlock2[day] = lv.filter((x) => x >= 2).length / lv.length;
+      (ultDay[day] ??= {})[h.id] = { on: r.ultOn, fired: r.ultFired, at: median(r.ultAt) };
+    }
     // hero pairs + overall
     const hero: Record<string, Record<string, number>> = {};
     const overall: Record<string, number> = {};
@@ -166,8 +192,11 @@ async function matchups() {
     const spread = Math.max(...rates) - Math.min(...rates);
     target(`day ${day}: hero pairs ≤ ${pct(TARGETS.hero, 0)}`, heroWorst, heroWorst <= TARGETS.hero, `worst ${pct(heroWorst, 0)}`);
     target(`day ${day}: hero spread ≤ ${TARGETS.heroSpread * 100} pts`, spread, spread <= TARGETS.heroSpread, `${(spread * 100).toFixed(0)} pts`);
+    const outOf = HEROES.filter((h) => overall[h.id] < TARGETS.heroLo || overall[h.id] > TARGETS.heroHi);
+    target(`day ${day}: every hero ${pct(TARGETS.heroLo, 0).trim()}–${pct(TARGETS.heroHi, 0).trim()}`, outOf.length, !outOf.length,
+      outOf.length ? outOf.map((h) => `${h.id} ${pct(overall[h.id], 0).trim()}`).join(', ') : 'all in');
     overallByDay[day] = overall;
-    out[day] = { arch, hero, overall, spread, zeroSkill: zeroByDay[day], avgLen: ticks / games / 10 };
+    out[day] = { line, hero, overall, spread, zeroSkill: zeroByDay[day], avgLen: ticks / games / 10 };
   }
 
   console.log(`\nHero overall win rate (vs every other hero) · 0-skill = share of its fights where it cast nothing`);
@@ -177,9 +206,48 @@ async function matchups() {
   console.log('spread      ' + DAYS.map((d) => num((Math.max(...Object.values(overallByDay[d])) - Math.min(...Object.values(overallByDay[d]))) * 100, 0, 6) + 'p').join(''));
   if (pairsOver.length) console.log(`\nHero pairs over ${pct(TARGETS.hero, 0)}:\n  ` + pairsOver.join('\n  '));
 
+  // designed counters: each "beats" pair, per day and averaged
+  hr(`Counter web · designed pairs (row beats column), target ${pct(TARGETS.beatsLo, 0).trim()}–${pct(TARGETS.beatsHi, 0).trim()} averaged over days`);
+  console.log('pair               ' + DAYS.map((d) => `d${d}`.padStart(6)).join('') + '     avg');
+  const beats: Record<string, number> = {};
+  const beatMiss: string[] = [];
+  for (const a of LINES)
+    for (const b of BEATS[a]) {
+      const xs = beatsAcc[`${a}>${b}`] ?? [];
+      const avg = xs.reduce((n, x) => n + x, 0) / Math.max(1, xs.length);
+      beats[`${a}>${b}`] = avg;
+      const okb = avg >= TARGETS.beatsLo && avg <= TARGETS.beatsHi;
+      if (!okb) beatMiss.push(`${a}>${b} ${pct(avg, 0).trim()}`);
+      console.log(`${LINE_ICON[a]}${a} > ${LINE_ICON[b as Line]}${b}`.padEnd(19) + xs.map((x) => pct(x, 6)).join('') + pct(avg, 8) + ' ' + ok(okb));
+    }
+  target(`counter pairs ${pct(TARGETS.beatsLo, 0).trim()}–${pct(TARGETS.beatsHi, 0).trim()} (avg over days)`, beatMiss.length, !beatMiss.length,
+    beatMiss.length ? `${16 - beatMiss.length}/16 in · miss ${beatMiss.join(', ')}` : '16/16 in');
+
+  // ultimates
+  hr('Ultimates · bot builds of the matchup days');
+  console.log('hero        ' + DAYS.map((d) => `unl d${d}`.padStart(8)).join('') + '  ' + DAYS.map((d) => `Lv2 d${d}`.padStart(8)).join('') +
+    '   fire%  at(med)  win unl/locked');
+  const ult: Record<string, unknown> = {};
+  for (const h of HEROES) {
+    const u = ultByHero[h.id];
+    const fire = u.fired / Math.max(1, u.on);
+    const at = median(u.at);
+    const winU = u.uScore / Math.max(1, u.on);
+    const winL = u.lScore / Math.max(1, u.lN);
+    ult[h.id] = { unlock: u.unlock, unlock2: u.unlock2, fire, at, winUnlocked: winU, winLocked: winL, byDay: Object.fromEntries(DAYS.map((d) => [d, ultDay[d][h.id]])) };
+    console.log(h.id.padEnd(12) + DAYS.map((d) => pct(u.unlock[d], 8)).join('') + '  ' + DAYS.map((d) => pct(u.unlock2[d], 8)).join('') +
+      `${pct(fire, 8)}${pct(at, 9)}   ${pct(winU, 0).trim()} / ${u.lN ? pct(winL, 0).trim() : '-'}`);
+    const lowOk = ULT_LOW.includes(h.id) ? TARGETS.ultFireLow : TARGETS.ultFire;
+    target(`${h.id} ult fires ≥ ${pct(lowOk, 0).trim()} when unlocked`, fire, fire >= lowOk, pct(fire, 0).trim());
+    target(`${h.id} ult median time ${pct(TARGETS.ultTimeLo, 0).trim()}–${pct(TARGETS.ultTimeHi, 0).trim()} of the fight`, at, at >= TARGETS.ultTimeLo && at <= TARGETS.ultTimeHi, pct(at, 0).trim());
+  }
+  console.log('  unl = share of bot builds with ult Lv1+ · fire% = fights where it fired / fights where unlocked · at = median fire tick / fight length');
+  report.ult = ult;
+  report.beats = beats;
+
   // length / health per day (random bot builds of random heroes)
   hr(`Fight length & health per day · ${LEN_N} random fights per day`);
-  console.log('day   avg   p10   p90  target      fatigue  0-skill locked ctl/side ctlmax  close trig/f chain');
+  console.log('day   avg   p10   p90  target      fatigue  0-skill locked ctl/side ctlmax  close trig/f chain  ult1+  ult2 fire%');
   const perChunk = Math.ceil(LEN_N / 100);
   const length: Record<number, HealthSummary> = {};
   let allH = newHealth();
@@ -199,7 +267,8 @@ async function matchups() {
     console.log(
       `${String(day).padStart(3)} ${num(s.avgLen, 1, 5)}s${num(s.p10, 1, 5)}s${num(s.p90, 1, 5)}s  ${`${lo}–${hi}s`.padEnd(7)}${ok(lenOk)}` +
         `${pct(s.fatigue, 7)}${ok(s.fatigue <= TARGETS.fatigue)}${pct(s.zeroSkill, 7)}${s.zeroSkill <= TARGETS.zeroSkill ? ' ' : '!'}${pct(s.locked, 6)}` +
-        `${num(s.ctlAvg, 1, 7)}s${num(s.ctlMax, 1, 6)}s${pct(s.close, 7)}${num(s.trigPerFight, 1, 7)}${String(s.chainMax).padStart(6)}`,
+        `${num(s.ctlAvg, 1, 7)}s${num(s.ctlMax, 1, 6)}s${pct(s.close, 7)}${num(s.trigPerFight, 1, 7)}${String(s.chainMax).padStart(6)}` +
+        `${pct(s.ult1, 7)}${pct(s.ult2, 6)}${pct(s.ultFire, 6)}`,
     );
   }
   const tot = healthSummary(allH);
@@ -210,7 +279,8 @@ async function matchups() {
     `all ${num(tot.avgLen, 1, 5)}s                       ${pct(tot.fatigue, 7)} ${pct(tot.zeroSkill, 7)} ${pct(tot.locked, 6)}${num(tot.ctlAvg, 1, 7)}s${num(tot.ctlMax, 1, 6)}s${pct(tot.close, 7)}${num(tot.trigPerFight, 1, 7)}${String(tot.chainMax).padStart(6)}`,
   );
   console.log('  0-skill = sides that cast nothing · locked = sides frozen/delayed ≥ 25% of the fight · ctl = freeze + cast-delay received\n' +
-    '  close = winner ends ≤ 10% HP · trig/f = trigger-bonus casts per fight · chain = biggest trigger chain in one tick');
+    '  close = winner ends ≤ 10% HP · trig/f = trigger-bonus casts per fight · chain = biggest trigger chain in one tick\n' +
+    '  ult1+ / ult2 = sides with the ultimate unlocked (Lv1+, Lv2) · fire% = of those, fights where it fired');
   report.matchups = out;
   report.length = length;
   report.health = tot;
@@ -247,6 +317,7 @@ async function runRuns(): Promise<RunsRes[]> {
       for (const k of Object.keys(v) as (keyof SkillAcc)[]) x[k] += v[k];
     }
     a.health = mergeHealth(a.health, p.health);
+    for (const k of ['ult1Day', 'ult2Day'] as const) for (const [d, v] of Object.entries(p[k])) a[k][+d] = (a[k][+d] ?? 0) + v;
   }
   runsCache = HEROES.map((h) => by[h.id]);
   return runsCache;
@@ -295,7 +366,24 @@ async function runs() {
     `run fights: ${h.fights} · avg ${h.avgLen.toFixed(1)}s · 0-skill ${pct(h.zeroSkill, 0)} · locked ${pct(h.locked, 0)} · ctl/side ${h.ctlAvg.toFixed(1)}s (max ${h.ctlMax.toFixed(1)}s)` +
       ` · fatigue ${pct(h.fatigue, 0)} · close ${pct(h.close, 0)} · trig/fight ${h.trigPerFight.toFixed(1)}`,
   );
-  report.runs = { heroes, spread, byTier, repeats, health: h };
+  // first day the ultimate reached Lv1 / Lv2 in each run (median over runs that got there; share that never did)
+  console.log(`\nUlt unlock day (runs, tier ${TIER}) · median first day of Lv1 / Lv2 · p25–p75 · never = run ended first`);
+  const ultDays: Record<string, unknown> = {};
+  const q = (hist: Record<number, number>, p: number) => {
+    const xs = Object.entries(hist).filter(([d]) => +d > 0).sort((a, b) => +a[0] - +b[0]);
+    const tot = xs.reduce((n, [, v]) => n + v, 0);
+    let acc = 0;
+    for (const [d, v] of xs) if ((acc += v) >= tot * p) return +d;
+    return NaN;
+  };
+  for (const x of res) {
+    const never1 = (x.ult1Day[0] ?? 0) / x.runs;
+    const never2 = (x.ult2Day[0] ?? 0) / x.runs;
+    ultDays[x.hero] = { lv1: q(x.ult1Day, 0.5), lv2: q(x.ult2Day, 0.5), never1, never2 };
+    console.log(`${x.hero.padEnd(12)} Lv1 d${q(x.ult1Day, 0.5)} (${q(x.ult1Day, 0.25)}–${q(x.ult1Day, 0.75)}) never ${pct(never1, 0)}` +
+      `   Lv2 d${q(x.ult2Day, 0.5)} (${q(x.ult2Day, 0.25)}–${q(x.ult2Day, 0.75)}) never ${pct(never2, 0)}`);
+  }
+  report.runs = { heroes, spread, byTier, repeats, health: h, ultDays };
 }
 
 async function skills() {
@@ -311,24 +399,127 @@ async function skills() {
   // heroes that can own each skill (unique skills: one hero), to turn counts into rates
   const ownersOf = (id: string) => (SKILLS[id].hero ? res.filter((x) => x.hero === SKILLS[id].hero) : res);
   hr(`Skills · from bot runs (${runsN} runs, ${won} reached 8 wins)`);
-  console.log('skill       arch      pick in 8-win  pick (all)  win% owned  dmg share  fights');
+  console.log('skill       line      pick in 8-win  pick (all)  win% owned  dmg share  fights   off-line pick in 8-win');
   const rows = SKILL_LIST.map((d) => {
     const a = acc[d.id] ?? { own8: 0, ownAll: 0, fights: 0, wins: 0, share: 0, shareN: 0 };
     const owners = ownersOf(d.id);
     const won8 = owners.reduce((n, x) => n + x.won, 0);
     const all = owners.reduce((n, x) => n + x.runs, 0);
     return {
-      id: d.id, arch: d.hero ? `${d.arch}*` : d.arch,
+      id: d.id, arch: d.hero ? `${d.line}*` : d.line,
       pick8: won8 ? a.own8 / won8 : NaN, pick: all ? a.ownAll / all : 0,
       winRate: a.fights ? a.wins / a.fights : NaN, dmgShare: a.shareN ? a.share / a.shareN : 0, fights: a.fights,
+      // share of the 8-win runs of heroes NOT of this skill's line that owned it (a generic carry shows up here)
+      off8: (() => {
+        if (d.hero || d.line === 'none') return NaN;
+        const os = res.filter((x) => HEROES.find((h) => h.id === x.hero)?.line !== d.line);
+        const w = os.reduce((n, x) => n + x.won, 0);
+        return w ? os.reduce((n, x) => n + (x.skills[d.id]?.own8 ?? 0), 0) / w : NaN;
+      })(),
     };
   }).sort((x, y) => (y.pick8 || 0) - (x.pick8 || 0));
   for (const r of rows)
     console.log(
-      `${r.id.padEnd(12)}${r.arch.padEnd(10)}${pct(r.pick8, 13)}${pct(r.pick, 12)}${pct(r.winRate, 12)}${pct(r.dmgShare, 11)}${String(r.fights).padStart(8)}`,
+      `${r.id.padEnd(12)}${r.arch.padEnd(10)}${pct(r.pick8, 13)}${pct(r.pick, 12)}${pct(r.winRate, 12)}${pct(r.dmgShare, 11)}${String(r.fights).padStart(8)}${pct(r.off8, 12)}`,
     );
+  const gen = rows.filter((r) => Number.isFinite(r.off8)).sort((x, y) => y.off8 - x.off8)[0];
+  if (gen) target('no generic skill in > 30% of off-line 8-win builds', gen.off8, gen.off8 <= 0.3, `top ${gen.id} ${pct(gen.off8, 0).trim()}`);
   console.log('  * = hero-unique (rates use that hero\'s runs) · win% owned = fight win rate of run builds that had it · dmg share = its share of its side\'s damage');
   report.skills = Object.fromEntries(rows.map((r) => [r.id, r]));
+}
+
+
+// ---------------- lines: in-line vs off-line, day-1 openings, ult value ----------------
+async function lines() {
+  const LTIER = TIER === 'easy' || TIER === 'mix' ? 'normal' : TIER;
+  const jobs: Job[] = [];
+  for (const day of DAYS) for (const h of HEROES) for (const [from, to] of chunks(N)) jobs.push({ k: 'lines', c: ctx, day, hero: h.id, from, to, tier: LTIER });
+  for (const h of HEROES) jobs.push({ k: 'day1', c: ctx, hero: h.id, n: Math.max(50, N) });
+  const parts = await runJobs<unknown>(jobs, WORKERS);
+  log('lines done');
+  const nl = DAYS.length * HEROES.length * chunks(N).length;
+  const lres = parts.slice(0, nl) as LinesRes[];
+  const d1 = parts.slice(nl) as Record<string, { easy: number; normal: number; n: number }>[];
+  hr(`Lines · ${LTIER} bots: in-line (prefers its line) vs off-line (never buys its line or unique) · ${N} per hero per day`);
+  console.log('h2h = in-line beats off-line (same hero) · pool = vs random normal bots of the day (in / off)');
+  console.log('hero        ' + DAYS.map((d) => `h2h d${d}`.padStart(9)).join('') + '   ' + DAYS.map((d) => `pool d${d}`.padStart(11)).join(''));
+  const per = chunks(N).length;
+  const out: Record<string, unknown> = {};
+  const inSk: Record<string, number> = {};
+  const offSk: Record<string, number> = {};
+  let builds = 0;
+  const ultAcc: Record<string, Record<number, [number, number, number]>> = {};
+  const h2hMid: number[] = [];
+  let k = 0;
+  const agg: Record<string, Record<number, LinesRes>> = {};
+  for (const day of DAYS)
+    for (const h of HEROES) {
+      const a: LinesRes = { h2h: 0, n: 0, inPool: 0, offPool: 0, ult: {}, inSkills: {}, offSkills: {} };
+      for (let c = 0; c < per; c++) {
+        const p = lres[k++];
+        a.h2h += p.h2h; a.n += p.n; a.inPool += p.inPool; a.offPool += p.offPool;
+        for (const [lv, u] of Object.entries(p.ult)) {
+          const x = ((ultAcc[h.id] ??= {})[+lv] ??= [0, 0, 0]);
+          x[0] += u[0]; x[1] += u[1]; x[2] += u[2];
+        }
+        for (const [id, v] of Object.entries(p.inSkills)) inSk[id] = (inSk[id] ?? 0) + v;
+        for (const [id, v] of Object.entries(p.offSkills)) offSk[id] = (offSk[id] ?? 0) + v;
+      }
+      builds += a.n / 2;
+      (agg[h.id] ??= {})[day] = a;
+    }
+  for (const h of HEROES) {
+    const row = DAYS.map((d) => pct(agg[h.id][d].h2h / agg[h.id][d].n, 9)).join('');
+    const pool = DAYS.map((d) => `${pct(agg[h.id][d].inPool / agg[h.id][d].n, 5)}/${pct(agg[h.id][d].offPool / agg[h.id][d].n, 0)}`.padStart(11)).join('');
+    console.log(h.id.padEnd(12) + row + '   ' + pool);
+    out[h.id] = Object.fromEntries(DAYS.map((d) => [d, { h2h: agg[h.id][d].h2h / agg[h.id][d].n, inPool: agg[h.id][d].inPool / agg[h.id][d].n, offPool: agg[h.id][d].offPool / agg[h.id][d].n }]));
+    for (const d of DAYS) if (d >= 5) h2hMid.push(agg[h.id][d].h2h / agg[h.id][d].n);
+  }
+  const avgMid = h2hMid.reduce((n, x) => n + x, 0) / Math.max(1, h2hMid.length);
+  const worstMid = Math.min(...h2hMid);
+  target('in-line beats off-line ≥ 55% (avg, days ≥ 5)', avgMid, avgMid >= 0.55, `avg ${pct(avgMid, 0).trim()}, worst ${pct(worstMid, 0).trim()}`);
+
+  // ult value: in-line builds with their ult vs the same fights with it locked
+  console.log('\nUlt value · in-line builds vs the pool, with the ult / locked (all days) · Δ = points the ult is worth');
+  console.log('hero          Lv1 with  locked     Δ     n   Lv2 with  locked     Δ     n');
+  const ultV: Record<string, unknown> = {};
+  const deltas: number[] = [];
+  for (const h of HEROES) {
+    const cells = [1, 2].map((lv) => {
+      const u = ultAcc[h.id]?.[lv];
+      if (!u || u[0] < 20) return { s: '       -       -     -     -', d: NaN };
+      const w = u[1] / u[0];
+      const l = u[2] / u[0];
+      deltas.push(w - l);
+      return { s: `${pct(w, 10)}${pct(l, 8)}${num((w - l) * 100, 0, 6)}${String(u[0]).padStart(6)}`, d: w - l, w, l };
+    });
+    ultV[h.id] = { lv1: cells[0].d, lv2: cells[1].d };
+    console.log(h.id.padEnd(12) + cells.map((c) => c.s).join(' '));
+  }
+  const maxD = Math.max(...deltas.filter(Number.isFinite));
+  target('ult worth ≤ 15 pts at Lv1 / Lv2 (every hero)', maxD, maxD <= 0.15, `max ${(maxD * 100).toFixed(0)} pts`);
+
+  // what the builds own (Lv2+ keeps the branch letter)
+  const top = (m: Record<string, number>) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([id, v]) => `${id} ${pct(v / builds, 0).trim()}`).join(' · ');
+  console.log(`\nOff-line builds own: ${top(offSk)}`);
+  console.log(`In-line builds own:  ${top(inSk)}`);
+
+  // day 1 openings
+  console.log('\nDay 1 · every affordable opening from the fixed shop vs random day-1 bots (easy / normal), best and worst');
+  const best: number[] = [];
+  const d1Out: Record<string, unknown> = {};
+  HEROES.forEach((h, i) => {
+    const rows = Object.entries(d1[i]).map(([key, v]) => ({ key, e: v.easy / v.n, nn: v.normal / v.n })).sort((a, b) => b.nn - a.nn);
+    const b = rows[0];
+    const w = rows[rows.length - 1];
+    best.push(b.nn);
+    d1Out[h.id] = Object.fromEntries(rows.map((r) => [r.key, { easy: r.e, normal: r.nn }]));
+    console.log(`${h.id.padEnd(12)} best ${b.key.padEnd(20)} ${pct(b.e, 4)} / ${pct(b.nn, 0)}   worst ${w.key.padEnd(20)} ${pct(w.e, 4)} / ${pct(w.nn, 0)}`);
+  });
+  const lo = Math.min(...best);
+  const hi = Math.max(...best);
+  target('day-1 best opening vs normal bots 50%–70% (every hero)', hi - lo, lo >= 0.5 && hi <= 0.7, `${pct(lo, 0).trim()}–${pct(hi, 0).trim()}`);
+  report.lines = { heroes: out, ult: ultV, day1: d1Out, offSkills: offSk, inSkills: inSk };
 }
 
 // ---------------- tiers ----------------
@@ -433,6 +624,7 @@ if (MODE === 'matchups' || MODE === 'all') await matchups();
 if (MODE === 'runs' || MODE === 'all') await runs();
 if (MODE === 'skills' || MODE === 'all') await skills();
 if (MODE === 'tiers' || MODE === 'all') await tiers();
+if (MODE === 'lines' || MODE === 'all') await lines();
 report.targets = targets;
 
 hr('Targets');

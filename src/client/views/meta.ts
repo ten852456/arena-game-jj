@@ -226,7 +226,7 @@ export async function getLeaderboard(period: Period): Promise<Leaderboard | null
 
 // ---------- scouting ----------
 export interface Scout {
-  /** archetype → share 0..1 */
+  /** line → share 0..1 */
   mix: Record<string, number>;
   /** how many saved builds the mix is from */
   total?: number;
@@ -243,7 +243,7 @@ export function scout(day: number, rating: number, runId: string): Promise<Scout
       if (!j) return null;
       const raw = (j.pct ?? j.counts ?? j.mix ?? j.archetypes ?? j.arch ?? j) as J; // server: pct = whole percents
       const mix: Record<string, number> = {};
-      for (const a of ['tank', 'burst', 'scaling', 'control']) {
+      for (const a of ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind']) {
         const v = num(raw[a], raw[a]?.share, raw[a]?.count);
         if (v !== undefined) mix[a] = v;
       }

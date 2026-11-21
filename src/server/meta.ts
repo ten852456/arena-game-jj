@@ -2,9 +2,10 @@
 // playerId is a random id the client keeps: it is untrusted and works like a password, so it is never returned in lists.
 import { HEROES_BY_ID } from '../sim/heroes';
 import { WIN_TARGET } from '../sim/run';
-import { archetypeOf } from './match';
+import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
-import { MAX_DAY, cleanId, cleanName, intIn, validateBuild } from './validate';
+import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, spendCheck, validateBuild } from './validate';
+import { recordOf } from './fight';
 import type { Res } from './fight';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
@@ -25,7 +26,7 @@ const publicPlayer = (p: Player) => ({
   name: p.name, stardust: p.stardust, runs: p.runs, wins: p.wins, losses: p.losses, best: p.best ?? null,
 });
 const runRow = (r: FinishedRun) => ({
-  runId: r.runId, name: r.name, hero: r.hero, arch: r.arch, wins: r.wins, losses: r.losses, day: r.day,
+  runId: r.runId, name: r.name, hero: r.hero, line: r.line ?? null, wins: r.wins, losses: r.losses, day: r.day,
   stardust: r.stardust, season: r.season, finishedAt: r.finishedAt,
 });
 const better = (a: Pick<FinishedRun, 'wins' | 'losses' | 'day'>, b: Pick<FinishedRun, 'wins' | 'losses' | 'day'>) =>
@@ -48,9 +49,6 @@ export function handleFinish(body: any): Res {
   if (!playerId || !runId || day === null || wins === null || losses === null || !HEROES_BY_ID[hero]) return bad('bad request');
   // one fight per day: the run ends after day `day`'s fight, or during day `day` when conceded before fighting
   if (wins + losses !== day && wins + losses !== day - 1) return bad('wins + losses do not match day');
-  const build = validateBuild(body?.build, day);
-  if (typeof build === 'string') return bad(build);
-  if (build.hero !== hero) return bad('build hero mismatch');
 
   const done = db.runs.find((r) => r.runId === runId);
   if (done) {
@@ -67,8 +65,16 @@ export function handleFinish(body: any): Res {
   const days = Object.values(track.days);
   const seenWins = days.filter((d) => d === 1).length;
   const seenLosses = days.length - seenWins;
-  // the claim must match the fights the server ran; the reward always uses the server's own counts
-  if (wins + losses !== days.length) return bad('result does not match the fights on record', 409);
+  // the claim must match the fights the server ran (and `day` is the last fought day or the next one), BEFORE the build
+  // is looked at (security review: relic checks first were an offer oracle through /finish)
+  if (wins + losses !== days.length || (day !== days.length && day !== days.length + 1)) return bad('result does not match the fights on record', 409);
+  // the final build: valid for the run's record, its hero, relics that follow the server's offers, and paid for by the
+  // run's ledger. Every rejection here gets the same error (no oracle).
+  const build = validateBuild(body?.build, day, recordOf(track).slice(0, day - 1), track.lastChoice);
+  if (
+    typeof build === 'string' || build.hero !== hero || (track.hero && track.hero !== hero) ||
+    relicOfferCheck(track, build, day) || !spendCheck(track, build, day, recordOf(track).slice(0, day - 1), track.lastChoice).length
+  ) return bad('implausible build');
   const countedWins = seenWins;
   const countedLosses = seenLosses;
   const capped = countedWins < wins;
@@ -79,7 +85,7 @@ export function handleFinish(body: any): Res {
   const name = cleanName(body?.name, playerId);
   const player = (db.players[playerId] ??= newPlayer(playerId, name));
   const run: FinishedRun = {
-    runId, playerId, name, hero, arch: archetypeOf(build), wins: countedWins, losses: countedLosses, day, build,
+    runId, playerId, name, hero, line: lineOf(build), wins: countedWins, losses: countedLosses, day, build,
     stardust: reward.stardust, ...(capped ? { capped } : {}), season: SEASON, finishedAt: Date.now(),
   };
   db.runs.push(run);

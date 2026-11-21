@@ -11,7 +11,7 @@ const post = async (body: unknown) => {
 };
 
 const blk = (id: string) => ({ id, v: '' });
-const buildA: Build = { hero: 'knight', skills: [{ ...blk('shield'), bonus: [{ t: 'strike', e: 'trigger' }] }, { ...blk('strike'), bonus: [{ t: 'arch:tank', e: 'dmg' }] }] };
+const buildA: Build = { hero: 'knight', skills: [{ ...blk('shield'), bonus: [{ t: 'strike', e: 'trigger' }] }, { ...blk('strike'), bonus: [{ t: 'line:shield', e: 'dmg' }] }] };
 const buildB: Build = { hero: 'witch', skills: [blk('frost'), blk('shatter')] };
 const tag = Date.now().toString(36);
 

@@ -1,8 +1,8 @@
 import { L, getLang, setLangValue, type Lang } from '../i18n';
 import { HEROES } from '../sim/heroes';
 import { MARK_INFO } from '../sim/run';
-import { ARCH_NAME, KEYWORDS, SKILLS, type Keyword } from '../sim/skills';
-import { ARCH_EN, BUILDINGS_EN, CHIP_EN, HEROES_EN, KEYWORDS_EN, MARKS_EN, RUN_ERRORS_EN, SKILLS_EN, SLIDES_EN } from './i18n_en';
+import { KEYWORDS, LINE_NAME, ROLE_NAME, SKILLS, type Keyword } from '../sim/skills';
+import { BUILDINGS_EN, LINE_EN, ROLE_EN, CHIP_EN, HEROES_EN, KEYWORDS_EN, MARKS_EN, RUN_ERRORS_EN, SKILLS_EN, SLIDES_EN } from './i18n_en';
 import { BUILDINGS } from './townData';
 import { SLIDES } from './tutorialSlides';
 
@@ -20,8 +20,9 @@ const TH = {
     Object.values(SKILLS).map((d) => [d.id, Object.fromEntries(Object.entries(d.tree).map(([v, n]) => [v || '_', { name: n.name, style: n.style }]))]),
   ),
   kw: Object.fromEntries(Object.entries(KEYWORDS).map(([k, x]) => [k, { name: x.name, desc: x.desc }])),
-  heroes: Object.fromEntries(HEROES.map((h) => [h.id, { name: h.name, passive: h.passive, style: h.style }])),
-  arch: { ...ARCH_NAME } as Record<string, string>,
+  heroes: Object.fromEntries(HEROES.map((h) => [h.id, { name: h.name, passive: h.passive, style: h.style, ult: { ...h.ult } }])),
+  line: { ...LINE_NAME } as Record<string, string>,
+  role: { ...ROLE_NAME } as Record<string, string>,
   marks: Object.fromEntries(Object.entries(MARK_INFO).map(([k, m]) => [k, { ...m }])),
   buildings: Object.fromEntries(BUILDINGS.map((b) => [b.id, { name: b.name, desc: b.desc, future: b.future }])),
   slides: SLIDES.map((s) => ({ title: s.title, body: [...s.body] })),
@@ -41,7 +42,8 @@ function apply(l: Lang) {
   }
   for (const [k, x] of Object.entries(KEYWORDS)) Object.assign(x, (en && KEYWORDS_EN[k]) || TH.kw[k as Keyword]);
   for (const h of HEROES) Object.assign(h, (en && HEROES_EN[h.id]) || TH.heroes[h.id]);
-  for (const k of Object.keys(ARCH_NAME) as (keyof typeof ARCH_NAME)[]) ARCH_NAME[k] = (en && ARCH_EN[k]) || TH.arch[k];
+  for (const k of Object.keys(LINE_NAME) as (keyof typeof LINE_NAME)[]) LINE_NAME[k] = (en && LINE_EN[k]) || TH.line[k];
+  for (const k of Object.keys(ROLE_NAME) as (keyof typeof ROLE_NAME)[]) ROLE_NAME[k] = (en && ROLE_EN[k]) || TH.role[k];
   for (const [k, m] of Object.entries(MARK_INFO)) Object.assign(m, (en && MARKS_EN[k]) || TH.marks[k]);
   for (const b of BUILDINGS) Object.assign(b, (en && BUILDINGS_EN[b.id]) || TH.buildings[b.id]);
   SLIDES.forEach((s, i) => Object.assign(s, (en && SLIDES_EN[i]) || TH.slides[i]));

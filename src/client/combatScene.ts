@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { DangerVignette } from './danger';
 import { confetti, drawPlate } from './winFx';
 import { ZOOM } from './view';
+import { HEROES_BY_ID } from '../sim/heroes';
 import { SKILLS, nodeOf } from '../sim/skills';
 import type { Build, CombatEvent, CombatResult, CooldownTrace, Fx, Side } from '../sim/types';
 import { hashSeed } from '../sim/rng';
@@ -14,7 +15,7 @@ import { ArenaLife, HeroIdle } from './idle';
 import { SKILL_ICON_IDS, skillIcon } from './assets';
 import { FxLayer, fxPlan, reducedMotion } from './fx';
 import { FighterFx, type FighterState } from './fighterFx';
-import { ARCH_HEX, SkillStrip, type StripState } from './skillStrip';
+import { LINE_HEX, SkillStrip, type StripState } from './skillStrip';
 
 let resolveReady!: (s: CombatScene) => void;
 export const sceneReady = new Promise<CombatScene>((r) => (resolveReady = r));
@@ -61,6 +62,8 @@ export class CombatScene extends Phaser.Scene {
   private slowed = [false, false];
   /** voice cues already played this fight (one of each, so the announcer does not chatter) */
   private said = new Set<string>();
+  /** epic skills that already flashed "◆ EPIC" this fight (side:idx) */
+  private epicShown = new Set<string>();
   private nameTexts!: Phaser.GameObjects.Text[];
   private hpTexts!: Phaser.GameObjects.Text[];
   private skillText!: Phaser.GameObjects.Text;
@@ -298,6 +301,7 @@ export class CombatScene extends Phaser.Scene {
     this.builds = [data.left.build, data.right.build];
     this.strip.setBuilds([data.left.build, data.right.build]);
     this.said = new Set();
+    this.epicShown = new Set();
     [data.left, data.right].forEach((side, i) => {
       this.show(i, side.build.hero, lookSeed(side), POS[i]);
       this.nameTexts[i].setText(side.name);
@@ -540,13 +544,23 @@ export class CombatScene extends Phaser.Scene {
         if (!this.quiet) {
           this.pose(e.side, 'cast');
           const inst = this.builds[e.side]?.skills[e.idx];
-          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.echo ? L(' (ซ้ำ)', ' (echo)') : ''}${e.side === 1 ? ' ◀' : ''}`;
+          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.star3 ? L(' ★★★ ซ้ำ', ' ★★★ echo') : e.echo ? L(' (ซ้ำ)', ' (echo)') : ''}${e.epic ? L(' ◆ มหากาพย์', ' ◆ EPIC') : ''}${e.side === 1 ? ' ◀' : ''}`;
           this.skillText.setText(label).setColor(SIDE_COLOR[e.side]).setAlpha(1).setScale(1);
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, delay: this.dur(500), duration: this.dur(400) });
           const lead = e.from !== undefined ? this.chain(e.side, e.from, e.idx, e.t) : 0;
           if (e.from !== undefined && e.side === 0) this.say('combo');
           this.castFx(e, lead);
+          // the depth moments get their own word over the caster: the ★★★ echo (gold) and an epic branch (purple)
+          if (e.star3) {
+            this.ffx.number(e.side, L('★★★ ซ้ำ!', '★★★ ECHO!'), 'status', 0.8, false, '#ffd34d');
+            this.fxl.starburst(this.fighters[e.side].x, CHEST - 30, 1.1);
+          } else if (e.epic && !e.echo && !this.epicShown.has(`${e.side}:${e.idx}`)) {
+            // an epic branch announces itself once per fight (its cast label keeps the ◆ every time)
+            this.epicShown.add(`${e.side}:${e.idx}`);
+            this.ffx.number(e.side, L('◆ มหากาพย์!', '◆ EPIC!'), 'status', 0.85, false, '#d9b8ff');
+            this.fxl.starburst(this.fighters[e.side].x, CHEST - 30, 0.8);
+          }
         }
         break;
       }
@@ -573,7 +587,13 @@ export class CombatScene extends Phaser.Scene {
           thorns: [L('หนาม', 'Thorns'), '#c9a0ff'],
           steadfast: [L('ใจเหล็ก', 'Iron Will'), '#ffffff'],
           rage: [L('คลั่ง!', 'Rage!'), '#ff4444'],
-          amplify: [e.value > 0 ? L('บัฟ x2!', 'Buffs x2!') : L('ยังไม่มีบัฟ', 'No buffs yet'), '#ffd166'],
+          dodge: [`${L('หลบ', 'Dodge')} ${e.value}`, '#b6f0c8'],
+          evade: [L('หลบได้!', 'Dodged!'), '#b6f0c8'],
+          sure: [L('👁 หลบไม่ได้!', '👁 Undodgeable!'), '#ffe08a'],
+          shake: [L('สลัดการคุม!', 'Shook it off!'), '#aaffcc'],
+          poison: [L('ติดพิษ', 'Poisoned'), '#c49cff'],
+          haste: [`${L('เร่ง', 'Haste')} +${e.value}%`, '#ffd166'],
+          wound: [L('แผลลึก', 'Wounded'), '#ff7b5c'],
           cleanse: [e.value > 0 ? `${L('ชำระล้าง', 'Cleansed')} ${e.value}` : L('ไม่มีดีบัฟ', 'No debuffs'), '#aaffcc'],
           dispel: [e.value > 0 ? `${L('สลายบัฟ', 'Dispelled')} ${e.value}!` : L('ไม่มีบัฟให้ลบ', 'Nothing to dispel'), '#c9a0ff'],
           delay: [e.value > 0 ? `${L('ถอยเวลา', 'Delayed')} ${(e.value / 10).toFixed(1)}${L(' วิ', 's')}` : L('ต้านได้', 'Resisted'), '#b8a0ff'],
@@ -585,13 +605,25 @@ export class CombatScene extends Phaser.Scene {
           this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
           if (e.side === 1 && e.value >= 15) this.say('frozen');
         }
-        if (e.status === 'cleanse' && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
+        if ((e.status === 'cleanse' || e.status === 'shake') && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
         if (e.status === 'delay' && e.value > 0) this.delayUntil[e.side] = e.t + Math.max(8, Math.min(20, e.value));
         break;
       }
       case 'fatigue':
         if (!this.quiet) this.skillText.setText(`${L('เหนื่อยล้า', 'Fatigue')} -${e.amount}`).setColor('#cccccc').setAlpha(1);
         break;
+      case 'ult': {
+        // simple ultimate banner in the cast-label spot (gold, bigger, stays a little longer)
+        const h = HEROES_BY_ID[e.hero];
+        if (!this.quiet && h) {
+          this.skillText.setText(`★ ${h.ult.name} Lv${e.lv} ★`).setColor('#ffd166').setAlpha(1).setScale(1.25);
+          this.tweens.killTweensOf(this.skillText);
+          this.tweens.add({ targets: this.skillText, alpha: 0, scale: 1, delay: this.dur(900), duration: this.dur(500) });
+          this.pose(e.side, 'cast');
+          this.float(e.side, L('ท่าไม้ตาย!', 'Ultimate!'), '#ffd166');
+        }
+        break;
+      }
       case 'end': {
         const w = e.winner;
         this.endWinner = w;
@@ -786,6 +818,9 @@ export class CombatScene extends Phaser.Scene {
         if (f.b > 0) list.push([`${L('ไฟ', 'Burn')} ${f.b}${L('/วิ', '/s')}`, '#ff7b5c']);
         if (fr > 0) list.push([`${L('แช่แข็ง', 'Frozen')} ${(fr / 10).toFixed(1)}`, '#8fd8ff']);
         if (f.sl > 0 && slt > 0) list.push([`${L('ช้า', 'Slow')} ${f.sl}%`, '#8fd8ff']);
+        if (f.dg > 0) list.push([`💨${L('หลบ', 'Dodge')} ${f.dg}`, '#ffd166']);
+        if (f.hs > 0 && f.hst - since > 0) list.push([`⏩${L('เร่ง', 'Haste')} ${f.hs}%`, '#ffd166']);
+        if (f.p > 0) list.push([`☠${L('พิษ', 'Poison')} ${f.p}${L('/วิ', '/s')}`, '#c49cff']);
       }
       let x = s === 0 ? 20 : 370;
       let y = 62;
@@ -832,8 +867,8 @@ export class CombatScene extends Phaser.Scene {
     if (!inst || !SKILLS[inst.id]) return;
     const foe = (1 - e.side) as Side;
     const lm = this.fxLife();
-    const arch = SKILLS[inst.id].arch;
-    const color = ARCH_HEX[arch] ?? 0xffffff;
+    const line = SKILLS[inst.id].line;
+    const color = LINE_HEX[line] ?? 0xffffff;
     const dir = e.side === 0 ? 1 : -1;
     const hs = this.hs();
     // at the caster's hand, on the side facing the enemy (clear of the skill name and the damage numbers)

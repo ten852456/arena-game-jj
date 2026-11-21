@@ -9,7 +9,8 @@ import { titleFor, type Fresh, type Recap, type RevealPlan } from './records';
 import { displayName } from '../lang';
 import type { Explanation, Lock } from '../../sim/explain';
 import { HEROES_BY_ID } from '../../sim/heroes';
-import { ARCH_NAME } from '../../sim/skills';
+import { LINE_NAME, lineLabel } from '../../sim/skills';
+import { LINES } from '../../sim/types';
 import { noteText, runBestText, type FinishRunResult, type FightNote, type Leaderboard, type Period, type Profile, type RunSummary, type Scout } from './meta';
 
 export const esc = (s: string) =>
@@ -330,17 +331,17 @@ export function leaderboardPage(period: Period, lb: Leaderboard | null, loading:
 
 // ---------- scouting chip (shop, above the fight button) ----------
 
-const ARCH_ORDER = ['tank', 'burst', 'scaling', 'control'] as const;
+const ARCH_ORDER = LINES;
 export function scoutChip(s: Scout | null, day: number) {
   if (!s) return '';
   const list = ARCH_ORDER.filter((a) => s.mix[a] !== undefined).sort((a, b) => (s.mix[b] ?? 0) - (s.mix[a] ?? 0));
   const bar = list.map((a) => `<i class="a-${a}" style="flex:${Math.max(0.02, s.mix[a] ?? 0)}"></i>`).join('');
   const top = list[0];
   const rows = list
-    .map((a) => `<li><i class="dot a-${a}" aria-hidden="true"></i>${ARCH_NAME[a]}<b>${Math.round((s.mix[a] ?? 0) * 100)}%</b></li>`)
+    .map((a) => `<li><i class="dot a-${a}" aria-hidden="true"></i>${lineLabel(a)}<b>${Math.round((s.mix[a] ?? 0) * 100)}%</b></li>`)
     .join('');
   return `<details class="mm-scout">
-    <summary><span class="mm-scout-ic" aria-hidden="true">🔭</span><span class="mm-scout-t">${L(`สนามวันที่ ${day}: ส่วนมากเป็น`, `Day ${day} arena: mostly `)}<b>${top ? ARCH_NAME[top] : '?'}</b></span><span class="mm-scout-bar" aria-hidden="true">${bar}</span></summary>
+    <summary><span class="mm-scout-ic" aria-hidden="true">🔭</span><span class="mm-scout-t">${L(`สนามวันที่ ${day}: ส่วนมากเป็น`, `Day ${day} arena: mostly `)}<b>${top ? LINE_NAME[top] : '?'}</b></span><span class="mm-scout-bar" aria-hidden="true">${bar}</span></summary>
     <ul>${rows}</ul>
     <p class="muted small">${L('สัดส่วนแนว build ของคู่ต่อสู้ที่อาจเจอวันนี้', 'Build styles of the opponents you may meet today')}${s.total ? L(` (จาก ${s.total} build)`, ` (from ${s.total} builds)`) : ''}${s.ai !== undefined ? ` · AI ${Math.round(s.ai * 100)}%` : ''}</p>
   </details>`;

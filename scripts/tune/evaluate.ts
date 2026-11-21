@@ -1,11 +1,12 @@
 // Measures candidates with the simulator jobs (scripts/sim/jobs.ts) and scores them (lower = better).
 // All candidates of one call share the same seeds (common random numbers), so they are compared fairly.
-import { HEROES } from '../../src/sim/heroes';
+import { HEROES, HEROES_BY_ID } from '../../src/sim/heroes';
 import { TPS } from '../../src/sim/combat';
-import { ARCHES, type Build } from '../../src/sim/types';
+import { LINES, type Build } from '../../src/sim/types';
 import { MAX_DAY, type Ctx, type Job, type MatchRes, type RunsRes } from '../sim/jobs';
+import type { LinesRes } from '../sim/lines';
 import { healthSummary, mergeHealth, newHealth, type Health } from '../sim/metrics';
-import { lengthTarget } from '../sim/targets';
+import { BEATS, TARGETS, ULT_LOW, lengthTarget } from '../sim/targets';
 import { BAND, CURVE_DAYS, curveTargets } from './curves';
 import { KNOBS, toUnit, x0 } from './knobs';
 import type { Task, TunePool } from './pool';
@@ -20,7 +21,13 @@ export interface EvalSpec {
   /** random fights per day for length / health (days 1–15) */
   lenN: number;
   days: number[];
+  /** in-line vs off-line builds per hero per LINE_DAYS day (0 = skip) */
+  linesN?: number;
+  /** runs per day-1 opening per hero (0 = skip) */
+  day1N?: number;
 }
+/** days of the in-line vs off-line check */
+export const LINE_DAYS = [4, 7, 11];
 
 export const LEN_DAYS = Array.from({ length: 15 }, (_, i) => i + 1);
 /** opponent pool per day for the bot runs (sim uses 24; 16 is enough for reach rates and much cheaper) */
@@ -44,6 +51,14 @@ export interface Measure {
   len: Record<number, { avg: number; fatigue: number; zero: number }>;
   zeroAll: number;
   watch: Record<string, Record<number, number>>;
+  /** hero → ultimate fire rate when unlocked and median fire time share (all scanned days) */
+  ult: Record<string, { fire: number; at: number }>;
+  /** hero → day → in-line beats off-line (same hero, normal bots) */
+  inline: Record<string, Record<number, number>>;
+  /** hero → points the ultimate is worth (in-line builds with it vs locked) */
+  ultValue: Record<string, number>;
+  /** hero → best day-1 opening's win rate vs normal day-1 bots */
+  day1: Record<string, number>;
 }
 
 export interface Score {
@@ -62,8 +77,18 @@ export const W = {
   zero: 5,
   fatigue: 2,
   length: 30,
+  /** designed counter pairs outside 53–60% (points²; sim v13: soft counters, the owner accepts 50–65) */
+  beats: 3,
+  /** ultimate fire rate / fire time misses (points²) */
+  ult: 0.5,
+  /** in-line builds beat off-line builds of the same hero 58–85% (points²) */
+  inline: 1.5,
+  /** the ultimate is worth 6–15 win-rate points (points²) */
+  ultValue: 0.5,
+  /** each hero's best day-1 opening vs normal day-1 bots 50–70% (points²) */
+  day1: 0.5,
   /** distance from the current values: (Δ / knob range)² summed × this */
-  dist: 25,
+  dist: 5,
 };
 /** Inner limits (a little stricter than the targets, so noise does not carry a candidate over them). */
 /**
@@ -104,7 +129,7 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
 
   // ---- phase 2: matchups, runs, length sweep, watch builds ----
   const t2: Task[] = [];
-  const k2: { ci: number; kind: 'm' | 'r' | 'l' | 'w'; day?: number; hero?: string; name?: string }[] = [];
+  const k2: { ci: number; kind: 'm' | 'r' | 'l' | 'w' | 'n' | 'd'; day?: number; hero?: string; name?: string }[] = [];
   cands.forEach((tune, ci) => {
     for (const day of spec.days)
       for (const h of HEROES) {
@@ -122,6 +147,17 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
         t2.push({ tune, job: { k: 'len', c, day, from, to } as Job });
         k2.push({ ci, kind: 'l', day });
       }
+    if (spec.day1N)
+      for (const h of HEROES) {
+        t2.push({ tune, job: { k: 'day1', c, hero: h.id, n: spec.day1N } });
+        k2.push({ ci, kind: 'd', hero: h.id });
+      }
+    if (spec.linesN)
+      for (const day of LINE_DAYS)
+        for (const h of HEROES) {
+          t2.push({ tune, job: { k: 'lines', c, day, hero: h.id, from: 0, to: spec.linesN, tier: 'normal' } });
+          k2.push({ ci, kind: 'n', day, hero: h.id });
+        }
     for (const w of WATCH)
       for (const day of w.days.filter((d) => builds[ci][d])) {
         const build = typeof w.build === 'function' ? w.build(day) : w.build;
@@ -131,7 +167,8 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
   });
   const r2 = await pool.run<unknown>(t2);
 
-  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {} }));
+  const out: Measure[] = cands.map(() => ({ overall: {}, pairWorst: {}, archWorst: {}, pairs: {}, pairN: spec.nb * 4, reach: {}, len: {}, zeroAll: 0, watch: {}, ult: {}, inline: {}, ultValue: {}, day1: {} }));
+  const ultAcc = cands.map(() => ({} as Record<string, [number, number, number]>));
   const match: Record<number, Record<number, Record<string, MatchRes>>> = {};
   const runs: Record<number, Record<string, { won: number; runs: number }>> = {};
   const lens: Record<number, Record<number, Health>> = {};
@@ -144,6 +181,14 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
       const a = ((runs[k.ci] ??= {})[k.hero!] ??= { won: 0, runs: 0 });
       a.won += r.won;
       a.runs += r.runs;
+    } else if (k.kind === 'd') {
+      const r = res as Record<string, { normal: number; n: number }>;
+      out[k.ci].day1[k.hero!] = Math.max(...Object.values(r).map((x) => x.normal / Math.max(1, x.n)));
+    } else if (k.kind === 'n') {
+      const r = res as LinesRes;
+      (out[k.ci].inline[k.hero!] ??= {})[k.day!] = r.h2h / Math.max(1, r.n);
+      const a = (ultAcc[k.ci][k.hero!] ??= [0, 0, 0]);
+      for (const u of Object.values(r.ult)) for (let i = 0; i < 3; i++) a[i] += u[i];
     } else if (k.kind === 'l') {
       const l = (lens[k.ci] ??= {});
       l[k.day!] = l[k.day!] ? mergeHealth(l[k.day!], res as Health) : (res as Health);
@@ -178,19 +223,32 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
       }
       m.pairWorst[day] = pw;
       let aw = { r: 0, a: '', b: '' };
-      for (const a of ARCHES)
-        for (const b of ARCHES) {
+      for (const a of LINES)
+        for (const b of LINES) {
           if (a === b) continue;
           let s = 0;
           let n = 0;
-          for (const A of HEROES.filter((h) => h.arch === a))
-            for (const B of HEROES.filter((h) => h.arch === b)) {
+          for (const A of HEROES.filter((h) => h.line === a))
+            for (const B of HEROES.filter((h) => h.line === b)) {
               s += res[A.id].score[B.id];
               n += res[A.id].count[B.id];
             }
           if (s / n > aw.r) aw = { r: s / n, a, b };
         }
       m.archWorst[day] = aw;
+    }
+    for (const h of HEROES) {
+      let on = 0;
+      let fired = 0;
+      const at: number[] = [];
+      for (const day of spec.days) {
+        const r = match[ci][day][h.id];
+        on += r.ultOn;
+        fired += r.ultFired;
+        at.push(...r.ultAt);
+      }
+      at.sort((x, y) => x - y);
+      m.ult[h.id] = { fire: fired / Math.max(1, on), at: at.length ? at[Math.floor(at.length / 2)] : 0.5 };
     }
     if (spec.runs > 0) for (const h of HEROES) m.reach[h.id] = runs[ci][h.id].won / runs[ci][h.id].runs;
     let all = newHealth();
@@ -201,6 +259,7 @@ export async function measure(pool: TunePool, cands: Record<string, number>[], s
       m.len[day] = { avg: s.avgLen, fatigue: s.fatigue, zero: s.zeroSkill };
     }
     m.zeroAll = all.zeroSides / Math.max(1, all.sides);
+    for (const [h, a] of Object.entries(ultAcc[ci])) if (a[0] >= 10) m.ultValue[h] = (a[1] - a[2]) / a[0];
     for (const [name, byDay] of Object.entries(watch[ci] ?? {}))
       m.watch[name] = Object.fromEntries(Object.entries(byDay).map(([d, x]) => [d, x.s / x.n]));
   });
@@ -213,7 +272,24 @@ const over = (x: number, lim: number) => Math.max(0, x - lim);
 /** Objective of one measured candidate with knob values xs. Lower is better; parts show where the cost comes from. */
 export function score(m: Measure, xs: number[]): Score {
   const tg = curveTargets();
-  const parts: Record<string, number> = { curve: 0, reach: 0, pair: 0, arch: 0, zero: 0, fatigue: 0, length: 0, watch: 0, dist: 0 };
+  const parts: Record<string, number> = { curve: 0, reach: 0, pair: 0, arch: 0, beats: 0, ult: 0, inline: 0, ultValue: 0, zero: 0, fatigue: 0, length: 0, watch: 0, dist: 0 };
+  for (const byDay of Object.values(m.inline))
+    for (const r of Object.values(byDay)) parts.inline += W.inline * (sq(over(0.58, r) * 100) + 0.5 * sq(over(r, 0.85) * 100));
+  for (const b of Object.values(m.day1)) parts.day1 = (parts.day1 ?? 0) + W.day1 * sq((over(0.5, b) + over(b, 0.7)) * 100);
+  for (const d of Object.values(m.ultValue)) parts.ultValue += W.ultValue * sq((over(0.06, d) + over(d, 0.15)) * 100);
+  // designed counters (one hero per line): average over the scanned days, inner band 54–57%
+  const heroOf = (line: string) => HEROES.find((h) => h.line === line)!.id;
+  const days = Object.keys(m.overall).map(Number);
+  for (const [a, bs] of Object.entries(BEATS))
+    for (const b of bs) {
+      const avg = days.reduce((n, d) => n + (m.pairs[d][`${heroOf(a)}>${heroOf(b)}`] ?? 0.5), 0) / Math.max(1, days.length);
+      parts.beats += W.beats * sq((over(0.53, avg) + over(avg, 0.6)) * 100);
+    }
+  for (const [h, u] of Object.entries(m.ult)) {
+    const lo = ULT_LOW.includes(h) ? TARGETS.ultFireLow : TARGETS.ultFire;
+    parts.ult += W.ult * sq(over(lo + 0.03, u.fire) * 100) + W.ult * sq((over(TARGETS.ultTimeLo + 0.03, u.at) + over(u.at, TARGETS.ultTimeHi - 0.03)) * 100);
+  }
+  void HEROES_BY_ID;
   const pairLim = LIMITS.pair + 0.5 * Math.sqrt(0.25 / Math.max(1, m.pairN));
   for (const day of Object.keys(m.overall).map(Number)) {
     for (const [h, r] of Object.entries(m.overall[day])) {

@@ -22,7 +22,7 @@ export interface SkillFx {
   t?: FxKind[];
 }
 
-/** All 26 skills. burst = slashes and stars, burn = flames, control = ice / snow / time, tank = bubble / spikes,
+/** All 35 skills. burst = slashes and stars, burn = flames, control = ice / snow / time, tank = bubble / spikes,
  *  scaling = golden arrows / hearts, engines = gears and speed lines, none = moon sparkles. */
 export const SKILL_FX: Record<string, SkillFx> = {
   strike: { t: ['slash'] },
@@ -36,7 +36,16 @@ export const SKILL_FX: Record<string, SkillFx> = {
   train: { c: ['power'], t: ['slash'] },
   ignite: { t: ['flame'] },
   feast: { c: ['heart', 'power'], t: ['slash'] },
-  amplify: { c: ['power', 'moon'] },
+  riposte: { t: ['slash', 'speed'] },
+  sidestep: { c: ['speed', 'moon'], t: ['slash'] },
+  mend: { c: ['heart', 'moon'] },
+  blaze: { t: ['flame', 'impact'] },
+  scorch: { t: ['flame'] },
+  venom: { t: ['spike', 'slash'] },
+  plague: { t: ['spike', 'impact'] },
+  icelance: { t: ['ice', 'slash'] },
+  glacier: { t: ['ice', 'impact'] },
+  tailwind: { c: ['speed', 'moon'], t: ['slash'] },
   frost: { t: ['ice'] },
   chill: { t: ['snow', 'slash'] },
   dispel: { t: ['dispel', 'slash'] },
@@ -53,8 +62,9 @@ export const SKILL_FX: Record<string, SkillFx> = {
   timewarp: { t: ['time', 'slash'] },
 };
 
-const ARCH_FX: Record<string, SkillFx> = {
-  burst: { t: ['slash'] }, tank: { c: ['bubble'] }, scaling: { c: ['power'] }, control: { t: ['ice'] }, none: { c: ['moon'] },
+const LINE_FX: Record<string, SkillFx> = {
+  hit: { t: ['slash'] }, dodge: { t: ['multi'] }, shield: { c: ['bubble'] }, heal: { c: ['heart'] }, burn: { t: ['flame'] },
+  poison: { t: ['spike'] }, ice: { t: ['ice'] }, wind: { t: ['snow', 'slash'] }, none: { c: ['moon'] },
 };
 
 const planCache = new Map<string, Required<SkillFx>>();
@@ -63,7 +73,7 @@ export function fxPlan(k: Pick<SkillInstance, 'id' | 'v'>): Required<SkillFx> {
   const key = `${k.id}:${k.v}`;
   const hit = planCache.get(key);
   if (hit) return hit;
-  const base = SKILL_FX[k.id] ?? ARCH_FX[SKILLS[k.id]?.arch ?? 'none'] ?? {};
+  const base = SKILL_FX[k.id] ?? LINE_FX[SKILLS[k.id]?.line ?? 'none'] ?? {};
   const c = [...(base.c ?? [])];
   const t = [...(base.t ?? [])];
   const add = (list: FxKind[], x: FxKind) => list.length < 3 && !list.includes(x) && list.push(x);
@@ -75,7 +85,7 @@ export function fxPlan(k: Pick<SkillInstance, 'id' | 'v'>): Required<SkillFx> {
       else if (e.k === 'delay') add(t, 'time');
       else if (e.k === 'heal' || e.k === 'leech') add(c, 'heart');
       else if (e.k === 'shield') add(c, 'bubble');
-      else if (e.k === 'grow' || e.k === 'charge' || e.k === 'amplify') add(c, 'power');
+      else if (e.k === 'grow' || e.k === 'charge' || e.k === 'haste') add(c, 'power');
       else if (e.k === 'thorns') add(c, 'spike');
       else if (e.k === 'dispel') add(t, 'dispel');
     }
