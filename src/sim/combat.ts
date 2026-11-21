@@ -74,6 +74,10 @@ export const ENGINE_GAP = 3 * TPS;
 export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
+/** ตราศักดิ์สิทธิ์ powers at most this many marked skills */
+export const SIGIL_MAX = 2;
+/** sim v18: a skill of the hero's line fires its first cast at most this many ticks into the fight (slow lines start sooner) */
+export const FIRST_CAST = 4 * TPS;
 /** damage sources a spiked shield does not reflect */
 const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
@@ -234,12 +238,13 @@ export const starPower = (star = 0) => 1 + T['star.pow'] * Math.max(0, Math.min(
 export function relicPower(b: Build, inst: SkillInstance): number {
   const rs = b.relics ?? [];
   if (!rs.length) return 1;
+  // ตราศักดิ์สิทธิ์ (sim v18): only the first SIGIL_MAX marked skills of the list
   let m = 1;
   const line = SKILLS[inst.id]?.line;
   if (rs.includes('wanderer') && !inLine(b.hero, inst.id)) m *= 1 + T['relic.wanderer'];
   if (rs.includes('twinline') && line && line === secondLine(b)) m *= 1 + T['relic.twinline'];
   if (rs.includes('lonewolf') && b.skills.length <= 3) m *= 1 + T['relic.lonewolf'];
-  if (rs.includes('sigil') && inst.mark) m *= 1 + T['relic.sigil'];
+  if (rs.includes('sigil') && inst.mark && b.skills.filter((k) => k.mark).slice(0, SIGIL_MAX).includes(inst)) m *= 1 + T['relic.sigil'];
   return m;
 }
 /** the line (not the hero's own, not 'none') the build owns most skills of; ties: first in the list */
@@ -283,6 +288,7 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   if (relics.has('glasscannon')) maxHp = Math.max(1, Math.round(maxHp * T['relic.glassHp']));
   const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
   const blocks = makeBlocks(b);
+  for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - FIRST_CAST);
   if (relics.has('quickdraw')) for (const blk of blocks) blk.prog = Math.max(blk.prog, Math.round(blk.cd * T['relic.quickdraw']));
   // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
   if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
@@ -476,7 +482,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (f.relics.has('executioner') && foe.hp < foe.maxHp * 0.4) m *= 1 + T['relic.executioner'];
     if (f.relics.has('rot') && foe.poisons.length) m *= 1 + T['relic.rot'];
     if (f.relics.has('brittle') && foe.frozen > 0) m *= 1 + T['relic.brittle'];
-    if (f.relics.has('glasscannon')) m *= 1 + T['relic.glassDmg'];
+    // ปืนแก้ว: its extra is added in hit() with a per-hit cap (glassCap × the enemy's max HP)
     if (f.relics.has('counterstep') && f.flags.counter) {
       m *= 1 + T['relic.counterstep'];
       f.flags.counter = 0;
@@ -634,6 +640,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         let dmg = Math.round((n + sum(f.growth) + bonusDmg) * mult);
         if (f.hooks.onHit) dmg = Math.max(0, Math.round(f.hooks.onHit(hookApi(f), dmg)));
         if (f.relics.size) dmg = Math.round(dmg * relicHit(f, foe));
+        if (f.relics.has('glasscannon')) dmg = Math.round(Math.min(dmg * (1 + T['relic.glassDmg']), Math.max(dmg, dmg + foe.maxHp * T['relic.glassCap'])));
         if (!o.sure && foe.dodge > 0) {
           // dodged: the whole hit misses (a charge is spent on it too), no thorns, no leech
           if (!useCharge) { /* the charge waits */ } else if (f.chargeHits > 1) f.chargeHits--;
@@ -910,6 +917,11 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       runSkill(f, foe, blk, power * 0.5, Math.round(blk.dmg * q.mult * 0.5));
     }
     if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1, 3, blk.idx);
+    // ★★★ signature (sim v18): every cast echoes once more at star.echo power
+    if ((inst.star ?? 0) >= 3 && lvOf(inst.v) >= 3 && foe.hp > 0 && f.hp > 0) {
+      emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
+      runSkill(f, foe, blk, power * T['star.echo'], Math.round(blk.dmg * q.mult * T['star.echo']));
+    }
 
     // trigger bonuses fire at the same power, but deeper chain steps get weaker
     const tm = q.depth >= 1 ? q.mult * T.chainDecay : q.mult;

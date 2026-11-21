@@ -366,7 +366,7 @@ const BASE_LIST: SkillDef[] = [
     a1: N('หินผา', 7, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(4, { shieldPct: 0.4 })]),
     a2: N('หินฟื้น', 7, [{ k: 'shield', n: 6 }, { k: 'heal', n: 5 }, hit(4, { shieldPct: 0.4 })]),
     b: N('หินพุ่ง', 7, [{ k: 'shield', n: 3 }, hit(3, { shieldPct: 0.8 })], 'โล่เป็นดาเมจ'),
-    b1: N('หินถล่ม', 7, [{ k: 'shield', n: 3 }, hit(4, { shieldPct: 1.2 })]),
+    b1: N('หินถล่ม', 7, [{ k: 'shield', n: 3 }, hit(4, { shieldPct: 1 }), { k: 'charge', mult: 1.5, hits: 1 }]),
     b2: N('หินทะลวง', 7, [{ k: 'shield', n: 3 }, hit(3, { shieldPct: 0.8, pierce: 1 })]),
   }),
   // tech: answers 🔥 ☠ (removes burn / poison)
@@ -456,7 +456,7 @@ const BASE_LIST: SkillDef[] = [
   def('plague', 'poison', {
     '': N('พิษปะทุ', 6, [hit(2, { poisonPct: 0.4, pierce: 1 })]),
     a: N('พิษระเบิด', 6, [hit(2, { poisonPct: 0.6, pierce: 1 })], 'ระเบิดพิษ'),
-    a1: N('มหาพิษ', 6, [hit(3, { poisonPct: 0.8, pierce: 1 })]),
+    a1: N('มหาพิษ', 6, [hit(3, { poisonPct: 0.7, pierce: 1, leech: 0.5 })]),
     a2: N('พิษลาม', 6, [hit(2, { poisonPct: 0.4, pierce: 1 }), { k: 'poison', dps: 2, secs: 8 }]),
     b: N('โรคระบาด', 6, [{ k: 'poison', dps: 1, secs: 10, stacks: 2 }], 'พิษนาน'),
     b1: N('ระบาดหนัก', 6, [{ k: 'poison', dps: 2, secs: 10, stacks: 2 }]),
@@ -477,7 +477,7 @@ const BASE_LIST: SkillDef[] = [
   def('frost', 'ice', {
     '': N('ลูกน้ำแข็ง', 5, [hit(5), { k: 'freeze', secs: 1 }]),
     a: N('แช่ยาว', 5, [hit(5), { k: 'freeze', secs: 1.7 }], 'ล็อกศัตรู'),
-    a1: N('ธารเยือกแข็ง', 5, [hit(10), { k: 'freeze', secs: 2.5 }]),
+    a1: N('ธารเยือกแข็ง', 5, [hit(10, { sure: true }), { k: 'freeze', secs: 2 }, { k: 'dispel', n: 1 }]),
     a2: N('หนาวสะท้าน', 5, [hit(8), { k: 'freeze', secs: 2 }, { k: 'slow', pct: 0.2, secs: 3 }]),
     b: N('น้ำแข็งคม', 5, [hit(7), { k: 'freeze', secs: 1 }], 'ดาเมจ'),
     b1: N('หอกน้ำแข็ง', 5, [hit(15), { k: 'freeze', secs: 1 }]),
@@ -585,7 +585,7 @@ const BASE_LIST: SkillDef[] = [
   def('bulwark', 'shield', {
     '': N('โล่กระแทก', 6, [hit(6, { shieldPct: 1 })]),
     a: N('ปะทะ', 6, [hit(8, { shieldPct: 1.3 })], 'โล่เป็นดาเมจ'),
-    a1: N('ทลายด้วยโล่', 6, [hit(9, { shieldPct: 1.7 })]),
+    a1: N('ทลายด้วยโล่', 6, [hit(9, { shieldPct: 1.4 }), { k: 'dispel', n: 1, shield: 0.5 }]),
     a2: N('โล่สะท้าน', 6, [hit(9, { shieldPct: 1.3 }), { k: 'freeze', secs: 0.5 }]),
     b: N('ปะทะแล้วตั้งรับ', 6, [hit(8, { shieldPct: 0.8 }), { k: 'shield', n: 4 }], 'วนโล่'),
     b1: N('ตั้งรับเต็มที่', 6, [hit(9, { shieldPct: 0.8 }), { k: 'shield', n: 6 }]),
@@ -612,7 +612,7 @@ const BASE_LIST: SkillDef[] = [
   def('spikewall', 'poison', {
     '': N('ป้อมหนามพิษ', 5.5, [hit(4, { thornsX: 2 }), { k: 'poison', dps: 1, secs: 6 }]),
     a: N('ระเบิดหนามพิษ', 5.5, [hit(5, { thornsX: 2.5, poisonPct: 0.4 })], 'แปลงพิษเป็นดาเมจ'),
-    a1: N('หนามพิษพุ่ง', 5.5, [hit(6, { thornsX: 3, poisonPct: 0.6 })]),
+    a1: N('หนามพิษพุ่ง', 5.5, [hit(6, { thornsX: 2.5, poisonPct: 0.5 }), { k: 'thorns', n: 1, perm: true }]),
     a2: N('หนามพิษล้อม', 5.5, [hit(5, { thornsX: 2.5, poisonPct: 0.4 }), { k: 'shield', n: 5 }]),
     b: N('ปลูกหนามพิษ', 5.5, [hit(4, { thornsX: 2 }), { k: 'thorns', n: 1 }, { k: 'poison', dps: 1, secs: 6 }], 'สะสมพิษ'),
     b1: N('สวนหนามพิษ', 5.5, [hit(5, { thornsX: 2 }), { k: 'thorns', n: 2 }, { k: 'poison', dps: 2, secs: 6 }]),

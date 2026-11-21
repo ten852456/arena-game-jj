@@ -40,7 +40,7 @@ export const RELICS: RelicDef[] = [
   { id: 'featherstep', icon: '🪶', group: 'dodge', name: ['ขนนก', 'Featherstep'],
     desc: () => ['เก็บแต้มหลบได้ +1 แต้ม', 'hold +1 dodge charge'] },
   // 🛡 shield
-  { id: 'spikedshield', icon: '🦔', group: 'shield', also: ['poison'], name: ['โล่หนาม', 'Spiked shield'],
+  { id: 'spikedshield', icon: '🦔', group: 'shield', name: ['โล่หนาม', 'Spiked shield'],
     desc: () => [`ดาเมจที่โล่รับไว้ สะท้อนกลับ ${pc(T['relic.spikedshield'])}%`, `${pc(T['relic.spikedshield'])}% of the damage your shield blocks is reflected`] },
   { id: 'bastion', icon: '🏰', group: 'shield', also: ['heal'], name: ['ป้อมปราการ', 'Bastion'],
     desc: () => [`เริ่มสู้พร้อมโล่ ${pc(T['relic.bastion'])}% ของเลือดสูงสุด`, `start each fight with a shield of ${pc(T['relic.bastion'])}% of your max HP`] },
@@ -82,11 +82,11 @@ export const RELICS: RelicDef[] = [
     desc: () => [`เลือดสูงสุด +${pc(T['relic.ironhide'])}%`, `+${pc(T['relic.ironhide'])}% max HP`] },
   // ☢ cheese: strong only with a rare setup
   { id: 'glasscannon', icon: '🔮', group: 'cheese', name: ['ปืนแก้ว', 'Glass cannon'],
-    desc: () => [`เลือดสูงสุดเหลือ ${pc(T['relic.glassHp'])}% แต่การตีทุกครั้ง +${pc(T['relic.glassDmg'])}%`, `max HP down to ${pc(T['relic.glassHp'])}%, but every hit deals +${pc(T['relic.glassDmg'])}%`] },
+    desc: () => [`เลือดสูงสุดเหลือ ${pc(T['relic.glassHp'])}% แต่การตีทุกครั้ง +${pc(T['relic.glassDmg'])}% (ส่วนที่เพิ่มไม่เกิน ${pc(T['relic.glassCap'])}% ของเลือดศัตรูต่อครั้ง)`, `max HP down to ${pc(T['relic.glassHp'])}%, but every hit deals +${pc(T['relic.glassDmg'])}% (the extra is at most ${pc(T['relic.glassCap'])}% of the enemy's max HP per hit)`] },
   { id: 'lonewolf', icon: '🐺', group: 'cheese', name: ['หมาป่าเดียวดาย', 'Lone wolf'],
     desc: () => [`มี skill ไม่เกิน 3 ตัว: ทุกตัวแรง +${pc(T['relic.lonewolf'])}%`, `with 3 skills or fewer, each one is ${pc(T['relic.lonewolf'])}% stronger`] },
   { id: 'sigil', icon: '🔱', group: 'cheese', name: ['ตราศักดิ์สิทธิ์', 'Sigil'],
-    desc: () => [`skill ที่มีตรา แรง +${pc(T['relic.sigil'])}%`, `skills with a mark are ${pc(T['relic.sigil'])}% stronger`] },
+    desc: () => [`skill ที่มีตรา (2 ตัวแรกในรายการ) แรง +${pc(T['relic.sigil'])}%`, `marked skills (the first 2 in your list) are ${pc(T['relic.sigil'])}% stronger`] },
 ];
 export const RELICS_BY_ID: Record<string, RelicDef> = Object.fromEntries(RELICS.map((r) => [r.id, r]));
 export const isRelic = (id: unknown): id is string => typeof id === 'string' && !!RELICS_BY_ID[id];
@@ -98,6 +98,8 @@ export const relicText = (id: string, th = true) => {
   const d = r.desc();
   return `${r.icon} ${th ? r.name[0] : r.name[1]}: ${th ? d[0] : d[1]}`;
 };
+/** the lines (not 'none') a build owns skills of: what a relic offer and its "fits" label look at */
+export const skillLinesOf = (skills: { id: string }[], lineOf: (id: string) => string | undefined) => [...new Set(skills.map((k) => lineOf(k.id)).filter((l): l is string => !!l && l !== 'none'))];
 /** does this relic suit `line` (its own group, or one of the lines it also suits)? */
 export const relicFits = (id: string, line?: string) => !!line && (RELICS_BY_ID[id]?.group === line || !!RELICS_BY_ID[id]?.also?.includes(line as Line));
 export const GROUP_ICON: Record<RelicGroup, string> = {
@@ -109,15 +111,18 @@ export const GROUP_ICON: Record<RelicGroup, string> = {
  * line while the run owns none of its line's relics (then line relics are only weighted ×1.3), the rest from everything
  * else (other lines, generic and cheese relics).
  */
-export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = []): string[] {
+export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skillLines: string[] = []): string[] {
   const rng = new Rng(hashSeed(seed, 'relic', day));
   const line = HEROES_BY_ID[hero]?.line;
+  // sim v18: "fits" = the hero's line or a line the build owns skills of
+  const lines = [...new Set([line, ...skillLines].filter((x): x is string => !!x && x !== 'none'))];
+  const fits = (id: string) => lines.some((l) => relicFits(id, l));
   const pool = RELICS.filter((r) => !owned.includes(r.id));
   const out: string[] = [];
-  // at least one of the hero's line while the run owns none of them; after that the line is only weighted (×LINE_W)
-  const mine = pool.filter((r) => relicFits(r.id, line));
-  const ownsLine = owned.some((id) => relicFits(id, line));
-  if (mine.length && !ownsLine) out.push(rng.pick(mine).id);
+  // always at least one that fits the build (sim v18: a line it owns skills of, not only the hero's nominal line);
+  // the hero's own line is weighted ×LINE_W in the rest
+  const mine = pool.filter((r) => fits(r.id));
+  if (mine.length) out.push(rng.pick(mine).id);
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
     const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : 1));

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
 import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markWishCost, slotsFor } from '../sim/run';
-import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer } from '../sim/relics';
+import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer, skillLinesOf } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
@@ -137,8 +137,12 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
  * Day-by-day spend check for a run (server fight.ts, and the honest-run test): which last-chance ways still fit when
  * this build is added to what the run already spent. Returns the ways that fit (empty = reject) with their new totals.
  */
+/** one last-chance way's running state (security review: every way keeps its own ledger, never mixed with another's) */
+export interface Ledger { spent: number; paidSlots: number; wishMarks: number; freeMarks: number }
+/** the ledger key of a way: its option and its free slots (the two Supply ways differ there) */
+export const wayKey = (a: { opt: string; freeSlots: number }) => `${a.opt}:${a.freeSlots}`;
 export function spendCheck(
-  prev: { build?: Build; spent?: number; paidSlots?: number; wishMarks?: number; freeMarks?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
+  prev: { build?: Build; spent?: number; paidSlots?: number; wishMarks?: number; freeMarks?: number; ledger?: Record<string, Ledger> } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
 ) {
   // ONE last-chance way must allow the whole build at once (security review): its marks, the build's own cost and the
   // running spend are all checked against the same way, never one way for one check and another for the next
@@ -153,17 +157,22 @@ export function spendCheck(
     // marks on lower skills can only be the last chance's one
     .filter((a) => marks <= a.marks + WISH_MARKS_MAX && lowMarks(build) <= a.marks)
     .filter((a) => buildCost(build, day, a.freeSlots) <= a.cap(build.skills.length))
-    .map((a) => {
-      const d = spendDelta(prev?.build, build, day, prev?.paidSlots ?? 0, a.freeSlots);
+    .flatMap((a) => {
+      // this way's own ledger: the saved one, or (right after the death) the one shared before the last chance;
+      // a way that was dropped earlier has no ledger any more and cannot come back
+      const key = wayKey(a);
+      const L: Ledger | undefined = prev?.ledger
+        ? prev.ledger[key] ?? prev.ledger['none:0']
+        : { spent: prev?.spent ?? 0, paidSlots: prev?.paidSlots ?? 0, wishMarks: prev?.wishMarks ?? 0, freeMarks: prev?.freeMarks ?? 0 };
+      if (!L) return [];
+      const d = spendDelta(prev?.build, build, day, L.paidSlots, a.freeSlots);
       // sim v18 ledger: a gained mark is the last chance's free one (once) or a paid moon wish (WISH_MARKS_MAX a run)
-      const freeLeft = Math.max(0, a.marks - (prev?.freeMarks ?? 0));
-      const free = Math.min(freeLeft, d.gainedMarks);
+      const free = Math.min(Math.max(0, a.marks - L.freeMarks), d.gainedMarks);
       const paid = d.gainedMarks - free;
-      const wishMarks = (prev?.wishMarks ?? 0) + paid;
-      return {
-        opt: a.opt, spent: (prev?.spent ?? 0) + d.gold + markWishCost(paid), paidSlots: d.paidSlots, cap: a.cap(build.skills.length),
-        wishMarks, freeMarks: (prev?.freeMarks ?? 0) + free,
-      };
+      return [{
+        opt: a.opt, key, cap: a.cap(build.skills.length),
+        spent: L.spent + d.gold + markWishCost(paid), paidSlots: d.paidSlots, wishMarks: L.wishMarks + paid, freeMarks: L.freeMarks + free,
+      }];
     })
     .filter((x) => x.spent <= x.cap && x.wishMarks <= WISH_MARKS_MAX);
 }
@@ -189,7 +198,7 @@ export function relicOfferCheck(track: { build?: Build; relicSeed?: number; hero
   const added = cur.filter((r) => !prev.includes(r));
   if (!added.length) return null;
   if (track?.relicSeed === undefined) return BAD_RELIC;
-  const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev);
+  const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev, skillLinesOf(track.build?.skills ?? [], (id) => SKILLS[id]?.line));
   return added.every((r) => offer.includes(r)) ? null : BAD_RELIC;
 }
 /** marks on skills below Lv3 (only the last chance's mark can be there) */
@@ -197,8 +206,8 @@ const lowMarks = (b: Build) => b.skills.filter((k) => k.mark && lvOf(k.v) < 3).l
 /** the only error any relic problem gets */
 export const BAD_RELIC = 'bad relic';
 /** the relics the server offers this run on `day` (empty when it is no relic day) */
-export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = []) =>
-  RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned) : [];
+export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = [], skills: { id: string }[] = []) =>
+  RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned, skillLinesOf(skills, (id) => SKILLS[id]?.line)) : [];
 
 export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
   const b = x as Build;

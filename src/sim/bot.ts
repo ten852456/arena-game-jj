@@ -5,7 +5,7 @@ import {
   LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
-import { RELICS_BY_ID, RELIC_DAYS, relicFits, rollRelicOffer } from './relics';
+import { RELICS_BY_ID, RELIC_DAYS, relicFits, rollRelicOffer, skillLinesOf } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, rarityOf, epicAfter, type Effect, type SkillNode, type Variant } from './skills';
 import { LINES, type Build, type Line, type SkillInstance } from './types';
@@ -199,17 +199,24 @@ export function botRelic(s: RunState, tier: BotTier): number {
   const offer = s.relicOffer ?? [];
   if (!offer.length) return -1;
   const rng = new Rng(hashSeed(s.seed, 'relicpick', s.day, tier));
-  if (tier === 'easy') return rng.int(offer.length);
+  // sim v18: every tier knows a relic's condition (no lone wolf with 5 skills, no sigil without a mark)
+  const usable = (id: string) => (id === 'lonewolf' ? s.skills.length <= 3 : id === 'sigil' ? s.skills.some((k) => k.mark) : true);
+  if (!offer.some(usable)) return -1;
+  if (tier === 'easy') {
+    const ok = offer.map((id, i) => (usable(id) ? i : -1)).filter((i) => i >= 0);
+    return ok[rng.int(ok.length)];
+  }
   const line = HEROES_BY_ID[s.hero]?.line;
   const counts: Record<string, number> = {};
   for (const k of s.skills) counts[SKILLS[k.id].line] = (counts[SKILLS[k.id].line] ?? 0) + 1;
   const fit = (id: string) => {
     const g = RELICS_BY_ID[id].group;
+    if (!usable(id)) return -Infinity;
     if (relicFits(id, line)) return 1.5;
     if (g === 'cheese') {
-      if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0;
-      if (id === 'lonewolf') return 0;
-      return tier === 'hard' ? 1.5 : 0.5;
+      if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0.5;
+      if (id === 'lonewolf') return 4;
+      return tier === 'hard' ? 1.2 : 0.3;
     }
     if (g === 'any') {
       if (id === 'twinline') return Math.max(...Object.entries(counts).filter(([l]) => l !== line && l !== 'none').map(([, n]) => n), 0) >= 2 ? 2.8 : 1;
@@ -507,7 +514,7 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
       // relic days: the same 3-card offer a player gets (sim v17)
       if (RELIC_DAYS.includes(d)) {
         s.relicDays = [...(s.relicDays ?? []), d];
-        s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? []);
+        s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? [], skillLinesOf(toBuild(s).skills, (id) => SKILLS[id]?.line));
         if (s.relicOffer.length) s.phase = 'relic';
       }
     }

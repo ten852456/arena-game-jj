@@ -140,6 +140,8 @@ export function handleFight(body: any): Res {
   track.paidSlots = way.paidSlots;
   track.wishMarks = way.wishMarks;
   track.freeMarks = way.freeMarks;
+  // every way that still fits keeps its OWN ledger (security review: never one way's marks with another's gold)
+  track.ledger = Object.fromEntries(ways.map((w) => [w.key, { spent: w.spent, paidSlots: w.paidSlots, wishMarks: w.wishMarks, freeMarks: w.freeMarks }]));
   if (opts.size === 1 && way.opt !== 'none') track.lastChoice = way.opt;
   track.rating = newRating;
   track.days[day] = won ? 1 : result.winner === -1 ? 2 : 0;
@@ -199,7 +201,7 @@ export function handleFight(body: any): Res {
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
       // tomorrow is a relic day: the 3 relics the server will accept (the client shows these)
-      ...(serverRelicOffer(track, build.hero, day + 1, build.relics).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics) } : {}),
+      ...(serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills) } : {}),
       result, won, rating: newRating,
     },
   };

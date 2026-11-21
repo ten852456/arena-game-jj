@@ -11,7 +11,7 @@ import * as RF from './runEndFx';
 import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
-import { GROUP_ICON, RELICS_BY_ID, relicFits, relicText } from '../sim/relics';
+import { GROUP_ICON, RELICS_BY_ID, relicFits, relicText, skillLinesOf } from '../sim/relics';
 import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
@@ -738,7 +738,8 @@ function renderRelic() {
     .map((id, i) => {
       const x = RELICS_BY_ID[id];
       const d = x.desc();
-      const tag = relicFits(id, HEROES_BY_ID[r.hero]?.line) ? `<span class="mark ult-aff">${L('สายของคุณ', 'your line')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
+      const lines = [HEROES_BY_ID[r.hero]?.line, ...skillLinesOf(r.skills, (sid) => SKILLS[sid]?.line)];
+      const tag = lines.some((l) => relicFits(id, l)) ? `<span class="mark ult-aff">${L('เข้ากับ build คุณ', 'fits your build')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
       return `<div class="card offer relic-card"><div class="offer-art" aria-hidden="true">${x.icon}</div>
         <div class="offer-name">${esc(th ? x.name[0] : x.name[1])}</div>
         <div class="offer-meta">${tag}</div>

@@ -1,7 +1,7 @@
 import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultPieces } from './heroes';
 import { rollBonuses } from './links';
-import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer } from './relics';
+import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer, skillLinesOf } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
@@ -34,7 +34,7 @@ export const canUpgrade = (v: string, day: number) => lvOf(v) < MAX_LV && (lvOf(
 export const STAR_MAX = 3;
 export const STAR_DAY = 7;
 /** price of the 1st / 2nd / 3rd star */
-export const STAR_PRICES = [5, 6, 7];
+export const STAR_PRICES = [3, 4, 5];
 /** at most this many star cards in one shop roll (so they never crowd out line and ult cards) */
 export const STAR_PER_ROLL = 1;
 export const canStar = (k: SkillInstance, day: number) => lvOf(k.v) >= MAX_LV && (k.star ?? 0) < STAR_MAX && day >= STAR_DAY;
@@ -165,7 +165,7 @@ export const sellPrice = (k: SkillInstance) => lvOf(k.v) + (k.star ?? 0);
  * HP lost on a defeat: 2 on days 1–3, 3 on days 4–6, 4 on days 7–9, 5 from day 10 (capped), so a good run to 10 wins
  * (≈ day 13–16) survives 3–4 defeats, plus the last chance.
  */
-export const LOSS_CAP = 5;
+export const LOSS_CAP = 3;
 export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / T['run.lossEvery']));
 
 /** Win streak bonus is clearly bigger than the loss-streak comeback money. */
@@ -198,7 +198,7 @@ export function beginDay(s: RunState) {
     s.relicDays = [...(s.relicDays ?? []), s.day];
     // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
     const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
-    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? []);
+    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], skillLinesOf(s.skills.slice(0, slotsOf(s)), (id) => SKILLS[id]?.line));
     delete s.relicNext;
     if (s.relicOffer.length) s.phase = 'relic';
   }

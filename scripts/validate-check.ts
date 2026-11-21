@@ -110,6 +110,19 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
   if (mixed.length) bad.push(`a build passed with marks from one last-chance way and gold from another (${mixed.map((w) => w.opt).join(', ')})`);
   if (!spendCheck({ build: marked, spent: gold - 1, paidSlots: 0 }, marked, 8, rec).some((w) => w.opt === 'mark')) bad.push('mixed-way test: the honest Mark way should pass');
 }
+// security review (round 7): each last-chance way keeps its own ledger; one way's spend never combines with another's cap
+{
+  const rec = [0, 0, 0, 0, 0, 0, 0, 1] as RunRecord;
+  const G = runMax(9, rec).gold;
+  const B: Build = { hero: 'knight', skills: [{ id: 'shield', v: 'a1', mark: 'echo' }, { id: 'bulwark', v: '' }] };
+  const cur: Build = { hero: 'knight', skills: [...B.skills, { id: 'stoneskin', v: '' }] };
+  const ledger = { 'mark:0': { spent: G - 2, paidSlots: 0, wishMarks: 0, freeMarks: 1 }, 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } };
+  if (spendCheck({ build: B, ledger }, cur, 9, rec).length) bad.push('ledger: a way passed with another ways cheaper spend (mark spend + supply gold)');
+  // the same numbers collapsed into one shared ledger would have let it through (the hole the per-way ledger closes)
+  if (!spendCheck({ build: B, spent: G - 2, paidSlots: 0, wishMarks: 0, freeMarks: 1 }, cur, 9, rec).length) bad.push('ledger test: the collapsed ledger should show the hole');
+  // a way dropped earlier never comes back
+  if (spendCheck({ build: B, ledger: { 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } } }, B, 9, rec).some((w) => w.opt === 'mark')) bad.push('ledger: a dropped way came back');
+}
 if (bad.length) {
   console.error(`validate check: ${bad.length} problem(s)\n  ${bad.slice(0, 30).join('\n  ')}`);
   process.exit(1);

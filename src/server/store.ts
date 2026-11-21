@@ -60,6 +60,8 @@ export interface RunTrack {
   /** marks paid as moon wishes so far, and the last chance's free mark if used (sim v18 ledger) */
   wishMarks?: number;
   freeMarks?: number;
+  /** per last-chance way (validate.ts wayKey): its own running spend, paid slots and marks */
+  ledger?: Record<string, { spent: number; paidSlots: number; wishMarks: number; freeMarks: number }>;
   /** the last chance's choice, once the builds have shown which one it was */
   lastChoice?: LastChoice;
   name: string;

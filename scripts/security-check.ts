@@ -203,6 +203,16 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const fb = toBuild(h.s);
   const [fs, fj] = await post('/api/run/finish', { runId: h.s.id, playerId: t, name: '', hero: fb.hero, wins: h.s.wins, losses: h.s.losses, day: h.s.day, build: { ...fb, skills: fb.skills.map((k) => (k.v.length === 2 ? { ...k, star: 3 } : k)) } });
   check('finish: a final build with unpaid ★★★ → 400', fs === 400, `status ${fs} ${fj?.error ?? ''}`);
+  // 2b /finish is no relic oracle: a claim that does not match the fights on record gets one answer for every relic,
+  //    and with a matching claim a bad relic and an unpaid build get the same error
+  const fAns = new Set<string>();
+  for (const r of RELICS.slice(0, 8)) {
+    const [st, f] = await post('/api/run/finish', { runId: h.s.id, playerId: t, name: '', hero: fb.hero, wins: h.s.wins, losses: h.s.losses + 3, day: h.s.day + 3, build: { ...fb, relics: [...(fb.relics ?? []), r.id] } });
+    fAns.add(`${st} ${f?.error}`);
+  }
+  check('finish oracle: a claim off the record gets one answer (409) for every relic', fAns.size === 1 && [...fAns][0].startsWith('409'), [...fAns].join(' | '));
+  const [, br] = await post('/api/run/finish', { runId: h.s.id, playerId: t, name: '', hero: fb.hero, wins: h.s.wins, losses: h.s.losses, day: h.s.day, build: { ...fb, relics: [...(fb.relics ?? []).slice(0, 2), RELICS.find((r) => !(fb.relics ?? []).includes(r.id))!.id] } });
+  check('finish oracle: a bad relic and an unpaid build get the same error', br?.error === fj?.error && fj?.error === 'implausible build', `${br?.error} / ${fj?.error}`);
   // 4 the client's wish rules match the server's: no mark wish before every skill is Lv3
   const early = newRun('knight', 77, t + '-ew');
   early.day = 3; early.gold = 50;

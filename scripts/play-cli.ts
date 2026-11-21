@@ -16,7 +16,7 @@ import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
 import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
-import { RELICS_BY_ID, relicFits, relicText } from '../src/sim/relics';
+import { RELICS_BY_ID, relicFits, relicText, skillLinesOf } from '../src/sim/relics';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
 import { SKILLS, VARIANTS, epicAfter, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
@@ -133,7 +133,7 @@ function show(s: R.RunState) {
   }
   if (s.phase === 'relic') {
     p('Relic day: pick one with `relic <i>` (-1 = skip). It lasts the whole run (at most 3).');
-    (s.relicOffer ?? []).forEach((id, i) => p(`   ${i}. ${relicText(id, false)}${relicFits(id, h.line) ? ' (your line)' : RELICS_BY_ID[id]?.group === 'cheese' ? ' (risky cheese)' : ''}`));
+    (s.relicOffer ?? []).forEach((id, i) => p(`   ${i}. ${relicText(id, false)}${[h.line, ...skillLinesOf(s.skills, (sid) => SKILLS[sid]?.line)].some((l) => relicFits(id, l)) ? ' (fits your build)' : RELICS_BY_ID[id]?.group === 'cheese' ? ' (risky: needs a rare setup)' : ''}`));
   }
   if (s.phase === 'lastchance') p('You died once: choose `chance awaken` (all Lv1 → Lv2), `chance mark` (a random mark), or `chance supply` (+8 gold, +1 slot).');
   if (s.phase === 'mark') p(`Place mark ${s.pendingMark}: \`mark <listIdx>\` (-1 = skip). ${R.MARK_INFO[s.pendingMark!].name}: ${R.MARK_INFO[s.pendingMark!].desc}`);

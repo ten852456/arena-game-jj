@@ -125,9 +125,11 @@ export const TUNING = {
   'line.lv3': 1.25,
   // ---- stars after Lv3 (sim v17, run.ts / combat.ts) ----
   /** each ★ on a Lv3 skill: all its numbers ×(1 + this) */
-  'star.pow': 0.08,
+  'star.pow': 0.1,
   /** ★★★ also cuts the skill's cooldown by this share */
-  'star.cd3': 0.08,
+  'star.cd3': 0,
+  /** ★★★ signature: each cast echoes once more at this power */
+  'star.echo': 0.2,
   // ---- run relics (sim v17, relics.ts) ----
   'relic.whetstone': 0.15,
   'relic.executioner': 0.35,
@@ -145,14 +147,16 @@ export const TUNING = {
   'relic.brittle': 0.3,
   'relic.gale': 0.15,
   'relic.tailspin': 0.3,
-  'relic.quickdraw': 0.15,
+  'relic.quickdraw': 0.1,
   'relic.wanderer': 0.25,
   'relic.twinline': 0.3,
   'relic.ironhide': 0.1,
   'relic.glassHp': 0.65,
-  'relic.glassDmg': 0.65,
+  /** ปืนแก้ว: its extra damage on one hit is at most this share of the enemy's max HP */
+  'relic.glassCap': 0.08,
+  'relic.glassDmg': 0.45,
   'relic.lonewolf': 1.1,
-  'relic.sigil': 0.8,
+  'relic.sigil': 0.35,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
@@ -184,15 +188,15 @@ export const TUNING = {
   /** นักฆ่า: enemy HP below this share */
   'ult.assassin.trig': 0.3,
   /** นักฆ่า: hit = this × the HP the enemy has lost (capped by ult.cap; ignores shield; a dodge halves it) */
-  'ult.assassin.pow': 0.2,
+  'ult.assassin.pow': 0.15,
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 5,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.55,
+  'ult.duelist.pow': 0.4,
   /** อัศวิน: shield gained, share of max HP */
   'ult.knight.trig': 0.05,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 0.8,
+  'ult.knight.pow': 1.2,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
@@ -208,13 +212,13 @@ export const TUNING = {
   /** หนามพิษ also poisons the enemy this much per second for its duration, at once */
   'ult.thornguard.poison': 2,
   /** แม่มดน้ำแข็ง: ice skill casts */
-  'ult.witch.trig': 5,
+  'ult.witch.trig': 3,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
   'ult.witch.pow': 1.25,
   /** จอมเวทลม: slows / delays landed */
   'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
-  'ult.chrono.pow': 0.4,
+  'ult.chrono.pow': 0.3,
 };
 // </tuned>
 
