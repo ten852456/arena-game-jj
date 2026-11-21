@@ -2,7 +2,8 @@
 import { aiBuild, botDay, botRules, botShopTurn } from '../src/sim/bot';
 import { HEROES_BY_ID } from '../src/sim/heroes';
 import { RELICS } from '../src/sim/relics';
-import { newRun, recordResult, toBuild, chooseLastChance, applyMark } from '../src/sim/run';
+import { newRun, recordResult, toBuild, chooseLastChance, applyMark, sell, wish, wishKind, wishPrice } from '../src/sim/run';
+import { lvOf } from '../src/sim/skills';
 const BASE = process.env.BASE ?? 'http://localhost:8787';
 const post = async (u: string, b: unknown) => { const r = await fetch(BASE + u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }); return [r.status, await r.json()] as const; };
 const build = aiBuild('knight', 1, ['shield'], 7);
@@ -88,14 +89,15 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
 {
   const t = 'sec-r6-' + Date.now();
   /** play a run on the server with the normal bot (it picks branches and relics), up to `upto` days; returns the run */
-  const play = async (id: string, hero: string, upto: number, tweak?: (day: number, b: ReturnType<typeof toBuild>, offer: string[]) => ReturnType<typeof toBuild> | null) => {
+  const play = async (id: string, hero: string, upto: number, tweak?: (day: number, b: ReturnType<typeof toBuild>, offer: string[]) => ReturnType<typeof toBuild> | null, act?: (s: ReturnType<typeof newRun>) => boolean | void) => {
     const s = newRun(hero, 4242, id);
     const res: { day: number; status: number; err?: string; offer?: string[] }[] = [];
     while (s.phase !== 'won' && s.phase !== 'dead' && s.day <= upto) {
       if (s.phase === 'lastchance') { chooseLastChance(s, 'supply'); continue; }
       if (s.phase === 'mark') { applyMark(s, 0); continue; }
       const offer = s.relicOffer?.slice();
-      botDay(s, botRules([HEROES_BY_ID[hero].line], 'hard'));
+      // act: an honest player's own moves (true = instead of the bot's shopping today)
+      if (!act?.(s)) botDay(s, botRules([HEROES_BY_ID[hero].line], 'hard'));
       const honest = toBuild(s);
       const b = tweak?.(s.day, honest, offer ?? []) ?? honest;
       const [st, f] = await post('/api/fight', { runId: s.id, playerId: t, name: '', day: s.day, rating: s.rating, build: b });
@@ -157,4 +159,53 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const sw = await play(t + '-br', 'knight', 6, (day, b) => (day === 6 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, v: (k.v[0] === 'a' ? 'b' : 'a') + k.v[1] } : k)) } : null));
   const s6 = sw.res.find((r) => r.day === 6);
   check('forge: every Lv3 switched to the other branch for free → 400', s6?.status === 400, `status ${s6?.status} ${s6?.err ?? ''}`);
+
+  // ---- round 7 (sim v18) ----
+  // 1 free marks: once every skill is Lv3 the forged build marks everything without paying wishes → 400;
+  //   an honest moon-wish mark (paid, at most 2 a run) is accepted
+  const lv3Only = (s: ReturnType<typeof newRun>) => { for (let i = s.skills.length - 1; i >= 0; i--) if (lvOf(s.skills[i].v) < 3) sell(s, i); };
+  // 2 marks (within the 2-a-run cap) on Lv3 skills but no wish gold paid: the ledger must refuse them
+  const fm = await play(t + '-fm', 'knight', 9, (day, b) => {
+    if (day !== 9) return null;
+    let n = 0;
+    return { ...b, skills: b.skills.map((k) => (k.v.length === 2 && n < 2 ? (n++, { ...k, mark: 'quick' as const }) : k)) };
+  });
+  const fm9 = fm.res.find((r) => r.day === 9);
+  check('forge: 2 unpaid marks on Lv3 skills (ledger) → 400', fm9?.status === 400, `status ${fm9?.status} ${fm9?.err ?? ''}`);
+  const fm3 = await play(t + '-fm3', 'knight', 9, (day, b) => (day === 9 ? { ...b, skills: b.skills.map((k) => ({ ...k, mark: 'echo' as const })) } : null));
+  const fm39 = fm3.res.find((r) => r.day === 9);
+  check('forge: marks on every skill → 400', fm39?.status === 400, `status ${fm39?.status} ${fm39?.err ?? ''}`);
+  let wished = '';
+  // from day 9 the player stops shopping, keeps only Lv3 skills and spends its gold on mark wishes
+  const hw = await play(t + '-hw', 'knight', 12, undefined, (s) => {
+    if (s.day < 9) return false;
+    lv3Only(s);
+    while (wishKind(s) === 'mark' && s.gold >= wishPrice(s)) { const w = wish(s); if ('mark' in w && w.mark) wished += w.mark + ' '; }
+    return true;
+  });
+  check('honest: paid moon-wish marks are accepted (at most 2 a run)', hw.res.every((r) => r.status === 200) && (hw.s.wishMarks ?? 0) >= 1 && (hw.s.wishMarks ?? 0) <= 2, `marks ${wished || 'none (no gold)'} · ${hw.res.find((r) => r.status !== 200)?.err ?? 'all days 200'}`);
+  // 2 relic-offer oracle: a future day or someone else's run gives the same answer for every relic
+  const victim = h.s.id;
+  const answers = new Set<string>();
+  for (const r of RELICS.slice(0, 8)) {
+    const [st, f] = await post('/api/fight', { runId: victim, playerId: t + '-other', day: 12, rating: 1000, build: { ...toBuild(h.s), relics: [r.id] } });
+    answers.add(`${st} ${f?.error}`);
+  }
+  check('oracle: another player probing relics on a run id gets one answer (403) for every relic', answers.size === 1 && [...answers][0].startsWith('403'), [...answers].join(' | '));
+  const own = await play(t + '-or', 'witch', 5);
+  const fut = new Set<string>();
+  for (const r of RELICS.slice(0, 10)) {
+    const [st, f] = await post('/api/fight', { runId: own.s.id, playerId: t, day: 7, rating: 1000, build: { ...toBuild(own.s), relics: [...(toBuild(own.s).relics ?? []), r.id] } });
+    fut.add(`${st} ${f?.error}`);
+  }
+  check('oracle: probing a future day gives one answer (409) for every relic', fut.size === 1 && [...fut][0].startsWith('409'), [...fut].join(' | '));
+  // 3 finish with unpaid stars (gold cap fine, running spend not)
+  const fb = toBuild(h.s);
+  const [fs, fj] = await post('/api/run/finish', { runId: h.s.id, playerId: t, name: '', hero: fb.hero, wins: h.s.wins, losses: h.s.losses, day: h.s.day, build: { ...fb, skills: fb.skills.map((k) => (k.v.length === 2 ? { ...k, star: 3 } : k)) } });
+  check('finish: a final build with unpaid ★★★ → 400', fs === 400, `status ${fs} ${fj?.error ?? ''}`);
+  // 4 the client's wish rules match the server's: no mark wish before every skill is Lv3
+  const early = newRun('knight', 77, t + '-ew');
+  early.day = 3; early.gold = 50;
+  early.skills = [{ id: 'bulwark', v: 'a' }, { id: 'shield', v: 'b' }];
+  check('client: a wish on an all-Lv2 build before day 4 gives no mark (the server would refuse it)', wishKind(early) === null, String(wishKind(early)));
 }

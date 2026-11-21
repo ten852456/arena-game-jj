@@ -4,7 +4,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { WIN_TARGET } from '../sim/run';
 import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
-import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, validateBuild } from './validate';
+import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, spendCheck, validateBuild } from './validate';
 import { recordOf } from './fight';
 import type { Res } from './fight';
 
@@ -69,6 +69,8 @@ export function handleFinish(body: any): Res {
   // the final build's relics must follow the run's last fought build and the server's offers (security review)
   const relicErr = relicOfferCheck(track, build, day);
   if (relicErr) return bad(relicErr);
+  // the final build must also fit the run's running spend (security review: unpaid stars / marks on share cards)
+  if (!spendCheck(track, build, day, recordOf(track).slice(0, day - 1), track.lastChoice).length) return bad('implausible: this run could not have paid for this build');
 
   // Only fights the server ran count: a client can't claim wins it never fought.
   const days = Object.values(track.days);

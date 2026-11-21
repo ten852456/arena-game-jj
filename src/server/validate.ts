@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, damageFor, incomeFor, slotsFor } from '../sim/run';
+import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markWishCost, slotsFor } from '../sim/run';
 import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
@@ -115,6 +115,8 @@ const sameBonus = (a: Build['skills'][number], b: Build['skills'][number]) => JS
 export function spendDelta(prev: Build | undefined, cur: Build, day: number, paidSlots = 0, freeSlots = 0) {
   let g = 0;
   const kept = new Set<string>();
+  // marks gained today: a mark on a skill that did not carry that same mark yesterday (sim v18 ledger)
+  const gainedMarks = cur.skills.filter((k) => k.mark && prev?.skills.find((x) => x.id === k.id)?.mark !== k.mark).length;
   for (const k of cur.skills) {
     const p = prev?.skills.find((x) => x.id === k.id);
     const continued = p && sameBonus(p, k) && k.v.startsWith(p.v) && lvOf(k.v) >= lvOf(p.v);
@@ -128,7 +130,7 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
   for (const p of prev?.skills ?? []) if (!kept.has(p.id)) g -= lvOf(p.v) + (p.star ?? 0);
   const need = Math.max(0, cur.skills.length - slotsFor(day) - freeSlots);
   for (let i = paidSlots; i < need; i++) g += 4 + 2 * i;
-  return { gold: g, paidSlots: Math.max(paidSlots, need) };
+  return { gold: g, paidSlots: Math.max(paidSlots, need), gainedMarks };
 }
 
 /**
@@ -136,7 +138,7 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
  * this build is added to what the run already spent. Returns the ways that fit (empty = reject) with their new totals.
  */
 export function spendCheck(
-  prev: { build?: Build; spent?: number; paidSlots?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
+  prev: { build?: Build; spent?: number; paidSlots?: number; wishMarks?: number; freeMarks?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
 ) {
   // ONE last-chance way must allow the whole build at once (security review): its marks, the build's own cost and the
   // running spend are all checked against the same way, never one way for one check and another for the next
@@ -145,14 +147,25 @@ export function spendCheck(
   const allLv3 = lvs.length > 0 && lvs.every((l) => l >= 3);
   // relics stay for the whole run and come one per relic day (sim v17): none may vanish, and today adds at most one
   if (!relicsFollow(prev?.build?.relics ?? [], build.relics ?? [], day, !!prev?.build)) return [];
+  void allLv3;
   return allowances(day, rec, choice)
-    .filter((a) => allLv3 || marks <= a.marks)
+    // a wish mark only goes on a Lv3 skill (and a skill never drops below Lv3 without being sold, losing its mark):
+    // marks on lower skills can only be the last chance's one
+    .filter((a) => marks <= a.marks + WISH_MARKS_MAX && lowMarks(build) <= a.marks)
     .filter((a) => buildCost(build, day, a.freeSlots) <= a.cap(build.skills.length))
     .map((a) => {
       const d = spendDelta(prev?.build, build, day, prev?.paidSlots ?? 0, a.freeSlots);
-      return { opt: a.opt, spent: (prev?.spent ?? 0) + d.gold, paidSlots: d.paidSlots, cap: a.cap(build.skills.length) };
+      // sim v18 ledger: a gained mark is the last chance's free one (once) or a paid moon wish (WISH_MARKS_MAX a run)
+      const freeLeft = Math.max(0, a.marks - (prev?.freeMarks ?? 0));
+      const free = Math.min(freeLeft, d.gainedMarks);
+      const paid = d.gainedMarks - free;
+      const wishMarks = (prev?.wishMarks ?? 0) + paid;
+      return {
+        opt: a.opt, spent: (prev?.spent ?? 0) + d.gold + markWishCost(paid), paidSlots: d.paidSlots, cap: a.cap(build.skills.length),
+        wishMarks, freeMarks: (prev?.freeMarks ?? 0) + free,
+      };
     })
-    .filter((x) => x.spent <= x.cap);
+    .filter((x) => x.spent <= x.cap && x.wishMarks <= WISH_MARKS_MAX);
 }
 
 /** relics `cur` can have after `prev` (the run's last fought build): every old relic kept, at most one new and only on a relic day */
@@ -171,13 +184,18 @@ export function relicsFollow(prev: string[], cur: string[], day: number, hasPrev
 export function relicOfferCheck(track: { build?: Build; relicSeed?: number; hero?: string } | undefined, build: Build, day: number): string | null {
   const prev = track?.build?.relics ?? [];
   const cur = build.relics ?? [];
-  if (!relicsFollow(prev, cur, day, !!track?.build)) return 'implausible: relics changed outside a relic day';
+  // one generic error for every relic problem (security review: distinct errors were an offer oracle)
+  if (!relicsFollow(prev, cur, day, !!track?.build)) return BAD_RELIC;
   const added = cur.filter((r) => !prev.includes(r));
   if (!added.length) return null;
-  if (track?.relicSeed === undefined) return 'implausible: no relic offer for this run';
+  if (track?.relicSeed === undefined) return BAD_RELIC;
   const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev);
-  return added.every((r) => offer.includes(r)) ? null : 'implausible: relic was not offered';
+  return added.every((r) => offer.includes(r)) ? null : BAD_RELIC;
 }
+/** marks on skills below Lv3 (only the last chance's mark can be there) */
+const lowMarks = (b: Build) => b.skills.filter((k) => k.mark && lvOf(k.v) < 3).length;
+/** the only error any relic problem gets */
+export const BAD_RELIC = 'bad relic';
 /** the relics the server offers this run on `day` (empty when it is no relic day) */
 export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = []) =>
   RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned) : [];
@@ -207,9 +225,7 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
   if (new Set(skills.map((s) => s.id)).size !== skills.length) return 'duplicate skill';
   // relics: known ids, no duplicates, at most one per relic day reached (sim v17)
   const relics = b.relics ?? [];
-  if (!Array.isArray(relics) || relics.some((r) => !isRelic(r))) return 'bad relic';
-  if (new Set(relics).size !== relics.length) return 'duplicate relic';
-  if (relics.length > relicsAllowed(day)) return 'implausible: too many relics for day ' + day;
+  if (!Array.isArray(relics) || relics.some((r) => !isRelic(r)) || new Set(relics).size !== relics.length || relics.length > relicsAllowed(day)) return BAD_RELIC;
   // plausibility for this day, from the run's record (sim v15: exact caps, see runMax / allowances)
   const lvs = skills.map((s) => lvOf(s.v));
   if (day <= 1) {
@@ -223,11 +239,13 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
   // marks come from the last chance (one, if that was its choice) or from moon wishes once every skill is Lv3
   const marks = skills.filter((s) => s.mark).length;
   const allLv3 = lvs.every((l) => l >= 3);
+  // marks: the last chance's one, plus at most WISH_MARKS_MAX paid wish marks (the ledger in spendCheck charges them)
+  void allLv3;
   const ways = allowances(day, rec, choice).filter(
-    (a) => (allLv3 || marks <= a.marks) && buildCost({ hero: b.hero, skills }, day, a.freeSlots) <= a.cap(skills.length),
+    (a) => marks <= a.marks + WISH_MARKS_MAX && lowMarks({ hero: b.hero, skills }) <= a.marks && buildCost({ hero: b.hero, skills }, day, a.freeSlots) <= a.cap(skills.length),
   );
-
-  if (!ways.length) return marks && !allLv3 ? 'implausible: too many marks' : 'implausible: costs more gold than this run can have';
+  if (!ways.length) return marks > WISH_MARKS_MAX + 1 ? 'implausible: too many marks' : 'implausible: costs more gold than this run can have';
+  if (marks && day < LV3_DAY) return 'implausible: too many marks';
   const look = Number.isInteger(b.look) && b.look! > 0 && b.look! < 2 ** 32 ? b.look : undefined;
   return { hero: b.hero, skills, ...(look ? { look } : {}), ...(relics.length ? { relics: [...relics] } : {}) };
 }

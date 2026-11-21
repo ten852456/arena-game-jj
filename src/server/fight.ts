@@ -63,6 +63,15 @@ export function handleFight(body: any): Res {
   const day = intIn(body?.day, 1, MAX_DAY);
   if (!runId || day === null || !playerId) return bad('bad request');
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // who and when first (security review: relic checks before these were an offer oracle on any run id / future day)
+  // runIds are public (leaderboard, replays): only the run's owner may fight its days
+  if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
+  if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
+  if (prev) syncLegacy(prev);
+  if (prev?.over) return { status: 409, json: { error: 'run is over' } };
+  // days are fought one by one in order: no skipping ahead, no repeating a day
+  const fought = prev ? Object.keys(prev.days).length : 0;
+  if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   // the build must be one this run could own today, judged from the run's own record (results of earlier days)
   const build = validateBuild(body?.build, day, recordOf(prev), prev?.lastChoice);
   if (typeof build === 'string') return bad(build);
@@ -81,16 +90,8 @@ export function handleFight(body: any): Res {
   const name = cleanName(body?.name, playerId ?? runId);
   // matchmaking and AI difficulty use the server's own rating for this run, never the client's
   const rating = prev?.rating ?? 1000;
-  // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
+  // Each day of a run is fought once (checked above): a finished run, or a day already on record, cannot be re-fought
   // (otherwise a client could retry a lost day until it wins and inflate the run-end reward).
-  // runIds are public (leaderboard, replays): only the run's owner may fight its days
-  if (prev && prev.playerId !== playerId) return { status: 403, json: { error: 'not your run' } };
-  if (prev?.finished) return { status: 409, json: { error: 'run already finished' } };
-  if (prev) syncLegacy(prev);
-  if (prev?.over) return { status: 409, json: { error: 'run is over' } };
-  // days are fought one by one in order: no skipping ahead, no repeating a day
-  const fought = prev ? Object.keys(prev.days).length : 0;
-  if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
   const streak = streakOf(prev);
 
   // Guided tutorial: the very first fight of a brand-new run, once per player, is against a training AI
@@ -137,6 +138,8 @@ export function handleFight(body: any): Res {
   track.build = build;
   track.spent = way.spent;
   track.paidSlots = way.paidSlots;
+  track.wishMarks = way.wishMarks;
+  track.freeMarks = way.freeMarks;
   if (opts.size === 1 && way.opt !== 'none') track.lastChoice = way.opt;
   track.rating = newRating;
   track.days[day] = won ? 1 : result.winner === -1 ? 2 : 0;

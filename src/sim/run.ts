@@ -127,6 +127,8 @@ export interface RunState {
   locks?: boolean[];
   /** moon wishes bought today (the price goes up with each one) */
   wishes?: number;
+  /** marks carved by wishes this run (at most WISH_MARKS_MAX) */
+  wishMarks?: number;
   /** run relics owned (relics.ts), at most MAX_RELICS */
   relics?: string[];
   /** the 3 relics offered today (phase 'relic') */
@@ -344,17 +346,30 @@ export const isLocked = (s: RunState, i: number) => !!s.locks?.[i] && !!s.shop[i
  * Deterministic from the run seed, day and wish count.
  */
 export const WISH_BASE = 6;
-export const wishPrice = (s: RunState) => WISH_BASE + 2 * (s.wishes ?? 0);
+/** a wish that carves a mark costs this much more (sim v18: marks are a rare resource again) */
+export const MARK_WISH_EXTRA = 4;
+/** marks a run can get from wishes, at most (sim v18) */
+export const WISH_MARKS_MAX = 2;
+export const wishPrice = (s: RunState) => WISH_BASE + 2 * (s.wishes ?? 0) + (wishKind(s) === 'mark' ? MARK_WISH_EXTRA : 0);
+/**
+ * Least gold `n` mark wishes on one day can have cost (server ledger, validate.ts): the k-th wish of a day costs
+ * WISH_BASE + 2k, a mark wish MARK_WISH_EXTRA more; earlier upgrade wishes that day only make it dearer.
+ */
+export const markWishCost = (n: number) => Array.from({ length: Math.max(0, n) }, (_, k) => WISH_BASE + MARK_WISH_EXTRA + 2 * k).reduce((a, b) => a + b, 0);
 export type WishKind = 'upgrade' | 'mark' | null;
+/**
+ * What a wish does now: upgrade a random skill below Lv3; once EVERY skill is Lv3 (sim v18: not merely "none can go up
+ * today"), carve a random mark into an unmarked skill, at most WISH_MARKS_MAX times a run.
+ */
 export function wishKind(s: RunState): WishKind {
   if (s.skills.some((k) => canUpgrade(k.v, s.day))) return 'upgrade';
-  if (s.skills.some((k) => !k.mark)) return 'mark';
+  if (s.skills.length && s.skills.every((k) => lvOf(k.v) >= MAX_LV) && s.skills.some((k) => !k.mark) && (s.wishMarks ?? 0) < WISH_MARKS_MAX) return 'mark';
   return null;
 }
 export type WishResult = { err: string } | { idx: number; from: string; v?: string; mark?: Mark };
 export function wish(s: RunState): WishResult {
   const kind = wishKind(s);
-  if (!kind) return { err: 'ทุก skill เต็มขั้นและมีตราแล้ว' };
+  if (!kind) return { err: 'พรจันทร์ใช้ไม่ได้ตอนนี้' };
   const price = wishPrice(s);
   if (s.gold < price) return { err: 'เงินไม่พอ' };
   const rng = new Rng(hashSeed(s.seed, 'wish', s.day, s.wishes ?? 0));
@@ -374,6 +389,7 @@ export function wish(s: RunState): WishResult {
     return { idx: i, from, v: k.v };
   }
   k.mark = rng.pick(MARKS);
+  s.wishMarks = (s.wishMarks ?? 0) + 1;
   return { idx: i, from, mark: k.mark };
 }
 

@@ -1548,6 +1548,18 @@ async function doFight() {
       if (JSON.stringify(local) !== JSON.stringify(res.result)) console.warn('[arena] client/server sim mismatch');
     }
   } catch (err) {
+    // the server answered but refused the build (400/403/409): never fight offline then, say why and stay in the shop
+    const m = /^(4\d\d) (.*)$/s.exec(err instanceof Error ? err.message : '');
+    if (m) {
+      let why = m[2];
+      try { why = (JSON.parse(m[2]) as { error?: string }).error ?? why; } catch { /* plain text */ }
+      console.warn('[arena] the server refused this build', m[1], why);
+      toast = L(`เซิร์ฟเวอร์ไม่รับ build นี้ (${why}) · ลองปรับ build แล้วสู้ใหม่ หรือเริ่มรอบใหม่`, `The server refused this build (${why}) · change the build and fight again, or start a new run`);
+      busy = false;
+      view = phaseView(r);
+      render();
+      return;
+    }
     console.warn('[arena] server unavailable, fighting a local AI', err);
     const seed = hashSeed(r.seed, 'offline', r.day, Date.now());
     const opp = randomAiBuild(r.day, seed, r.day <= 2 ? 'easy' : 'normal', r.day <= 2 ? r.hero : undefined);
