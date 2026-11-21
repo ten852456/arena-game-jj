@@ -1,6 +1,6 @@
 import { HEROES_BY_ID } from './heroes';
 import { Rng, hashSeed } from './rng';
-import { nodeOf } from './skills';
+import { SKILLS, nodeOf } from './skills';
 import { T } from './tuning';
 import type { Line } from './types';
 
@@ -104,7 +104,8 @@ export const relicText = (id: string, th = true) => {
  * with no slow): the effects its owned skills apply. Generic relics (no entry) never claim to fit.
  */
 const NEEDS: Record<string, string[]> = {
-  whetstone: ['hit'], executioner: ['hit'], counterstep: ['dodge'], featherstep: ['dodge'], spikedshield: ['shield'], bastion: ['shield'],
+  // every build hits: the ⚔ relics fit a build with hit-line skills, a charge or an execute
+  whetstone: ['line:hit', 'charge'], executioner: ['line:hit', 'exec'], counterstep: ['dodge'], featherstep: ['dodge'], spikedshield: ['shield'], bastion: ['shield'],
   overflow: ['heal'], vitality: ['heal'], meltdown: ['burn'], kindling: ['burn'], virulence: ['poison'], rot: ['poison'],
   permafrost: ['freeze'], brittle: ['freeze'], gale: ['slow'], tailspin: ['haste'],
 };
@@ -114,12 +115,15 @@ export function buildEffects(skills: { id: string; v: string }[]) {
   for (const k of skills) {
     let n;
     try { n = nodeOf(k); } catch { continue; }
+    const line = SKILLS[k.id]?.line;
+    if (line) out.add(`line:${line}`);
     for (const e of n.fx) {
       out.add(e.k);
       if (e.k === 'hit') {
         if (e.burn) out.add('burn');
         if (e.poison) out.add('poison');
         if (e.shieldPct) out.add('shield');
+        if (e.exec) out.add('exec');
       }
     }
   }

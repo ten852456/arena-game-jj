@@ -212,7 +212,7 @@ export function botRelic(s: RunState, tier: BotTier): number {
   const fit = (id: string) => {
     const g = RELICS_BY_ID[id].group;
     if (!usable(id)) return -Infinity;
-    if (relicFitsBuild(id, s.skills)) return 1.8;
+    if (relicFitsBuild(id, s.skills)) return 1.3;
     if (relicFits(id, line)) return 1.2;
     if (g === 'cheese') {
       if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0.5;
