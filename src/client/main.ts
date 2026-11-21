@@ -19,6 +19,7 @@ import { icon, initIcons } from './icons';
 import './theme.css'; // the Mochi Moon look: loaded last so it wins
 import './reward.css';
 import './runend.css'; // end of run: after theme.css so it wins
+import './depth.css'; // relics, stars, marks, branch picker, build card, codex
 
 initIcons();
 

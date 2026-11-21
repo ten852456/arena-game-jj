@@ -103,7 +103,7 @@ export const relicText = (id: string, th = true) => {
  * What each relic needs the build to DO (sim v19, playtest: "fits" from the line alone labelled ลมแรง for a witch
  * with no slow): the effects its owned skills apply. Generic relics (no entry) never claim to fit.
  */
-const NEEDS: Record<string, string[]> = {
+export const NEEDS: Record<string, string[]> = {
   // every build hits: the ⚔ relics fit a build with hit-line skills, a charge or an execute
   whetstone: ['line:hit', 'charge'], executioner: ['line:hit', 'exec'], counterstep: ['dodge'], featherstep: ['dodge'], spikedshield: ['shield'], bastion: ['shield'],
   overflow: ['heal'], vitality: ['heal'], meltdown: ['burn'], kindling: ['burn'], virulence: ['poison'], rot: ['poison'],

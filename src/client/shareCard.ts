@@ -211,3 +211,149 @@ export async function saveCard(d: CardData): Promise<'saved' | 'failed'> {
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   return 'saved';
 }
+
+// ---------- Build Card (sim v17+ depth: branches, rarity, stars, marks, relics, the W/L log) ----------
+export interface BuildCardImage {
+  runId: string;
+  heroSvg: string;
+  heroName: string;
+  /** "⚔ ตี · ★ เงาจันทร์ Lv2" */
+  heroLine: string;
+  player: string;
+  won: boolean;
+  wins: number;
+  losses: number;
+  skills: { id: string; name: string; meta: string; rarity: 'common' | 'rare' | 'epic'; star: number; mark: string }[];
+  relics: string[];
+  /** one entry per fight: 'w' | 'l' | 'd' */
+  log: ('w' | 'l' | 'd')[];
+  title: string;
+  summary: string;
+  footer: string;
+}
+const BW = 1200;
+const BH = 630;
+const RAR: Record<string, string> = { epic: '#b48cff', rare: '#9ccbff', common: 'rgba(255,232,196,0.3)' };
+
+async function drawBuild(d: BuildCardImage): Promise<Blob | null> {
+  const c = document.createElement('canvas');
+  c.width = BW;
+  c.height = BH;
+  const g = c.getContext('2d');
+  if (!g) return null;
+  try {
+    await document.fonts?.ready;
+  } catch {
+    /* fonts are a nicety */
+  }
+  const [bg, hero, ...icons] = await Promise.all([load(IMAGES.bgTitle), load(svgSrc(sized(d.heroSvg, 300))), ...d.skills.slice(0, 8).map((k) => load(skillIcon(k.id)))]);
+  if (bg) {
+    const s = Math.max(BW / bg.width, BH / bg.height);
+    g.drawImage(bg, (BW - bg.width * s) / 2, (BH - bg.height * s) / 2, bg.width * s, bg.height * s);
+  }
+  g.fillStyle = 'rgba(28,20,58,0.86)';
+  g.fillRect(0, 0, BW, BH);
+  const spot = g.createRadialGradient(190, 300, 10, 190, 300, 230);
+  spot.addColorStop(0, d.won ? 'rgba(255,227,163,0.5)' : 'rgba(212,200,247,0.35)');
+  spot.addColorStop(1, 'rgba(255,227,163,0)');
+  g.fillStyle = spot;
+  g.fillRect(0, 60, 400, 500);
+  if (hero) g.drawImage(hero, 190 - hero.width / 2, 150, hero.width, hero.height);
+  g.lineWidth = 10;
+  g.strokeStyle = '#150e27';
+  rr(g, 12, 12, BW - 24, BH - 24, 34);
+  g.stroke();
+  g.setLineDash([10, 8]);
+  g.lineWidth = 2;
+  g.strokeStyle = d.won ? 'rgba(255,211,77,0.6)' : 'rgba(255,232,196,0.4)';
+  rr(g, 26, 26, BW - 52, BH - 52, 26);
+  g.stroke();
+  g.setLineDash([]);
+  // left column: title, hero, record
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#ffe3a3';
+  g.font = '500 26px Mitr, Kanit, sans-serif';
+  g.fillText(fit(g, d.title, 330), 52, 74);
+  g.fillStyle = '#fff4e4';
+  g.font = '600 64px Mitr, Kanit, sans-serif';
+  g.fillText(`${d.wins}–${d.losses}`, 52, 140);
+  g.font = '500 32px Mitr, Kanit, sans-serif';
+  g.fillText(fit(g, d.heroName, 330), 52, 500);
+  g.font = '400 21px Kanit, sans-serif';
+  g.fillStyle = '#d4c8f7';
+  g.fillText(fit(g, d.heroLine, 330), 52, 532);
+  g.fillStyle = '#ffd34d';
+  g.font = '600 21px Kanit, sans-serif';
+  g.fillText(fit(g, d.summary, 330), 52, 562);
+  // skills: 2 columns x 4 rows of tiles
+  const x0 = 410;
+  const tw = 370;
+  const th = 82;
+  d.skills.slice(0, 8).forEach((k, i) => {
+    const x = x0 + (i % 2) * (tw + 14);
+    const y = 50 + Math.floor(i / 2) * (th + 12);
+    g.fillStyle = 'rgba(21,14,39,0.7)';
+    rr(g, x, y, tw, th, 16);
+    g.fill();
+    g.lineWidth = k.rarity === 'common' && k.star < 3 ? 2.5 : 4;
+    g.strokeStyle = k.star >= 3 ? '#ffd34d' : RAR[k.rarity];
+    rr(g, x, y, tw, th, 16);
+    g.stroke();
+    const img = icons[i];
+    if (img) g.drawImage(img, x + 10, y + 11, 60, 60);
+    g.fillStyle = '#fff4e4';
+    g.font = '600 24px Kanit, sans-serif';
+    g.fillText(fit(g, k.name, tw - 100), x + 82, y + 34);
+    g.font = '400 17px Kanit, sans-serif';
+    g.fillStyle = k.rarity === 'epic' ? '#d9c4ff' : k.rarity === 'rare' ? '#cfe8ff' : '#b8afd9';
+    g.fillText(fit(g, k.meta, tw - 100), x + 82, y + 58);
+    const tags = `${'★'.repeat(k.star)}${k.mark ? `  ${k.mark}` : ''}`;
+    if (tags.trim()) {
+      g.font = '700 18px Kanit, sans-serif';
+      g.fillStyle = '#ffd34d';
+      g.fillText(tags, x + 82, y + 77);
+    }
+  });
+  // relics + log
+  g.font = '500 20px Kanit, sans-serif';
+  g.fillStyle = '#e9dcff';
+  g.fillText(fit(g, d.relics.join('   ·   ') || '—', BW - x0 - 50), x0, 452);
+  d.log.forEach((r, i) => {
+    const x = x0 + i * 40;
+    if (x > BW - 70) return;
+    g.fillStyle = r === 'w' ? '#b2ebcb' : r === 'd' ? '#c6c1e8' : '#ff9b9b';
+    rr(g, x, 478, 32, 32, 8);
+    g.fill();
+    g.lineWidth = 3;
+    g.strokeStyle = '#150e27';
+    rr(g, x, 478, 32, 32, 8);
+    g.stroke();
+  });
+  g.font = '500 26px Mitr, Kanit, sans-serif';
+  g.fillStyle = '#fff4e4';
+  g.fillText(fit(g, d.player, 400), x0, 562);
+  g.font = '400 19px Kanit, sans-serif';
+  g.fillStyle = '#cfc6f5';
+  const fw = g.measureText(d.footer).width;
+  g.fillText(d.footer, BW - 52 - fw, 562);
+  return new Promise((res) => c.toBlob((b) => res(b), 'image/png'));
+}
+/** Download the Build Card as a PNG. */
+export async function saveBuildCard(d: BuildCardImage): Promise<'saved' | 'failed'> {
+  let blob: Blob | null = null;
+  try {
+    blob = await drawBuild(d);
+  } catch {
+    blob = null;
+  }
+  if (!blob) return 'failed';
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mochi-moon-build-${d.wins}-${d.losses}.png`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return 'saved';
+}

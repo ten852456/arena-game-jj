@@ -35,6 +35,9 @@ import { MARKS_EN } from './i18n_en';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
 import { setView } from './layout';
 import { bonusRows, detailTipHTML, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
+import * as D from './depthUI';
+import { simpleText } from './skillText';
+import { saveBuildCard, type BuildCardImage } from './shareCard';
 
 export interface Stage {
   town: TownScene;
@@ -178,20 +181,19 @@ function rarityTag(k: { id: string; v: string } | null) {
   if (r === 'common') {
     // a Lv2 upgrade whose next branch is epic says so (the random branch rule stays: Lv3 picks one of two)
     const e = k ? epicAfter(k.id, k.v) : null;
-    return e ? ` <span class="mark rarity-path" title="${esc(L('อัป Lv3 สายนี้มีโอกาสได้ระดับมหากาพย์', 'the Lv3 after this branch can be the epic one'))}">${L(`◆ ทางสู่ ${SKILLS[k!.id].tree[e].name}`, `◆ leads to ${SKILLS[k!.id].tree[e].name}`)}</span>` : '';
+    return e ? ` <span class="mark rarity-path" data-codex="rarity" title="${esc(L('อัป Lv3 จากทางนี้ เลือกทางมหากาพย์ได้', 'the Lv3 after this branch can be the epic one'))}">${L(`◆ ทางสู่ ${SKILLS[k!.id].tree[e].name}`, `◆ leads to ${SKILLS[k!.id].tree[e].name}`)}</span>` : '';
   }
-  return ` <span class="mark rarity-${r}">${r === 'epic' ? L('◆ มหากาพย์', '◆ EPIC') : L('◇ หายาก', '◇ RARE')}</span>`;
+  const what = r === 'epic' ? L('ทาง Lv3 ที่เปลี่ยนวิธีเล่นของ skill', 'a Lv3 branch that changes how the skill plays') : L('ทาง Lv3 ที่ตัวเลขเด่น', 'a Lv3 branch with standout numbers');
+  return ` <span class="mark rarity-${r}" data-codex="rarity" data-ttxt="${esc(`<div class="tt-h"><b>${D.rarityName(r)}</b></div><div class="desc">${what}</div>`)}">${r === 'epic' ? L('◆ มหากาพย์', '◆ EPIC') : L('◇ หายาก', '◇ RARE')}</span>`;
 }
 /** "★★" after a Lv3 skill's name (sim v17) */
-const starTag = (n = 0) =>
-  n > 0 ? ` <span class="mark star-tag" title="${esc(L(`★ ${n}: ตัวเลขทุกตัว +${Math.round((starPower(n) - 1) * 100)}%${n >= 3 ? ` และทุกครั้งที่ใช้ ทำซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★ ${n}: every number +${Math.round((starPower(n) - 1) * 100)}%${n >= 3 ? ` and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}">${'★'.repeat(n)}</span>` : '';
+const starTag = (n = 0) => D.starPips(n);
 /** what one more star gives, as a diff line */
 const starDiff = (n: number) =>
-  `<div class="up-diff"><span class="better">${esc(L(`★${n}: ตัวเลขทุกตัว +${Math.round((n >= 3 ? T['star.pow3'] : T['star.pow']) * 100)}%${n >= 3 ? ` · ★★★ ใช้ซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★${n}: every number +${Math.round((n >= 3 ? T['star.pow3'] : T['star.pow']) * 100)}%${n >= 3 ? ` · ★★★ repeats every cast at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}</span></div>`;
+  `<div class="sc-gain">${L(`ดาวที่ ${n}: `, `Star ${n}: `)}<b>${esc(D.starStep(n))}</b><br><small>${L('รวมแล้ว', 'in total')}: ${esc(D.starGain(n))}</small></div>`;
 /** relics of the run as small chips with their text in the tooltip */
-function relicsHTML(ids: string[] = []) {
-  if (!ids.length) return '';
-  return `<p class="sv-sub sv-relics">${ids.map((id) => `<span class="mark relic-chip" title="${esc(relicText(id, getLang() !== 'en'))}">${RELICS_BY_ID[id]?.icon ?? '?'} ${esc(L(RELICS_BY_ID[id]?.name[0] ?? id, RELICS_BY_ID[id]?.name[1] ?? id))}</span>`).join(' ')}</p>`;
+function relicsHTML(ids: string[] = [], day = run?.day ?? 1) {
+  return D.relicTrayHTML(ids, day);
 }
 /** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
 function upDiffHTML(owned: SkillInstance, o: R.Offer) {
@@ -211,6 +213,8 @@ function sellDrop(r: R.RunState, i: number) {
 function ultTagHTML(r: R.RunState, o: R.Offer) {
   if (!inLine(r.hero, o.id)) return '';
   const b = R.toBuild(r);
+  const lv2 = D.ultLv2Step(r.hero, b.skills, o);
+  if (lv2 && ultLevel(b) >= 1) return `<span class="mark ult-lv2" data-codex="hero:${r.hero}" title="${esc(L(ultRuleText(true), ultRuleText(false)))}">${esc(lv2)}</span>`;
   const g = ultGain(b, o);
   const aff = `${L('ถนัดสาย', 'line mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%`;
   if (!g.pieces) return `<span class="mark ult-aff" title="${esc(aff)}">${L('ถนัด', 'mastery')}</span>`;
@@ -222,11 +226,7 @@ function ultTagHTML(r: R.RunState, o: R.Offer) {
 }
 /** shop: "★ เงาจันทร์ 2/3" ult piece counter for the run's build */
 function ultProgressHTML(r: R.RunState) {
-  const h = HEROES_BY_ID[r.hero];
-  if (!h) return '';
-  const b = R.toBuild(r);
-  const lv = ultLevel(b);
-  return `<span title="${esc(`${L(ultRuleText(true), ultRuleText(false))} · ${h.ult.trigger} → ${h.ult.effect}`)}">★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ยังไม่ปลด', 'locked')} · ${LINE_ICON[h.line]} ${L(ultProgressText(b, true), ultProgressText(b, false)).replace(/^(ท่าไม้ตาย|Ult) /, '')}</span>`;
+  return D.ultChecklistHTML(r.hero, R.toBuild(r).skills);
 }
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -241,8 +241,8 @@ function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
 }
 
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
-function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus' | 'star'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
-  const mark = (k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : (k as { markHidden?: string }).markHidden ? ` <span class="mark" title="${esc(L('ชนิดจะเปิดเมื่อสู้ครั้งถัดไป', 'revealed in your next fight'))}">${L('ตราลึกลับ', 'Hidden mark')}</span>` : '') + starTag(k.star);
+function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'markHidden' | 'bonus' | 'star'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
+  const mark = D.markBadge(k) + starTag(k.star);
   const lv = lvOf(k.v);
   const pips = `<i class="lvpips" aria-hidden="true">${Array.from({ length: R.MAX_LV }, (_, j) => `<i class="${j < lv ? 'on' : ''}"></i>`).join('')}</i>`;
   return `<span class="nm">${nodeOf(k).name} <small>Lv${lv}</small>${pips}${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
@@ -477,7 +477,7 @@ function render() {
   hideTip();
   // shop → shop: keep each panel's inner scroll (buying or selling must not jump the lists back to the top)
   const keep = view === 'shop' && $panel.querySelector('.shopv') ? [...$panel.querySelectorAll<HTMLElement>('.sv-sec, .sv-side')].map((e) => e.scrollTop) : null;
-  $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML();
+  $panel.innerHTML = (toast ? `<div class="toast">${esc(toast)}</div>` : '') + html + treeHTML() + branchHTML();
   toast = '';
   if (keep) $panel.querySelectorAll<HTMLElement>('.sv-sec, .sv-side').forEach((e, k) => (e.scrollTop = keep[k] ?? 0));
   clearPick($panel);
@@ -623,24 +623,31 @@ function wishCard(r: R.RunState) {
   const kind = R.wishKind(r);
   const price = R.wishPrice(r);
   const why = !r.skills.length ? L('ยังไม่มี skill', 'No skills yet') : !kind ? L('ครบทุกอย่างแล้ว', 'All done') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
-  const pool = kind === 'upgrade' ? r.skills.filter((k) => lvOf(k.v) < R.MAX_LV).length : r.skills.filter((k) => !k.mark).length;
+  const below = r.skills.filter((k) => lvOf(k.v) < R.MAX_LV).length;
+  const unmarked = r.skills.filter((k) => !k.mark && !k.markHidden).length;
   const left = R.WISH_MARKS_MAX - (r.wishMarks ?? 0);
-  const desc =
-    kind === 'mark'
-      ? L(`<b>ให้ตรา</b>: ทุกตัว Lv3 แล้ว สุ่มใส่ตราให้ 1 ใน ${pool} skill ที่ยังไม่มีตรา (เหลือ ${left} ครั้งในรอบนี้)`, `<b>Gives a mark</b>: all Lv3, so a random mark goes on 1 of ${pool} unmarked skills (${left} left this run)`)
-      : L(`<b>ให้อัปเกรด</b>: สุ่มอัป 1 ใน ${pool} skill ที่ยังไม่ Lv3 (สุ่มทาง)`, `<b>Gives an upgrade</b>: 1 of ${pool} skills below Lv3 goes up a level (random branch)`);
+  // one clear line: what this wish gives now, and why (never two rules that read as if they clash)
+  const desc = !r.skills.length
+    ? L('ซื้อ skill ก่อน', 'Buy a skill first')
+    : kind === 'mark'
+      ? `<span class="wish-kind mk">✦ ${L('ให้ตรา', 'Gives a mark')}</span> ${L(`ทุกตัว Lv3 แล้ว: สุ่มตราใส่ 1 ใน ${unmarked} ตัวที่ยังไม่มีตรา · เหลือ ${left} ครั้ง`, `All Lv3: a random mark on 1 of ${unmarked} unmarked skills · ${left} left`)}`
+      : kind === 'upgrade'
+        ? `<span class="wish-kind up">▲ ${L('ให้อัปเกรด', 'Gives an upgrade')}</span> ${L(`สุ่มอัป 1 ใน ${below} ตัวที่ยังไม่ Lv3 (สุ่มทาง)`, `1 of ${below} skills below Lv3 goes up (random branch)`)}${left > 0 && r.day >= R.LV3_DAY ? `<br><small class="muted">${L(`ให้ตราได้เมื่อทุกตัว Lv3 (เหลือ ${below})`, `marks once all are Lv3 (${below} to go)`)}</small>` : ''}`
+        : `<span class="wish-kind no">${L('หมดแล้ว', 'Nothing left')}</span> ${(r.wishMarks ?? 0) >= R.WISH_MARKS_MAX ? L(`ใช้ตราจากพรครบ ${R.WISH_MARKS_MAX} แล้ว`, `All ${R.WISH_MARKS_MAX} wish marks used`) : L('ทุกตัวมีตราแล้ว', 'Every skill has a mark')}`;
   const tip = `<div class="tt-h"><b>${L('🌙 พรจันทร์', '🌙 Moon Wish')}</b></div><div class="desc">${L(
-    `ที่ใช้เงินเหลือ: จ่ายแพงกว่าการ์ดอัปเกรดปกติ แต่ไม่ต้องรอร้านสุ่มเจอ
-    เลือก skill และทางอัปให้แบบสุ่ม (ช่องเดิม โบนัสเชื่อมต่อเดิม) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน
-    · ราคาเริ่ม ${R.WISH_BASE} และแพงขึ้น +2 ทุกครั้งในวันเดียวกัน`,
-    `For spare gold: costs more than a normal upgrade card, but you don't have to wait for the shop to roll one.
-    It picks the skill and branch at random (same slot, same connect bonuses) · once every skill is Lv3 it adds a random mark instead
-    · starts at ${R.WISH_BASE} and costs +2 more each time on the same day`,
+    `ใช้เงินที่เหลือ: สุ่ม skill และทางให้ (ช่องเดิม โบนัสเดิม)<br>
+    · <b>ให้อัปเกรด</b> ถ้ายังมี skill ต่ำกว่า Lv3<br>
+    · <b>ให้ตรา</b> เมื่อทุกตัว Lv3 แล้วเท่านั้น (+${R.MARK_WISH_EXTRA} เงิน, ${R.WISH_MARKS_MAX} ครั้งต่อรอบ)<br>
+    · ราคาเริ่ม ${R.WISH_BASE} และ +2 ทุกครั้งในวันเดียวกัน`,
+    `For spare gold: picks the skill and branch at random (same slot, same bonuses)<br>
+    · <b>an upgrade</b> while any skill is below Lv3<br>
+    · <b>a mark</b> only once every skill is Lv3 (+${R.MARK_WISH_EXTRA} gold, ${R.WISH_MARKS_MAX} a run)<br>
+    · starts at ${R.WISH_BASE}, +2 for each wish already made that day`,
   )}</div>`;
   return `<div class="card offer extra wish${kind && r.skills.length && r.gold < price ? ' poor' : ''}" data-ttxt="${esc(tip)}">
     <div class="offer-art" aria-hidden="true">🌙</div>
-    <div class="offer-name">${L('พรจันทร์', 'Moon Wish')}</div>
-    <div class="offer-desc">${kind || !r.skills.length ? desc : (r.wishMarks ?? 0) >= R.WISH_MARKS_MAX ? L(`ใช้ตราจากพรครบ ${R.WISH_MARKS_MAX} ครั้งแล้ว`, `All ${R.WISH_MARKS_MAX} wish marks used`) : L('ยังให้ตราไม่ได้: ต้อง Lv3 ทุกตัวก่อน', 'No mark yet: every skill must be Lv3 first')}</div>
+    <div class="offer-name">${L('พรจันทร์', 'Moon Wish')} <button class="cx-q-link" data-codex="shop:wish" aria-label="${esc(L('พรจันทร์ในคู่มือ', 'Moon wish in the codex'))}">?</button></div>
+    <div class="offer-desc">${desc}</div>
     <button class="buy" data-a="wish" ${why ? 'disabled' : ''}>${buyLabel(why, L('ขอพร', 'Wish'), price, !!kind && r.skills.length > 0 && r.gold < price)}</button>
   </div>`;
 }
@@ -721,43 +728,67 @@ function choiceHTML(r: R.RunState, o: R.Offer, i: number, why: string, price: nu
   const up = R.upgradeOf(r, o);
   const opts = R.offerChoices(r, o);
   if (!up || opts.length < 2) return '';
-  return `<div class="branch-pick">${opts
+  const names = opts
     .map((v) => {
-      const k = { id: o.id, v };
-      return `<div class="branch-opt">
-        <div class="branch-name"><b>${esc(nodeOf(k).name)}</b>${rarityTag(k)}</div>
-        ${upDiffHTML(up, { id: o.id, v })}
-        <button class="buy" data-a="buy" data-i="${i}" data-v="${v}" ${why ? 'disabled' : ''}>${buyLabel(why, L('เลือกทางนี้', 'Take this'), price, poor)}</button>
-      </div>`;
+      const rar = rarityOf(o.id, v);
+      const nx = epicAfter(o.id, v);
+      return `<span class="bp-n rar-${rar}">${esc(nodeOf({ id: o.id, v }).name)}<i>${rar === 'epic' ? L('◆ มหากาพย์', '◆ epic') : rar === 'rare' ? L('◇ หายาก', '◇ rare') : nx ? L('◆ ทางสู่มหากาพย์', '◆ leads to epic') : SKILLS[o.id].tree[v[0] as 'a'].style ?? ''}</i></span>`;
     })
-    .join('')}</div>`;
+    .join('');
+  return `<div class="branch-pick bp-mini"><div class="bp-names">${names}</div>
+    <button class="buy" data-a="branchOpen" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, L('เลือกทาง ▸', 'Pick a branch ▸'), price, poor)}</button></div>`;
 }
 
-/** Relic day (sim v17): pick 1 of 3 run relics, or skip. */
+/** shop offer whose two branches are open side by side (null = closed) */
+let branchOpen: number | null = null;
+/** The branch picker: both next branches side by side, rarity frames, before → after and what each leads to. */
+function branchHTML() {
+  const r = run;
+  if (branchOpen === null || !r || view !== 'shop') return '';
+  const o = r.shop[branchOpen];
+  const up = o ? R.upgradeOf(r, o) : null;
+  const opts = o ? R.offerChoices(r, o) : [];
+  if (!o || !up || opts.length < 2) return '';
+  const price = R.priceOf(o);
+  const why = offerWhy(r, branchOpen);
+  const poor = r.gold < price;
+  const th = getLang() !== 'en';
+  const now = simpleText(up);
+  const card = (v: Variant) => {
+    const k = { id: o.id, v };
+    const rar = rarityOf(o.id, v);
+    const diff = upgradeDiff(nodeOf(up), nodeOf(k), th);
+    const nx = lvOf(v) < R.MAX_LV ? nextVariants(v).map((x) => ({ x, rar: rarityOf(o.id, x) })) : [];
+    return `<div class="bp-opt rar-${rar}">
+      ${rar !== 'common' ? `<span class="bp-rar">${D.rarityName(rar)}</span>` : ''}
+      <h4>${esc(nodeOf(k).name)} <small>Lv${lvOf(v)}</small></h4>
+      <span class="bp-style">${L('ทาง', 'Branch')} ${v.toUpperCase()}${SKILLS[o.id].tree[v[0] as 'a'].style ? ` · ${esc(SKILLS[o.id].tree[v[0] as 'a'].style!)}` : ''}</span>
+      <dl class="bp-ba"><dt>${L('ตอนนี้', 'Now')}</dt><dd>${esc(now)}</dd><dt>${L('หลังอัป', 'After')}</dt><dd class="after">${esc(simpleText(k))}</dd></dl>
+      ${diff.length ? `<div class="bp-diff">${diff.map((d) => `<span class="${d.worse ? 'worse' : ''}">${esc(d.text)}${d.worse ? ' ▼' : ''}</span>`).join('')}</div>` : ''}
+      ${nx.length ? `<div class="bp-next">${L('Lv3 ต่อไป', 'Lv3 next')}: ${nx.map((n) => `${esc(nodeOf({ id: o.id, v: n.x }).name)}${n.rar === 'epic' ? ' ◆' : n.rar === 'rare' ? ' ◇' : ''}`).join(L(' หรือ ', ' or '))}</div>` : ''}
+      <button class="buy primary" data-a="buy" data-i="${branchOpen}" data-v="${v}" ${why ? 'disabled' : ''}>${buyLabel(why, L('เลือกทางนี้', 'Take this branch'), price, poor)}</button>
+    </div>`;
+  };
+  return `<div class="modal bp-modal" data-a="branchClose"><div class="modal-box bp-box" role="dialog" aria-label="${esc(L('เลือกทางอัปเกรด', 'Pick an upgrade branch'))}">
+    <div class="bp-head"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><h3>${L('เลือกทาง', 'Pick a branch')}: ${esc(nodeOf(up).name)} Lv${lvOf(up.v)} → Lv${lvOf(o.v)}<small>${L('เลือกแล้วย้อนกลับไม่ได้ · ช่องเดิม โบนัสเชื่อมต่อเดิม', 'No going back · same slot, same connect bonuses')}</small></h3>
+      <button class="small ghost" data-a="branchClose">${L('ปิด ✕', 'Close ✕')}</button></div>
+    <div class="bp-opts">${opts.map(card).join('')}</div>
+  </div></div>`;
+}
+
+/** Relic day (sim v17): pick 1 of 3 run relics, or skip. Each card says what it does, if it fits your build and its risk. */
 function renderRelic() {
   const r = run!;
   scene.idle(r.hero, R.lookOf(r));
-  const th = getLang() !== 'en';
-  const cards = (r.relicOffer ?? [])
-    .map((id, i) => {
-      const x = RELICS_BY_ID[id];
-      const d = x.desc();
-      const tag = relicFitsBuild(id, r.skills) ? `<span class="mark ult-aff">${L('เข้ากับ build คุณ', 'fits your build')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
-      return `<div class="card offer relic-card"><div class="offer-art" aria-hidden="true">${x.icon}</div>
-        <div class="offer-name">${esc(th ? x.name[0] : x.name[1])}</div>
-        <div class="offer-meta">${tag}</div>
-        <div class="offer-desc">${esc(th ? d[0] : d[1])}${relicHint(id, th) ? `<br><small class="muted">${esc(relicHint(id, th))}</small>` : ''}</div>
-        <button class="buy primary" data-a="relic" data-i="${i}">${L('เลือก', 'Take')}</button></div>`;
-    })
-    .join('');
+  const cards = (r.relicOffer ?? []).map((id, i) => D.relicCardHTML(id, i, r.skills)).join('');
   return `<div class="lay">
   <div class="lay-side">${stageSlot(true)}</div>
-  <section class="lay-main glass">
-  <h2>${L(`วันที่ ${r.day}: ของวิเศษประจำรอบ`, `Day ${r.day}: a run relic`)}</h2>
-  <p>${L('เลือก 1 ชิ้น ใช้ได้ทั้งรอบ (มีได้สูงสุด 3 ชิ้น) หรือข้ามไป', 'Pick 1; it lasts the whole run (at most 3), or skip')}</p>
+  <section class="lay-main glass relic-view">
+  <h2>${L(`วันที่ ${r.day}: เลือกของวิเศษ`, `Day ${r.day}: pick a relic`)} <button class="cx-q-link" data-codex="relics" aria-label="${esc(L('ของวิเศษในคู่มือ', 'Relics in the codex'))}">?</button></h2>
+  <p class="rv-lead">${L('เลือก 1 ชิ้น ใช้ได้ทั้งรอบ หรือข้ามไป', 'Pick 1; it lasts the whole run. Or skip')}</p>
   ${relicsHTML(r.relics)}
   <div class="shop relic-shop">${cards}</div>
-  <div class="actions"><button class="ghost" data-a="relic" data-i="-1">${L('ข้าม', 'Skip')}</button></div>
+  <div class="actions"><button class="ghost" data-a="relic" data-i="-1">${L('ข้าม ไม่เอาชิ้นไหน', 'Skip, take none')}</button></div>
   </section>
   </div>`;
 }
@@ -788,10 +819,10 @@ function renderShop() {
       const badge = isUp
         ? `<span class="up-badge" aria-label="${L(`อัปเกรดเป็น Lv${lvOf(o.v)}`, `Upgrades to Lv${lvOf(o.v)}`)}">▲ Lv${lvOf(o.v)}</span><span class="up-shine" aria-hidden="true"></span>`
         : '';
-      return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
-        ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name} ${'★'.repeat(o.star)}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
-        <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(o.v ? o : null)}${ultTagHTML(r, o)}</div>
+      return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
+        ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
+        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : rarityTag(o.v ? o : null)}${o.star ? '' : ultTagHTML(r, o)}</div>
         ${choiceHTML(r, o, i, why, price, poor) || `${up ? (o.star ? starDiff(o.star) : upDiffHTML(up, o)) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? (o.star ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : L('อัปเกรด', 'Upgrade')) : L('ซื้อ', 'Buy'), price, poor)}</button>`}
@@ -805,7 +836,7 @@ function renderShop() {
       const row = `<li class="skillrow line-${SKILLS[k.id].line}${rarityOf(k.id, k.v) === 'epic' ? ' row-epic' : ''}${(k.star ?? 0) >= 3 ? ' row-star3' : ''}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
-        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(k.v ? { id: k.id, v: k.v } : null)}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</div>
+        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}<span class="sk-tags">${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(k.v ? { id: k.id, v: k.v } : null)}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</span></div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
@@ -822,13 +853,13 @@ function renderShop() {
   const nLocked = r.shop.filter((_, i) => R.isLocked(r, i)).length;
   resetHints();
   return `<div class="shopv">
-  ${hudHTML(r, streakText(r.streak), concedeHTML())}
+  ${hudHTML(r, streakText(r.streak), `<button class="small ghost cx-hud" data-codex="run" title="${esc(L('คู่มือ', 'Codex'))}" aria-label="${esc(L('เปิดคู่มือ', 'Open the codex'))}">📖</button>${concedeHTML()}`)}
   <aside class="sv-side">
     ${stageSlot(true, 'sv-slot')}
     <div class="sv-hero glass">
       <div class="svh-name"><b>${hero.name}</b> <span class="tag">${lineLabel(hero.line)}</span></div>
       <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · ${hero.passive}</p>
-      <p class="sv-sub sv-ult">${ultProgressHTML(r)}</p>${relicsHTML(r.relics)}
+      <div class="sv-sub sv-ult">${ultProgressHTML(r)}</div>${relicsHTML(r.relics)}${D.markCountHTML(r.skills, r.wishMarks ?? 0)}
     </div>
     <div class="mm-scout-slot sv-scout"></div>
   </aside>
@@ -906,6 +937,7 @@ function renderFighting() {
     ${[1, 2, 4].map((s) => `<button class="small ${scene.speed === s ? 'on' : ''}" data-a="speed" data-i="${s}">${s}x</button>`).join('')}
     <button class="small" data-a="skip">${L('ข้าม ⏭', 'Skip ⏭')}</button>
   </div>
+  <div id="fv-dots" class="fv-dots" aria-live="off"></div>
   <div class="fv-logh">${L('📜 บันทึกการสู้ (ล่าสุดอยู่บน)', '📜 Fight log (newest on top)')}</div>
   <ol id="log" class="log"></ol>
   </aside>
@@ -1124,6 +1156,7 @@ function renderResult() {
      ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
     <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `Wins: ${r.wins}/${R.WIN_TARGET}`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
   ${f.won ? winRewardHTML(r) : ''}
+  ${revealHTML()}
   </div>
   <div class="actions rv-actions"><button class="primary" data-a="next">${L('ต่อไป ▶', 'Continue ▶')}</button>${x && !x.close ? `<button data-a="rewatch">${L('▶ ดูไฟต์นี้อีกครั้ง', '▶ Watch this fight again')}</button>` : ''}</div>
   </div>
@@ -1199,6 +1232,18 @@ function onLcHover(ev: Event) {
 
 function renderLastChance() {
   scene.idle(run!.hero, R.lookOf(run!));
+  const r = run!;
+  // when each power is good, with this build's numbers; the best fit gets a badge
+  const lv1 = r.skills.filter((k) => k.v === '').length;
+  const lv3 = r.skills.filter((k) => lvOf(k.v) >= R.MAX_LV).length;
+  const full = R.slotsOf(r) >= R.MAX_SLOTS;
+  const best = lv1 >= 2 ? 'awaken' : lv3 >= 2 && !r.skills.some((k) => k.mark || k.markHidden) ? 'mark' : 'supply';
+  const when = {
+    awaken: L(`ดีเมื่อมี skill Lv1 หลายตัว · คุณมี <b>${lv1}</b>`, `Best with many Lv1 skills · you have <b>${lv1}</b>`),
+    mark: L(`ดีเมื่อ skill หลักเป็น Lv3 แล้ว · คุณมี Lv3 <b>${lv3}</b> ตัว`, `Best once your main skills are Lv3 · you have <b>${lv3}</b> at Lv3`),
+    supply: full ? L(`ดีเมื่อมีของอยากซื้อ · ได้เงิน <b>${R.SUPPLY_GOLD_FULL}</b>`, `Best when you have things to buy · <b>${R.SUPPLY_GOLD_FULL}</b> gold`) : L(`ดีเมื่อมีของอยากซื้อและอยากได้ช่องเพิ่ม · ช่องตอนนี้ <b>${R.slotsOf(r)}/${R.MAX_SLOTS}</b>`, `Best when you want to buy more and need a slot · slots now <b>${R.slotsOf(r)}/${R.MAX_SLOTS}</b>`),
+  };
+  const tag = (k: 'awaken' | 'mark' | 'supply') => (k === best ? `<span class="lc-badge">${L('เหมาะกับคุณ', 'Fits you')}</span>` : '');
   return `<div class="lay">
   <div class="lay-side">${stageSlot(true)}</div>
   <section class="lay-main glass">
@@ -1208,9 +1253,9 @@ function renderLastChance() {
     'You become a <b>half-spirit</b>: you come back with 1 HP, and one more loss ends the run. Pick one power',
   )}</p>
   <div class="heroes">
-    <button class="hero" data-a="lc" data-i="awaken"><b>${L('ตื่นพลัง', 'Awaken')}</b><span class="lc-count">${awakenCount()}</span><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มทาง A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="muted">${L('เหมาะกับ build ที่ของครบแต่เลเวลต่ำ', 'Good for a full build with low levels')}</span></button>
-    <button class="hero" data-a="lc" data-i="mark"><b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Get 1 of 4 random marks, then pick a skill for it')}</span><span class="muted">${L('เหมาะกับ build ที่มี skill หลักชัด', 'Good for a build with a clear main skill')}</span></button>
-    <button class="hero" data-a="lc" data-i="supply"><b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${R.slotsOf(run!) >= R.MAX_SLOTS ? L(`ช่อง skill เต็ม ${R.MAX_SLOTS} แล้ว: ได้เงิน ${R.SUPPLY_GOLD_FULL} แทน`, `Slots are full (${R.MAX_SLOTS}): ${R.SUPPLY_GOLD_FULL} gold instead`) : L('เงิน 8 และช่อง skill +1 ถาวร', '8 gold and +1 skill slot for good')}</span><span class="muted">${L('เหมาะกับ build ที่ยังขาดชิ้นสำคัญ', 'Good for a build still missing a key piece')}</span></button>
+    <button class="hero${best === 'awaken' ? ' lc-best' : ''}" data-a="lc" data-i="awaken">${tag('awaken')}<b>${L('ตื่นพลัง', 'Awaken')}</b><span class="lc-count">${awakenCount()}</span><span>${L('skill Lv1 ทุกใบขึ้นเป็น Lv2 (สุ่มทาง A หรือ B)', 'Every Lv1 skill becomes Lv2 (random branch A or B)')}</span><span class="lc-when">${when.awaken}</span></button>
+    <button class="hero${best === 'mark' ? ' lc-best' : ''}" data-a="lc" data-i="mark">${tag('mark')}<b>${L('ตราวิญญาณ', 'Spirit Mark')}</b><span>${L('สุ่มตราหนึ่งในสี่แบบ แล้วเลือกใส่ skill', 'Get 1 of 4 random marks, then pick a skill for it')}</span><span class="lc-when">${when.mark}</span></button>
+    <button class="hero${best === 'supply' ? ' lc-best' : ''}" data-a="lc" data-i="supply">${tag('supply')}<b>${L('เสบียงสุดท้าย', 'Last Supplies')}</b><span>${R.slotsOf(run!) >= R.MAX_SLOTS ? L(`ช่อง skill เต็ม ${R.MAX_SLOTS} แล้ว: ได้เงิน ${R.SUPPLY_GOLD_FULL} แทน`, `Slots are full (${R.MAX_SLOTS}): ${R.SUPPLY_GOLD_FULL} gold instead`) : L('เงิน 8 และช่อง skill +1 ถาวร', '8 gold and +1 skill slot for good')}</span><span class="lc-when">${when.supply}</span></button>
   </div>
   ${lcBuild()}
   </section>
@@ -1221,14 +1266,14 @@ function renderMark() {
   const r = run!;
   // a ranked run's last-chance mark is hidden: the server reveals its kind in the next fight (sim v20)
   const m = r.pendingHidden
-    ? { name: L('ตราลึกลับ', 'Hidden mark'), desc: L('ชนิดจะเปิดเมื่อสู้ครั้งถัดไป (server สุ่ม)', 'its kind is revealed in your next fight (rolled by the server)') }
+    ? { name: L('ตราลึกลับ', 'Hidden mark'), desc: L('ทำงานทันที ชนิดจะเปิดหลังสู้ครั้งถัดไป', 'it works right away; its kind is revealed after your next fight') }
     : R.MARK_INFO[r.pendingMark!];
   scene.idle(r.hero, R.lookOf(r));
   return `<div class="lay">
   <div class="lay-side">${stageSlot(true)}</div>
   <section class="lay-main glass">
   <h2>${L('ได้ตรา', 'New mark')}: ${m.name}</h2>
-  <p>${m.desc} · ${L('เลือก skill ที่จะใส่ตรา', 'pick the skill that gets the mark')}</p>
+  <p>${m.desc} · ${L('เลือก skill ที่จะใส่ตรา', 'pick the skill that gets the mark')} ${D.markCountHTML(r.skills, r.wishMarks ?? 0)}</p>
   <ol class="build lc-list mark-list">${r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i);
@@ -1273,11 +1318,46 @@ function renderOver() {
     .sort((a, b) => Number(b.tag === 'again') - Number(a.tag === 'again'));
   return stageSlot(true, 'over-slot bleed') + P.runOverPage({
     won, conceded: !!r.conceded, hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), wins: r.wins, losses: r.losses,
-    winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, streak: stats.streak, buildHTML: buildList(R.toBuild(r)),
+    winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, streak: stats.streak, buildHTML: buildCardBlock(r),
     historyHTML: P.historyList(r.log, notes), best: M.bestNote(r.id), reward, total, recap,
     fresh: RC.freshRecords(stats, recap, reward?.bestWins), goal: RC.nextGoal(stats, recap, R.WIN_TARGET), ended, quick,
     plan, el: clock.el, on: clock.on, rewardAt,
   });
+}
+
+/** The Build Card on the run-end screen (every finished run), with its "save image" button and the full list below. */
+function buildCardBlock(r: R.RunState) {
+  const card = D.buildCardHTML({
+    hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), player: displayName(M.serverName() ?? playerName()), won: r.phase === 'won',
+    wins: r.wins, losses: r.losses, winTarget: R.WIN_TARGET, skills: r.skills, relics: r.relics ?? [], log: r.log, rating: r.rating,
+  });
+  return `<div class="bc-wrap">${card}<div class="actions"><button data-a="saveBuild">${L('บันทึกการ์ด build เป็นรูป', 'Save the build card as an image')}</button></div>
+    <details class="bc-list"><summary>${L('ดูรายละเอียดทุก skill', 'Every skill in detail')}</summary>${buildList(R.toBuild(r))}</details></div>`;
+}
+/** the Build Card as data for the PNG (shareCard.ts) */
+function buildCardImage(r: R.RunState): BuildCardImage {
+  const h = HEROES_BY_ID[r.hero];
+  const lv = ultLevel(R.toBuild(r));
+  const glyph: Record<string, string> = { burn: '✹', echo: '↻', quick: '»', steadfast: '⛨' };
+  return {
+    runId: r.id, heroSvg: renderChibi(rollLook(r.hero, R.lookOf(r))), heroName: h.name,
+    heroLine: `${LINE_NAME[h.line]} · ★ ${h.ult.name} ${lv ? `Lv${lv}` : L('ล็อก', 'locked')}`,
+    player: displayName(M.serverName() ?? playerName()), won: r.phase === 'won', wins: r.wins, losses: r.losses,
+    skills: r.skills.map((k) => {
+      const rar = rarityOf(k.id, k.v);
+      const style = k.v ? SKILLS[k.id].tree[k.v[0] as 'a'].style ?? '' : '';
+      return {
+        id: k.id, name: nodeOf(k).name, rarity: rar, star: k.star ?? 0,
+        meta: `Lv${lvOf(k.v)}${style ? ` · ${style}` : ''}${rar !== 'common' ? ` · ${D.rarityName(rar)}` : ''}`,
+        mark: k.mark ? `${glyph[k.mark]} ${R.MARK_INFO[k.mark].name}` : k.markHidden ? `? ${L('ตราลึกลับ', 'hidden mark')}` : '',
+      };
+    }),
+    relics: (r.relics ?? []).map((id) => `${RELICS_BY_ID[id]?.icon ?? ''} ${D.relicName(id)}`),
+    log: r.log.map((x) => (x.won ? 'w' : x.draw ? 'd' : 'l')),
+    title: L('Mochi Moon · การ์ด build', 'Mochi Moon · Build card'),
+    summary: L(`★ ${r.skills.reduce((n, k) => n + (k.star ?? 0), 0)} · ◆ ${r.skills.filter((k) => rarityOf(k.id, k.v) === 'epic').length} · ตรา ${r.skills.filter((k) => k.mark || k.markHidden).length}`, `★ ${r.skills.reduce((n, k) => n + (k.star ?? 0), 0)} · ◆ ${r.skills.filter((k) => rarityOf(k.id, k.v) === 'epic').length} · marks ${r.skills.filter((k) => k.mark || k.markHidden).length}`),
+    footer: `${location.host} · ${new Date().toLocaleDateString(getLang() === 'en' ? 'en-GB' : 'th-TH')}`,
+  };
 }
 
 /** Share card of the crowned run on screen. */
@@ -1440,6 +1520,21 @@ function beginLog(result: CombatResult, builds: [Build, Build]) {
   logBuilds = builds;
   logRefl = reflectEvents(result.events);
   logHist = [];
+  dots = [{ burn: 0, poison: 0 }, { burn: 0, poison: 0 }];
+  paintDots();
+}
+/** burn / poison damage each side has dealt so far in the fight on screen */
+let dots = [{ burn: 0, poison: 0 }, { burn: 0, poison: 0 }];
+function paintDots() {
+  const el = document.getElementById('fv-dots');
+  if (!el) return;
+  el.innerHTML = ([0, 1] as const)
+    .map((s) => {
+      const d = dots[s];
+      const parts = [d.burn ? `🔥 ${d.burn}` : '', d.poison ? `☠ ${d.poison}` : ''].filter(Boolean).join(' · ');
+      return parts ? `<span class="s${s}" title="${esc(L('ดาเมจไฟ/พิษที่ทำได้', 'burn / poison damage dealt'))}">${esc(names[s])}: ${parts}</span>` : '';
+    })
+    .join('');
 }
 /** events already in the log, so a language change can re-write it */
 let logHist: CombatEvent[] = [];
@@ -1454,7 +1549,7 @@ function describe(e: CombatEvent): string | null {
   };
   switch (e.type) {
     case 'cast':
-      return `${who(e.side)} ${L('ใช้', vb(e.side, 'uses', 'use'))} <b>${varName(e.side, e.skill)}</b> Lv${e.lv}${e.echo ? L(' (ตีซ้ำ)', ' (echo)') : ''}${e.from !== undefined ? ` <small class="muted">${L('🔗ต่อ', '🔗chain')}</small>` : ''}`;
+      return `${who(e.side)} ${L('ใช้', vb(e.side, 'uses', 'use'))} <b>${varName(e.side, e.skill)}</b> Lv${e.lv}${e.star3 ? ` <span class="lg-star">${L('★★★ ซ้ำ', '★★★ echo')}</span>` : e.echo ? L(' (ตีซ้ำ)', ' (echo)') : ''}${e.epic && !e.echo ? ` <span class="lg-epic">${L('◆ มหากาพย์', '◆ EPIC')}</span>` : ''}${e.from !== undefined ? ` <small class="muted">${L('🔗ต่อ', '🔗chain')}</small>` : ''}`;
     case 'damage': {
       const attacker = 1 - e.side;
       const src =
@@ -1520,6 +1615,10 @@ function describe(e: CombatEvent): string | null {
 }
 function addLog(e: CombatEvent) {
   logHist.push(e);
+  if (e.type === 'damage' && (e.src === 'burn' || e.src === 'poison')) {
+    dots[1 - e.side][e.src] += e.amount + e.blocked;
+    paintDots();
+  }
   if (logHist.length > 400) logHist.splice(0, logHist.length - 200);
   writeLog(e);
 }
@@ -1583,13 +1682,14 @@ async function doFight() {
   // sim v20: the server revealed hidden marks (their kinds are its rolls)
   if (!(res as { offline?: boolean }).offline) r.online = true;
   const rev = (res as { revealed?: { idx: number; mark: string }[] }).revealed;
+  lastReveal = [];
   if (Array.isArray(rev))
     for (const x of rev) {
       const k = r.skills[x.idx];
       if (k && R.MARKS.includes(x.mark as Mark)) {
         k.mark = x.mark as Mark;
         delete k.markHidden;
-        toast = L(`ตราลึกลับเปิดแล้ว: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[k.mark].name} (${R.MARK_INFO[k.mark].desc})`, `Hidden mark revealed: ${nodeOf(k).name} has the ${MARKS_EN[k.mark].name} mark (${MARKS_EN[k.mark].desc})`);
+        lastReveal.push({ id: k.id, v: k.v, mark: k.mark });
       }
     }
   const nextRelics = (res as { nextRelics?: unknown }).nextRelics;
@@ -1607,6 +1707,15 @@ async function doFight() {
   music('battle');
   render();
   playLast();
+}
+
+/** hidden marks the last fight's response revealed: shown as a moment on the result screen */
+let lastReveal: { id: string; v: string; mark: Mark }[] = [];
+function revealHTML() {
+  return lastReveal
+    .map((x) => `<div class="mk-reveal mk-${x.mark}" role="status"><i class="mk-c mk-big">${D.markGlyph(x.mark)}</i>
+      <p><b>${L('ตราลึกลับเปิดแล้ว!', 'Hidden mark revealed!')}</b> ${L(`${esc(nodeOf(x).name)} ได้ตรา <b>${esc(R.MARK_INFO[x.mark].name)}</b>`, `${esc(nodeOf(x).name)} has the <b>${esc(R.MARK_INFO[x.mark].name)}</b> mark`)}<small>${esc(R.MARK_INFO[x.mark].desc)}</small></p></div>`)
+    .join('');
 }
 
 /** Play the last fight of the run in the arena (first time, or again from the result screen). */
@@ -1698,7 +1807,7 @@ function onClick(ev: Event) {
   if (!el || (el as HTMLButtonElement).disabled) return;
   const a = el.dataset.a!;
   // the tree window closes from its button or a click on the dark backdrop, not from clicks inside it
-  if (a === 'treeClose' && el.classList.contains('modal') && ev.target !== el) return;
+  if ((a === 'treeClose' || a === 'branchClose') && el.classList.contains('modal') && ev.target !== el) return;
   const arg = el.dataset.i ?? '';
   const n = Number(arg);
   let err: string | null = null;
@@ -1736,7 +1845,17 @@ function onClick(ev: Event) {
       break;
     case 'buy':
       err = buyOffer(n, null, el.dataset.v || undefined);
+      branchOpen = null;
       break;
+    case 'branchOpen':
+      if (!run?.shop[n]) return;
+      branchOpen = n;
+      render();
+      return;
+    case 'branchClose':
+      branchOpen = null;
+      render();
+      return;
     case 'relic':
       err = R.pickRelic(run!, n);
       if (!err) view = phaseView(run!);
@@ -1770,10 +1889,11 @@ function onClick(ev: Event) {
       if ('err' in w) err = w.err;
       else {
         const k = run!.skills[w.idx];
+        const nm = run!.skills.filter((x) => x.mark || x.markHidden).length;
         toast = k.markHidden
-          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตราลึกลับ (ชนิดเปิดเมื่อสู้ครั้งถัดไป) · ตรามีได้สูงสุด 3 (จากพร ${R.WISH_MARKS_MAX})`, `🌙 Moon Wish: ${nodeOf(k).name} gets a hidden mark (revealed in your next fight) · at most 3 marks (${R.WISH_MARKS_MAX} from wishes)`)
+          ? L(`🌙 ${nodeOf(k).name} ได้ตราลึกลับ · ชนิดเปิดหลังสู้ครั้งถัดไป · ตรา ${nm}/${D.MARK_MAX}`, `🌙 ${nodeOf(k).name} gets a hidden mark · revealed after your next fight · marks ${nm}/${D.MARK_MAX}`)
           : w.mark
-          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name} (${R.MARK_INFO[w.mark].desc}) · ตรามีได้สูงสุด 3 (จากพร ${R.WISH_MARKS_MAX})`, `🌙 Moon Wish: ${nodeOf(k).name} gets the ${MARKS_EN[w.mark].name} mark (${MARKS_EN[w.mark].desc}) · at most 3 marks (${R.WISH_MARKS_MAX} from wishes)`)
+          ? L(`🌙 ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name}: ${R.MARK_INFO[w.mark].desc} · ตรา ${nm}/${D.MARK_MAX}`, `🌙 ${nodeOf(k).name} gets the ${MARKS_EN[w.mark].name} mark: ${MARKS_EN[w.mark].desc} · marks ${nm}/${D.MARK_MAX}`)
           : `${L('🌙 พรจันทร์', '🌙 Moon Wish')}: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`;
       }
       break;
@@ -1863,6 +1983,19 @@ function onClick(ev: Event) {
       };
       if (a === 'saveCard') void saveCard(d).then(done);
       else void shareCard(d, L(`โมจิของฉันได้มงกุฎดวงจันทร์ใน Mochi Moon! ${location.origin}`, `My mochi won the moon crown in Mochi Moon! ${location.origin}`)).then(done);
+      return;
+    }
+    case 'saveBuild': {
+      if (!run || (run.phase !== 'won' && run.phase !== 'dead')) return;
+      const btn = el as HTMLButtonElement;
+      btn.disabled = true;
+      void saveBuildCard(buildCardImage(run)).then((how) => {
+        btn.disabled = false;
+        if (how === 'failed') {
+          toast = L('ทำรูปการ์ดไม่สำเร็จ', 'Could not make the card image');
+          render();
+        }
+      });
       return;
     }
     case 'leaveReplay':

@@ -62,6 +62,8 @@ export class CombatScene extends Phaser.Scene {
   private slowed = [false, false];
   /** voice cues already played this fight (one of each, so the announcer does not chatter) */
   private said = new Set<string>();
+  /** epic skills that already flashed "◆ EPIC" this fight (side:idx) */
+  private epicShown = new Set<string>();
   private nameTexts!: Phaser.GameObjects.Text[];
   private hpTexts!: Phaser.GameObjects.Text[];
   private skillText!: Phaser.GameObjects.Text;
@@ -299,6 +301,7 @@ export class CombatScene extends Phaser.Scene {
     this.builds = [data.left.build, data.right.build];
     this.strip.setBuilds([data.left.build, data.right.build]);
     this.said = new Set();
+    this.epicShown = new Set();
     [data.left, data.right].forEach((side, i) => {
       this.show(i, side.build.hero, lookSeed(side), POS[i]);
       this.nameTexts[i].setText(side.name);
@@ -548,6 +551,16 @@ export class CombatScene extends Phaser.Scene {
           const lead = e.from !== undefined ? this.chain(e.side, e.from, e.idx, e.t) : 0;
           if (e.from !== undefined && e.side === 0) this.say('combo');
           this.castFx(e, lead);
+          // the depth moments get their own word over the caster: the ★★★ echo (gold) and an epic branch (purple)
+          if (e.star3) {
+            this.ffx.number(e.side, L('★★★ ซ้ำ!', '★★★ ECHO!'), 'status', 0.8, false, '#ffd34d');
+            this.fxl.starburst(this.fighters[e.side].x, CHEST - 30, 1.1);
+          } else if (e.epic && !e.echo && !this.epicShown.has(`${e.side}:${e.idx}`)) {
+            // an epic branch announces itself once per fight (its cast label keeps the ◆ every time)
+            this.epicShown.add(`${e.side}:${e.idx}`);
+            this.ffx.number(e.side, L('◆ มหากาพย์!', '◆ EPIC!'), 'status', 0.85, false, '#d9b8ff');
+            this.fxl.starburst(this.fighters[e.side].x, CHEST - 30, 0.8);
+          }
         }
         break;
       }
