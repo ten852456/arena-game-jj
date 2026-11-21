@@ -88,13 +88,14 @@ async function play(label, ctxOpts, runs = 1) {
     }
     await shot(`run${run}-shop-d1`);
 
-    let day = 0, fights = 0, sawLC = false, sawMark = false, triedShopTools = false, sawRelic = 0, sawBranch = false;
+    let day = 0, fights = 0, sawLC = false, sawMark = false, triedShopTools = false, sawRelic = 0, sawBranch = false, sawPicker = false, sawPickerBuy = false, sawHud = false;
     for (let guard = 0; guard < 40; guard++) {
       // sim v17: relic day (days 4, 7, 10): 3 relic cards + skip; take the first, it must show in the shop afterwards
       if (await has('[data-a="relic"]')) {
         const cards = await p.locator('.relic-card').count();
         ok(`${label} run${run}: relic day shows 3 relics and a skip`, cards === 3 && (await has('[data-a="relic"][data-i="-1"]')), `${cards} cards`);
         sawRelic++;
+        if (sawRelic === 1) ok(`${label} run${run}: relic cards show a medallion, a name and an effect`, (await p.locator('.relic-card .rlm').count()) === 3 && (await p.locator('.relic-card .rl-desc').count()) === 3);
         await tap('[data-a="relic"][data-i="0"]', 600);
         ok(`${label} run${run}: picked relic shows in the shop`, (await has('.shopv')) && (await p.locator('.relic-chip').count()) === sawRelic, `chips ${await p.locator('.relic-chip').count()}`);
         continue;
@@ -133,6 +134,10 @@ async function play(label, ctxOpts, runs = 1) {
             ok(`${label} run${run}: drag (${ctxOpts.hasTouch ? 'touch' : 'mouse'}) reorders the list`, before !== after, `${before} → ${after}`);
           } else ok(`${label} run${run}: drag test skipped (fewer than 2 skills)`, true);
           ok(`${label} run${run}: firing timeline visible`, (await text()).includes('วิ') && (await has('.shopv svg, .tl, [class*="timeline"]')));
+          // a contextual codex link: the ult checklist opens the hero's entry
+          await p.locator('.ult-chk').first().click().catch(() => {}); await p.waitForTimeout(500);
+          ok(`${label} run${run}: tapping the ult checklist opens its codex entry`, await has('.cx-modal:not([hidden]) .cx-entry.cx-hit'));
+          await p.keyboard.press('Escape'); await p.waitForTimeout(300);
           if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
           // shop HUD + coin pill on the shop panel
           ok(`${label} run${run}: HUD shows HP, day and 10 win stars`, (await has('[data-hud="hp"]')) && (await has('[data-hud="day"]')) && (await p.locator('.hud-star').count()) === 10);
@@ -193,6 +198,21 @@ async function play(label, ctxOpts, runs = 1) {
             } else ok(`${label} run${run}: buy-by-drag skipped (no affordable new skill)`, true);
           }
         }
+        // sim v17 branch choice: an upgrade card opens the picker with both branches side by side; take the first
+        if (await has('[data-a="branchOpen"]:not([disabled])')) {
+          await tap('[data-a="branchOpen"]:not([disabled])', 500);
+          const opts = await p.locator('.bp-opt').count();
+          if (!sawPicker) ok(`${label} run${run}: branch picker shows 2 branches with before → after`, opts === 2 && (await has('.bp-opt .bp-ba .after')), `${opts} branches`);
+          sawPicker = true;
+          const g0 = await p.evaluate(() => JSON.parse(localStorage.getItem('arena.run.v7') || '{}').gold);
+          await tap('.bp-opt [data-a="buy"]:not([disabled])', 600);
+          const g1 = await p.evaluate(() => JSON.parse(localStorage.getItem('arena.run.v7') || '{}').gold);
+          if (!sawPickerBuy) ok(`${label} run${run}: picking a branch upgrades and closes the picker`, g1 < g0 && !(await has('.bp-opt')), `gold ${g0}→${g1}`);
+          sawPickerBuy = true;
+          if (await has('.bp-opt')) await tap('button[data-a="branchClose"]', 300);
+        }
+        // the ult checklist and the relic tray sit in the shop sidebar
+        if (!sawHud) { sawHud = true; ok(`${label} run${run}: shop shows the ult checklist and the relic slots`, (await has('.ult-chk .uc-step')) && (await has('.relic-tray'))); }
         // buy what we can afford (left to right), then fight
         for (let i = 0; i < 6; i++) {
           const btn = p.locator('[data-a="buy"]:not([disabled])').first();
@@ -226,6 +246,7 @@ async function play(label, ctxOpts, runs = 1) {
     const m = t.match(/(\d+)\s*ชนะ\s*(\d+)\s*แพ้/);
     ok(`${label} run${run}: end page shows a stardust reward`, /\+\d+\s*ผงดาว/.test(t), m ? `wins ${m[1]} losses ${m[2]}` : t.slice(0, 80));
     ok(`${label} run${run}: end page has banner image`, await has('.mm-banner'));
+    ok(`${label} run${run}: end page shows the build card (skills, W/L log)`, (await p.locator('.bc-card .bc-sk').count()) > 0 && (await p.locator('.bc-card .bc-day').count()) > 0, `${await p.locator('.bc-card .bc-day').count()} days, ${fights} fights`);
     ok(`${label} run${run}: end page has no horizontal scroll`, await noHScroll());
     await shot(`run${run}-over`);
     // open a replay from the run list if there is one
@@ -237,6 +258,19 @@ async function play(label, ctxOpts, runs = 1) {
     }
     await p.goto(BASE, { waitUntil: 'load' }); await p.waitForTimeout(1200);
   }
+  // the codex: header button, 9 sections, a relic entry, search, a contextual link, Esc closes it
+  if (await tap('header .cx-open', 700)) {
+    ok(`${label}: codex opens with 9 sections`, (await p.locator('.cx-modal:not([hidden]) .cx-tab').count()) === 9);
+    await tap('[data-cx-sec="relics"]', 400);
+    ok(`${label}: codex lists every relic with its medallion`, (await p.locator('.cx-entry .rlm').count()) >= 23, `${await p.locator('.cx-entry .rlm').count()} relics`);
+    await p.fill('.cx-q', 'หมาป่า'); await p.waitForTimeout(400);
+    ok(`${label}: codex search finds Lone wolf and its warning`, /หมาป่าเดียวดาย/.test(await p.locator('.cx-body').innerText()) && (await has('.cx-body .cx-risk')));
+    await p.fill('.cx-q', ''); await tap('[data-cx-sec="skills"]', 400); await tap('[data-cx-line="ice"]', 300);
+    ok(`${label}: codex skills filter by line`, (await p.locator('.cx-entry .cx-skh').count()) >= 4);
+    await p.locator('.cx-link[data-codex^="relic:"], .cx-link[data-codex="marks"]').first().click().catch(() => {});
+    await p.keyboard.press('Escape'); await p.waitForTimeout(300);
+    ok(`${label}: Esc closes the codex`, !(await has('.cx-modal:not([hidden])')));
+  } else ok(`${label}: codex button in the header`, false);
   // profile now has data
   await tap('[data-a="goto"][data-i="hall"]'); await tap('[data-a="profile"]', 1200);
   const prof = await text();
