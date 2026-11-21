@@ -251,6 +251,8 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
     if (SKILLS[s.id].hero && SKILLS[s.id].hero !== b.hero) return 'skill not allowed for hero';
     if (!isVariant(s.v)) return 'bad level';
     if (s.mark !== undefined && !MARKS.includes(s.mark)) return 'bad mark';
+    // hidden marks are revealed (replaced by the server's roll) before validation; one still here is forged
+    if ((s as { markHidden?: unknown }).markHidden !== undefined) return 'bad mark';
     // ★ only on a Lv3 skill, 1–3, from STAR_DAY (sim v17)
     if (s.star !== undefined && (!Number.isInteger(s.star) || s.star < 1 || s.star > STAR_MAX || lvOf(s.v) < 3)) return 'bad star';
     if (s.star && day < STAR_DAY) return 'implausible: star before day ' + STAR_DAY;

@@ -2,7 +2,7 @@
 // Real runs here = bot runs of every tier and hero on days 1–15 (they shop with the same rules and prices as players).
 import { aiBuild, botDay, botRules, randomAiBuild } from '../src/sim/bot';
 import { simulate } from '../src/sim/combat';
-import { applyMark, chooseLastChance, newRun, recordResult, toBuild } from '../src/sim/run';
+import { applyMark, chooseLastChance, markKindFor, newRun, recordResult, toBuild } from '../src/sim/run';
 import { HEROES } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
 import { allowances, buildCost, couldBeFull, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/validate';
@@ -123,8 +123,21 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
   // a way dropped earlier never comes back
   if (spendCheck({ build: B, ledger: { 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } } }, B, 9, rec).some((w) => w.opt === 'mark')) bad.push('ledger: a dropped way came back');
 }
+let markChi = 0;
+// security review (round 9): the two wish-mark kinds of a run are independent (FNV low bits used to pair them)
+{
+  const n = 16000;
+  const pairs: Record<string, number> = {};
+  for (let i = 0; i < n; i++) { const k = `${markKindFor(i * 7919 + 13, 0)}+${markKindFor(i * 7919 + 13, 1)}`; pairs[k] = (pairs[k] ?? 0) + 1; }
+  const keys = Object.keys(pairs);
+  const exp = n / 16;
+  const chi = keys.reduce((a, k) => a + (pairs[k] - exp) ** 2 / exp, 0) + (16 - keys.length) * exp;
+  // 15 degrees of freedom: chi² above 37.7 has p < 0.001
+  if (keys.length !== 16 || chi > 37.7) bad.push(`mark kinds: wish pairs not uniform (${keys.length}/16 pairs, chi² ${chi.toFixed(1)})`);
+  else markChi = chi;
+}
 if (bad.length) {
   console.error(`validate check: ${bad.length} problem(s)\n  ${bad.slice(0, 30).join('\n  ')}`);
   process.exit(1);
 }
-console.log(`validate check: ${n} bot builds (all tiers, days 1–15) and ${runsDays} days of honest bot runs (real records, last chances) pass, ${forged.length} forged builds rejected`);
+console.log(`validate check: mark-kind pairs uniform (chi² ${markChi.toFixed(1)}, 15 df) · ${n} bot builds (all tiers, days 1–15) and ${runsDays} days of honest bot runs (real records, last chances) pass, ${forged.length} forged builds rejected`);

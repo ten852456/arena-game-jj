@@ -242,7 +242,7 @@ function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
 
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
 function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus' | 'star'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
-  const mark = (k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : '') + starTag(k.star);
+  const mark = (k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : (k as { markHidden?: string }).markHidden ? ` <span class="mark" title="${esc(L('ชนิดจะเปิดเมื่อสู้ครั้งถัดไป', 'revealed in your next fight'))}">${L('ตราลึกลับ', 'Hidden mark')}</span>` : '') + starTag(k.star);
   const lv = lvOf(k.v);
   const pips = `<i class="lvpips" aria-hidden="true">${Array.from({ length: R.MAX_LV }, (_, j) => `<i class="${j < lv ? 'on' : ''}"></i>`).join('')}</i>`;
   return `<span class="nm">${nodeOf(k).name} <small>Lv${lv}</small>${pips}${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
@@ -1219,7 +1219,10 @@ function renderLastChance() {
 
 function renderMark() {
   const r = run!;
-  const m = R.MARK_INFO[r.pendingMark!];
+  // a ranked run's last-chance mark is hidden: the server reveals its kind in the next fight (sim v20)
+  const m = r.pendingHidden
+    ? { name: L('ตราลึกลับ', 'Hidden mark'), desc: L('ชนิดจะเปิดเมื่อสู้ครั้งถัดไป (server สุ่ม)', 'its kind is revealed in your next fight (rolled by the server)') }
+    : R.MARK_INFO[r.pendingMark!];
   scene.idle(r.hero, R.lookOf(r));
   return `<div class="lay">
   <div class="lay-side">${stageSlot(true)}</div>
@@ -1577,12 +1580,18 @@ async function doFight() {
   last = res;
   // apply the result before the replay plays, so reloading mid-replay can't undo a loss
   r.rating = res.rating;
-  const mk = (res as { markKinds?: { wish?: unknown; last?: unknown } }).markKinds;
-  if (mk && Array.isArray(mk.wish) && typeof mk.last === 'string') {
-    // the server's index 0 is the run's next wish mark: keep the client's array aligned with wishMarks
-    const done = r.wishMarks ?? 0;
-    r.markKinds = { wish: [...Array(done).fill('echo'), ...mk.wish.filter((x): x is Mark => R.MARKS.includes(x as Mark))], last: mk.last as Mark };
-  }
+  // sim v20: the server revealed hidden marks (their kinds are its rolls)
+  if (!(res as { offline?: boolean }).offline) r.online = true;
+  const rev = (res as { revealed?: { idx: number; mark: string }[] }).revealed;
+  if (Array.isArray(rev))
+    for (const x of rev) {
+      const k = r.skills[x.idx];
+      if (k && R.MARKS.includes(x.mark as Mark)) {
+        k.mark = x.mark as Mark;
+        delete k.markHidden;
+        toast = L(`ตราลึกลับเปิดแล้ว: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[k.mark].name} (${R.MARK_INFO[k.mark].desc})`, `Hidden mark revealed: ${nodeOf(k).name} has the ${MARKS_EN[k.mark].name} mark (${MARKS_EN[k.mark].desc})`);
+      }
+    }
   const nextRelics = (res as { nextRelics?: unknown }).nextRelics;
   if (Array.isArray(nextRelics)) r.relicNext = { day: r.day + 1, ids: nextRelics.filter((x): x is string => typeof x === 'string') };
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId }, res.result.winner === -1);
@@ -1761,7 +1770,9 @@ function onClick(ev: Event) {
       if ('err' in w) err = w.err;
       else {
         const k = run!.skills[w.idx];
-        toast = w.mark
+        toast = k.markHidden
+          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตราลึกลับ (ชนิดเปิดเมื่อสู้ครั้งถัดไป) · ตรามีได้สูงสุด 3 (จากพร ${R.WISH_MARKS_MAX})`, `🌙 Moon Wish: ${nodeOf(k).name} gets a hidden mark (revealed in your next fight) · at most 3 marks (${R.WISH_MARKS_MAX} from wishes)`)
+          : w.mark
           ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name} (${R.MARK_INFO[w.mark].desc}) · ตรามีได้สูงสุด 3 (จากพร ${R.WISH_MARKS_MAX})`, `🌙 Moon Wish: ${nodeOf(k).name} gets the ${MARKS_EN[w.mark].name} mark (${MARKS_EN[w.mark].desc}) · at most 3 marks (${R.WISH_MARKS_MAX} from wishes)`)
           : `${L('🌙 พรจันทร์', '🌙 Moon Wish')}: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`;
       }
@@ -1809,7 +1820,7 @@ function onClick(ev: Event) {
       view = phaseView(run!);
       break;
     case 'mark':
-      R.applyMark(run!, n);
+      err = R.applyMark(run!, n);
       view = phaseView(run!);
       break;
     case 'replayAgain':

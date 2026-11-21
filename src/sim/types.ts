@@ -32,6 +32,12 @@ export interface SkillInstance {
   bonus?: Bonus[];
   /** ★ after Lv3 (sim v17): 1–3 duplicate cards bought on top of the Lv3 skill */
   star?: number;
+  /**
+   * sim v20: a mark carved in a ranked run whose kind the server has not revealed yet (it rolls the kind from its own
+   * seed and reveals it in the response of the next fight): 'wish' (moon wish) or 'last' (the last chance's mark).
+   * A hidden mark does nothing in a fight until it is revealed.
+   */
+  markHidden?: 'wish' | 'last';
 }
 
 /** A build is a hero plus its skill list, top to bottom. Neighbours (above / below) can turn on connect bonuses. */

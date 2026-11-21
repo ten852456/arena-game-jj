@@ -104,7 +104,8 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
       res.push({ day: s.day, status: st, err: f?.error, offer });
       if (st !== 200) break;
       if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
-      if (f.markKinds) s.markKinds = { wish: [...Array(s.wishMarks ?? 0).fill('echo'), ...f.markKinds.wish], last: f.markKinds.last };
+      s.online = true;
+      for (const x of f.revealed ?? []) { const k = s.skills[x.idx]; if (k) { k.mark = x.mark; delete k.markHidden; } }
       s.rating = f.rating;
       recordResult(s, f.won, { opp: f.opponent.name, ai: f.opponent.ai, fightId: f.fightId }, f.result.winner === -1);
     }
@@ -252,6 +253,22 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   });
   const smRow = swapMark.res.find((r) => r.status !== 200);
   check('forge: a mark kept through a Lv3 branch swap → 400', smRow?.status === 400, `${smRow?.day} ${smRow?.status} ${smRow?.err ?? ''}`);
+  // round 9: no mark kinds ahead of time; a hidden mark the server can't place is rejected; honest hidden marks get revealed
+  {
+    const [, f1] = await post('/api/fight', { runId: t + '-nk', playerId: t, day: 1, rating: 1000, build: { hero: 'knight', skills: [{ id: 'bulwark', v: '' }, { id: 'shield', v: '' }] } });
+    check('fight responses carry no mark kinds ahead of time', f1 && !('markKinds' in f1), Object.keys(f1 ?? {}).join(','));
+    const [fh] = await post('/api/fight', { runId: t + '-nk', playerId: t, day: 2, rating: 1000, build: { hero: 'knight', skills: [{ id: 'bulwark', v: '', markHidden: 'oops' }, { id: 'shield', v: '' }] } });
+    check('forge: a hidden mark of an unknown kind → 400', fh === 400, `status ${fh}`);
+    let revealedKinds = '';
+    const hid = await play(t + '-hd', 'knight', 11, undefined, (s) => {
+      if (s.day < 9) return false;
+      lv3Only(s);
+      if (wishKind(s) === 'mark' && s.gold >= wishPrice(s)) wish(s);
+      return true;
+    });
+    revealedKinds = hid.s.skills.filter((k) => k.mark).map((k) => k.mark).join(',');
+    check('honest: a wish mark is carved hidden and the next fight reveals the server kind', hid.res.every((r) => r.status === 200) && !hid.s.skills.some((k) => k.markHidden) && revealedKinds.length > 0, `revealed ${revealedKinds || 'none'}`);
+  }
   // 4 the client's wish rules match the server's: no mark wish before every skill is Lv3
   const early = newRun('knight', 77, t + '-ew');
   early.day = 3; early.gold = 50;

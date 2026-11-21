@@ -218,7 +218,7 @@ switch (cmd) {
       else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]), false)})`);
       else p(`wish: ${nodeOf(st.skills[w.idx]).name} got${markText(w.mark)} · at most 3 marks a run (${R.WISH_MARKS_MAX} from wishes)`);
     } else if (cmd === 'chance') R.chooseLastChance(st, args[0] as R.LastChanceOption);
-    else if (cmd === 'mark') R.applyMark(st, n(args[0]));
+    else if (cmd === 'mark') err = R.applyMark(st, n(args[0]));
     else if (cmd === 'fight') {
       if (st.phase !== 'shop') fail('not in the shop');
       const me = R.toBuild(st);

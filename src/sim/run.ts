@@ -129,8 +129,10 @@ export interface RunState {
   wishes?: number;
   /** marks carved by wishes this run (at most WISH_MARKS_MAX) */
   wishMarks?: number;
-  /** the mark kinds the server rolled for this run (fight response): the next wish marks, and the last chance's */
-  markKinds?: { wish: Mark[]; last: Mark };
+  /** a ranked run (a server fight went through): its marks are carved hidden and revealed by the server (sim v20) */
+  online?: boolean;
+  /** the last chance's mark is a hidden one (ranked run) */
+  pendingHidden?: boolean;
   /** run relics owned (relics.ts), at most MAX_RELICS */
   relics?: string[];
   /** the 3 relics offered today (phase 'relic') */
@@ -364,7 +366,16 @@ export const markWishCost = (n: number) => Array.from({ length: Math.max(0, n) }
  * fight response (`markKinds`), so a client can't choose its marks. idx = the run's n-th wish mark, or 'last' for the
  * last chance's mark. Offline runs roll with their own seed.
  */
-export const markKindFor = (seed: number, idx: number | 'last'): Mark => MARKS[hashSeed(seed, 'markkind', idx) % MARKS.length];
+export const markKindFor = (seed: number, idx: number | 'last'): Mark => MARKS[mix32(hashSeed(seed, 'markkind', idx)) % MARKS.length];
+/** a full 32-bit mixer (sim v20, security review: FNV's low bits paired the two wish marks as {echo, quick} or {burn, steadfast}) */
+export function mix32(x: number) {
+  x ^= x >>> 16;
+  x = Math.imul(x, 0x7feb352d);
+  x ^= x >>> 15;
+  x = Math.imul(x, 0x846ca68b);
+  x ^= x >>> 16;
+  return x >>> 0;
+}
 export type WishKind = 'upgrade' | 'mark' | null;
 /**
  * What a wish does now: upgrade a random skill below Lv3; once EVERY skill is Lv3 (sim v18: not merely "none can go up
@@ -397,7 +408,9 @@ export function wish(s: RunState): WishResult {
     });
     return { idx: i, from, v: k.v };
   }
-  k.mark = s.markKinds?.wish[s.wishMarks ?? 0] ?? rng.pick(MARKS);
+  // a ranked run's mark kind is the server's roll, revealed in the next fight's response (sim v20); offline: rolled here
+  if (s.online) k.markHidden = 'wish';
+  else k.mark = rng.pick(MARKS);
   s.wishMarks = (s.wishMarks ?? 0) + 1;
   return { idx: i, from, mark: k.mark };
 }
@@ -524,7 +537,8 @@ export function chooseLastChance(s: RunState, opt: LastChanceOption) {
     }
   }
   if (opt === 'mark') {
-    s.pendingMark = s.markKinds?.last ?? new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+    s.pendingMark = new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+    s.pendingHidden = !!s.online;
     s.phase = 'mark';
     return;
   }
@@ -540,10 +554,20 @@ export function concede(s: RunState) {
 }
 
 /** idx = -1 skips placing the mark */
-export function applyMark(s: RunState, idx: number) {
-  if (s.phase !== 'mark' || !s.pendingMark) return;
-  if (s.skills[idx]) s.skills[idx].mark = s.pendingMark;
+export function applyMark(s: RunState, idx: number): string | null {
+  if (s.phase !== 'mark' || !s.pendingMark) return 'ไม่มีตราให้ใส่';
+  if (idx !== -1 && !s.skills[idx]) return 'ไม่มี skill ช่องนี้';
+  const k = s.skills[idx];
+  if (k && s.pendingHidden) {
+    delete k.mark;
+    k.markHidden = 'last';
+  } else if (k) {
+    delete k.markHidden;
+    k.mark = s.pendingMark;
+  }
+  s.pendingHidden = false;
   s.pendingMark = null;
   s.day++;
   beginDay(s);
+  return null;
 }

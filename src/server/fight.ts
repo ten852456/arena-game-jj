@@ -1,7 +1,7 @@
 // POST /api/fight and GET /api/scout.
 import { randomInt, randomUUID } from 'node:crypto';
 import { SIM_VERSION, simulate } from '../sim/combat';
-import { START_HP, WIN_TARGET, WISH_MARKS_MAX, damageFor, markKindFor } from '../sim/run';
+import { START_HP, WIN_TARGET, damageFor, markKindFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
@@ -19,6 +19,26 @@ const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 4
 /** A run's results before today, day 1 first (1 = won, 0 = lost, 2 = draw), for validateBuild. */
 export const recordOf = (t?: RunTrack): RunRecord =>
   t ? Object.keys(t.days).map(Number).sort((a, b) => a - b).map((d) => (t.days[d] === 1 ? 1 : t.days[d] === 2 ? 2 : 0)) : [];
+
+/**
+ * Replace the build's hidden marks by the server's rolls (sim v20, security review: the kinds used to be sent ahead in
+ * every fight response): the last chance's mark gets the run's 'last' roll, wish marks the run's next wish rolls in list
+ * order. A run without a server seed yet (its first fight) cannot have marks.
+ */
+function revealMarks(build: unknown, prev?: RunTrack): { idx: number; mark: string }[] {
+  const skills = (build as { skills?: unknown })?.skills;
+  if (!Array.isArray(skills)) return [];
+  const out: { idx: number; mark: string }[] = [];
+  let w = prev?.wishMarks ?? 0;
+  skills.forEach((k: { markHidden?: unknown; mark?: unknown }, idx) => {
+    if (!k || typeof k !== 'object' || k.markHidden === undefined) return;
+    if (prev?.relicSeed === undefined || (k.markHidden !== 'wish' && k.markHidden !== 'last')) return; // left in place: validateBuild rejects it
+    k.mark = markKindFor(prev.relicSeed, k.markHidden === 'last' ? 'last' : w++);
+    delete k.markHidden;
+    out.push({ idx, mark: k.mark as string });
+  });
+  return out;
+}
 
 function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
@@ -72,6 +92,8 @@ export function handleFight(body: any): Res {
   // days are fought one by one in order: no skipping ahead, no repeating a day
   const fought = prev ? Object.keys(prev.days).length : 0;
   if ((prev && Object.hasOwn(prev.days, day)) || day !== fought + 1) return { status: 409, json: { error: fought >= day ? 'day already fought' : 'days must be fought in order' } };
+  // sim v20: reveal hidden marks with the server's rolls (the kind is decided here, never by the client)
+  const revealed = revealMarks(body?.build, prev);
   // the build must be one this run could own today, judged from the run's own record (results of earlier days)
   const build = validateBuild(body?.build, day, recordOf(prev), prev?.lastChoice);
   if (typeof build === 'string') return bad(build);
@@ -200,8 +222,8 @@ export function handleFight(body: any): Res {
       },
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
-      // the mark kinds this run will get (the server's rolls; the client can't pick its marks)
-      markKinds: { wish: [0, 1].map((i) => markKindFor(track.relicSeed!, (track.wishMarks ?? 0) + i)).slice(0, Math.max(0, WISH_MARKS_MAX - (track.wishMarks ?? 0))), last: markKindFor(track.relicSeed!, 'last') },
+      // hidden marks this fight revealed: list index → kind (the server's roll)
+      ...(revealed.length ? { revealed } : {}),
       // tomorrow is a relic day: the 3 relics the server will accept (the client shows these)
       ...(serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills) } : {}),
       result, won, rating: newRating,
