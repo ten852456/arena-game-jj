@@ -477,6 +477,28 @@ export function explain(
   const add = (score: number, text: string, kind: LineKind) => score > 0 && out.push([score, text, kind]);
   const lostHp = r.maxHp[me];
   if (!won) {
+    // sim v19 (playtest: "lost in 4.5s at full HP, no idea why"): a burst inside one second, and poison that shields can't stop
+    const hits = r.events.filter((e) => e.type === 'damage' && e.side === me) as Extract<CombatEvent, { type: 'damage' }>[];
+    const burst = hits.filter((e) => e.t >= len - 10).reduce((n, e) => n + e.amount, 0);
+    if (len <= 80 && burst >= lostHp * 0.5)
+      add(
+        95,
+        L(
+          `โดนรวม ${burst} ดาเมจใน 1 วินาทีสุดท้าย (${sec(Math.max(0, len - 10))}–${sec(len)} วิ): skill ของศัตรูยิงพร้อมกันเป็นชุด → เพิ่มโล่/ฟื้นเลือดช่วงต้น หรือ skill ที่ใช้ได้เร็วกว่า ${sec(len)} วิ`,
+          `You took ${burst} damage in the last second (${sec(Math.max(0, len - 10))}–${sec(len)}s): the enemy's skills landed together in one volley → add early shield/healing, or a skill that fires before ${sec(len)}s`,
+        ),
+        'ko',
+      );
+    const poisonDmg = hits.filter((e) => e.src === 'poison').reduce((n, e) => n + e.amount, 0);
+    if (poisonDmg >= lostHp * 0.35 && r.events.some((e) => e.type === 'shield' && e.side === me))
+      add(
+        60,
+        L(
+          `พิษทำดาเมจ ${poisonDmg} และพิษไม่สนโล่ (โล่ของคุณกันไม่ได้) → ชำระ/ล้างพิษ หรือฟื้นเลือด`,
+          `Poison dealt ${poisonDmg} and poison ignores shields (yours could not stop it) → cleanse it, or heal`,
+        ),
+        'poison',
+      );
     if (pct(myCtl, len) >= 20) {
       const tip = advise(
         [['ironwill', L('การควบคุมอ่อนลง 60%', 'control 60% weaker')], ['cleanse', L('ลบการแช่แข็ง', 'removes freeze')]],

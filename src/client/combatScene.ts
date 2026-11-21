@@ -541,7 +541,7 @@ export class CombatScene extends Phaser.Scene {
         if (!this.quiet) {
           this.pose(e.side, 'cast');
           const inst = this.builds[e.side]?.skills[e.idx];
-          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.echo ? L(' (ซ้ำ)', ' (echo)') : ''}${e.side === 1 ? ' ◀' : ''}`;
+          const label = `${e.side === 0 ? '▶ ' : ''}${inst ? nodeOf(inst).name : d.name} Lv${e.lv}${e.star3 ? L(' ★★★ ซ้ำ', ' ★★★ echo') : e.echo ? L(' (ซ้ำ)', ' (echo)') : ''}${e.epic ? L(' ◆ มหากาพย์', ' ◆ EPIC') : ''}${e.side === 1 ? ' ◀' : ''}`;
           this.skillText.setText(label).setColor(SIDE_COLOR[e.side]).setAlpha(1).setScale(1);
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, delay: this.dur(500), duration: this.dur(400) });

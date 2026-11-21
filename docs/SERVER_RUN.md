@@ -38,3 +38,19 @@ real shop might never have offered. Closing that needs the server to own the run
 Forged builds (any skill, branch or bonus), gold and slot cheating, re-rolling a day by refreshing, and switching hero
 mid-run. What it can't fix: a player using an outside simulator to plan purchases (that is skill, and the shop and the
 opponent are still unknown until they happen).
+
+## What the per-fight checks still cannot see (round 8, sim v19)
+
+The server checks each fought build against the run's record, a per-way gold ledger, the relic offers it rolled and the
+mark kinds it rolled. Without owning the shop it still cannot prove:
+
+- **Which cards the shop showed.** A star needs a star card (one per shop roll at most), but the server only sees the
+  star count. It caps stars at 4 per day and charges 3/4/5 gold each; a build can still show a star whose card never
+  appeared, as long as the gold fits.
+- **Rerolls and wishes that bought nothing.** Gold spent on rerolls, or on upgrade wishes, is invisible, so the ledger
+  is a lower bound: a client that saved that gold can spend it elsewhere (including on one last-chance way's reward
+  while another way's ledger shows the spend). Each way keeps its own ledger, so the gold caps never mix, but the
+  unseen reroll gold is slack inside each way.
+- **Which skill a wish mark went on.** The kind is the server's roll; the target is any Lv3 skill the build owned.
+
+All three close when the server owns the run (commands in, state out), as planned above.

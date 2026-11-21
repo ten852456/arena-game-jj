@@ -341,6 +341,8 @@ export const RUN_ERRORS_EN: Record<string, string> = {
   'เงินไม่พอ': 'Not enough gold',
   'ไม่มีของ': 'Nothing to buy there',
   'เลือกของวิเศษก่อน': 'Pick a relic first',
+  'ยังมีช่องว่าง': 'A skill slot is still empty',
+  'พรจันทร์ใช้ไม่ได้ตอนนี้': 'Moon Wish is not available now',
   'ไม่มีทางนี้': 'That branch is not available',
   'ไม่มีของวิเศษให้เลือก': 'No relic to pick',
   'ไม่มีของชิ้นนี้': 'No such relic',

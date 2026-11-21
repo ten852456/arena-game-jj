@@ -5,7 +5,7 @@ import {
   LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
-import { RELICS_BY_ID, RELIC_DAYS, relicFits, rollRelicOffer, skillLinesOf } from './relics';
+import { RELICS_BY_ID, RELIC_DAYS, relicFits, relicFitsBuild, rollRelicOffer } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, rarityOf, epicAfter, type Effect, type SkillNode, type Variant } from './skills';
 import { LINES, type Build, type Line, type SkillInstance } from './types';
@@ -212,7 +212,8 @@ export function botRelic(s: RunState, tier: BotTier): number {
   const fit = (id: string) => {
     const g = RELICS_BY_ID[id].group;
     if (!usable(id)) return -Infinity;
-    if (relicFits(id, line)) return 1.5;
+    if (relicFitsBuild(id, s.skills)) return 1.8;
+    if (relicFits(id, line)) return 1.2;
     if (g === 'cheese') {
       if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0.5;
       if (id === 'lonewolf') return 4;
@@ -514,7 +515,7 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
       // relic days: the same 3-card offer a player gets (sim v17)
       if (RELIC_DAYS.includes(d)) {
         s.relicDays = [...(s.relicDays ?? []), d];
-        s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? [], skillLinesOf(toBuild(s).skills, (id) => SKILLS[id]?.line));
+        s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? [], toBuild(s).skills);
         if (s.relicOffer.length) s.phase = 'relic';
       }
     }

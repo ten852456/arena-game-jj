@@ -11,7 +11,7 @@ import * as RF from './runEndFx';
 import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
-import { GROUP_ICON, RELICS_BY_ID, relicFits, relicText, skillLinesOf } from '../sim/relics';
+import { GROUP_ICON, RELICS_BY_ID, relicFitsBuild, relicHint, relicText } from '../sim/relics';
 import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
@@ -31,6 +31,7 @@ import { clearPick, goToPick, picked, setPick } from './shop/pick';
 import { music, sfx, voice } from './audio';
 import { IMAGES, skillIcon, lineIcon } from './assets';
 import { L, getLang } from '../i18n';
+import { MARKS_EN } from './i18n_en';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
 import { setView } from './layout';
 import { bonusRows, detailTipHTML, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
@@ -606,7 +607,9 @@ function buyLabel(why: string, verb: string, price: number, poor: boolean) {
 function slotCard(r: R.RunState) {
   const price = R.slotPrice(r);
   const maxed = R.slotsOf(r) >= R.MAX_SLOTS;
-  const why = maxed ? L('เต็มแล้ว', 'Maxed') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
+  // sim v19: no slot while one is still empty (a lone-wolf build never needs one)
+  const spare = r.skills.length < R.slotsOf(r);
+  const why = maxed ? L('เต็มแล้ว', 'Maxed') : spare ? L('ยังมีช่องว่าง', 'A slot is still empty') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
   return `<div class="card offer expand extra${!maxed && r.gold < price ? ' poor' : ''}" title="${L('ช่อง skill +1 ถาวรทั้งรอบ ราคาขึ้นทุกครั้งที่ซื้อ', '+1 skill slot for the whole run; the price goes up each time')}">
     <div class="offer-art" aria-hidden="true">＋</div>
     <div class="offer-name">${L('ช่อง skill +1', '+1 skill slot')}</div>
@@ -621,10 +624,11 @@ function wishCard(r: R.RunState) {
   const price = R.wishPrice(r);
   const why = !r.skills.length ? L('ยังไม่มี skill', 'No skills yet') : !kind ? L('ครบทุกอย่างแล้ว', 'All done') : r.gold < price ? L('เงินไม่พอ', 'Not enough gold') : '';
   const pool = kind === 'upgrade' ? r.skills.filter((k) => lvOf(k.v) < R.MAX_LV).length : r.skills.filter((k) => !k.mark).length;
+  const left = R.WISH_MARKS_MAX - (r.wishMarks ?? 0);
   const desc =
     kind === 'mark'
-      ? L(`ทุกตัว Lv3 แล้ว: สุ่มใส่ <b>ตรา</b> ให้ 1 ใน ${pool} skill ที่ยังไม่มีตรา`, `All Lv3: adds a random <b>mark</b> to 1 of ${pool} unmarked skills`)
-      : L(`สุ่มอัปเกรด 1 ใน ${pool} skill ที่ยังไม่ Lv3 ขึ้นขั้นถัดไป (สุ่มทาง)`, `Upgrades 1 of ${pool} skills below Lv3 to the next level (random branch)`);
+      ? L(`<b>ให้ตรา</b>: ทุกตัว Lv3 แล้ว สุ่มใส่ตราให้ 1 ใน ${pool} skill ที่ยังไม่มีตรา (เหลือ ${left} ครั้งในรอบนี้)`, `<b>Gives a mark</b>: all Lv3, so a random mark goes on 1 of ${pool} unmarked skills (${left} left this run)`)
+      : L(`<b>ให้อัปเกรด</b>: สุ่มอัป 1 ใน ${pool} skill ที่ยังไม่ Lv3 (สุ่มทาง)`, `<b>Gives an upgrade</b>: 1 of ${pool} skills below Lv3 goes up a level (random branch)`);
   const tip = `<div class="tt-h"><b>${L('🌙 พรจันทร์', '🌙 Moon Wish')}</b></div><div class="desc">${L(
     `ที่ใช้เงินเหลือ: จ่ายแพงกว่าการ์ดอัปเกรดปกติ แต่ไม่ต้องรอร้านสุ่มเจอ
     เลือก skill และทางอัปให้แบบสุ่ม (ช่องเดิม โบนัสเชื่อมต่อเดิม) · ถ้าทุกตัว Lv3 แล้วจะสุ่มใส่ตราแทน
@@ -636,7 +640,7 @@ function wishCard(r: R.RunState) {
   return `<div class="card offer extra wish${kind && r.skills.length && r.gold < price ? ' poor' : ''}" data-ttxt="${esc(tip)}">
     <div class="offer-art" aria-hidden="true">🌙</div>
     <div class="offer-name">${L('พรจันทร์', 'Moon Wish')}</div>
-    <div class="offer-desc">${kind || !r.skills.length ? desc : L('ทุก skill Lv3 และมีตราแล้ว', 'Every skill is Lv3 and marked')}</div>
+    <div class="offer-desc">${kind || !r.skills.length ? desc : (r.wishMarks ?? 0) >= R.WISH_MARKS_MAX ? L(`ใช้ตราจากพรครบ ${R.WISH_MARKS_MAX} ครั้งแล้ว`, `All ${R.WISH_MARKS_MAX} wish marks used`) : L('ยังให้ตราไม่ได้: ต้อง Lv3 ทุกตัวก่อน', 'No mark yet: every skill must be Lv3 first')}</div>
     <button class="buy" data-a="wish" ${why ? 'disabled' : ''}>${buyLabel(why, L('ขอพร', 'Wish'), price, !!kind && r.skills.length > 0 && r.gold < price)}</button>
   </div>`;
 }
@@ -738,12 +742,11 @@ function renderRelic() {
     .map((id, i) => {
       const x = RELICS_BY_ID[id];
       const d = x.desc();
-      const lines = [HEROES_BY_ID[r.hero]?.line, ...skillLinesOf(r.skills, (sid) => SKILLS[sid]?.line)];
-      const tag = lines.some((l) => relicFits(id, l)) ? `<span class="mark ult-aff">${L('เข้ากับ build คุณ', 'fits your build')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
+      const tag = relicFitsBuild(id, r.skills) ? `<span class="mark ult-aff">${L('เข้ากับ build คุณ', 'fits your build')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
       return `<div class="card offer relic-card"><div class="offer-art" aria-hidden="true">${x.icon}</div>
         <div class="offer-name">${esc(th ? x.name[0] : x.name[1])}</div>
         <div class="offer-meta">${tag}</div>
-        <div class="offer-desc">${esc(th ? d[0] : d[1])}</div>
+        <div class="offer-desc">${esc(th ? d[0] : d[1])}${relicHint(id, th) ? `<br><small class="muted">${esc(relicHint(id, th))}</small>` : ''}</div>
         <button class="buy primary" data-a="relic" data-i="${i}">${L('เลือก', 'Take')}</button></div>`;
     })
     .join('');
@@ -799,7 +802,7 @@ function renderShop() {
   const rows = r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i, act);
-      const row = `<li class="skillrow line-${SKILLS[k.id].line}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
+      const row = `<li class="skillrow line-${SKILLS[k.id].line}${rarityOf(k.id, k.v) === 'epic' ? ' row-epic' : ''}${(k.star ?? 0) >= 3 ? ' row-star3' : ''}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
         <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(k.v ? { id: k.id, v: k.v } : null)}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</div>
@@ -1759,7 +1762,7 @@ function onClick(ev: Event) {
       else {
         const k = run!.skills[w.idx];
         toast = w.mark
-          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name}`, `🌙 Moon Wish: ${nodeOf(k).name} gets the ${R.MARK_INFO[w.mark].name} mark`)
+          ? L(`🌙 พรจันทร์: ${nodeOf(k).name} ได้ตรา${R.MARK_INFO[w.mark].name} (${R.MARK_INFO[w.mark].desc}) · ตรามีได้สูงสุด 3 (จากพร ${R.WISH_MARKS_MAX})`, `🌙 Moon Wish: ${nodeOf(k).name} gets the ${MARKS_EN[w.mark].name} mark (${MARKS_EN[w.mark].desc}) · at most 3 marks (${R.WISH_MARKS_MAX} from wishes)`)
           : `${L('🌙 พรจันทร์', '🌙 Moon Wish')}: ${nodeOf({ id: k.id, v: w.from }).name} Lv${lvOf(w.from)} → ${nodeOf(k).name} Lv${lvOf(k.v)}`;
       }
       break;

@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
 import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markKindFor, markWishCost, slotsFor } from '../sim/run';
-import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer, skillLinesOf } from '../sim/relics';
+import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
@@ -229,7 +229,7 @@ export function relicOfferCheck(track: { build?: Build; relicSeed?: number; hero
   const added = cur.filter((r) => !prev.includes(r));
   if (!added.length) return null;
   if (track?.relicSeed === undefined) return BAD_RELIC;
-  const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev, skillLinesOf(track.build?.skills ?? [], (id) => SKILLS[id]?.line));
+  const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev, track.build?.skills ?? []);
   return added.every((r) => offer.includes(r)) ? null : BAD_RELIC;
 }
 /** marks on skills below Lv3 (only the last chance's mark can be there) */
@@ -237,8 +237,8 @@ const lowMarks = (b: Build) => b.skills.filter((k) => k.mark && lvOf(k.v) < 3).l
 /** the only error any relic problem gets */
 export const BAD_RELIC = 'bad relic';
 /** the relics the server offers this run on `day` (empty when it is no relic day) */
-export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = [], skills: { id: string }[] = []) =>
-  RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned, skillLinesOf(skills, (id) => SKILLS[id]?.line)) : [];
+export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []) =>
+  RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned, skills) : [];
 
 export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
   const b = x as Build;

@@ -1,5 +1,6 @@
 import { HEROES_BY_ID } from './heroes';
 import { Rng, hashSeed } from './rng';
+import { nodeOf } from './skills';
 import { T } from './tuning';
 import type { Line } from './types';
 
@@ -98,6 +99,48 @@ export const relicText = (id: string, th = true) => {
   const d = r.desc();
   return `${r.icon} ${th ? r.name[0] : r.name[1]}: ${th ? d[0] : d[1]}`;
 };
+/**
+ * What each relic needs the build to DO (sim v19, playtest: "fits" from the line alone labelled ลมแรง for a witch
+ * with no slow): the effects its owned skills apply. Generic relics (no entry) never claim to fit.
+ */
+const NEEDS: Record<string, string[]> = {
+  whetstone: ['hit'], executioner: ['hit'], counterstep: ['dodge'], featherstep: ['dodge'], spikedshield: ['shield'], bastion: ['shield'],
+  overflow: ['heal'], vitality: ['heal'], meltdown: ['burn'], kindling: ['burn'], virulence: ['poison'], rot: ['poison'],
+  permafrost: ['freeze'], brittle: ['freeze'], gale: ['slow'], tailspin: ['haste'],
+};
+/** the effects a list of skills applies: their effect kinds, plus what their hits carry (burn, poison, shield bash …) */
+export function buildEffects(skills: { id: string; v: string }[]) {
+  const out = new Set<string>();
+  for (const k of skills) {
+    let n;
+    try { n = nodeOf(k); } catch { continue; }
+    for (const e of n.fx) {
+      out.add(e.k);
+      if (e.k === 'hit') {
+        if (e.burn) out.add('burn');
+        if (e.poison) out.add('poison');
+        if (e.shieldPct) out.add('shield');
+      }
+    }
+  }
+  return out;
+}
+/** does this relic fit what the build actually does (its NEEDS met by the skills' effects; conditional ones by their setup)? */
+export function relicFitsBuild(id: string, skills: { id: string; v: string; mark?: string }[]) {
+  if (id === 'sigil') return skills.filter((k) => k.mark).length >= 2;
+  if (id === 'lonewolf') return skills.length <= 3;
+  const need = NEEDS[id];
+  if (!need) return false;
+  const fx = buildEffects(skills);
+  return need.some((x) => fx.has(x));
+}
+/** what a risky relic needs, in words (shown on its card) */
+export const relicHint = (id: string, th = true): string =>
+  ({
+    sigil: th ? 'ต้องมีตราอย่างน้อย 2 อัน (โอกาสสุดท้าย / พรจันทร์)' : 'needs 2+ marks (last chance / moon wishes)',
+    lonewolf: th ? 'ต้องมี skill ไม่เกิน 3 ตัว' : 'needs 3 skills or fewer',
+    glasscannon: th ? 'เสี่ยง: ต้องมีโล่/ฟื้นเลือดมากพอ' : 'risky: needs plenty of shield / healing',
+  })[id] ?? '';
 /** the lines (not 'none') a build owns skills of: what a relic offer and its "fits" label look at */
 export const skillLinesOf = (skills: { id: string }[], lineOf: (id: string) => string | undefined) => [...new Set(skills.map((k) => lineOf(k.id)).filter((l): l is string => !!l && l !== 'none'))];
 /** does this relic suit `line` (its own group, or one of the lines it also suits)? */
@@ -111,12 +154,11 @@ export const GROUP_ICON: Record<RelicGroup, string> = {
  * line while the run owns none of its line's relics (then line relics are only weighted ×1.3), the rest from everything
  * else (other lines, generic and cheese relics).
  */
-export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skillLines: string[] = []): string[] {
+export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []): string[] {
   const rng = new Rng(hashSeed(seed, 'relic', day));
   const line = HEROES_BY_ID[hero]?.line;
-  // sim v18: "fits" = the hero's line or a line the build owns skills of
-  const lines = [...new Set([line, ...skillLines].filter((x): x is string => !!x && x !== 'none'))];
-  const fits = (id: string) => lines.some((l) => relicFits(id, l));
+  // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line
+  const fits = (id: string) => (skills.length ? relicFitsBuild(id, skills) : relicFits(id, line));
   const pool = RELICS.filter((r) => !owned.includes(r.id));
   const out: string[] = [];
   // always at least one that fits the build (sim v18: a line it owns skills of, not only the hero's nominal line);
@@ -125,7 +167,8 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   if (mine.length) out.push(rng.pick(mine).id);
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
-    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : 1));
+    // the hero's line weighted ×LINE_W; risky relics ×1.5 (sim v19: lone wolf showed in 26% of runs, sigil never)
+    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : r.group === 'cheese' ? 1.5 : 1));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;

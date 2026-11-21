@@ -788,3 +788,6 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
 .relic-shop { display: flex; flex-wrap: wrap; gap: 8px; }
 .relic-card { flex: 1 1 180px; max-width: 260px; }
 .relic-card .offer-art { font-size: 34px; }
+.skillrow.row-epic { box-shadow: inset 3px 0 0 #b48cff; }
+.skillrow.row-star3 { box-shadow: inset -3px 0 0 #ffd34d; }
+.skillrow.row-epic.row-star3 { box-shadow: inset 3px 0 0 #b48cff, inset -3px 0 0 #ffd34d; }

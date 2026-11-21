@@ -16,7 +16,7 @@ import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
 import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
-import { RELICS_BY_ID, relicFits, relicText, skillLinesOf } from '../src/sim/relics';
+import { relicFitsBuild, relicHint, relicText } from '../src/sim/relics';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
 import { SKILLS, VARIANTS, epicAfter, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
@@ -133,7 +133,7 @@ function show(s: R.RunState) {
   }
   if (s.phase === 'relic') {
     p('Relic day: pick one with `relic <i>` (-1 = skip). It lasts the whole run (at most 3).');
-    (s.relicOffer ?? []).forEach((id, i) => p(`   ${i}. ${relicText(id, false)}${[h.line, ...skillLinesOf(s.skills, (sid) => SKILLS[sid]?.line)].some((l) => relicFits(id, l)) ? ' (fits your build)' : RELICS_BY_ID[id]?.group === 'cheese' ? ' (risky: needs a rare setup)' : ''}`));
+    (s.relicOffer ?? []).forEach((id, i) => p(`   ${i}. ${relicText(id, false)}${relicFitsBuild(id, s.skills) ? ' (fits your build)' : ''}${relicHint(id, false) ? ` (${relicHint(id, false)})` : ''}`));
   }
   if (s.phase === 'lastchance') p('You died once: choose `chance awaken` (all Lv1 → Lv2), `chance mark` (a random mark), or `chance supply` (+8 gold, +1 slot).');
   if (s.phase === 'mark') p(`Place mark ${s.pendingMark}: \`mark <listIdx>\` (-1 = skip). ${R.MARK_INFO[s.pendingMark!].name}: ${R.MARK_INFO[s.pendingMark!].desc}`);
@@ -149,7 +149,7 @@ function fightSummary(ev: CombatEvent[], names: [string, string], builds: [Build
     /** English verb for side s: "You take" / "Enemy takes" */
     const v = (s: number, you: string, it: string) => (names[s] === 'You' ? you : it);
     if (e.type === 'ult') lines.push(`  ${t} ★ ${names[e.side]} ULTIMATE ${ultText(builds[e.side].hero, e.lv)} (Lv${e.lv})  ${hp}`);
-    else if (e.type === 'cast') lines.push(`  ${t} ${names[e.side]} ${e.skill} Lv${e.lv}${e.from !== undefined ? ' (set off)' : ''}${e.react ? ' (react)' : ''}${e.echo ? ' (echo)' : ''}  ${hp} · shield ${names[0]} ${e.s.sh[0]} · ${names[1]} ${e.s.sh[1]}`);
+    else if (e.type === 'cast') lines.push(`  ${t} ${names[e.side]} ${e.skill} Lv${e.lv}${e.from !== undefined ? ' (set off)' : ''}${e.react ? ' (react)' : ''}${e.star3 ? ' (★★★ echo)' : e.echo ? ' (echo)' : ''}${e.epic ? ' [EPIC]' : ''}  ${hp} · shield ${names[0]} ${e.s.sh[0]} · ${names[1]} ${e.s.sh[1]}`);
     else if (e.type === 'damage' && e.src === 'ult') lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'take', 'takes')} ${e.amount} from the ultimate  ${hp}`);
     else if (e.type === 'status' && e.status === 'evade') lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'DODGE', 'DODGES')} a hit (${e.value} dodge left)`);
     else if (e.type === 'status' && e.status === 'sure') lines.push(`  ${t}   ${names[e.side]} can't dodge: an undodgeable 👁 hit`);
@@ -216,7 +216,7 @@ switch (cmd) {
       const w = R.wish(st);
       if ('err' in w) err = w.err;
       else if (w.v !== undefined) p(`wish: ${nodeOf({ id: st.skills[w.idx].id, v: w.from }).name} Lv${lv(w.from)} → ${nodeOf(st.skills[w.idx]).name} Lv${lv(w.v)} (${upgradeDiffText(nodeOf({ id: st.skills[w.idx].id, v: w.from }), nodeOf(st.skills[w.idx]), false)})`);
-      else p(`wish: ${nodeOf(st.skills[w.idx]).name} got${markText(w.mark)}`);
+      else p(`wish: ${nodeOf(st.skills[w.idx]).name} got${markText(w.mark)} · at most 3 marks a run (${R.WISH_MARKS_MAX} from wishes)`);
     } else if (cmd === 'chance') R.chooseLastChance(st, args[0] as R.LastChanceOption);
     else if (cmd === 'mark') R.applyMark(st, n(args[0]));
     else if (cmd === 'fight') {

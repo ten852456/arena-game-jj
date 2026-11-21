@@ -1,7 +1,7 @@
 import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultPieces } from './heroes';
 import { rollBonuses } from './links';
-import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer, skillLinesOf } from './relics';
+import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
@@ -153,6 +153,7 @@ export const slotPrice = (s: RunState) => 4 + 2 * s.slotBuys;
 /** Buy +1 skill slot for the rest of the run. */
 export function buySlot(s: RunState): string | null {
   if (slotsOf(s) >= MAX_SLOTS) return 'ช่อง skill เต็มแล้ว';
+  if (s.skills.length < slotsOf(s)) return 'ยังมีช่องว่าง';
   const price = slotPrice(s);
   if (s.gold < price) return 'เงินไม่พอ';
   s.gold -= price;
@@ -200,7 +201,7 @@ export function beginDay(s: RunState) {
     s.relicDays = [...(s.relicDays ?? []), s.day];
     // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
     const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
-    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], skillLinesOf(s.skills.slice(0, slotsOf(s)), (id) => SKILLS[id]?.line));
+    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
     delete s.relicNext;
     if (s.relicOffer.length) s.phase = 'relic';
   }
