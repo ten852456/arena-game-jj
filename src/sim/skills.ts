@@ -291,7 +291,7 @@ const BASE_LIST: SkillDef[] = [
   def('strike', 'hit', {
     '': N('ฟัน', 4.3, [hit(5)]),
     a: N('ฟันหนัก', 5, [hit(9)], 'ตีหนัก'),
-    a1: N('ฟันทะลวง', 5, [hit(14, { pierce: 1 })]),
+    a1: N('ฟันทะลวง', 5, [hit(15, { pierce: 0.6 })]),
     a2: N('ฟันประหาร', 5, [hit(13, { exec: [0.5, 1.6] })]),
     b: N('ฟันคู่', 4, [hit(4, { times: 2 })], 'ตีหลายครั้ง'),
     b1: N('ฟันพายุ', 4, [hit(4, { times: 3 })]),
@@ -382,13 +382,13 @@ const BASE_LIST: SkillDef[] = [
   // ======================= ❤ heal =======================
   // core: heal + grow
   def('feast', 'heal', {
-    '': N('กินฟื้นแรง', 5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
-    a: N('กินอิ่ม', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
-    a1: N('งานเลี้ยง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
-    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
-    b: N('กินโต', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
-    b1: N('กินไม่หยุด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 5 }, { k: 'grow', n: 2 }, hit(4)]),
-    b2: N('กินเลือด', 5.5, [{ k: 'cleanse', n: 1, dot: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
+    '': N('กินฟื้นแรง', 5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 1 }, hit(2)]),
+    a: N('กินอิ่ม', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, hit(2)], 'อยู่รอด'),
+    a1: N('งานเลี้ยง', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 8 }, { k: 'grow', n: 1 }, hit(3)]),
+    a2: N('กินแล้วแกร่ง', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 6 }, { k: 'grow', n: 1 }, { k: 'shield', n: 4 }, hit(3)]),
+    b: N('กินโต', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, hit(2)], 'โตเร็ว'),
+    b1: N('กินไม่หยุด', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 5 }, { k: 'grow', n: 2 }, hit(4)]),
+    b2: N('กินเลือด', 5.5, [{ k: 'cleanse', n: 1, dot: true, lineAll: true }, { k: 'heal', n: 4 }, { k: 'grow', n: 2 }, { k: 'leech', pct: 0.5 }, hit(3)]),
   }),
   // payoff: the longer it lasts, the harder it hits
   def('train', 'heal', {
@@ -516,10 +516,10 @@ const BASE_LIST: SkillDef[] = [
   }),
   // payoff: speed yourself up and blow debuffs away
   def('tailwind', 'wind', {
-    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 1, dot: true, lineAll: true }, hit(3)]),
-    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 1, dot: true, lineAll: true }, hit(4)], 'ล้างดีบัฟ'),
-    a1: N('พายุหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 4 }, { k: 'cleanse', n: 2, dot: true, lineAll: true }, hit(5)]),
-    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 2, dot: true, lineAll: true }, { k: 'heal', n: 4 }, hit(4)]),
+    '': N('ลมส่ง', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 1, dot: true }, hit(3)]),
+    a: N('ลมหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 3 }, { k: 'cleanse', n: 1, dot: true }, hit(4)], 'ล้างดีบัฟ'),
+    a1: N('พายุหมุน', 6, [{ k: 'haste', pct: 0.4, secs: 4 }, { k: 'cleanse', n: 2, dot: true }, hit(5)]),
+    a2: N('ลมชำระ', 6, [{ k: 'haste', pct: 0.3, secs: 3 }, { k: 'cleanse', n: 2, dot: true }, { k: 'heal', n: 4 }, hit(4)]),
     b: N('ลมกรด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(3, { times: 2 })], 'เร็ว'),
     b1: N('ลมพายุ', 4.5, [{ k: 'haste', pct: 0.4, secs: 3 }, hit(3, { times: 2 })]),
     b2: N('ลมบาด', 5, [{ k: 'haste', pct: 0.3, secs: 3 }, hit(4, { times: 2 }), { k: 'slow', pct: 0.2, secs: 2 }]),

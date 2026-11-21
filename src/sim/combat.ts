@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 15;
+export const SIM_VERSION = 16;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -588,7 +588,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           emit({ type: 'status', side: foe.side, status: 'evade', value: foe.dodge });
           foe.hooks.onDodge?.(hookApi(foe));
           // a dodge is a graze, not a wall: a share of the hit still lands (no riders, no thorns, no leech)
-          const graze = Math.round(dmg * T['dodge.graze']);
+          // sim v16: a slowed enemy dodges the wind badly (จอมเวทลม: more of the hit still lands)
+          const graze = Math.round(dmg * (f.hero === 'chrono' && foe.slowT > 0 ? T['chrono.graze'] : T['dodge.graze']));
           if (graze > 0) deal(foe, graze, 1 - (o.pierce ?? 0), inst.id, blk.idx);
           return -1;
         }

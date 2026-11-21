@@ -204,7 +204,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
   chrono: {
     name: 'Wind Mage',
     get passive() {
-      return `${hpPlus('chrono')}your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal 10% more`;
+      return `${hpPlus('chrono')}your slows are +10% stronger and last 1s longer · hits on slowed or frozen enemies deal ${Math.round(T['chrono.slowHit'] * 100)}% more · a slowed enemy dodges badly (${Math.round(T['chrono.graze'] * 100)}% of a dodged hit still lands instead of ${Math.round(T['dodge.graze'] * 100)}%)`;
     },
     style: 'Wind of time: slow the enemy, push their cooldowns back, speed yourself up and blow burn/poison away',
     ult: {

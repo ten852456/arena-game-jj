@@ -79,7 +79,7 @@ function simpleEffect(e: Effect): string {
       return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
         (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
     case 'cleanse':
-      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`ล้างไฟ/พิษ ${e.n} กอง${e.lineAll ? ' (สายตัวเอง: ล้างหมด)' : ''}`, `−${e.n} burn/poison${e.lineAll ? ' (your line: all)' : ''}`);
+      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : (e.lineAll ? L(`ล้างไฟ/พิษ ${e.n}–ทั้งหมด`, `−${e.n}–all burn/poison`) : L(`ล้างไฟ/พิษ ${e.n} กอง`, `−${e.n} burn/poison`));
       return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
     case 'dispel':
       return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +

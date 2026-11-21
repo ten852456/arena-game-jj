@@ -274,7 +274,7 @@ export const HEROES: HeroDef[] = [
   // ---------------- 🌪 wind ----------------
   {
     id: 'chrono', day1: ['timewarp', 'chill', 'tailwind', 'dispel', 'strike'], name: 'จอมเวทลม', line: 'wind', unique: 'timewarp',
-    passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น ${pc(T['chrono.slowHit'])}%`,
+    passive: `${hpTxt('chrono')}ความช้าที่คุณใส่แรงขึ้น +10% และนานขึ้น 1 วิ · ตีศัตรูที่ช้าหรือถูกแช่แข็งอยู่แรงขึ้น ${pc(T['chrono.slowHit'])}% · ศัตรูที่ช้าหลบได้ไม่เต็ม (โดน ${pc(T['chrono.graze'])}% แทน ${pc(T['dodge.graze'])}%)`,
     style: 'ลมพัดเวลา: ทำให้ศัตรูช้า ดึงคูลดาวน์ถอยหลัง เร่งตัวเอง และพัดไฟ/พิษทิ้ง',
     hooks: {
       maxHp: hpOf('chrono'),

@@ -23,9 +23,9 @@ export const TUNING = {
   /** days 1–3 */
   'hp.early': 1.07,
   /** days 4–7 */
-  'hp.mid': 1.18,
+  'hp.mid': 1.4,
   /** day 8+ */
-  'hp.late': 1.35,
+  'hp.late': 1.6,
   // ---- combat rules (numbers only) ----
   /** each trigger-chain step after the first fires ×this */
   'chainDecay': 0.75,
@@ -37,7 +37,7 @@ export const TUNING = {
   'line.hit.lv1': 0.75,
   'line.hit.lv3': 1.45,
   'line.dodge.lv1': 0.75,
-  'line.dodge.lv3': 1.55,
+  'line.dodge.lv3': 1.8,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
   'line.heal.lv1': 1.25,
@@ -46,12 +46,12 @@ export const TUNING = {
   'line.burn.lv3': 0.7,
   'line.poison.lv1': 1.35,
   'line.poison.lv3': 0.8,
-  'line.ice.lv1': 1.28,
-  'line.ice.lv3': 1.55,
+  'line.ice.lv1': 1.22,
+  'line.ice.lv3': 1.7,
   'line.wind.lv1': 1.3,
   'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
-  'uniq.knight.lv1': 0.72,
+  'uniq.knight.lv1': 0.65,
   'uniq.knight.lv3': 0.8,
   'uniq.thornguard.lv1': 1.2,
   'uniq.thornguard.lv3': 1.8,
@@ -59,7 +59,7 @@ export const TUNING = {
   'uniq.assassin.lv3': 1.6,
   'uniq.duelist.lv1': 0.95,
   'uniq.duelist.lv3': 1.55,
-  'uniq.berserker.lv1': 1.65,
+  'uniq.berserker.lv1': 1.5,
   'uniq.berserker.lv3': 1.25,
   'uniq.pyro.lv1': 1.3,
   'uniq.pyro.lv3': 1,
@@ -77,17 +77,17 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.2,
-  'hp.thornguard': 1.34,
+  'hp.knight': 1.15,
+  'hp.thornguard': 1.28,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
   'hp.berserker': 1.16,
   'hp.pyro': 1.45,
-  'hp.witch': 1.45,
+  'hp.witch': 1.52,
   'hp.chrono': 1.32,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
-  'knight.shield': 0.16,
+  'knight.shield': 0.12,
   /** นักฆ่า: the first hit of the fight × this */
   'assassin.first': 1.5,
   /** นักฆ่า: every this-many-th hit is ×assassin.first too (0 = only the first hit) */
@@ -115,16 +115,18 @@ export const TUNING = {
   'dodge.cap': 1,
   /** share of a dodged hit that still lands (its riders, thorns and leech don't) */
   'dodge.graze': 0.25,
+  /** จอมเวทลม: share of a dodged hit that still lands when the enemy is slowed */
+  'chrono.graze': 0.6,
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
   /** sim v16: พลัง from a skill outside your hero's line is this share (a generic grow pile out-scaled every line) */
-  'grow.offline': 0.7,
+  'grow.offline': 0.5,
   /** sim v16: a Lv3 skill of your hero's line is this much stronger again (mastery grows with the line) */
   'line.lv3': 1.25,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
-  'shield.guard': 0.3,
+  'shield.guard': 0.4,
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
   'aff.assassin': 1.3,
   'aff.duelist': 1.4,
@@ -160,15 +162,15 @@ export const TUNING = {
   /** อัศวิน: shield gained, share of max HP */
   'ult.knight.trig': 0.05,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 1.4,
+  'ult.knight.pow': 0.8,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
-  'ult.berserker.pow': 0.15,
+  'ult.berserker.pow': 0.08,
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,
   /** นักเวทเพลิง: deals the burn still to come × this right away */
-  'ult.pyro.pow': 0.35,
+  'ult.pyro.pow': 0.27,
   /** นักรบหนาม: direct hits taken */
   'ult.thornguard.trig': 6,
   /** นักรบหนาม: seconds of poison thorns */
