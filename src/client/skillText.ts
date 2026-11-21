@@ -6,7 +6,7 @@
  * Pure text in the current language (L from i18n.ts): no DOM, so scripts/skilltext-check.ts can test every skill.
  */
 import { L } from '../i18n';
-import { cdTicks, CTL_MIN_T, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
+import { cdTicks, CLEANSE_MAX, CTL_MIN_T, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, bonusValue } from '../sim/links';
 import { LINE_NAME, SKILLS, nodeOf, type Effect, type SkillNode } from '../sim/skills';
 import { T } from '../sim/tuning';
@@ -79,7 +79,7 @@ function simpleEffect(e: Effect): string {
       return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
         (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
     case 'cleanse':
-      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : (e.lineAll ? L(`ล้างไฟ/พิษ ${e.n}–ทั้งหมด`, `−${e.n}–all burn/poison`) : L(`ล้างไฟ/พิษ ${e.n} กอง`, `−${e.n} burn/poison`));
+      if (e.dot) return e.n >= 99 ? L(`พัดไฟ/พิษทิ้ง ${CLEANSE_MAX} กอง`, `Blows away ${CLEANSE_MAX} burn/poison`) : (e.lineAll ? L(`ล้างไฟ/พิษ ${e.n}–${CLEANSE_MAX}`, `−${e.n}–${CLEANSE_MAX} burn/poison`) : L(`ล้างไฟ/พิษ ${e.n} กอง`, `−${e.n} burn/poison`));
       return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
     case 'dispel':
       return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +
@@ -187,8 +187,8 @@ function effectDetail(e: Effect): string {
       );
     case 'cleanse':
       return e.dot
-        ? L(`✨ ลบไฟ/พิษ ${e.n >= 99 ? 'ทุก' : e.n} กอง (ไม่ลบการแช่แข็ง ไม่ทำงานตอนโดนคุม)`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn/poison stack(s) (not freeze; does not react to control)`)
-        : L(`✨ ลบไฟ/พิษ ${e.n >= 99 ? 'ทุก' : e.n} กอง + ความช้า + แช่แข็ง + แผลลึก`, `✨ removes ${e.n >= 99 ? 'all' : e.n} burn/poison stack(s) + slow + freeze + wound`);
+        ? L(`✨ ลบไฟ/พิษ ${Math.min(e.n, CLEANSE_MAX)} กอง (ไม่ลบการแช่แข็ง ไม่ทำงานตอนโดนคุม)`, `✨ removes ${Math.min(e.n, CLEANSE_MAX)} burn/poison stack(s) (not freeze; does not react to control)`)
+        : L(`✨ ลบไฟ/พิษ ${Math.min(e.n, CLEANSE_MAX)} กอง + ความช้า + แช่แข็ง + แผลลึก`, `✨ removes ${Math.min(e.n, CLEANSE_MAX)} burn/poison stack(s) + slow + freeze + wound`);
     case 'dispel':
       return L(
         `💥 ลบบัฟศัตรูอย่างละ ${e.n >= 99 ? 'ทั้งหมด' : e.n} + โล่ ${pct(e.shield ?? 0.2)}${e.steal ? ' · ได้พลังที่ลบมา' : ''}`,

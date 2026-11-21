@@ -1,5 +1,5 @@
 import { randomAiBuild } from '../sim/bot';
-import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
+import { SIM_VERSION, cdTicks, simulate, starPower } from '../sim/combat';
 import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../sim/heroes';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
 import { explainView } from './explainView';
@@ -184,10 +184,10 @@ function rarityTag(k: { id: string; v: string } | null) {
 }
 /** "★★" after a Lv3 skill's name (sim v17) */
 const starTag = (n = 0) =>
-  n > 0 ? ` <span class="mark star-tag" title="${esc(L(`★ ${n}: ตัวเลขทุกตัว +${Math.round(T['star.pow'] * 100 * n)}%${n >= 3 ? ` และทุกครั้งที่ใช้ ทำซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★ ${n}: every number +${Math.round(T['star.pow'] * 100 * n)}%${n >= 3 ? ` and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}">${'★'.repeat(n)}</span>` : '';
+  n > 0 ? ` <span class="mark star-tag" title="${esc(L(`★ ${n}: ตัวเลขทุกตัว +${Math.round((starPower(n) - 1) * 100)}%${n >= 3 ? ` และทุกครั้งที่ใช้ ทำซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★ ${n}: every number +${Math.round((starPower(n) - 1) * 100)}%${n >= 3 ? ` and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}">${'★'.repeat(n)}</span>` : '';
 /** what one more star gives, as a diff line */
 const starDiff = (n: number) =>
-  `<div class="up-diff"><span class="better">${esc(L(`★${n}: ตัวเลขทุกตัว +${Math.round(T['star.pow'] * 100)}%${n >= 3 ? ` · ★★★ ใช้ซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★${n}: every number +${Math.round(T['star.pow'] * 100)}%${n >= 3 ? ` · ★★★ repeats every cast at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}</span></div>`;
+  `<div class="up-diff"><span class="better">${esc(L(`★${n}: ตัวเลขทุกตัว +${Math.round((n >= 3 ? T['star.pow3'] : T['star.pow']) * 100)}%${n >= 3 ? ` · ★★★ ใช้ซ้ำอีกครั้งที่แรง ${Math.round(T['star.echo'] * 100)}%` : ''}`, `★${n}: every number +${Math.round((n >= 3 ? T['star.pow3'] : T['star.pow']) * 100)}%${n >= 3 ? ` · ★★★ repeats every cast at ${Math.round(T['star.echo'] * 100)}%` : ''}`))}</span></div>`;
 /** relics of the run as small chips with their text in the tooltip */
 function relicsHTML(ids: string[] = []) {
   if (!ids.length) return '';
@@ -871,7 +871,7 @@ function renderShop() {
 
   <div class="sv-fight">
     <span class="pill gold"><small>${L('เงินเหลือ', 'Gold left')}</small> ${COIN_I}<b class="gold-n">${r.gold}</b></span>
-    <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ ${L('สู้วันที่', 'Fight day')} ${r.day} <small>${L('แพ้เสียเลือด', 'a loss costs')} ${R.damageFor(r.day)}${L('', ' HP')}</small>${r.skills.length < R.slotsOf(r) && !(r.relics ?? []).includes('lonewolf') ? `<small class="warn-empty">${L(`ช่อง skill ว่าง ${R.slotsOf(r) - r.skills.length} ช่อง`, `${R.slotsOf(r) - r.skills.length} empty skill slot(s)`)}</small>` : ''}${R.slotsFor(r.day) > R.slotsFor(r.day - 1) && r.day > 1 ? `<small class="slot-up">${L('วันนี้ได้ช่อง skill +1', 'New today: +1 skill slot')}</small>` : ''}</button>
+    <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ ${L('สู้วันที่', 'Fight day')} ${r.day} <small>${L('แพ้เสียเลือด', 'a loss costs')} ${R.damageFor(r.day)}${L('', ' HP')}</small>${r.skills.length < R.slotsOf(r) && !(r.relics ?? []).includes('lonewolf') ? `<small class="warn-empty">${L(`ช่อง skill ว่าง ${R.slotsOf(r) - r.skills.length} ช่อง`, `${R.slotsOf(r) - r.skills.length} empty skill slot(s)`)}${r.gold >= 3 ? L(` · ยังมีเงิน ${r.gold}`, ` · ${r.gold} gold left`) : ''}</small>` : ''}${R.slotsFor(r.day) > R.slotsFor(r.day - 1) && r.day > 1 ? `<small class="slot-up">${L('วันนี้ได้ช่อง skill +1', 'New today: +1 skill slot')}</small>` : ''}</button>
     <button class="ghost" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
   </div>
   </div>`;

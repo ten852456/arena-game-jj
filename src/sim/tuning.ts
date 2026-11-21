@@ -52,21 +52,21 @@ export const TUNING = {
   'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.65,
-  'uniq.knight.lv3': 1.0,
+  'uniq.knight.lv3': 1.15,
   'uniq.thornguard.lv1': 1.15,
   'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.8,
   'uniq.assassin.lv3': 1.6,
   'uniq.duelist.lv1': 1.05,
   'uniq.duelist.lv3': 1.4,
-  'uniq.berserker.lv1': 1.35,
-  'uniq.berserker.lv3': 1.25,
+  'uniq.berserker.lv1': 1.5,
+  'uniq.berserker.lv3': 1.1,
   'uniq.pyro.lv1': 0.95,
   'uniq.pyro.lv3': 1,
   'uniq.witch.lv1': 1.15,
   'uniq.witch.lv3': 1.3,
   'uniq.chrono.lv1': 1.3,
-  'uniq.chrono.lv3': 1.35,
+  'uniq.chrono.lv3': 1.25,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
   'cd.knight': 1,
   'cd.thornguard': 1.1,
@@ -125,11 +125,13 @@ export const TUNING = {
   'line.lv3': 1.25,
   // ---- stars after Lv3 (sim v17, run.ts / combat.ts) ----
   /** each ★ on a Lv3 skill: all its numbers ×(1 + this) */
-  'star.pow': 0.12,
+  'star.pow': 0.08,
   /** ★★★ also cuts the skill's cooldown by this share */
   'star.cd3': 0,
+  /** ★★★ adds this much more on top of ★★ (sim v20: the spike) */
+  'star.pow3': 0.12,
   /** ★★★ signature: each cast echoes once more at this power */
-  'star.echo': 0.12,
+  'star.echo': 0.18,
   // ---- run relics (sim v17, relics.ts) ----
   'relic.whetstone': 0.12,
   'relic.executioner': 0.35,
@@ -155,7 +157,7 @@ export const TUNING = {
   /** ปืนแก้ว: its extra damage on one hit is at most this share of the enemy's max HP */
   'relic.glassCap': 0.08,
   'relic.glassDmg': 0.45,
-  'relic.lonewolf': 1.1,
+  'relic.lonewolf': 0.5,
   'relic.sigil': 0.25,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
@@ -203,7 +205,7 @@ export const TUNING = {
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
   /** นักรบคลั่ง ult: +power for the rest of the fight = this share of max HP (×1.5 at Lv2), at least 2 */
-  'ult.berserker.grow': 0.012,
+  'ult.berserker.grow': 0.009,
   'ult.berserker.pow': 0.08,
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,

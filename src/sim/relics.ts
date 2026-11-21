@@ -132,17 +132,18 @@ export function buildEffects(skills: { id: string; v: string }[]) {
 /** does this relic fit what the build actually does (its NEEDS met by the skills' effects; conditional ones by their setup)? */
 export function relicFitsBuild(id: string, skills: { id: string; v: string; mark?: string }[]) {
   if (id === 'sigil') return skills.filter((k) => k.mark).length >= 2;
-  if (id === 'lonewolf') return skills.length <= 3;
+  // sim v20: lone wolf never counts as fitting (day-4 builds all had ≤ 3 skills, so it took the guaranteed place)
+  if (id === 'lonewolf') return false;
   const need = NEEDS[id];
   if (!need) return false;
-  const fx = buildEffects(skills);
-  return need.some((x) => fx.has(x));
+  // sim v20: at least 2 skills that do what it needs (one heal skill made สมุนไพร "fit" a knight)
+  return skills.filter((k) => { const fx = buildEffects([k]); return need.some((x) => fx.has(x)); }).length >= 2;
 }
 /** what a risky relic needs, in words (shown on its card) */
 export const relicHint = (id: string, th = true): string =>
   ({
     sigil: th ? 'ต้องมีตราอย่างน้อย 2 อัน (โอกาสสุดท้าย / พรจันทร์)' : 'needs 2+ marks (last chance / moon wishes)',
-    lonewolf: th ? 'ต้องมี skill ไม่เกิน 3 ตัว' : 'needs 3 skills or fewer',
+    lonewolf: th ? 'มี skill ได้สูงสุด 3 ตัว: ปิดทางท่าไม้ตาย Lv2 (ต้องมีสกิลสาย 4 ตัว)' : 'max 3 skills: blocks ult Lv2 (it needs 4 line skills)',
     glasscannon: th ? 'เสี่ยง: ต้องมีโล่/ฟื้นเลือดมากพอ' : 'risky: needs plenty of shield / healing',
   })[id] ?? '';
 /** the lines (not 'none') a build owns skills of: what a relic offer and its "fits" label look at */
@@ -163,7 +164,8 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   const line = HEROES_BY_ID[hero]?.line;
   // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line
   const fits = (id: string) => (skills.length ? relicFitsBuild(id, skills) : relicFits(id, line));
-  const pool = RELICS.filter((r) => !owned.includes(r.id));
+  // lone wolf only from day 7 (sim v20)
+  const pool = RELICS.filter((r) => !owned.includes(r.id) && (r.id !== 'lonewolf' || day >= 7));
   const out: string[] = [];
   // always at least one that fits the build (sim v18: a line it owns skills of, not only the hero's nominal line);
   // the hero's own line is weighted ×LINE_W in the rest
@@ -172,7 +174,7 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
     // the hero's line weighted ×LINE_W; risky relics ×1.5 (sim v19: lone wolf showed in 26% of runs, sigil never)
-    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : r.group === 'cheese' ? 1.5 : 1));
+    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : 1));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;

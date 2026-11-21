@@ -12,7 +12,7 @@ import { randomInt } from 'node:crypto';
 import { detailLines, simpleBonus, simpleText } from '../src/client/skillText';
 import { aiBuild, lossDrop, type BotTier } from '../src/sim/bot';
 import { LINES } from '../src/sim/types';
-import { simulate } from '../src/sim/combat';
+import { simulate, starPower } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
 import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../src/sim/heroes';
 import { T } from '../src/sim/tuning';
@@ -76,7 +76,7 @@ function ultText(hero: string, lv: number) {
   return `${u.name}: when ${at(u.trigger)} → ${at(u.effect)}`;
 }
 
-const starText = (n?: number) => (n ? ` ${'★'.repeat(n)} (+${Math.round(T['star.pow'] * 100 * n)}% numbers${n >= 3 ? `, every cast repeats at ${Math.round(T['star.echo'] * 100)}%` : ''})` : '');
+const starText = (n?: number) => (n ? ` ${'★'.repeat(n)} (+${Math.round((starPower(n) - 1) * 100)}% numbers${n >= 3 ? `, every cast repeats at ${Math.round(T['star.echo'] * 100)}%` : ''})` : '');
 function describeBuild(b: Build, title: string) {
   p(`${title}: ${HEROES_BY_ID[b.hero].name} (${b.hero}, line ${heroLine(b.hero)})${b.relics?.length ? ` · relics: ${b.relics.map((r) => relicText(r, false)).join(' | ')}` : ''}`);
   b.skills.forEach((k, i) => p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${starText(k.star)}${markText(k.mark)} ${simpleText(k)}`));
@@ -103,7 +103,7 @@ function show(s: R.RunState) {
     p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${starText(k.star)}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
-    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g, next one ${R.slotPrice(s) + 2}g`} · wish ${R.wishKind(s) ? `${R.wishPrice(s)}g` : 'not available'} = ${R.wishKind(s) === 'mark' ? `once every skill is Lv3: carves a RANDOM mark into a random unmarked skill (${R.WISH_MARKS_MAX - (s.wishMarks ?? 0)} of ${R.WISH_MARKS_MAX} mark wishes left this run)` : 'upgrades a RANDOM skill of yours below Lv3 to a random next branch'}; each wish today costs +2g more):`);
+    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotsOf(s) >= R.MAX_SLOTS ? `FULL (${R.MAX_SLOTS}/${R.MAX_SLOTS})` : `${R.slotPrice(s)}g, next one ${R.slotPrice(s) + 2}g`} · wish ${!R.wishKind(s) ? 'not available now (it gives a mark only once every skill is Lv3, at most 2 a run)' : `${R.wishPrice(s)}g = ${R.wishKind(s) === 'mark' ? `once every skill is Lv3: carves a RANDOM mark into a random unmarked skill (${R.WISH_MARKS_MAX - (s.wishMarks ?? 0)} of ${R.WISH_MARKS_MAX} mark wishes left this run)` : 'upgrades a RANDOM skill of yours below Lv3 to a random next branch'}; each wish today costs +2g more`}):`);
     s.shop.forEach((o, i) => {
       if (!o) return p(`   ${i}. (sold)`);
       const up = R.upgradeOf(s, o);
@@ -113,7 +113,7 @@ function show(s: R.RunState) {
       const tag = g.pieces ? ` ★ ${o.v ? 'Lv3 toward ult Lv2' : '+1 ult piece'}${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
       const choices = R.offerChoices(s, o);
       if (up && o.star) {
-        p(`   ${i}. STAR ★${o.star} for ${nodeOf(up).name} [${o.id} Lv3] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}\n        change: all numbers +${Math.round(T['star.pow'] * 100)}%${o.star >= 3 ? `, and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`);
+        p(`   ${i}. STAR ★${o.star} for ${nodeOf(up).name} [${o.id} Lv3] ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}\n        change: all numbers +${Math.round((o.star >= 3 ? T['star.pow3'] : T['star.pow']) * 100)}%${o.star >= 3 ? `, and every cast repeats once at ${Math.round(T['star.echo'] * 100)}%` : ''}`);
         return;
       }
       if (up && choices.length > 1) {
@@ -234,6 +234,12 @@ switch (cmd) {
       ex.moments.forEach((m) => p(` moment: ${m.title} — ${m.text}`));
       p(' timeline (casts + special events ★):');
       fightSummary(r.events, ['You', 'Enemy'], [me, opp]).slice(0, 140).forEach((l) => p(l));
+      // burn / poison ticks are not listed one by one: a total per side
+      for (const side of [0, 1] as const) {
+        const dot = (src: string) => r.events.filter((e) => e.type === 'damage' && e.side === side && e.src === src).reduce((a, e) => a + (e as { amount: number }).amount, 0);
+        const b = dot('burn'), q = dot('poison');
+        if (b || q) p(` ticks: ${side === 0 ? 'You' : 'Enemy'} took ${b} burn and ${q} poison damage over the fight`);
+      }
       save.history.push(`D${st.day} ${won ? 'W' : 'L'} vs ${opp.hero} ${(r.ticks / 10).toFixed(1)}s`);
       R.recordResult(st, won, { opp: 'bot', ai: true }, r.winner === -1);
     } else fail('unknown command ' + cmd);

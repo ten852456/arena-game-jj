@@ -336,8 +336,8 @@ export function ultProgressText(b: Pick<Build, 'hero' | 'skills'>, th = true) {
   if (lv >= 2) return th ? 'ท่าไม้ตาย Lv2 ✓ (เต็ม)' : 'Ult Lv2 ✓ (max)';
   if (lv === 1)
     return th
-      ? `ท่าไม้ตาย Lv1 ✓ · Lv2 ต้องมี: สกิลสาย ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} ตัว และสกิลสาย Lv3 ${l3}/${ULT_LV2_LV3} ตัว`
-      : `Ult Lv1 ✓ · Lv2 needs: line skills ${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} and line skills at Lv3 ${l3}/${ULT_LV2_LV3}`;
+      ? `ท่าไม้ตาย Lv1 ✓ · Lv2: สกิลสาย ${ULT_PIECES[1]} ตัว, Lv3 ${ULT_LV2_LV3} ตัว (ตอนนี้ ${Math.min(p, ULT_PIECES[1])} · ${l3})`
+      : `Ult Lv1 ✓ · Lv2: ${ULT_PIECES[1]} line skills, ${ULT_LV2_LV3} at Lv3 (now ${Math.min(p, ULT_PIECES[1])} · ${l3})`;
   return th ? `ท่าไม้ตาย Lv1: สกิลสาย ${p}/${ULT_PIECES[0]}` : `Ult Lv1: line skills ${p}/${ULT_PIECES[0]}`;
 }
 /** the rule in one line */

@@ -416,7 +416,7 @@ const BASE_LIST: SkillDef[] = [
     '': N('จุดไฟ', 5, [{ k: 'burn', dps: 2, secs: 4 }]),
     a: N('ไฟลุก', 5.5, [{ k: 'burn', dps: 3, secs: 6 }], 'ไฟแรง'),
     a1: N('ไฟนรก', 5.5, [{ k: 'burn', dps: 6, secs: 6 }]),
-    a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 4, secs: 6, growthHalf: true }]),
+    a2: N('ไฟโหม', 5.5, [{ k: 'burn', dps: 5, secs: 6, growthHalf: true }]),
     b: N('ไฟยาว', 5.5, [{ k: 'burn', dps: 2, secs: 10 }], 'ไฟนาน'),
     b1: N('ไฟไม่ดับ', 5.5, [{ k: 'burn', dps: 3, secs: 14 }]),
     b2: N('ไฟเย็น', 5.5, [{ k: 'burn', dps: 4, secs: 8 }, { k: 'slow', pct: 0.15, secs: 3 }]),
@@ -972,7 +972,7 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
       case 'charge': out.push({ kw: 'charge', text: `⚡×${e.mult}${e.hits && e.hits > 1 ? ` (${e.hits} ครั้ง)` : ''}` }); break;
       case 'thorns': out.push({ kw: 'thorns', text: `🌵${e.n}${e.perm ? ' ถาวร' : ''}${e.heal !== undefined ? ` ศัตรูฟื้น ${pct(e.heal)}` : ''}` }); break;
       case 'steadfast': out.push({ kw: 'steadfast', text: `🗿${e.keep !== undefined && e.keep !== 0.4 ? ` ${pct(1 - e.keep)}` : ''}${e.ignoreFreeze ? ' +กันแช่แข็ง 1 ครั้ง' : ''}` }); break;
-      case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}${e.lineAll ? ' (ถนัดสาย: ล้างได้ทั้งหมด)' : ''}` }); break;
+      case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨×4' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}${e.lineAll ? ' (ถนัดสาย: ล้างได้ 4)' : ''}` }); break;
       case 'dispel': out.push({ kw: 'dispel', text: `${e.n >= 99 ? '💥ทั้งหมด' : e.n > 1 ? `💥×${e.n}` : '💥'}${e.shield !== undefined ? ` โล่${pct(e.shield)}` : ''}${e.steal ? ' ขโมยพลัง' : ''}` }); break;
       case 'leech': out.push({ kw: 'leech', text: `🩸${pct(e.pct)} ครั้งถัดไป` }); break;
     }

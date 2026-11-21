@@ -37,6 +37,8 @@ export const STAR_DAY = 7;
 export const STAR_PRICES = [3, 4, 5];
 /** at most this many star cards in one shop roll (so they never crowd out line and ult cards) */
 export const STAR_PER_ROLL = 1;
+/** from this day the shop leans to upgrades and stars of owned skills */
+export const LATE_DAY = 9;
 export const canStar = (k: SkillInstance, day: number) => lvOf(k.v) >= MAX_LV && (k.star ?? 0) < STAR_MAX && day >= STAR_DAY;
 
 /**
@@ -93,7 +95,7 @@ export interface LogEntry {
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
-export const RUN_VERSION = 12;
+export const RUN_VERSION = 13;
 
 export interface RunState {
   v: typeof RUN_VERSION;
@@ -263,7 +265,9 @@ function rollShop(s: RunState) {
   const ups = s.skills.filter((k) => canUpgrade(k.v, s.day) && !keptIds.has(k.id)).map((k) => k.id);
   // star cards (sim v17): Lv3 skills below ★★★, at most STAR_PER_ROLL per roll, and only in a share of rolls
   const starIds = s.skills.filter((k) => canStar(k, s.day) && !keptIds.has(k.id)).map((k) => k.id);
-  let stars = starIds.length && rng.next() < (ups.length ? 0.5 : 0.8) ? STAR_PER_ROLL : 0;
+  // late shops (sim v20): from day LATE_DAY more upgrade and star cards of what you own, fewer Lv1 fillers
+  const late = s.day >= LATE_DAY;
+  let stars = starIds.length && rng.next() < (late ? 0.9 : ups.length ? 0.5 : 0.8) ? STAR_PER_ROLL + (late ? 1 : 0) : 0;
   const picks: Offer[] = [];
   const need = SHOP_SIZE - keptIds.size;
   const line = HEROES_BY_ID[s.hero]?.line;
@@ -309,7 +313,7 @@ function rollShop(s: RunState) {
       stars--;
       continue;
     }
-    const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < 0.5);
+    const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < (late ? 0.75 : 0.5));
     if (!takeUp && !fresh.length) break;
     if (takeUp) {
       const id = ups.splice(rng.int(ups.length), 1)[0];

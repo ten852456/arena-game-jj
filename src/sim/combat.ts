@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 19;
+export const SIM_VERSION = 20;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -80,11 +80,13 @@ export const QUICK_MARK = 0.75;
 export const SIGIL_MAX = 2;
 /** sim v18: a skill of the hero's line fires its first cast at most this many ticks into the fight (slow lines start sooner) */
 export const FIRST_CAST = 3.5 * TPS;
-export const FIRST_CAST_STEP = 0.5 * TPS;
-export const FIRST_CAST_MAX = 5 * TPS;
+export const FIRST_CAST_STEP = 1 * TPS;
+export const FIRST_CAST_MAX = 6.5 * TPS;
+/** a cleanse removes at most this many burn / poison stacks per cast */
+export const CLEANSE_MAX = 4;
 /** no ultimate fires before this tick */
 export const ULT_MIN_T = 6 * TPS;
-export const FIRST_CAST_DAYS = 5;
+export const FIRST_CAST_DAYS = 7;
 /** damage sources a spiked shield does not reflect */
 const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
@@ -237,7 +239,11 @@ export const affinityOf = (hero: string, id: string, v = '') =>
 export const dodgeCap = (hero: string, relics: readonly string[] = []) =>
   T['dodge.cap'] + (HEROES_BY_ID[hero]?.line === 'dodge' ? 1 : 0) + (relics.includes('featherstep') ? 1 : 0);
 /** ★ on a Lv3 skill: its numbers ×(1 + star.pow) per star */
-export const starPower = (star = 0) => 1 + T['star.pow'] * Math.max(0, Math.min(3, star));
+export const starPower = (star = 0) => {
+  const n = Math.max(0, Math.min(3, star));
+  // sim v20: ★ and ★★ are small (+8% each), ★★★ is the spike (+12% more, and the echo)
+  return 1 + T['star.pow'] * Math.min(2, n) + (n >= 3 ? T['star.pow3'] : 0);
+};
 /**
  * Power from the build's relics for one skill (sim v17): wanderer (off-line skills), twin line (the second line),
  * lone wolf (≤ 3 skills), sigil (marked skills).
@@ -835,8 +841,9 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         emit({ type: 'status', side: f.side, status: 'steadfast', value: 1 });
       },
       cleanse(stacks, dotOnly) {
-        // the strongest burn / poison stacks, then slow, freeze and wounds
-        let n = removeDots(f, stacks);
+        // the strongest burn / poison stacks, then slow, freeze and wounds (sim v20: at most CLEANSE_MAX stacks a cast,
+        // one feast cleansed 10 burns)
+        let n = removeDots(f, Math.min(stacks, CLEANSE_MAX));
         if (dotOnly) {
           emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
           return n;
@@ -934,7 +941,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
       runSkill(f, foe, blk, power * 0.5, Math.round(blk.dmg * q.mult * 0.5));
     }
-    if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1 + Math.floor(day / 3), 4, blk.idx);
+    // sim v20: only the skill's own casts (an engine or a trigger setting it off does not burn again)
+    if (inst.mark === 'burn' && foe.hp > 0 && q.from === undefined) addBurn(foe, 1 + Math.floor(day / 3), 4, blk.idx);
     // ★★★ signature (sim v18): every cast echoes once more at star.echo power
     if ((inst.star ?? 0) >= 3 && lvOf(inst.v) >= 3 && foe.hp > 0 && f.hp > 0) {
       // sim v19: a true share of the damage the cast dealt (no rounding up, no DoT / buff / cleanse repeat)
