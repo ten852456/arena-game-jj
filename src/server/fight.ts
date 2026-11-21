@@ -59,7 +59,11 @@ export function resolveMarks(
   const rec = recordOf(prev);
   const candidates: { build: unknown; revealed: { idx: number; mark: string }[] }[] = [];
   // ways that still have the free last-chance mark (their own ledger), then plain wish marks
-  for (const [key, L] of Object.entries(prev.ledger ?? {})) if (key.startsWith('mark:') && L.freeMarks < 1) candidates.push(fill(true, L.wishMarks));
+  // right after the death the mark way has no ledger of its own yet: spendCheck starts it from the shared 'none:0'
+  // one, so the free mark is tried from there too (otherwise the last chance's mark got a wish roll and was refused)
+  const markLedgers = Object.entries(prev.ledger ?? {}).filter(([key]) => key.startsWith('mark:')).map(([, L]) => L);
+  if (!markLedgers.length && prev.ledger?.['none:0']) markLedgers.push(prev.ledger['none:0']);
+  for (const L of markLedgers) if (L.freeMarks < 1) candidates.push(fill(true, L.wishMarks));
   const wishFroms = [...new Set(Object.values(prev.ledger ?? {}).map((L) => L.wishMarks).concat(prev.wishMarks ?? 0))];
   for (const w of wishFroms) candidates.push(fill(false, w));
   if (prev.ghost && !prev.ledger) candidates.unshift(fill(true, prev.wishMarks ?? 0));
