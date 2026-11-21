@@ -41,11 +41,14 @@ const GROUP_RING: Record<RelicGroup, string> = { ...LINE_COLORS, any: '#ffe3a3',
 export const groupLabel = (g: RelicGroup) =>
   g === 'any' ? `${GROUP_ICON.any} ${L('ทั่วไป', 'any build')}` : g === 'cheese' ? `${GROUP_ICON.cheese} ${L('เสี่ยง', 'risky')}` : `${GROUP_ICON[g]} ${LINE_NAME[g]}`;
 
-/** round medallion: the relic's glyph (or its painted art) in a ring of its group colour */
+/**
+ * round medallion: the relic's painted art, or until the pack lands its glyph drawn by CSS (::before from data-g, so the
+ * stand-in emoji is decoration only and never part of the page text) in a ring of its group colour
+ */
 export function relicMedal(id: string, size: 'sm' | 'md' | 'lg' = 'md') {
   const x = RELICS_BY_ID[id];
   const g = x?.group ?? 'any';
-  return `<span class="rlm rlm-${size}${g === 'cheese' ? ' rlm-risk' : ''}" style="--ring:${GROUP_RING[g]}" aria-hidden="true">${artOr(DEPTH_FILES.relic(id), `<span class="rlm-g">${x?.icon ?? '?'}</span>`, 'rlm-img')}</span>`;
+  return `<span class="rlm rlm-${size}${g === 'cheese' ? ' rlm-risk' : ''}" style="--ring:${GROUP_RING[g]}" aria-hidden="true">${artOr(DEPTH_FILES.relic(id), `<span class="rlm-g" data-g="${esc(x?.icon ?? '?')}"></span>`, 'rlm-img')}</span>`;
 }
 
 /**

@@ -141,7 +141,7 @@ function build(): Entry[] {
     const owner = d.hero ? HEROES_BY_ID[d.hero]?.name : '';
     add('skills', d.id,
       d.name,
-      `<p class="cx-skh"><img class="skill-icon" src="${skillIcon(d.id)}" alt="">${lineChip(d.line)}${SKILL_ROLE[d.id] ? ` <span class="cx-role">${esc(ROLE_NAME[SKILL_ROLE[d.id]])}</span>` : ''}${owner ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'unique')}: ${esc(owner)}</span>` : ''}</p><details class="cx-det"><summary>${L('ดูต้นไม้ทั้ง 7 ขั้น', 'See all 7 steps')}</summary>${tree}</details>`,
+      `<p class="cx-skh"><img class="skill-icon" src="${skillIcon(d.id)}" alt="">${lineChip(d.line)}${SKILL_ROLE[d.id] ? ` <span class="cx-role">${esc(ROLE_NAME[SKILL_ROLE[d.id]])}</span>` : ''}${owner ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'unique')}: ${esc(owner)}</span>` : ''}</p><p class="cx-lv1">Lv1: ${esc(simpleText({ id: d.id, v: '' }))}</p><details class="cx-det"><summary>${L('ดูต้นไม้ทั้ง 7 ขั้น', 'See all 7 steps')}</summary>${tree}</details>`,
       `${d.id} ${d.line} ${Object.values(d.tree).map((n) => n.name).join(' ')}`);
   }
 
@@ -283,6 +283,8 @@ export function openCodex(target = '') {
     document.body.appendChild($box);
   }
   lastFocus = document.activeElement as HTMLElement | null;
+  // out of the page while closed (it shares the .modal look with the game's other windows, which tests look for)
+  if (!$box.isConnected) document.body.appendChild($box);
   $box.hidden = false;
   document.body.classList.add('cx-on');
   frame();
@@ -297,12 +299,13 @@ export function openCodex(target = '') {
   ($box.querySelector<HTMLElement>('.cx-x'))?.focus({ preventScroll: true });
 }
 export function closeCodex() {
-  if (!$box || $box.hidden) return;
-  $box.hidden = true;
+  if (!codexOpen()) return;
+  $box!.hidden = true;
+  $box!.remove();
   document.body.classList.remove('cx-on');
   lastFocus?.focus?.({ preventScroll: true });
 }
-export const codexOpen = () => !!$box && !$box.hidden;
+export const codexOpen = () => !!$box && $box.isConnected && !$box.hidden;
 
 function onClick(ev: MouseEvent) {
   const t = ev.target as HTMLElement;

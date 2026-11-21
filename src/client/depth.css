@@ -19,6 +19,7 @@
   box-shadow: inset 0 -4px 0 rgba(58, 43, 72, 0.22), 0 3px 0 var(--ink-deep);
 }
 .rlm::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; border: 1.5px dashed rgba(58, 43, 72, 0.35); pointer-events: none; }
+.rlm-g::before { content: attr(data-g); }
 .rlm-g { font-size: calc(var(--sz) * 0.52); line-height: 1; filter: drop-shadow(0 2px 0 rgba(21, 14, 39, 0.35)); }
 .rlm-sm { --sz: 30px; border-width: 2.5px; box-shadow: inset 0 -3px 0 rgba(58, 43, 72, 0.2), 0 2px 0 var(--ink-deep); }
 .rlm-sm::after { inset: 2px; }
@@ -352,8 +353,14 @@ header .cx-open { background: var(--m-mint); white-space: nowrap; padding: 4px 1
 }
 @media (orientation: landscape) and (max-height: 500px) {
   .relic-shop { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-  .relic-card.rl-card { display: flex; text-align: center; padding: 14px 8px 8px; }
-  .relic-card.rl-card .rlm-lg { --sz: 44px; }
+  .relic-card.rl-card { display: flex; text-align: center; padding: 12px 6px 6px; gap: 3px; }
+  .relic-card.rl-card .rlm-lg { --sz: 38px; border-width: 2.5px; }
+  .rl-risk { width: calc(100% + 12px); margin: 2px -6px 0; padding: 3px 6px; font-size: 11.5px; }
+  .rl-risk b { font-size: 12px; }
+  .rl-card .rl-take { min-height: 34px; padding: 2px 6px; }
+  .rl-ribbon { font-size: 11px; padding: 0 6px; }
+  .relic-view h2 { font-size: 18px; }
+  .relic-view .rv-lead { margin-bottom: 2px; }
   .rl-card .rl-body { align-items: center; }
   .rl-card .rl-name { font-size: 16px; }
   .rl-desc { font-size: 12.5px; }
@@ -389,3 +396,4 @@ header .cx-open { background: var(--m-mint); white-space: nowrap; padding: 4px 1
   .cx-table td.cx-win small { font-size: 10.5px; }
   .cx-line { padding: 0 5px; }
 }
+.cx-lv1 { font-size: 13px !important; color: #d9cff5 !important; }
