@@ -101,9 +101,9 @@ export function relicCardHTML(id: string, i: number, skills: SkillInstance[]) {
     <div class="rl-body">
       <div class="rl-name">${esc(relicName(id))}</div>
       <div class="rl-group"><span class="rl-gchip">${groupLabel(x.group)}</span>${also ? `<span class="rl-also" title="${esc(L('เข้ากับสายนี้ด้วย', 'also suits'))}">+ ${also}</span>` : ''}<button class="cx-q-link" data-codex="relic:${id}" aria-label="${esc(L('เปิดในคู่มือ', 'Open in the codex'))}">?</button></div>
-      <p class="rl-desc">${esc(relicDesc(id))}</p>
-      ${hint ? `<p class="rl-hint">${esc(hint)}</p>` : ''}
     </div>
+    <p class="rl-desc">${esc(relicDesc(id))}</p>
+    ${hint ? `<p class="rl-hint">${esc(hint)}</p>` : ''}
     ${risk ? `<div class="rl-risk${risk.ok === false ? ' bad' : risk.ok ? ' good' : ''}" role="note"><b>⚠ ${esc(risk.band)}</b><span>${risk.ok === null ? '' : risk.ok ? '✓ ' : '✗ '}${esc(risk.now)}</span></div>` : ''}
     <button class="buy primary rl-take" data-a="relic" data-i="${i}">${L('เลือกชิ้นนี้', 'Take it')}</button>
   </div>`;
@@ -170,7 +170,7 @@ export function markCountHTML(skills: Pick<SkillInstance, 'mark' | 'markHidden'>
   if (!marked.length) return '';
   const coins = Array.from({ length: MARK_MAX }, (_, j) => {
     const k = marked[j];
-    return k ? `<i class="mk-dot ${k.mark ? `mk-${k.mark}` : 'mk-hidden'}">${k.mark ? MARK_GLYPH[k.mark] : '?'}</i>` : '<i class="mk-dot off"></i>';
+    return k ? `<i class="mk-dot ${k.mark ? `mk-${k.mark}` : 'mk-hidden'}">${k.mark ? markGlyph(k.mark) : artOr(DEPTH_FILES.mark('hidden'), '?')}</i>` : '<i class="mk-dot off"></i>';
   }).join('');
   const tip = `<div class="tt-h"><b>${L('ตรา', 'Marks')} ${marked.length}/${MARK_MAX}</b></div><div class="desc">${esc(
     L(`มีได้สูงสุด ${MARK_MAX} อัน: จากโอกาสสุดท้าย 1 และพรจันทร์ ${R.WISH_MARKS_MAX} (ใช้พรไปแล้ว ${wishMarks})`, `At most ${MARK_MAX}: 1 from the last chance and ${R.WISH_MARKS_MAX} from moon wishes (${wishMarks} wish marks used)`),
@@ -187,7 +187,11 @@ export function ultChecklistHTML(hero: string, skills: SkillInstance[]) {
   const p = ultPieces(b);
   const l3 = ultLv3(b);
   const lv = ultLevel(b);
-  const pip = (on: boolean, cls = '') => artOr(on ? DEPTH_FILES.ultPipOn : DEPTH_FILES.ultPipOff, `<i class="up${on ? ' on' : ''}${cls}"></i>`, 'up-img');
+  // line pieces are moons; the Lv3 ones Lv2 needs are stars (painted when the pack is in, CSS dots otherwise)
+  const pip = (on: boolean, cls = '') =>
+    cls === ' l3'
+      ? on ? artOr(DEPTH_FILES.starPip, '<i class="up on l3"></i>', 'up-img l3') : '<i class="up l3"></i>'
+      : artOr(on ? DEPTH_FILES.ultPipOn : DEPTH_FILES.ultPipOff, `<i class="up${on ? ' on' : ''}"></i>`, `up-img${on ? '' : ' off'}`);
   const row = (n: number, have: number, cls = '') => Array.from({ length: n }, (_, j) => pip(j < have, cls)).join('');
   const tip = `<div class="tt-h"><b>★ ${esc(h.ult.name)}</b></div><div class="desc">${esc(L(ultProgressText(b, true), ultProgressText(b, false)))}</div><div class="muted small">${esc(h.ult.trigger)} → ${esc(h.ult.effect)}</div>`;
   return `<div class="ult-chk${lv ? ` lv${lv}` : ''}" data-ttxt="${esc(tip)}" data-codex="hero:${hero}" aria-label="${esc(L(ultProgressText(b, true), ultProgressText(b, false)))}">
@@ -236,7 +240,7 @@ export function buildCardHTML(d: BuildCardData) {
       const r = rarityOf(k.id, k.v);
       const st = k.star ?? 0;
       const branch = k.v ? SKILLS[k.id].tree[k.v[0] as 'a' | 'b'].style ?? '' : '';
-      return `<li class="bc-sk rar-${r}${st >= R.STAR_MAX ? ' st3' : ''}">
+      return `<li class="bc-sk rar-${r}${st >= R.STAR_MAX ? ' st3' : ''}">${st >= R.STAR_MAX ? artOr(DEPTH_FILES.star3Burst, '', 'bc-burst') : ''}
         <img class="skill-icon" src="${skillIcon(k.id)}" alt="">
         <span class="bc-nm">${esc(nodeOf(k).name)}</span>
         <span class="bc-meta">Lv${lvOf(k.v)}${branch ? ` · ${esc(branch)}` : ''}</span>

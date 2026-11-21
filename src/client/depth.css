@@ -43,7 +43,7 @@
 .rl-group { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
 .rl-gchip { background: rgba(21, 14, 39, 0.55); border: 1.5px solid color-mix(in srgb, var(--ring) 60%, transparent); color: #efe6ff; border-radius: 999px; padding: 1px 9px; }
 .rl-also { color: #c9bde9; }
-.rl-desc { margin: 2px 0 0; font-size: 14px; line-height: 1.45; color: #f3ecff; overflow-wrap: anywhere; }
+.rl-desc { margin: 2px 0 0; font-size: 14px; width: 100%; line-height: 1.45; color: #f3ecff; overflow-wrap: anywhere; }
 .rl-hint { margin: 0; font-size: 12px; color: #c9bde9; }
 .rl-ribbon {
   position: absolute; top: -11px; left: 50%; transform: translateX(-50%) rotate(-2deg); white-space: nowrap;
@@ -333,7 +333,7 @@ header .cx-open { background: var(--m-mint); white-space: nowrap; padding: 4px 1
   .relic-card.rl-card .rlm-lg { --sz: 54px; grid-row: 1; }
   .rl-card .rl-body { align-items: flex-start; }
   .rl-group { justify-content: flex-start; }
-  .rl-card .rl-risk, .rl-card .rl-take { grid-column: 1 / -1; }
+  .rl-card .rl-risk, .rl-card .rl-take, .rl-card .rl-desc, .rl-card .rl-hint { grid-column: 1 / -1; }
   .rl-ribbon { left: 14px; transform: rotate(-2deg); }
   .bp-opts { gap: 8px; }
   .bp-opt { padding: 12px 8px 8px; }
@@ -400,3 +400,79 @@ header .cx-open { background: var(--m-mint); white-space: nowrap; padding: 4px 1
 /* last chance powers: ink text on the lavender dough (the light text was for dark hero cards) */
 #panel .hero[data-a="lc"] b, #panel .hero[data-a="lc"] > span:not(.lc-badge) { color: var(--ink); }
 #panel .hero[data-a="lc"] .lc-count { background: var(--m-mint); color: #173d2a; border: 1.5px solid var(--ink-deep); }
+
+/* ==========================================================================
+   Painted depth pack (assets/ui/depth, depthArt.ts): icons, seals, pips, 9-slice frames.
+   Every rule here only applies when the art is present (an <img class="dart"> or body.depth-art).
+   ========================================================================== */
+.rlm .rlm-img { width: 84%; height: 84%; filter: drop-shadow(0 2px 0 rgba(21, 14, 39, 0.3)); position: relative; z-index: 1; }
+.rl-slot .dart:not(.rlm-img) { width: 30px; height: 30px; }
+.mk-c:has(.dart), .mk-dot:has(.dart) { background: none !important; border: none; box-shadow: none; animation: none; }
+.mk-c:has(.dart) { width: 24px; height: 24px; }
+.mk-dot:has(.dart) { width: 18px; height: 18px; }
+.mk-hidden .mk-c .dart { animation: mk-wobble 2.6s ease-in-out infinite; }
+@keyframes mk-wobble { 50% { transform: rotate(-8deg) scale(1.06); } }
+.mk-reveal .mk-big:has(.dart) { width: 52px; height: 52px; }
+.star-pips .sp-img { width: 14px; height: 14px; display: inline-block; }
+.star-pips.max .sp-img { animation: sp-shine 2.8s ease-in-out infinite; }
+.up-img { width: 15px; height: 15px; display: inline-block; }
+.up-img.off { opacity: 0.38; filter: grayscale(0.7); }
+.up-img.l3 { width: 13px; height: 13px; }
+.bc-sk { position: relative; }
+.bc-burst { position: absolute; top: -12px; right: -10px; width: 34px !important; height: 34px !important; pointer-events: none; }
+
+/* 9-slice frames: the branch picker, relic cards and build card tiles (the skill list keeps its CSS frame) */
+.depth-art .bp-opt.rar-epic, .depth-art .bp-opt.rar-rare, .depth-art .bp-opt.rar-common {
+  border: 16px solid transparent; border-image: var(--dframe-common) 80 64 80 64 / 20px 16px 20px 16px stretch;
+  border-radius: 0; background-clip: padding-box; box-shadow: none; padding: 4px 6px 6px;
+}
+.depth-art .bp-opt.rar-epic { border-image-source: var(--dframe-epic); filter: drop-shadow(0 0 10px var(--epic-glow)); }
+.depth-art .bp-opt.rar-rare { border-image-source: var(--dframe-rare); }
+.depth-art .bp-opt .bp-rar { top: -24px; }
+.depth-art .relic-card.rl-card {
+  border: 18px solid transparent; border-image: var(--dframe-relic) 90 70 90 70 / 22px 18px 22px 18px stretch;
+  border-radius: 0; background-clip: padding-box; box-shadow: none; padding: 6px 4px 4px;
+}
+.depth-art .relic-card.rl-card.rl-fits { filter: drop-shadow(0 0 6px rgba(178, 235, 203, 0.7)); }
+.depth-art .relic-card.rl-card .rl-ribbon { top: -26px; }
+.depth-art .relic-card.rl-card .rl-risk { width: calc(100% + 8px); margin: 2px -4px 0; }
+.depth-art .bc-sk.rar-epic, .depth-art .bc-sk.rar-rare, .depth-art .bc-sk.st3 {
+  border: 9px solid transparent; border-image: var(--dframe-common) 80 64 80 64 / 11px 9px 11px 9px stretch;
+  border-radius: 0; background-clip: padding-box; box-shadow: none; padding: 1px 3px;
+}
+.depth-art .bc-sk.rar-epic { border-image-source: var(--dframe-epic); }
+.depth-art .bc-sk.rar-rare { border-image-source: var(--dframe-rare); }
+.depth-art .bc-sk.st3 { border-image-source: var(--dframe-star3); }
+/* the build card's painted moonlit sky, washed dark so the cream text keeps its contrast */
+.depth-art .bc-card { background: linear-gradient(165deg, rgba(60, 47, 114, 0.84), rgba(34, 26, 66, 0.92)), var(--dbuild-bg) center / cover; }
+
+/* narrowest phones (≤ 380 px, e.g. 360): the logo keeps only its moon (it is still the home button) */
+@media (max-width: 380px) {
+  header > b.logo { font-size: 0; gap: 0; }
+  header > b.logo .logo-moon { font-size: 20px; }
+}
+/* phones held sideways: relic cards go compact (icon beside the name) so "Take it" is on screen */
+@media (orientation: landscape) and (max-height: 500px) {
+  .relic-view h2 { font-size: 16px; margin: 0; }
+  .relic-view .rv-lead { display: none; }
+  .relic-view .relic-tray { margin-top: 2px; gap: 4px; }
+  .relic-view .relic-tray .rl-sn { display: none; }
+  .relic-view .relic-shop { margin-top: 14px; gap: 8px; }
+  .relic-card.rl-card { display: grid; grid-template-columns: auto 1fr; align-items: center; text-align: left; column-gap: 6px; row-gap: 2px; }
+  .relic-card.rl-card .rlm-lg { --sz: 34px; }
+  .rl-card .rl-body { align-items: flex-start; gap: 1px; }
+  .rl-card .rl-name { font-size: 14px; }
+  .rl-group { justify-content: flex-start; font-size: 11px; }
+  .rl-card .rl-desc { grid-column: 1 / -1; font-size: 12px; line-height: 1.3; margin: 0; }
+  .rl-card .rl-hint { display: none; }
+  .rl-card .rl-risk, .rl-card .rl-take { grid-column: 1 / -1; }
+  .rl-card .rl-take { min-height: 32px; font-size: 13px; }
+  .rl-ribbon { left: 8px; transform: rotate(-2deg); }
+  .relic-view .actions { margin-top: 6px; }
+}
+/* the painted relic frame needs width: sideways phones keep the CSS card (compact grid) */
+@media (orientation: landscape) and (max-height: 500px) {
+  .depth-art .relic-card.rl-card { border: 1px solid rgba(255, 232, 196, 0.2); border-image: none; border-radius: 14px; padding: 12px 6px 6px; }
+  .depth-art .relic-card.rl-card .rl-ribbon { top: -11px; }
+  .depth-art .relic-card.rl-card .rl-risk { width: calc(100% + 12px); margin: 2px -6px 0; }
+}

@@ -4,6 +4,7 @@
  */
 import { IMAGES, skillIcon } from './assets';
 import { iconURL } from './icons';
+import { DEPTH_FILES, depthArt } from './depthArt';
 
 export interface CardData {
   runId: string;
@@ -246,96 +247,108 @@ async function drawBuild(d: BuildCardImage): Promise<Blob | null> {
   } catch {
     /* fonts are a nicety */
   }
-  const [bg, hero, ...icons] = await Promise.all([load(IMAGES.bgTitle), load(svgSrc(sized(d.heroSvg, 300))), ...d.skills.slice(0, 8).map((k) => load(skillIcon(k.id)))]);
+  const bgSrc = depthArt(DEPTH_FILES.buildcardBg);
+  const frSrc = depthArt(DEPTH_FILES.buildcardFrame);
+  const [bg, frame, hero, burst, ...icons] = await Promise.all([
+    load(bgSrc ?? IMAGES.bgTitle), frSrc ? load(frSrc) : Promise.resolve(null), load(svgSrc(sized(d.heroSvg, frSrc ? 136 : 210))),
+    depthArt(DEPTH_FILES.star3Burst) ? load(depthArt(DEPTH_FILES.star3Burst)!) : Promise.resolve(null),
+    ...d.skills.slice(0, 8).map((k) => load(skillIcon(k.id))),
+  ]);
   if (bg) {
     const s = Math.max(BW / bg.width, BH / bg.height);
     g.drawImage(bg, (BW - bg.width * s) / 2, (BH - bg.height * s) / 2, bg.width * s, bg.height * s);
   }
-  g.fillStyle = 'rgba(28,20,58,0.86)';
-  g.fillRect(0, 0, BW, BH);
-  const spot = g.createRadialGradient(190, 300, 10, 190, 300, 230);
-  spot.addColorStop(0, d.won ? 'rgba(255,227,163,0.5)' : 'rgba(212,200,247,0.35)');
+  // the painted frame leaves an inner window (clouds, moon and bunnies around it): the card's content lives in a plum
+  // panel inside it; without the frame the same layout gets the old ink border
+  const P = frame ? { x: 112, y: 128, w: 976, h: 372 } : { x: 40, y: 40, w: BW - 80, h: BH - 80 };
+  g.fillStyle = 'rgba(30,22,62,0.9)';
+  rr(g, P.x, P.y, P.w, P.h, 26);
+  g.fill();
+  if (frame) g.drawImage(frame, 0, 0, BW, BH);
+  else {
+    g.lineWidth = 10;
+    g.strokeStyle = '#150e27';
+    rr(g, 12, 12, BW - 24, BH - 24, 34);
+    g.stroke();
+  }
+  // left: hero, name, record
+  const lx = P.x + 22;
+  const spot = g.createRadialGradient(lx + 105, P.y + 120, 10, lx + 105, P.y + 120, 140);
+  spot.addColorStop(0, d.won ? 'rgba(255,227,163,0.45)' : 'rgba(212,200,247,0.3)');
   spot.addColorStop(1, 'rgba(255,227,163,0)');
   g.fillStyle = spot;
-  g.fillRect(0, 60, 400, 500);
-  if (hero) g.drawImage(hero, 190 - hero.width / 2, 150, hero.width, hero.height);
-  g.lineWidth = 10;
-  g.strokeStyle = '#150e27';
-  rr(g, 12, 12, BW - 24, BH - 24, 34);
-  g.stroke();
-  g.setLineDash([10, 8]);
-  g.lineWidth = 2;
-  g.strokeStyle = d.won ? 'rgba(255,211,77,0.6)' : 'rgba(255,232,196,0.4)';
-  rr(g, 26, 26, BW - 52, BH - 52, 26);
-  g.stroke();
-  g.setLineDash([]);
-  // left column: title, hero, record
+  g.fillRect(P.x, P.y, 260, 260);
+  // (the painted frame's sleeping bunnies sit over the panel's bottom corners: the left column ends above them)
+  const top = frame ? 0 : 40;
+  if (hero) g.drawImage(hero, lx + 105 - hero.width / 2, P.y + 6 + top, hero.width, hero.height);
   g.textBaseline = 'alphabetic';
-  g.fillStyle = '#ffe3a3';
-  g.font = '500 26px Mitr, Kanit, sans-serif';
-  g.fillText(fit(g, d.title, 330), 52, 74);
   g.fillStyle = '#fff4e4';
-  g.font = '600 64px Mitr, Kanit, sans-serif';
-  g.fillText(`${d.wins}–${d.losses}`, 52, 140);
-  g.font = '500 32px Mitr, Kanit, sans-serif';
-  g.fillText(fit(g, d.heroName, 330), 52, 500);
-  g.font = '400 21px Kanit, sans-serif';
+  g.font = '600 44px Mitr, Kanit, sans-serif';
+  g.fillText(`${d.wins}–${d.losses}`, lx, P.y + 186 + top);
+  g.font = '500 23px Mitr, Kanit, sans-serif';
+  g.fillText(fit(g, d.heroName, 230), lx, P.y + 214 + top);
+  g.font = '400 15px Kanit, sans-serif';
   g.fillStyle = '#d4c8f7';
-  g.fillText(fit(g, d.heroLine, 330), 52, 532);
-  g.fillStyle = '#ffd34d';
-  g.font = '600 21px Kanit, sans-serif';
-  g.fillText(fit(g, d.summary, 330), 52, 562);
-  // skills: 2 columns x 4 rows of tiles
-  const x0 = 410;
-  const tw = 370;
-  const th = 82;
+  g.fillText(fit(g, d.heroLine, 230), lx, P.y + 234 + top);
+  // right: skills (2 x 4 tiles), relics, the day log
+  const x0 = P.x + 270;
+  // (the frame's hanging stars reach into the panel's top-right corner: leave them room)
+  const tw = (P.w - 270 - 22 - 10 - (frame ? 44 : 0)) / 2;
+  const th = 56;
   d.skills.slice(0, 8).forEach((k, i) => {
-    const x = x0 + (i % 2) * (tw + 14);
-    const y = 50 + Math.floor(i / 2) * (th + 12);
-    g.fillStyle = 'rgba(21,14,39,0.7)';
-    rr(g, x, y, tw, th, 16);
+    const x = x0 + (i % 2) * (tw + 10);
+    const y = P.y + 18 + Math.floor(i / 2) * (th + 8);
+    g.fillStyle = 'rgba(21,14,39,0.75)';
+    rr(g, x, y, tw, th, 14);
     g.fill();
     g.lineWidth = k.rarity === 'common' && k.star < 3 ? 2.5 : 4;
     g.strokeStyle = k.star >= 3 ? '#ffd34d' : RAR[k.rarity];
-    rr(g, x, y, tw, th, 16);
+    rr(g, x, y, tw, th, 14);
     g.stroke();
     const img = icons[i];
-    if (img) g.drawImage(img, x + 10, y + 11, 60, 60);
+    if (img) g.drawImage(img, x + 7, y + 6, 44, 44);
+    if (k.star >= 3 && burst) g.drawImage(burst, x + tw - 34, y - 10, 34, 34);
     g.fillStyle = '#fff4e4';
-    g.font = '600 24px Kanit, sans-serif';
-    g.fillText(fit(g, k.name, tw - 100), x + 82, y + 34);
-    g.font = '400 17px Kanit, sans-serif';
+    g.font = '600 19px Kanit, sans-serif';
+    g.fillText(fit(g, k.name, tw - 70), x + 58, y + 24);
+    g.font = '400 14px Kanit, sans-serif';
     g.fillStyle = k.rarity === 'epic' ? '#d9c4ff' : k.rarity === 'rare' ? '#cfe8ff' : '#b8afd9';
-    g.fillText(fit(g, k.meta, tw - 100), x + 82, y + 58);
     const tags = `${'★'.repeat(k.star)}${k.mark ? `  ${k.mark}` : ''}`;
+    g.fillText(fit(g, k.meta, tw - 70 - (tags.trim() ? g.measureText(tags).width + 14 : 0)), x + 58, y + 45);
     if (tags.trim()) {
-      g.font = '700 18px Kanit, sans-serif';
+      g.font = '700 15px Kanit, sans-serif';
       g.fillStyle = '#ffd34d';
-      g.fillText(tags, x + 82, y + 77);
+      g.fillText(tags, x + tw - 8 - g.measureText(tags).width, y + 45);
     }
   });
-  // relics + log
-  g.font = '500 20px Kanit, sans-serif';
+  const rows = Math.ceil(Math.min(8, d.skills.length) / 2);
+  const ry = P.y + 18 + rows * (th + 8) + 18;
+  g.font = '500 17px Kanit, sans-serif';
   g.fillStyle = '#e9dcff';
-  g.fillText(fit(g, d.relics.join('   ·   ') || '—', BW - x0 - 50), x0, 452);
+  g.fillText(fit(g, d.relics.join('   ·   ') || '—', P.w - 270 - 22), x0, ry);
+  g.fillStyle = '#ffd34d';
+  g.font = '600 16px Kanit, sans-serif';
+  g.fillText(d.summary, x0, ry + 26);
   d.log.forEach((r, i) => {
-    const x = x0 + i * 40;
-    if (x > BW - 70) return;
+    const x = x0 + i * 28;
+    if (x > P.x + P.w - 40) return;
     g.fillStyle = r === 'w' ? '#b2ebcb' : r === 'd' ? '#c6c1e8' : '#ff9b9b';
-    rr(g, x, 478, 32, 32, 8);
+    rr(g, x, ry + 40, 22, 22, 6);
     g.fill();
-    g.lineWidth = 3;
+    g.lineWidth = 2.5;
     g.strokeStyle = '#150e27';
-    rr(g, x, 478, 32, 32, 8);
+    rr(g, x, ry + 40, 22, 22, 6);
     g.stroke();
   });
-  g.font = '500 26px Mitr, Kanit, sans-serif';
+  // footer under the panel: title, player and date on one line
+  // who and when, under the hero (clear of the frame's bunnies and of a full 8-skill grid)
+  g.font = '500 16px Mitr, Kanit, sans-serif';
   g.fillStyle = '#fff4e4';
-  g.fillText(fit(g, d.player, 400), x0, 562);
-  g.font = '400 19px Kanit, sans-serif';
+  g.fillText(fit(g, d.player, 230), lx, P.y + 258 + top);
+  g.font = '400 13px Kanit, sans-serif';
   g.fillStyle = '#cfc6f5';
-  const fw = g.measureText(d.footer).width;
-  g.fillText(d.footer, BW - 52 - fw, 562);
+  g.fillText(fit(g, d.title, 230), lx, P.y + 274 + top);
+  g.fillText(fit(g, d.footer, 230), lx, P.y + 290 + top);
   return new Promise((res) => c.toBlob((b) => res(b), 'image/png'));
 }
 /** Download the Build Card as a PNG. */
