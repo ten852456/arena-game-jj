@@ -52,7 +52,7 @@ export const TUNING = {
   'line.wind.lv3': 1.2,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.65,
-  'uniq.knight.lv3': 0.8,
+  'uniq.knight.lv3': 1.0,
   'uniq.thornguard.lv1': 1.2,
   'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.8,
