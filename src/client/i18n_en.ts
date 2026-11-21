@@ -154,7 +154,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Moon Fortress',
       get trigger() { return both((lv) => `${pc(ultTrig('knight', lv))}% of max HP gained as shield (the start shield does not count)`); },
-      get effect() { return both((lv) => `hit = your shield ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
+      get effect() { return both((lv) => `hit = (your shield + ${pc(T['ult.knight.hp'])}% of your max HP) ×${r1(ultPow('knight', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), can’t be dodged (the shield stays)`); },
     },
   },
   berserker: {

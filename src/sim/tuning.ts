@@ -78,12 +78,12 @@ export const TUNING = {
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
   'hp.knight': 1.2,
-  'hp.thornguard': 1.2,
+  'hp.thornguard': 1.15,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
   'hp.berserker': 1.16,
-  'hp.pyro': 1.38,
-  'hp.witch': 1.4,
+  'hp.pyro': 1.45,
+  'hp.witch': 1.35,
   'hp.chrono': 1.32,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
@@ -192,11 +192,13 @@ export const TUNING = {
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 5,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.5,
+  'ult.duelist.pow': 0.4,
   /** อัศวิน: shield gained, share of max HP */
-  'ult.knight.trig': 0.05,
+  'ult.knight.trig': 0.15,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 0.6,
+  /** อัศวิน ult: hits pow × (shield + this share of max HP) */
+  'ult.knight.hp': 0.1,
+  'ult.knight.pow': 0.5,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
@@ -206,19 +208,19 @@ export const TUNING = {
   /** นักเวทเพลิง: deals the burn still to come × this right away */
   'ult.pyro.pow': 0.27,
   /** นักรบหนาม: direct hits taken */
-  'ult.thornguard.trig': 4,
+  'ult.thornguard.trig': 3,
   /** นักรบหนาม: seconds of poison thorns */
   'ult.thornguard.pow': 3,
   /** หนามพิษ also poisons the enemy this much per second for its duration, at once */
   'ult.thornguard.poison': 2,
   /** แม่มดน้ำแข็ง: ice skill casts */
-  'ult.witch.trig': 3,
+  'ult.witch.trig': 2,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
-  'ult.witch.pow': 1.45,
+  'ult.witch.pow': 1.7,
   /** จอมเวทลม: slows / delays landed */
   'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
-  'ult.chrono.pow': 0.3,
+  'ult.chrono.pow': 0.25,
 };
 // </tuned>
 

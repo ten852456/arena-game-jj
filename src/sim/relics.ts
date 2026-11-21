@@ -32,7 +32,7 @@ export const RELICS: RelicDef[] = [
   // ⚔ hit
   { id: 'whetstone', icon: '🗡️', group: 'hit', also: ['dodge'], name: ['หินลับมีด', 'Whetstone'],
     desc: () => [`การใช้ครั้งแรกของทุก skill แรง +${pc(T['relic.whetstone'])}%`, `the first cast of each skill is ${pc(T['relic.whetstone'])}% stronger`] },
-  { id: 'executioner', icon: '🪓', group: 'hit', also: ['burn'], name: ['ขวานเพชฌฆาต', 'Headsman'],
+  { id: 'executioner', icon: '🪓', group: 'hit', also: ['burn', 'poison'], name: ['ขวานเพชฌฆาต', 'Headsman'],
     desc: () => [`ตีศัตรูที่เลือดต่ำกว่า 40% แรง +${pc(T['relic.executioner'])}%`, `hits on an enemy below 40% HP deal +${pc(T['relic.executioner'])}%`] },
   // 💨 dodge
   { id: 'counterstep', icon: '🌀', group: 'dodge', also: ['hit'], name: ['ก้าวสวน', 'Counterstep'],

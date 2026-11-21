@@ -521,7 +521,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         addDodge(f, 2);
         break;
       case 'knight':
-        deal(foe, Math.max(1, Math.round(Math.min(pow * f.shield, ultCap(f, foe)))), true, 'ult');
+        // sim v18: shield plus a share of max HP (late shields are small next to late HP, so Lv2 did almost nothing)
+        deal(foe, Math.max(1, Math.round(Math.min(pow * (f.shield + f.maxHp * T['ult.knight.hp']), ultCap(f, foe)))), true, 'ult');
         break;
       case 'berserker': {
         const h = Math.min(f.maxHp - f.hp, Math.round(pow * f.maxHp));

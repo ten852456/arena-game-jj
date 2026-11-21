@@ -200,7 +200,7 @@ export function botRelic(s: RunState, tier: BotTier): number {
   if (!offer.length) return -1;
   const rng = new Rng(hashSeed(s.seed, 'relicpick', s.day, tier));
   // sim v18: every tier knows a relic's condition (no lone wolf with 5 skills, no sigil without a mark)
-  const usable = (id: string) => (id === 'lonewolf' ? s.skills.length <= 3 : id === 'sigil' ? s.skills.some((k) => k.mark) : true);
+  const usable = (id: string) => (id === 'lonewolf' ? s.skills.length <= 3 && s.day >= 7 : id === 'sigil' ? s.skills.some((k) => k.mark) : true);
   if (!offer.some(usable)) return -1;
   if (tier === 'easy') {
     const ok = offer.map((id, i) => (usable(id) ? i : -1)).filter((i) => i >= 0);
