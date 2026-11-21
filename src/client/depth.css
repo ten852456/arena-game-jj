@@ -397,3 +397,6 @@ header .cx-open { background: var(--m-mint); white-space: nowrap; padding: 4px 1
   .cx-line { padding: 0 5px; }
 }
 .cx-lv1 { font-size: 13px !important; color: #d9cff5 !important; }
+/* last chance powers: ink text on the lavender dough (the light text was for dark hero cards) */
+#panel .hero[data-a="lc"] b, #panel .hero[data-a="lc"] > span:not(.lc-badge) { color: var(--ink); }
+#panel .hero[data-a="lc"] .lc-count { background: var(--m-mint); color: #173d2a; border: 1.5px solid var(--ink-deep); }
