@@ -17,7 +17,7 @@ import { LINES, type Build, type Line, type SkillInstance } from './types';
  * - easy:   no rerolls, noisy picks, sometimes leaves a slot empty on days 1–3, keeps the list in buy order.
  * - normal: line / hero preference, 2 rerolls a day, sorts the list for connect bonuses, buys toward the ultimate.
  * - hard:   values skills by their numbers, buys for connect bonuses, finishes upgrade branches that fit the build,
- *           buys toward the ultimate (3 / 5 pieces), likes its line's tech skill, buys anti-control when its line has
+ *           buys toward the ultimate (3 line pieces = Lv1; all 4 with 3 at Lv3 = Lv2), likes its line's tech skill, buys anti-control when its line has
  *           none, spends its gold (rerolls, slots).
  * Every tier makes sure the build owns at least one damage skill with a short cooldown, so it always casts early.
  */
@@ -261,7 +261,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
         if (!upgradeOf(s, offer) || lazy) return; // lazy easy bots do not upgrade early either
         if (!upgradeAllowed(offer.v, s.day, tier)) return;
         score = easy ? 1.5 : 3; // an upgrade of something we own (easy undervalues upgrades)
-        // a Lv3 on a line skill is one more ult piece (5 pieces = ult Lv2)
+        // a Lv3 on a line skill is one more ult piece (ult Lv2 needs ULT_LV2_LV3 of them)
         if (!easy && SKILLS[id].line === line && offer.v.length === 2 && ultLv3(s) < ULT_LV2_LV3) score += 1;
       } else {
         if (s.skills.some((k) => k.id === id)) return;

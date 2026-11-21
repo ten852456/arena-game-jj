@@ -18,7 +18,7 @@ import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgr
 import { T } from '../src/sim/tuning';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
-import { SKILLS, VARIANTS, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
+import { SKILLS, VARIANTS, epicAfter, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
 import type { Build, CombatEvent } from '../src/sim/types';
 
 type CliTier = BotTier | 'auto';
@@ -109,7 +109,7 @@ function show(s: R.RunState) {
       const g = ultGain(b0, o);
       const tag = g.pieces ? ` ★ ${o.v ? 'Lv3 toward ult Lv2' : '+1 ult piece'}${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
       const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k), false) : '';
-      p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''}${rarityOf(o.id, o.v) !== 'common' ? ` [${rarityOf(o.id, o.v).toUpperCase()}]` : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff}${diff.includes('▼') ? ' (▼ = worse)' : ''}` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
+      p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''}${rarityOf(o.id, o.v) !== 'common' ? ` [${rarityOf(o.id, o.v).toUpperCase()}]` : ''}${epicAfter(o.id, o.v) ? ` [leads to EPIC ${SKILLS[o.id].tree[epicAfter(o.id, o.v)!].name}]` : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff}${diff.includes('▼') ? ' (▼ = worse)' : ''}` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
     const oh = oppHero(s);

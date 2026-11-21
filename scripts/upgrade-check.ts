@@ -32,6 +32,7 @@ for (const d of Object.values(SKILLS))
 for (const d of Object.values(SKILLS))
   for (const v of VARIANTS) {
     if (!v) continue;
+    if (!upgradeDiff(d.tree[parentOf(v)], d.tree[v]).length) bad.push(`${d.id}/${v}: upgrade shows no change`);
     const from = d.tree[parentOf(v)];
     const to = d.tree[v];
     const a = flatNumbers(from);
@@ -61,9 +62,10 @@ for (const [id, f, v, field, worse] of must) {
 for (const d of Object.values(SKILLS))
   for (const v of VARIANTS) {
     if (!v) continue;
+    if (!upgradeDiff(d.tree[parentOf(v)], d.tree[v]).length) bad.push(`${d.id}/${v}: upgrade shows no change`);
     for (const row of upgradeDiff(d.tree[parentOf(v)], d.tree[v])) {
       const field = row.key.replace(/#\d+/, '');
-      if (/(99|NaN|undefined)/.test(row.text)) bad.push(`${d.id}/${v}: unreadable diff "${row.text}"`);
+      if (/(99|NaN|undefined)|[a-z]{3,}/.test(row.text)) bad.push(`${d.id}/${v}: unreadable diff "${row.text}"`);
       if (row.fromText && row.toText && !LOWER_BETTER.has(field) && row.worse !== row.to < row.from) bad.push(`${d.id}/${v}: ${field} direction`);
     }
   }

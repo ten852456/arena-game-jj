@@ -758,7 +758,7 @@ export function flatNumbers(n: SkillNode): Record<string, number> {
     // presence of the effect itself (a steadfast or cleanse without numbers still shows when it comes or goes)
     o[`${e.k}#${i}`] = 1;
   }
-  if (n.engine) for (const [f, v] of Object.entries(n.engine)) if (typeof v === 'number') o[`engine.${f}`] = v;
+  if (n.engine) for (const [f, v] of Object.entries(n.engine)) if (typeof v === 'number' || typeof v === 'boolean') o[`engine.${f}`] = +v;
   o.cd = n.cd / 10;
   return o;
 }
@@ -785,6 +785,7 @@ const FIELD: Record<string, [string, string, ('pct' | 'sec' | 'flag' | 'num')?]>
   'dispel.n': ['สลาย', 'dispel'], 'dispel.shield': ['สลายโล่', 'dispel shield', 'pct'], 'dispel.steal': ['ขโมยพลัง', 'steal power', 'flag'], 'dispel': ['สลาย', 'dispel', 'flag'],
   'leech.pct': ['ดูดเลือดครั้งหน้า', 'next-hit leech', 'pct'], 'leech': ['ดูดเลือด', 'leech', 'flag'], 'engine.power': ['แรงที่สั่ง', 'engine power', 'pct'], 'engine.n': ['สั่งกี่ตัว', 'fires'],
   'engine.keep': ['คูลดาวน์ไม่เริ่มใหม่', 'keeps cooldown', 'flag'], 'cd': ['คูลดาวน์', 'cooldown', 'sec'],
+  'shield': ['โล่', 'shield', 'flag'], 'heal': ['ฟื้น', 'heal', 'flag'],
 };
 /** fields where a lower number is better (sim v16 audit: cooldown, what the enemy keeps, the control that still lands) */
 export const LOWER_BETTER = new Set(['cd', 'thorns.heal', 'steadfast.keep', 'cleanse.dot']);
@@ -856,15 +857,26 @@ export const upgradeDiffText = (from: SkillNode, to: SkillNode, th = true) =>
   upgradeDiff(from, to, th).map((d) => `${d.text}${d.worse ? '▼' : ''}`).join(' · ');
 
 /**
- * Rarity of a tree variant (a label for the shop and the list; no rule depends on it): Lv1/Lv2 common, Lv3 rare,
- * and the big Lv3 finishers epic. Pure data, cheap to change.
+ * Rarity of a tree variant (a label for the shop and the list; no rule depends on it). Sim v16: only chosen Lv3
+ * branches are special: about two epics per line, each one changing how the skill plays (not just bigger numbers),
+ * and a few rares; every other branch is common. Pure data, cheap to change.
  */
 export type Rarity = 'common' | 'rare' | 'epic';
 export const EPIC: Record<string, Variant[]> = {
-  charge: ['a1'], flurry: ['b1'], heavy: ['a1'], shatter: ['a1'], inferno: ['a1'], plague: ['a1'], bulwark: ['a1'],
-  rampage: ['a1'], timewarp: ['b1'], spikewall: ['a1'], execute: ['a1'], strike: ['a1'], frost: ['a1'], blaze: ['a1'],
+  strike: ['a2'], charge: ['a1'], riposte: ['a1'], flurry: ['a2'], stoneskin: ['b1'], bulwark: ['a1'], feast: ['b2'],
+  rampage: ['a2'], inferno: ['a1'], ignite: ['a2'], spikewall: ['a1'], plague: ['a1'], shatter: ['a1'], frost: ['a1'],
+  timewarp: ['b2'], dispel: ['b2'], gear: ['b2'], overclock: ['b2'],
 };
-export const rarityOf = (id: string, v: string): Rarity => (lvOf(v) < 3 ? 'common' : EPIC[id]?.includes(v as Variant) ? 'epic' : 'rare');
+export const RARE: Record<string, Variant[]> = {
+  heavy: ['a2'], execute: ['a1'], jab: ['b2'], sidestep: ['b2'], shield: ['a2'], cleanse: ['a1'], train: ['b2'],
+  mend: ['a2'], blaze: ['a2'], scorch: ['a1'], venom: ['a2'], thorns: ['a2'], icelance: ['a2'], glacier: ['a2'],
+  tailwind: ['a1'], chill: ['a2'], ironwill: ['a1'],
+};
+export const rarityOf = (id: string, v: string): Rarity =>
+  lvOf(v) < 3 ? 'common' : EPIC[id]?.includes(v as Variant) ? 'epic' : RARE[id]?.includes(v as Variant) ? 'rare' : 'common';
+/** the Lv3 branch of `v` (a Lv2 variant) that is epic, if any: the shop shows "◆ leads to …" on that upgrade */
+export const epicAfter = (id: string, v: string): Variant | null =>
+  v.length !== 1 ? null : (EPIC[id]?.find((x) => x[0] === v) ?? null);
 
 export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
 

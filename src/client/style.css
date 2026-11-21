@@ -72,6 +72,7 @@ button.on { border-color: var(--accent); color: var(--accent); }
 .mark.uniq-tag { background: #e8b84a; color: #3a2600; font-weight: 700; }
 .mark.rarity-rare { background: #cfe8ff; color: #0b3a66; margin-left: 4px; }
 .mark.rarity-epic { background: #b48cff; color: #fff; font-weight: 700; margin-left: 4px; }
+.mark.rarity-path { background: transparent; color: #b48cff; border: 1px solid #b48cff; margin-left: 4px; }
 .fightbtn .warn-empty { display: block; color: #ffcf6e; }
 .fightbtn .slot-up { display: block; color: #b6f0c8; }
 .up-diff { font-size: 11px; margin: 2px 0; display: flex; flex-wrap: wrap; gap: 4px; }

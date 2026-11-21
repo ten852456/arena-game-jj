@@ -12,7 +12,7 @@ import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
-import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
+import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
@@ -172,7 +172,11 @@ function ultHTML(h: (typeof HEROES)[number]) {
 /** rarity of an upgrade branch (rare = any Lv3, epic = the big ones): a gold / purple tag */
 function rarityTag(k: { id: string; v: string } | null) {
   const r = k ? rarityOf(k.id, k.v) : 'common';
-  if (r === 'common') return '';
+  if (r === 'common') {
+    // a Lv2 upgrade whose next branch is epic says so (the random branch rule stays: Lv3 picks one of two)
+    const e = k ? epicAfter(k.id, k.v) : null;
+    return e ? ` <span class="mark rarity-path" title="${esc(L('อัป Lv3 สายนี้มีโอกาสได้ระดับมหากาพย์', 'the Lv3 after this branch can be the epic one'))}">${L(`◆ ทางสู่ ${SKILLS[k!.id].tree[e].name}`, `◆ leads to ${SKILLS[k!.id].tree[e].name}`)}</span>` : '';
+  }
   return ` <span class="mark rarity-${r}">${r === 'epic' ? L('◆ มหากาพย์', '◆ EPIC') : L('◇ หายาก', '◇ RARE')}</span>`;
 }
 /** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
