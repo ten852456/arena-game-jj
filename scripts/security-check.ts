@@ -53,3 +53,13 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const [, fin] = await post('/api/run/finish', { runId: fresh + '-r', playerId: fresh, name: '', hero: 'knight', wins: jf.won ? 1 : 0, losses: jf.won ? 0 : 1, day: 1, build });
   check('tutorial fight: its win earns no stardust (same as a 0-win run: 5)', !jf.won || fin?.reward?.stardust === 5, `stardust ${fin?.reward?.stardust}`);
 }
+// sim v14: implausible builds are rejected (and so never enter the snapshot pool)
+{
+  const t = 'sec-pl-' + Date.now();
+  const eight = { hero: 'knight', skills: ['shield', 'stoneskin', 'cleanse', 'bulwark', 'strike', 'jab', 'feast', 'frost'].map((id) => ({ id, v: '' })) };
+  const [s8] = await post('/api/fight', { runId: t + '-a', playerId: t, day: 1, rating: 1000, build: eight });
+  check('8 skills on day 1 → 400', s8 === 400, `status ${s8}`);
+  const lv3 = { hero: 'knight', skills: [{ id: 'bulwark', v: 'a1' }, { id: 'shield', v: '' }] };
+  const [s3] = await post('/api/fight', { runId: t + '-b', playerId: t, day: 1, rating: 1000, build: lv3 });
+  check('Lv3 on day 1 → 400', s3 === 400, `status ${s3}`);
+}
