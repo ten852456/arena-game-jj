@@ -156,11 +156,11 @@ export const TUNING = {
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
   'ult.berserker.pow': 0.07,
   /** นักเวทเพลิง: burn stacks on the enemy */
-  'ult.pyro.trig': 3,
+  'ult.pyro.trig': 2,
   /** นักเวทเพลิง: deals the burn still to come × this right away */
   'ult.pyro.pow': 0.3,
   /** นักรบหนาม: direct hits taken */
-  'ult.thornguard.trig': 9,
+  'ult.thornguard.trig': 5,
   /** นักรบหนาม: seconds of poison thorns */
   'ult.thornguard.pow': 2.5,
   /** แม่มดน้ำแข็ง: ice skill casts */
