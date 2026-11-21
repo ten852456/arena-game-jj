@@ -122,7 +122,10 @@ export function initTutorial(opts: { onHelp?: () => void } = {}) {
   if (header && !header.querySelector('.tut-open')) {
     const b = document.createElement('button');
     b.className = 'tut-open small ghost';
-    const paint = () => (b.textContent = L('? วิธีเล่น', '? How to play'));
+    const paint = () => {
+      b.innerHTML = `<span aria-hidden="true">?</span> <span class="hb-l">${L('วิธีเล่น', 'How to play')}</span>`;
+      b.setAttribute('aria-label', L('วิธีเล่น', 'How to play'));
+    };
     paint();
     b.addEventListener('click', () => (opts.onHelp ?? showTutorial)());
     header.appendChild(b);

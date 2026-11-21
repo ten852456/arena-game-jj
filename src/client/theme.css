@@ -343,3 +343,45 @@ body.skill-dragging .sell-jar { border-color: var(--m-gold); box-shadow: 0 0 0 3
 .mm-lb li.r1 { box-shadow: 0 0 0 2.5px var(--m-moon), 0 3px 0 var(--ink-deep); }
 .mm-lb li.me { box-shadow: inset 6px 0 0 var(--m-sky), 0 3px 0 var(--ink-deep); }
 .mm-lb li.r1.me { box-shadow: inset 6px 0 0 var(--m-sky), 0 0 0 2.5px var(--m-moon), 0 3px 0 var(--ink-deep); }
+
+/* ==========================================================================
+   Phones held sideways with the browser bar showing (≤ 420px tall, e.g. 780×340, 667×320):
+   every pixel of height goes to the game. Header buttons show only their icon, the HUD is slimmer,
+   the shop drops its small arena picture (the fight screen shows the arena) and panels scroll inside.
+   ========================================================================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  header .hb-l, header .ib-l { display: none; }
+  header .cx-open, header .tut-open, header .info-btn { min-width: 36px; padding: 0 8px; }
+}
+@media (orientation: landscape) and (max-height: 420px) {
+  :root { --hh: 34px; --gap: 6px; --pad: 5px; }
+  header > b { font-size: 15px; }
+  header button, header .lang button, header .tut-open, header .mute-btn { min-height: 28px !important; }
+  header .lang button, header .mute-btn { min-width: 32px; }
+
+  .shopv { gap: 5px 6px; grid-template-columns: minmax(150px, 0.5fr) minmax(0, 1fr) minmax(0, 1.1fr); }
+  .shopv > .sv-top.hud { min-height: 36px; }
+  .hud-chip { height: 34px; padding: 0 8px 0 6px; border-radius: 12px; }
+  .hud-n { font-size: 18px; }
+  .hud-heart { width: 20px; height: 18px; }
+  .hud-moon { width: 20px; height: 20px; }
+  .hud-star svg { width: 11px; height: 11px; }
+  .gold-pill { height: 28px; }
+  .gold-n { font-size: 18px; }
+  .sv-slot { display: none; }
+  .sv-hero { padding: 5px 8px; }
+  .svh-name b { font-size: 14px; }
+  .svh-name .tag { display: none; }
+  .shopv > .sv-sec { padding: 6px; }
+  .sv-h h3 { font-size: 14px; }
+  .shopv .shop { grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 5px; margin-top: 4px; }
+  .sv-fight .fightbtn { min-height: 36px; font-size: 14px; }
+  .sv-fight .fightbtn small { display: none; }
+
+  /* hero pick: long hero text scrolls inside its card instead of being cut off */
+  #panel .pick3 .hero { overflow-y: auto; overscroll-behavior: contain; justify-content: flex-start; }
+  .pick-rules { display: none; }
+
+  .fv-side { padding: 6px 8px; }
+  .rv-side .mm-result h2 { font-size: 15px; margin: 2px 0; }
+}

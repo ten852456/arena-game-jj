@@ -331,7 +331,8 @@ export function initCodex() {
     const b = document.createElement('button');
     b.className = 'cx-open small ghost';
     const paint = () => {
-      b.textContent = L('📖 คู่มือ', '📖 Codex');
+      b.innerHTML = `<span aria-hidden="true">📖</span> <span class="hb-l">${L('คู่มือ', 'Codex')}</span>`;
+      b.setAttribute('aria-label', L('คู่มือ', 'Codex'));
       b.title = L('คู่มือ: ทุกอย่างในเกมอธิบายไว้ที่นี่', 'Codex: everything in the game, explained');
     };
     paint();
