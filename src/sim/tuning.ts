@@ -21,9 +21,9 @@ export const TUNING = {
   'run.lossEvery': 4,
   // ---- base HP per day (combat.ts HP_BY_DAY × this) ----
   /** days 1–3 */
-  'hp.early': 1.15,
+  'hp.early': 1.25,
   /** days 4–7 */
-  'hp.mid': 1.45,
+  'hp.mid': 1.6,
   /** day 8+ */
   'hp.late': 1.85,
   // ---- combat rules (numbers only) ----

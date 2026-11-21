@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 17;
+export const SIM_VERSION = 18;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**

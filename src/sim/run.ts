@@ -93,7 +93,7 @@ export interface LogEntry {
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
-export const RUN_VERSION = 10;
+export const RUN_VERSION = 11;
 
 export interface RunState {
   v: typeof RUN_VERSION;
