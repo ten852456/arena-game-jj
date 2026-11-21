@@ -341,7 +341,7 @@ const BASE_LIST: SkillDef[] = [
   // tech: answers 🔥 ☠ (shakes off a burn / poison stack)
   def('sidestep', 'dodge', {
     '': N('ก้าวหลบ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(3)]),
-    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(3)], 'ล้างดีบัฟ'),
+    a: N('สะบัดพิษ', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(4)], 'ล้างดีบัฟ'),
     a1: N('สะบัดหมด', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, hit(4)]),
     a2: N('สะบัดแล้วฟื้น', 6, [{ k: 'dodge', n: 1 }, { k: 'cleanse', n: 99, dot: true }, { k: 'heal', n: 4 }]),
     b: N('เงาลวง', 6, [{ k: 'dodge', n: 2 }, { k: 'cleanse', n: 1, dot: true }, hit(4)], 'หลบมาก'),
@@ -366,7 +366,7 @@ const BASE_LIST: SkillDef[] = [
     a1: N('หินผา', 6.5, [{ k: 'shield', n: 8 }, { k: 'steadfast' }, hit(4, { shieldPct: 0.4 })]),
     a2: N('หินฟื้น', 6.5, [{ k: 'shield', n: 6 }, { k: 'heal', n: 5 }, hit(4, { shieldPct: 0.4 })]),
     b: N('หินพุ่ง', 6.5, [{ k: 'shield', n: 4 }, hit(3, { shieldPct: 0.8 })], 'โล่เป็นดาเมจ'),
-    b1: N('หินถล่ม', 6.5, [{ k: 'shield', n: 4 }, hit(4, { shieldPct: 1 }), { k: 'charge', mult: 1.5, hits: 1 }]),
+    b1: N('หินถล่ม', 6.5, [{ k: 'shield', n: 4 }, hit(4, { shieldPct: 1 }), { k: 'thorns', n: 2 }]),
     b2: N('หินทะลวง', 6.5, [{ k: 'shield', n: 4 }, hit(3, { shieldPct: 0.8, pierce: 1 })]),
   }),
   // tech: answers 🔥 ☠ (removes burn / poison)
@@ -456,7 +456,7 @@ const BASE_LIST: SkillDef[] = [
   def('plague', 'poison', {
     '': N('พิษปะทุ', 6, [hit(2, { poisonPct: 0.4, pierce: 1 })]),
     a: N('พิษระเบิด', 6, [hit(2, { poisonPct: 0.6, pierce: 1 })], 'ระเบิดพิษ'),
-    a1: N('มหาพิษ', 6, [hit(3, { poisonPct: 0.7, pierce: 1, leech: 0.5 })]),
+    a1: N('มหาพิษ', 6, [hit(3, { poisonPct: 0.85, pierce: 1, leech: 0.5 })]),
     a2: N('พิษลาม', 6, [hit(2, { poisonPct: 0.4, pierce: 1 }), { k: 'poison', dps: 2, secs: 8 }]),
     b: N('โรคระบาด', 6, [{ k: 'poison', dps: 1, secs: 10, stacks: 2 }], 'พิษนาน'),
     b1: N('ระบาดหนัก', 6, [{ k: 'poison', dps: 2, secs: 10, stacks: 2 }]),

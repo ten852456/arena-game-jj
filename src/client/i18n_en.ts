@@ -166,7 +166,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Undying',
       get trigger() { return both((lv) => `HP below ${pc(ultTrig('berserker', lv))}% or a killing blow`); },
-      get effect() { return both((lv) => `don’t die (1 HP left on a killing blow), heal ${pc(ultPow('berserker', lv))}% of max HP + ${lv >= 2 ? 3 : 2} power`); },
+      get effect() { return both((lv) => `don’t die (1 HP left on a killing blow), heal ${pc(ultPow('berserker', lv))}% of max HP + power for the rest of the fight = ${r1(T['ult.berserker.grow'] * 100 * (lv >= 2 ? 1.5 : 1))}% of max HP (at least 2)`); },
     },
   },
   pyro: {
@@ -221,10 +221,10 @@ export const LINE_EN: Record<string, string> = {
 export const ROLE_EN: Record<string, string> = { core: 'Core', payoff: 'Payoff', tech: 'Counter' };
 
 export const MARKS_EN: Record<string, { name: string; desc: string }> = {
-  burn: { name: 'Scorch', desc: 'Each use burns the enemy 1/s for 3s' },
+  burn: { name: 'Scorch', desc: 'Each use burns the enemy for 4s (1/s, +1 every 3 days)' },
   echo: { name: 'Echo', desc: 'Works once more at 50% power' },
-  quick: { name: 'Quickcast', desc: 'Cooldown −40%' },
-  steadfast: { name: 'Unshaken', desc: 'Its cooldown keeps running even while you are frozen' },
+  quick: { name: 'Quickcast', desc: 'Cooldown −25%' },
+  steadfast: { name: 'Unshaken', desc: '25% stronger, and its cooldown keeps running even while you are frozen' },
 };
 
 export const BUILDINGS_EN: Record<string, { name: string; desc: string; future?: string }> = {

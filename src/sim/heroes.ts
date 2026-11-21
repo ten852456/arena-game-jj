@@ -214,7 +214,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'ไม่ยอมตาย',
       get trigger() { return both((lv) => `เลือดต่ำกว่า ${pc(ultTrig('berserker', lv))}% หรือโดนตีจนเลือดหมด`); },
-      get effect() { return both((lv) => `ไม่ตาย (เหลือ 1 เลือดถ้าโดนตีจนหมด) ฟื้น ${pc(ultPow('berserker', lv))}% ของเลือดสูงสุด + พลัง +${lv >= 2 ? 3 : 2}`); },
+      get effect() { return both((lv) => `ไม่ตาย (เหลือ 1 เลือดถ้าโดนตีจนหมด) ฟื้น ${pc(ultPow('berserker', lv))}% ของเลือดสูงสุด + พลังตลอดการสู้ +${r1(T['ult.berserker.grow'] * 100 * (lv >= 2 ? 1.5 : 1))}% ของเลือดสูงสุด (อย่างน้อย 2)`); },
     },
   },
   // ---------------- 🔥 burn ----------------

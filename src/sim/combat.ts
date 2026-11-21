@@ -2,7 +2,7 @@ import { HEROES_BY_ID, ULT_LV2_POW, inLine, lineAffinity, ultLevel, ultPow, ultT
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
-import { SKILLS, execNode, lvOf, nodeOf, reacts, type Ctx, type FighterView } from './skills';
+import { SKILLS, execNode, lvOf, nodeOf, rarityOf, reacts, type Ctx, type FighterView } from './skills';
 import type {
   BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
 } from './types';
@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 18;
+export const SIM_VERSION = 19;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -54,8 +54,8 @@ export const fatigueStart = (day: number) => Math.round(Math.min(30, day <= 3 ? 
 /** Fatigue damage in the n-th second = n × step, so it ends a fight a few seconds after it starts on every day. */
 export const fatigueStep = (day: number) => Math.max(1, Math.ceil(hpFor(day) / 30));
 const MAX_FREEZE_TICKS = 15;
-const FREEZE_DR = 0.6; // each recent freeze makes the next one 40% shorter
-const FREEZE_DR_DECAY = 4 * TPS; // one stack of diminishing returns wears off every 4s
+const FREEZE_DR = 0.5; // each recent freeze makes the next one half as long (sim v19: was 40% shorter)
+const FREEZE_DR_DECAY = 6 * TPS; // one stack of diminishing returns wears off every 6s (sim v19: 4s)
 /** Total frozen time per fight (≈25% of the target fight length); after that freezes are resisted. */
 export const freezeCap = (day: number) => (day <= 3 ? 2 : day <= 7 ? 4.5 : 6) * TPS;
 const SLOW_CAP = 0.5;
@@ -74,10 +74,16 @@ export const ENGINE_GAP = 3 * TPS;
 export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
+/** ร่ายไว mark: cooldown × this (sim v19: 0.6 was the one mark everyone wanted) */
+export const QUICK_MARK = 0.75;
 /** ตราศักดิ์สิทธิ์ powers at most this many marked skills */
 export const SIGIL_MAX = 2;
 /** sim v18: a skill of the hero's line fires its first cast at most this many ticks into the fight (slow lines start sooner) */
-export const FIRST_CAST = 4.5 * TPS;
+export const FIRST_CAST = 3.5 * TPS;
+export const FIRST_CAST_STEP = 0.5 * TPS;
+export const FIRST_CAST_MAX = 5 * TPS;
+/** no ultimate fires before this tick */
+export const ULT_MIN_T = 6 * TPS;
 export const FIRST_CAST_DAYS = 5;
 /** damage sources a spiked shield does not reflect */
 const NO_REFLECT = new Set(['thorns', 'burn', 'poison', 'fatigue', 'ult']);
@@ -220,7 +226,7 @@ const dotLeft = (xs: Dot[]) => xs.reduce((n, b) => n + b.dps * Math.ceil(b.t / T
 
 /** haste = cooldown cut from connect bonuses (0.2 per haste bonus, at most halved) */
 export function cdTicks(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'star'>, haste = 0): number {
-  const base = nodeOf(k).cd * (k.mark === 'quick' ? 0.6 : 1) * Math.max(0.5, 1 - haste) * ((k.star ?? 0) >= 3 ? 1 - T['star.cd3'] : 1);
+  const base = nodeOf(k).cd * (k.mark === 'quick' ? QUICK_MARK : 1) * Math.max(0.5, 1 - haste) * ((k.star ?? 0) >= 3 ? 1 - T['star.cd3'] : 1);
   return Math.max(5, Math.round(base));
 }
 
@@ -271,7 +277,7 @@ function makeBlocks(b: Build): Block[] {
     const t = bonusTotals(skills, out.length, act);
     out.push({
       inst: { ...inst }, idx, cd: Math.round(cdTicks(inst, t.haste) * ((b.relics ?? []).includes('permafrost') ? 1 + T['relic.permafrostCd'] : 1)), prog: 0,
-      power: t.power * affinityOf(b.hero, inst.id, inst.v) * (lvOf(inst.v) >= 3 ? starPower(inst.star) : 1) * relicPower(b, inst), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
+      power: t.power * affinityOf(b.hero, inst.id, inst.v) * (lvOf(inst.v) >= 3 ? starPower(inst.star) : 1) * relicPower(b, inst) * (inst.mark === 'steadfast' ? 1.25 : 1), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
@@ -290,7 +296,11 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
   const blocks = makeBlocks(b);
   // early days only: a slow line's first cast comes by FIRST_CAST (fights on days 1–FIRST_CAST_DAYS are short)
-  if (day <= FIRST_CAST_DAYS) for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - FIRST_CAST);
+  // sim v19: staggered by list order (3.5 s, 4 s, 4.5 s, 5 s …) so the line's first casts don't land as one volley with the ult
+  if (day <= FIRST_CAST_DAYS) {
+    let n = 0;
+    for (const blk of blocks) if (inLine(b.hero, blk.inst.id)) blk.prog = Math.max(blk.prog, blk.cd - Math.min(FIRST_CAST_MAX, FIRST_CAST + FIRST_CAST_STEP * n++));
+  }
   if (relics.has('quickdraw')) for (const blk of blocks) blk.prog = Math.max(blk.prog, Math.round(blk.cd * T['relic.quickdraw']));
   // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
   if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
@@ -530,7 +540,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           f.hp += h;
           emit({ type: 'heal', side: f.side, amount: h });
         }
-        const g = f.ultLv >= 2 ? 3 : 2;
+        // sim v19: a bigger payoff (+power for the rest of the fight scales with the day's HP)
+        const g = Math.max(2, Math.round(f.maxHp * T['ult.berserker.grow'] * (f.ultLv >= 2 ? 1.5 : 1)));
         f.growth.push({ v: g, idx: -1 });
         emit({ type: 'status', side: f.side, status: 'grow', value: sum(f.growth) });
         break;
@@ -600,6 +611,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
   }
   function ultCheck() {
+    // sim v19: no ultimate before ULT_MIN_T (it landed in the same second as the first casts: one-volley fights)
+    if (t < ULT_MIN_T) return;
     for (const f of F) if (ultReady(f)) fireUlt(f);
   }
 
@@ -903,10 +916,12 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (SKILLS[inst.id].line === HEROES_BY_ID[f.hero]?.line) f.lineCasts++;
     emit({
       type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx,
+      ...(rarityOf(inst.id, inst.v) === 'epic' ? { epic: true } : {}),
       ...(q.from !== undefined ? { from: f.blocks[q.from].idx } : {}),
       ...(q.react ? { react: true } : {}),
     });
     const power = blk.power * q.mult * (firstCast ? 1 + T['relic.whetstone'] : 1);
+    const dealtBefore = f.dealtTotal;
     runSkill(f, foe, blk, power, Math.round(blk.dmg * q.mult));
     if (blk.shieldOnFire > 0 && f.hp > 0) {
       const n = meltShield(f, Math.max(1, Math.round(blk.shieldOnFire * q.mult)));
@@ -919,11 +934,15 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
       runSkill(f, foe, blk, power * 0.5, Math.round(blk.dmg * q.mult * 0.5));
     }
-    if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1, 3, blk.idx);
+    if (inst.mark === 'burn' && foe.hp > 0) addBurn(foe, 1 + Math.floor(day / 3), 4, blk.idx);
     // ★★★ signature (sim v18): every cast echoes once more at star.echo power
     if ((inst.star ?? 0) >= 3 && lvOf(inst.v) >= 3 && foe.hp > 0 && f.hp > 0) {
-      emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true });
-      runSkill(f, foe, blk, power * T['star.echo'], Math.round(blk.dmg * q.mult * T['star.echo']));
+      // sim v19: a true share of the damage the cast dealt (no rounding up, no DoT / buff / cleanse repeat)
+      const extra = Math.floor((f.dealtTotal - dealtBefore) * T['star.echo']);
+      if (extra > 0) {
+        emit({ type: 'cast', side: f.side, skill: inst.id, lv: lvOf(inst.v), idx: blk.idx, echo: true, star3: true });
+        deal(foe, extra, true, inst.id, blk.idx);
+      }
     }
 
     // trigger bonuses fire at the same power, but deeper chain steps get weaker

@@ -21,7 +21,7 @@ export const TUNING = {
   'run.lossEvery': 4,
   // ---- base HP per day (combat.ts HP_BY_DAY × this) ----
   /** days 1–3 */
-  'hp.early': 1.25,
+  'hp.early': 1.4,
   /** days 4–7 */
   'hp.mid': 1.6,
   /** day 8+ */
@@ -36,7 +36,7 @@ export const TUNING = {
   // ---- shared skills of each line: power multiplier at Lv1 and Lv3 ----
   'line.hit.lv1': 0.75,
   'line.hit.lv3': 1.45,
-  'line.dodge.lv1': 0.75,
+  'line.dodge.lv1': 0.85,
   'line.dodge.lv3': 1.75,
   'line.shield.lv1': 1.05,
   'line.shield.lv3': 1.45,
@@ -57,7 +57,7 @@ export const TUNING = {
   'uniq.thornguard.lv3': 1.8,
   'uniq.assassin.lv1': 0.8,
   'uniq.assassin.lv3': 1.6,
-  'uniq.duelist.lv1': 0.95,
+  'uniq.duelist.lv1': 1.05,
   'uniq.duelist.lv3': 1.4,
   'uniq.berserker.lv1': 1.5,
   'uniq.berserker.lv3': 1.25,
@@ -65,7 +65,7 @@ export const TUNING = {
   'uniq.pyro.lv3': 1,
   'uniq.witch.lv1': 1.15,
   'uniq.witch.lv3': 1.3,
-  'uniq.chrono.lv1': 1.55,
+  'uniq.chrono.lv1': 1.4,
   'uniq.chrono.lv3': 1.25,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
   'cd.knight': 1,
@@ -77,13 +77,13 @@ export const TUNING = {
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
   // ---- hero max HP multiplier ----
-  'hp.knight': 1.2,
+  'hp.knight': 1.12,
   'hp.thornguard': 1.15,
   'hp.assassin': 1.18,
   'hp.duelist': 0.9,
   'hp.berserker': 1.16,
-  'hp.pyro': 1.45,
-  'hp.witch': 1.35,
+  'hp.pyro': 1.55,
+  'hp.witch': 1.28,
   'hp.chrono': 1.32,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
@@ -125,7 +125,7 @@ export const TUNING = {
   'line.lv3': 1.25,
   // ---- stars after Lv3 (sim v17, run.ts / combat.ts) ----
   /** each ★ on a Lv3 skill: all its numbers ×(1 + this) */
-  'star.pow': 0.1,
+  'star.pow': 0.12,
   /** ★★★ also cuts the skill's cooldown by this share */
   'star.cd3': 0,
   /** ★★★ signature: each cast echoes once more at this power */
@@ -156,7 +156,7 @@ export const TUNING = {
   'relic.glassCap': 0.08,
   'relic.glassDmg': 0.45,
   'relic.lonewolf': 1.1,
-  'relic.sigil': 0.35,
+  'relic.sigil': 0.25,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
@@ -165,7 +165,7 @@ export const TUNING = {
   'aff.assassin': 1.3,
   'aff.duelist': 1.4,
   'aff.knight': 1.35,
-  'aff.berserker': 1.4,
+  'aff.berserker': 1.3,
   'aff.pyro': 1.4,
   'aff.thornguard': 1.35,
   'aff.witch': 1.45,
@@ -202,6 +202,8 @@ export const TUNING = {
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.3,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
+  /** นักรบคลั่ง ult: +power for the rest of the fight = this share of max HP (×1.5 at Lv2), at least 2 */
+  'ult.berserker.grow': 0.012,
   'ult.berserker.pow': 0.08,
   /** นักเวทเพลิง: burn stacks on the enemy */
   'ult.pyro.trig': 2,
@@ -214,7 +216,7 @@ export const TUNING = {
   /** หนามพิษ also poisons the enemy this much per second for its duration, at once */
   'ult.thornguard.poison': 2,
   /** แม่มดน้ำแข็ง: ice skill casts */
-  'ult.witch.trig': 2,
+  'ult.witch.trig': 3,
   /** แม่มดน้ำแข็ง: freeze seconds (+ next hit ×2) */
   'ult.witch.pow': 1.7,
   /** จอมเวทลม: slows / delays landed */

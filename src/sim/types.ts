@@ -122,8 +122,10 @@ export type EventBody =
   /** idx = index into that side's build.skills */
   | {
       type: 'cast'; side: Side; skill: string; lv: number; idx: number; echo?: boolean;
-      /** set off by this skill (its trigger bonus, or an engine: ฟันเฟือง / เร่งเครื่อง) */
       from?: number;
+      /** sim v19: the ★★★ repeat (a share of the cast's damage), and a cast of an epic branch (shown in the fight) */
+      star3?: boolean;
+      epic?: boolean;
       /** fired early as a reaction to control (skills with ✨ ชำระ or 🗿 ใจเหล็ก) */
       react?: boolean;
     }

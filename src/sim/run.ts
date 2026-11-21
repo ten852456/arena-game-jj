@@ -76,10 +76,10 @@ export function heroChoices(seed: number, n = HERO_CHOICES): string[] {
 export type LastChanceOption = 'awaken' | 'mark' | 'supply';
 export const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];
 export const MARK_INFO: Record<Mark, { name: string; desc: string }> = {
-  burn: { name: 'เผาไหม้', desc: 'ทุกครั้งที่ใช้ ศัตรูติดไฟ 1/วิ นาน 3 วิ' },
+  burn: { name: 'เผาไหม้', desc: 'ทุกครั้งที่ใช้ ศัตรูติดไฟ 4 วิ (1/วิ และ +1 ทุก 3 วัน)' },
   echo: { name: 'ตีซ้ำ', desc: 'ทำงานซ้ำอีกครั้งที่แรง 50%' },
-  quick: { name: 'ร่ายไว', desc: 'คูลดาวน์ลด 40%' },
-  steadfast: { name: 'ไม่หวั่นไหว', desc: 'คูลดาวน์ยังเดินต่อแม้โดนแช่แข็ง' },
+  quick: { name: 'ร่ายไว', desc: 'คูลดาวน์ลด 25%' },
+  steadfast: { name: 'ไม่หวั่นไหว', desc: 'แรงขึ้น 25% และคูลดาวน์ยังเดินต่อแม้โดนแช่แข็ง' },
 };
 
 export interface LogEntry {
@@ -93,7 +93,7 @@ export interface LogEntry {
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
-export const RUN_VERSION = 11;
+export const RUN_VERSION = 12;
 
 export interface RunState {
   v: typeof RUN_VERSION;
