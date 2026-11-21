@@ -4,7 +4,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { WIN_TARGET } from '../sim/run';
 import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
-import { MAX_DAY, cleanId, cleanName, intIn, validateBuild } from './validate';
+import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, validateBuild } from './validate';
 import { recordOf } from './fight';
 import type { Res } from './fight';
 
@@ -66,6 +66,9 @@ export function handleFinish(body: any): Res {
   if (!track) return bad('unknown run', 404);
   if (track.playerId !== playerId) return bad('run belongs to another player', 403);
   if (track.finished) return bad('run already finished', 409);
+  // the final build's relics must follow the run's last fought build and the server's offers (security review)
+  const relicErr = relicOfferCheck(track, build, day);
+  if (relicErr) return bad(relicErr);
 
   // Only fights the server ran count: a client can't claim wins it never fought.
   const days = Object.values(track.days);

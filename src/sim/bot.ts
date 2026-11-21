@@ -5,7 +5,7 @@ import {
   LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
-import { RELICS_BY_ID, RELIC_DAYS, rollRelicOffer } from './relics';
+import { RELICS_BY_ID, RELIC_DAYS, relicFits, rollRelicOffer } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, SKILL_ROLE, lvOf, nodeOf, rarityOf, epicAfter, type Effect, type SkillNode, type Variant } from './skills';
 import { LINES, type Build, type Line, type SkillInstance } from './types';
@@ -182,14 +182,14 @@ export function botBranch(s: RunState, o: Offer, tier: BotTier): string | undefi
   const opts = offerChoices(s, o);
   if (opts.length < 2) return undefined;
   const rng = new Rng(hashSeed(s.seed, 'branch', s.day, o.id, tier));
-  if (tier === 'easy' || (tier === 'normal' && rng.next() < 0.5)) return rng.pick(opts);
+  if (tier === 'easy' || (tier === 'normal' && rng.next() < 0.6)) return rng.pick(opts);
   const has = effectsOf(s.skills);
   const val = (v: Variant) => {
     let x = nodeValue(nodeOf({ id: o.id, v }), has);
     if (v.length === 1) x += 0.25 * Math.max(...(['1', '2'] as const).map((c) => nodeValue(nodeOf({ id: o.id, v: (v + c) as Variant }), has)));
     const r = rarityOf(o.id, v);
     if (tier === 'hard') x *= r === 'epic' ? 1.08 : r === 'rare' ? 1.04 : epicAfter(o.id, v) ? 1.03 : 1;
-    return x * (0.92 + 0.16 * rng.next());
+    return x * (0.8 + 0.4 * rng.next());
   };
   return opts.reduce((a, b) => (val(b) > val(a) ? b : a));
 }
@@ -205,7 +205,7 @@ export function botRelic(s: RunState, tier: BotTier): number {
   for (const k of s.skills) counts[SKILLS[k.id].line] = (counts[SKILLS[k.id].line] ?? 0) + 1;
   const fit = (id: string) => {
     const g = RELICS_BY_ID[id].group;
-    if (g === line) return 3;
+    if (relicFits(id, line)) return 1.5;
     if (g === 'cheese') {
       if (id === 'sigil') return s.skills.filter((k) => k.mark).length >= 2 ? 4 : 0;
       if (id === 'lonewolf') return 0;
@@ -214,14 +214,14 @@ export function botRelic(s: RunState, tier: BotTier): number {
     if (g === 'any') {
       if (id === 'twinline') return Math.max(...Object.entries(counts).filter(([l]) => l !== line && l !== 'none').map(([, n]) => n), 0) >= 2 ? 2.8 : 1;
       if (id === 'wanderer') return s.skills.filter((k) => SKILLS[k.id].line !== line).length >= 3 ? 2.6 : 1.2;
-      return 2;
+      return 1.5;
     }
-    return 1 + 0.6 * (counts[g] ?? 0);
+    return 1 + 0.5 * (counts[g] ?? 0);
   };
   let best = 0;
   let bv = -Infinity;
   offer.forEach((id, i) => {
-    const v = fit(id) + rng.next() * (tier === 'hard' ? 1.2 : 1.8);
+    const v = fit(id) + rng.next() * (tier === 'hard' ? 2 : 2.5);
     if (v > bv) [best, bv] = [i, v];
   });
   return best;

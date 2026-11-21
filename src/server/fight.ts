@@ -6,7 +6,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
-import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, spendCheck, validateBuild, type RunRecord } from './validate';
+import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, relicOfferCheck, serverRelicOffer, spendCheck, validateBuild, type RunRecord } from './validate';
 
 export interface Res {
   status: number;
@@ -24,6 +24,7 @@ function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
   t.name = name;
   t.playerId ??= playerId; // the run belongs to the player who started it
+  t.relicSeed ??= randomInt(0, 2 ** 32 - 1); // server-only: the run's relic offers (never sent)
   t.t = Date.now();
   return t;
 }
@@ -68,6 +69,9 @@ export function handleFight(body: any): Res {
   // the hero is bound to the run on its first fight: no switching hero (or counter-picking from /api/scout) mid-run
   if (prev?.hero && build.hero !== prev.hero) return bad('hero does not match this run');
   // day by day, the run pays for every change of its build: the running total must fit what its record earned
+  // relics: only kept ones, plus on a relic day one of the 3 the server offered (security review)
+  const relicErr = relicOfferCheck(prev, build, day);
+  if (relicErr) return bad(relicErr);
   const ways = spendCheck(prev, build, day, recordOf(prev), prev?.lastChoice);
   if (!ways.length) return bad('implausible: this run could not have paid for this build');
   // spendCheck re-checks marks and the build's cost per way, so the ways left are the ones that allow ALL of it;
@@ -191,6 +195,8 @@ export function handleFight(body: any): Res {
       },
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
+      // tomorrow is a relic day: the 3 relics the server will accept (the client shows these)
+      ...(serverRelicOffer(track, build.hero, day + 1, build.relics).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics) } : {}),
       result, won, rating: newRating,
     },
   };

@@ -75,6 +75,12 @@ export interface RunTrack {
   rating?: number;
   /** set when POST /api/run/finish recorded this run */
   finished?: number;
+  /**
+   * Server-only seed of the run's relic offers (sim v17, security review): crypto random, made on the run's first fight,
+   * never sent. Each relic day's 3 offers are rollRelicOffer(relicSeed, hero, day, owned); the client only gets the
+   * offer itself (fight response `nextRelics`). First step of docs/SERVER_RUN.md (the server owns the run's seed).
+   */
+  relicSeed?: number;
   t: number;
 }
 export interface FinishedRun {

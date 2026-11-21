@@ -133,6 +133,8 @@ export interface RunState {
   relicOffer?: string[];
   /** relic days already offered (picked or skipped) */
   relicDays?: number[];
+  /** the server's relic offer for a coming day (fight response nextRelics): used instead of the local roll */
+  relicNext?: { day: number; ids: string[] };
 }
 
 /** Skill slots on a day: 3 on days 1–3, 4 on 4–6, 5 on 7–9, 6 from day 10, plus bonus slots (max MAX_SLOTS). */
@@ -192,7 +194,10 @@ export function beginDay(s: RunState) {
   // relic days (sim v17): pick 1 of 3 relics (or skip) before the shop opens
   if (RELIC_DAYS.includes(s.day) && !(s.relicDays ?? []).includes(s.day) && (s.relics ?? []).length < MAX_RELICS) {
     s.relicDays = [...(s.relicDays ?? []), s.day];
-    s.relicOffer = rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? []);
+    // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
+    const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
+    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? []);
+    delete s.relicNext;
     if (s.relicOffer.length) s.phase = 'relic';
   }
 }

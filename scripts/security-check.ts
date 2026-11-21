@@ -1,5 +1,7 @@
 // Abuse cases for the server (run against a live server): npm run security  (BASE=http://host:port)
-import { aiBuild, botShopTurn } from '../src/sim/bot';
+import { aiBuild, botDay, botRules, botShopTurn } from '../src/sim/bot';
+import { HEROES_BY_ID } from '../src/sim/heroes';
+import { RELICS } from '../src/sim/relics';
 import { newRun, recordResult, toBuild, chooseLastChance, applyMark } from '../src/sim/run';
 const BASE = process.env.BASE ?? 'http://localhost:8787';
 const post = async (u: string, b: unknown) => { const r = await fetch(BASE + u, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }); return [r.status, await r.json()] as const; };
@@ -81,4 +83,78 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const d8 = { hero: 'knight', skills: ['charge:a2', 'gear:b2', 'bulwark:a2', 'strike:a1', 'heavy:a2', 'glacier:b2', 'venom:b', 'ignite:a1'].map((x) => ({ id: x.split(':')[0], v: x.split(':')[1] })) };
   const [s8b] = await post('/api/fight', { runId: t + '-c', playerId: t, day: 1, rating: 1000, build: d8 });
   check('forge: the 102g day-8 build from the playtest on a fresh run → 400', s8b === 400, `status ${s8b}`);
+}
+// sim v17 (round 6): branch choice, stars and relics. Relic offers come from a server-only seed (security review).
+{
+  const t = 'sec-r6-' + Date.now();
+  /** play a run on the server with the normal bot (it picks branches and relics), up to `upto` days; returns the run */
+  const play = async (id: string, hero: string, upto: number, tweak?: (day: number, b: ReturnType<typeof toBuild>, offer: string[]) => ReturnType<typeof toBuild> | null) => {
+    const s = newRun(hero, 4242, id);
+    const res: { day: number; status: number; err?: string; offer?: string[] }[] = [];
+    while (s.phase !== 'won' && s.phase !== 'dead' && s.day <= upto) {
+      if (s.phase === 'lastchance') { chooseLastChance(s, 'supply'); continue; }
+      if (s.phase === 'mark') { applyMark(s, 0); continue; }
+      const offer = s.relicOffer?.slice();
+      botDay(s, botRules([HEROES_BY_ID[hero].line], 'hard'));
+      const honest = toBuild(s);
+      const b = tweak?.(s.day, honest, offer ?? []) ?? honest;
+      const [st, f] = await post('/api/fight', { runId: s.id, playerId: t, name: '', day: s.day, rating: s.rating, build: b });
+      res.push({ day: s.day, status: st, err: f?.error, offer });
+      if (st !== 200) break;
+      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      s.rating = f.rating;
+      recordResult(s, f.won, { opp: f.opponent.name, ai: f.opponent.ai, fightId: f.fightId }, f.result.winner === -1);
+    }
+    return { s, res };
+  };
+  // honest: the bot takes relics from the server's offer, chooses branches and buys stars → every day accepted
+  const h = await play(t + '-h', 'pyro', 11);
+  const relicsOwned = toBuild(h.s).relics ?? [];
+  const stars = h.s.skills.reduce((n, k) => n + (k.star ?? 0), 0);
+  check('honest run with relics, branch choice and stars: every day accepted', h.res.every((r) => r.status === 200), `days ${h.res.length} · relics ${relicsOwned.join(',') || '-'} · ★${stars} · ${h.res.find((r) => r.status !== 200)?.err ?? ''}`);
+  check('the server sent the relic offers (picked relics came from them)', relicsOwned.length > 0 && h.res.filter((r) => [4, 7, 10].includes(r.day)).every((r) => !r.offer || r.offer.length === 3), relicsOwned.join(','));
+  // off-offer: on day 4 take a relic the server did not offer
+  const off = await play(t + '-o', 'pyro', 4, (day, b, offer) => {
+    if (day !== 4) return null;
+    const pick = RELICS.map((r) => r.id).find((id) => !offer.includes(id))!;
+    return { ...b, relics: [pick] };
+  });
+  const offDay4 = off.res.find((r) => r.day === 4);
+  check('forge: a relic the server did not offer → 400', offDay4?.status === 400 && (offDay4.offer ?? []).length === 3, `status ${offDay4?.status} ${offDay4?.err ?? ''} · offered ${offDay4?.offer?.join(',')}`);
+  // a relic added on a non-relic day (day 5)
+  // skip the relic on day 4, then add one of day 4's offer on day 5 (still within the count cap)
+  let offer4: string[] = [];
+  const late = await play(t + '-l', 'pyro', 5, (day, b, offer) => {
+    if (day === 4) { offer4 = offer; return { ...b, relics: [] }; }
+    if (day === 5) return { ...b, relics: [offer4[0]] };
+    return null;
+  });
+  const d5 = late.res.find((r) => r.day === 5);
+  check('forge: a relic added on a non-relic day (skipped on day 4, added day 5) → 400', late.res.find((r) => r.day === 4)?.status === 200 && d5?.status === 400, `status ${d5?.status} ${d5?.err ?? ''}`);
+  // a relic dropped / swapped later
+  const swap = await play(t + '-s', 'pyro', 5, (day, b) => (day === 5 && b.relics?.length ? { ...b, relics: [] } : null));
+  const d5s = swap.res.find((r) => r.day === 5);
+  check('forge: a relic dropped later → 400', !toBuild(swap.s).relics?.length || d5s?.status === 400, `status ${d5s?.status}`);
+  // relic forgery on day 1 and unknown ids
+  const k1 = { hero: 'knight', skills: [{ id: 'bulwark', v: '' }, { id: 'shield', v: '' }] };
+  const [r1] = await post('/api/fight', { runId: t + '-d1', playerId: t, day: 1, rating: 1000, build: { ...k1, relics: ['bastion'] } });
+  check('forge: a relic on day 1 → 400', r1 === 400, `status ${r1}`);
+  const [r2] = await post('/api/fight', { runId: t + '-d1b', playerId: t, day: 1, rating: 1000, build: { ...k1, relics: ['godmode'] } });
+  check('forge: an unknown relic id → 400', r2 === 400, `status ${r2}`);
+  // stars: only on Lv3, at most ★★★, from day 7, and they cost gold
+  const [x1] = await post('/api/fight', { runId: t + '-st1', playerId: t, day: 1, rating: 1000, build: { hero: 'knight', skills: [{ id: 'bulwark', v: '', star: 1 }, { id: 'shield', v: '' }] } });
+  check('forge: a star on a Lv1 skill → 400', x1 === 400, `status ${x1}`);
+  const starForge = await play(t + '-st2', 'knight', 5, (day, b) => (day === 5 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, star: 3 } : k)) } : null));
+  const s5 = starForge.res.find((r) => r.day === 5);
+  check('forge: stars before day 7 → 400', s5?.status === 400 || !toBuild(starForge.s).skills.some((k) => k.v.length === 2), `status ${s5?.status} ${s5?.err ?? ''}`);
+  const star4 = await play(t + '-st3', 'knight', 9, (day, b) => (day === 9 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, star: 4 } : k)) } : null));
+  const s9 = star4.res.find((r) => r.day === 9);
+  check('forge: ★★★★ → 400', s9?.status === 400, `status ${s9?.status} ${s9?.err ?? ''}`);
+  const rich = await play(t + '-st4', 'knight', 8, (day, b) => (day === 8 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, star: 3 } : k)) } : null));
+  const s8 = rich.res.find((r) => r.day === 8);
+  check('forge: ★★★ on every Lv3 skill on day 8 (unpaid) → 400', s8?.status === 400, `status ${s8?.status} ${s8?.err ?? ''}`);
+  // branch choice: switching a Lv3 skill to its other branch is a sell + rebuy (must be paid for)
+  const sw = await play(t + '-br', 'knight', 6, (day, b) => (day === 6 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, v: (k.v[0] === 'a' ? 'b' : 'a') + k.v[1] } : k)) } : null));
+  const s6 = sw.res.find((r) => r.day === 6);
+  check('forge: every Lv3 switched to the other branch for free → 400', s6?.status === 400, `status ${s6?.status} ${s6?.err ?? ''}`);
 }

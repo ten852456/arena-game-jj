@@ -11,6 +11,8 @@ import * as RF from './runEndFx';
 import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
+import { GROUP_ICON, RELICS_BY_ID, relicFits, relicText } from '../sim/relics';
+import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
@@ -40,7 +42,7 @@ export interface Stage {
 }
 
 type View =
-  | 'town' | 'title' | 'shop' | 'fighting' | 'result' | 'lastchance' | 'mark' | 'over' | 'replay' | 'replayDone'
+  | 'town' | 'title' | 'shop' | 'relic' | 'fighting' | 'result' | 'lastchance' | 'mark' | 'over' | 'replay' | 'replayDone'
   | 'profile' | 'leaderboard';
 
 // ---------- C2: fight names, end-of-run reward, profile / leaderboard / scouting state ----------
@@ -179,6 +181,17 @@ function rarityTag(k: { id: string; v: string } | null) {
   }
   return ` <span class="mark rarity-${r}">${r === 'epic' ? L('◆ มหากาพย์', '◆ EPIC') : L('◇ หายาก', '◇ RARE')}</span>`;
 }
+/** "★★" after a Lv3 skill's name (sim v17) */
+const starTag = (n = 0) =>
+  n > 0 ? ` <span class="mark star-tag" title="${esc(L(`★ ${n}: ตัวเลขทุกตัว +${Math.round(T['star.pow'] * 100 * n)}%${n >= 3 ? ` และคูลดาวน์ −${Math.round(T['star.cd3'] * 100)}%` : ''}`, `★ ${n}: every number +${Math.round(T['star.pow'] * 100 * n)}%${n >= 3 ? ` and cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''}`))}">${'★'.repeat(n)}</span>` : '';
+/** what one more star gives, as a diff line */
+const starDiff = (n: number) =>
+  `<div class="up-diff"><span class="better">${esc(L(`★${n}: ตัวเลขทุกตัว +${Math.round(T['star.pow'] * 100)}%${n >= 3 ? ` · คูลดาวน์ −${Math.round(T['star.cd3'] * 100)}%` : ''}`, `★${n}: every number +${Math.round(T['star.pow'] * 100)}%${n >= 3 ? ` · cooldown −${Math.round(T['star.cd3'] * 100)}%` : ''}`))}</span></div>`;
+/** relics of the run as small chips with their text in the tooltip */
+function relicsHTML(ids: string[] = []) {
+  if (!ids.length) return '';
+  return `<p class="sv-sub sv-relics">${ids.map((id) => `<span class="mark relic-chip" title="${esc(relicText(id, getLang() !== 'en'))}">${RELICS_BY_ID[id]?.icon ?? '?'} ${esc(L(RELICS_BY_ID[id]?.name[0] ?? id, RELICS_BY_ID[id]?.name[1] ?? id))}</span>`).join(' ')}</p>`;
+}
 /** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
 function upDiffHTML(owned: SkillInstance, o: R.Offer) {
   const diff = upgradeDiff(nodeOf(owned), nodeOf({ id: o.id, v: o.v }), getLang() !== 'en');
@@ -227,8 +240,8 @@ function chipsHTML(k: Pick<SkillInstance, 'id' | 'v' | 'mark'>, haste = 0) {
 }
 
 /** Name, level, mark, chips and connect bonuses of a skill (one list row). on = its active bonuses. */
-function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
-  const mark = k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : '';
+function skillLine(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus' | 'star'>, on: Set<number> | null = null, haste = 0, dir?: (bi: number) => Dir) {
+  const mark = (k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : '') + starTag(k.star);
   const lv = lvOf(k.v);
   const pips = `<i class="lvpips" aria-hidden="true">${Array.from({ length: R.MAX_LV }, (_, j) => `<i class="${j < lv ? 'on' : ''}"></i>`).join('')}</i>`;
   return `<span class="nm">${nodeOf(k).name} <small>Lv${lv}</small>${pips}${mark}</span>${chipsHTML(k, haste)}${bonusChips(k.bonus ?? [], lvOf(k.v), on, null, dir)}`;
@@ -426,7 +439,7 @@ function streakText(s: number) {
 const stageSlot = (cover = false, cls = '') => `<div class="stage-slot ${cls}"${cover ? ' data-stage="cover"' : ''} aria-hidden="true"></div>`;
 /** hero shown in the arena on the hero-pick screen (hover / focus a hero card to preview it) */
 let previewHero: string | null = null;
-const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'lastchance' || run.phase === 'mark');
+const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'relic' || run.phase === 'lastchance' || run.phase === 'mark');
 
 function render() {
   if (view !== shownView) {
@@ -454,6 +467,7 @@ function render() {
     fighting: renderFighting,
     result: renderResult,
     lastchance: renderLastChance,
+    relic: renderRelic,
     mark: renderMark,
     over: renderOver,
     replay: renderFighting,
@@ -655,7 +669,7 @@ function offerWhy(r: R.RunState, i: number) {
  * Buy shop offer i through run.buy (the same rule the server re-checks at fight time). A new skill then moves from
  * the end of the list to `pos` (null = the ghost's spot: the best chain spot, else the end); an upgrade stays put.
  */
-function buyOffer(i: number, pos: number | null): string | null {
+function buyOffer(i: number, pos: number | null, pick?: string): string | null {
   const r = run!;
   const o = r.shop[i];
   if (!o) return R.buy(r, i);
@@ -663,7 +677,7 @@ function buyOffer(i: number, pos: number | null): string | null {
   const upIdx = up ? r.skills.indexOf(up) : -1;
   const at = o.v === '' ? Math.max(0, Math.min(r.skills.length, pos ?? defaultSlot(r, o))) : upIdx;
   const from = $panel.querySelector(`.card.offer[data-tip="s:${i}"]`)?.getBoundingClientRect() ?? null;
-  const err = R.buy(r, i);
+  const err = R.buy(r, i, pick);
   if (err) return err;
   if (o.v === '') for (let k = r.skills.length - 1; k > at; k--) R.moveSkill(r, k, -1);
   afterRender = () => {
@@ -695,6 +709,55 @@ function dropSkill(from: number, to: number) {
   render();
 }
 
+/**
+ * Branch choice (sim v17): an upgrade card shows both next branches with their changes and rarity; the player taps one.
+ * Empty when the offer has no choice (a new skill, a star, a stale card).
+ */
+function choiceHTML(r: R.RunState, o: R.Offer, i: number, why: string, price: number, poor: boolean) {
+  const up = R.upgradeOf(r, o);
+  const opts = R.offerChoices(r, o);
+  if (!up || opts.length < 2) return '';
+  return `<div class="branch-pick">${opts
+    .map((v) => {
+      const k = { id: o.id, v };
+      return `<div class="branch-opt">
+        <div class="branch-name"><b>${esc(nodeOf(k).name)}</b>${rarityTag(k)}</div>
+        ${upDiffHTML(up, { id: o.id, v })}
+        <button class="buy" data-a="buy" data-i="${i}" data-v="${v}" ${why ? 'disabled' : ''}>${buyLabel(why, L('เลือกทางนี้', 'Take this'), price, poor)}</button>
+      </div>`;
+    })
+    .join('')}</div>`;
+}
+
+/** Relic day (sim v17): pick 1 of 3 run relics, or skip. */
+function renderRelic() {
+  const r = run!;
+  scene.idle(r.hero, R.lookOf(r));
+  const th = getLang() !== 'en';
+  const cards = (r.relicOffer ?? [])
+    .map((id, i) => {
+      const x = RELICS_BY_ID[id];
+      const d = x.desc();
+      const tag = relicFits(id, HEROES_BY_ID[r.hero]?.line) ? `<span class="mark ult-aff">${L('สายของคุณ', 'your line')}</span>` : x.group === 'cheese' ? `<span class="mark rarity-epic">${L('☢ เสี่ยง', '☢ risky')}</span>` : x.group === 'any' ? `<span class="mark">${L('✦ ทั่วไป', '✦ any build')}</span>` : `<span class="mark">${GROUP_ICON[x.group]} ${lineLabel(x.group as 'hit')}</span>`;
+      return `<div class="card offer relic-card"><div class="offer-art" aria-hidden="true">${x.icon}</div>
+        <div class="offer-name">${esc(th ? x.name[0] : x.name[1])}</div>
+        <div class="offer-meta">${tag}</div>
+        <div class="offer-desc">${esc(th ? d[0] : d[1])}</div>
+        <button class="buy primary" data-a="relic" data-i="${i}">${L('เลือก', 'Take')}</button></div>`;
+    })
+    .join('');
+  return `<div class="lay">
+  <div class="lay-side">${stageSlot(true)}</div>
+  <section class="lay-main glass">
+  <h2>${L(`วันที่ ${r.day}: ของวิเศษประจำรอบ`, `Day ${r.day}: a run relic`)}</h2>
+  <p>${L('เลือก 1 ชิ้น ใช้ได้ทั้งรอบ (มีได้สูงสุด 3 ชิ้น) หรือข้ามไป', 'Pick 1; it lasts the whole run (at most 3), or skip')}</p>
+  ${relicsHTML(r.relics)}
+  <div class="shop relic-shop">${cards}</div>
+  <div class="actions"><button class="ghost" data-a="relic" data-i="-1">${L('ข้าม', 'Skip')}</button></div>
+  </section>
+  </div>`;
+}
+
 function renderShop() {
   const r = run!;
   scene.idle(r.hero, R.lookOf(r));
@@ -723,11 +786,11 @@ function renderShop() {
         : '';
       return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
         ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
-        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${node.name}</div>
+        <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name} ${'★'.repeat(o.star)}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
         <div class="offer-meta">${o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(o.v ? o : null)}${ultTagHTML(r, o)}</div>
-        ${up ? upDiffHTML(up, o) : ''}
+        ${choiceHTML(r, o, i, why, price, poor) || `${up ? (o.star ? starDiff(o.star) : upDiffHTML(up, o)) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
-        <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy'), price, poor)}</button>
+        <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? (o.star ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : L('อัปเกรด', 'Upgrade')) : L('ซื้อ', 'Buy'), price, poor)}</button>`}
       </div>`;
     })
     .join('');
@@ -761,7 +824,7 @@ function renderShop() {
     <div class="sv-hero glass">
       <div class="svh-name"><b>${hero.name}</b> <span class="tag">${lineLabel(hero.line)}</span></div>
       <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · ${hero.passive}</p>
-      <p class="sv-sub sv-ult">${ultProgressHTML(r)}</p>
+      <p class="sv-sub sv-ult">${ultProgressHTML(r)}</p>${relicsHTML(r.relics)}
     </div>
     <div class="mm-scout-slot sv-scout"></div>
   </aside>
@@ -1497,6 +1560,8 @@ async function doFight() {
   last = res;
   // apply the result before the replay plays, so reloading mid-replay can't undo a loss
   r.rating = res.rating;
+  const nextRelics = (res as { nextRelics?: unknown }).nextRelics;
+  if (Array.isArray(nextRelics)) r.relicNext = { day: r.day + 1, ids: nextRelics.filter((x): x is string => typeof x === 'string') };
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId }, res.result.winner === -1);
   saveRun();
   const oppInfo = res.opponent as FightResponse['opponent'] & { tier?: unknown };
@@ -1536,7 +1601,7 @@ function playLast() {
 }
 
 function phaseView(r: R.RunState): View {
-  return r.phase === 'shop' ? 'shop' : r.phase === 'lastchance' ? 'lastchance' : r.phase === 'mark' ? 'mark' : 'over';
+  return r.phase === 'shop' ? 'shop' : r.phase === 'relic' ? 'relic' : r.phase === 'lastchance' ? 'lastchance' : r.phase === 'mark' ? 'mark' : 'over';
 }
 
 async function openReplay(id: string) {
@@ -1638,7 +1703,11 @@ function onClick(ev: Event) {
       view = runActive() ? phaseView(run!) : 'title';
       break;
     case 'buy':
-      err = buyOffer(n, null);
+      err = buyOffer(n, null, el.dataset.v || undefined);
+      break;
+    case 'relic':
+      err = R.pickRelic(run!, n);
+      if (!err) view = phaseView(run!);
       break;
     case 'pickGo':
       goToPick($panel);

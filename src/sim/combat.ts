@@ -290,7 +290,7 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
     side, hero: b.hero, hooks, blocks, relics,
     hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
-    burns: [], poisons: [], dodge: relics.has('featherstep') ? 1 : 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
+    burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
     ultLv: ultLevel(b), ultDone: false, shieldGot: 0, hitsTaken: 0, lineCasts: 0, ctlLanded: 0, bigHit: 0, ultUntil: 0,
     freezeN: 0, ctlKeep: 1, ignoreFreeze: false, chargeHits: 0, leechNext: 0, thornsHeal: THORNS_HEAL, flags: {},
     stats: b.skills.map(emptyStat), dealtTotal: 0,

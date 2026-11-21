@@ -777,3 +777,14 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
 .shopv .line-ice { --pa: var(--p-ice); }
 .shopv .line-wind { --pa: var(--p-wind); }
 .shopv .line-none { --pa: var(--p-none); }
+
+/* sim v17: branch choice, stars, relics */
+.branch-pick { display: flex; gap: 6px; margin: 4px 0; }
+.branch-opt { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+.branch-opt .branch-name { font-size: 12px; }
+.branch-opt .buy { margin-top: auto; }
+.mark.star-tag { background: #ffd34d; color: #3a2600; font-weight: 700; margin-left: 4px; }
+.mark.relic-chip { background: #3b2f5c; color: #f0e6ff; margin: 1px 2px; }
+.relic-shop { display: flex; flex-wrap: wrap; gap: 8px; }
+.relic-card { flex: 1 1 180px; max-width: 260px; }
+.relic-card .offer-art { font-size: 34px; }

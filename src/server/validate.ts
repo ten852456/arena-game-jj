@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
 import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, damageFor, incomeFor, slotsFor } from '../sim/run';
-import { RELIC_DAYS, isRelic, relicsAllowed } from '../sim/relics';
+import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
@@ -162,6 +162,25 @@ export function relicsFollow(prev: string[], cur: string[], day: number, hasPrev
   if (!hasPrev) return added <= relicsAllowed(day);
   return added === 0 || (added === 1 && RELIC_DAYS.includes(day));
 }
+
+/**
+ * Relics of `build` against the run on the server (security review): every relic of the last fought build kept, at most
+ * one new, only on a relic day, and the new one must be one of the 3 the server offered that day
+ * (rollRelicOffer with the run's server-only relic seed). Returns an error, or null when fine.
+ */
+export function relicOfferCheck(track: { build?: Build; relicSeed?: number; hero?: string } | undefined, build: Build, day: number): string | null {
+  const prev = track?.build?.relics ?? [];
+  const cur = build.relics ?? [];
+  if (!relicsFollow(prev, cur, day, !!track?.build)) return 'implausible: relics changed outside a relic day';
+  const added = cur.filter((r) => !prev.includes(r));
+  if (!added.length) return null;
+  if (track?.relicSeed === undefined) return 'implausible: no relic offer for this run';
+  const offer = rollRelicOffer(track.relicSeed, track.hero ?? build.hero, day, prev);
+  return added.every((r) => offer.includes(r)) ? null : 'implausible: relic was not offered';
+}
+/** the relics the server offers this run on `day` (empty when it is no relic day) */
+export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = []) =>
+  RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? rollRelicOffer(track.relicSeed, hero, day, owned) : [];
 
 export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
   const b = x as Build;
