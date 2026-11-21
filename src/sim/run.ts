@@ -21,6 +21,8 @@ export const DAY1_GOLD = 7;
 export const MAX_SLOTS = 8;
 /** Lv3 upgrades are offered from this day on (shop, moon wish, bots): before it a Lv2 skill gets no upgrade card */
 export const LV3_DAY = 4;
+/** เสบียงสุดท้าย when the slots are already at MAX_SLOTS: this much gold instead of 8 + a slot */
+export const SUPPLY_GOLD_FULL = 12;
 /** shop rolls: a new skill of the hero's own line is this many times as likely as any other skill */
 export const LINE_WEIGHT = 2;
 /** from this day the hero's unique, when not owned, is always in the shop (one place) */
@@ -400,8 +402,12 @@ export function chooseLastChance(s: RunState, opt: LastChanceOption) {
     });
   }
   if (opt === 'supply') {
-    s.gold += 8;
-    s.bonusSlots += 1;
+    // at the most slots there is no slot to give: 12 gold instead (sim v15)
+    if (slotsOf(s) >= MAX_SLOTS) s.gold += SUPPLY_GOLD_FULL;
+    else {
+      s.gold += 8;
+      s.bonusSlots += 1;
+    }
   }
   if (opt === 'mark') {
     s.pendingMark = new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);

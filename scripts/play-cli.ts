@@ -18,7 +18,7 @@ import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLev
 import { T } from '../src/sim/tuning';
 import { hashSeed } from '../src/sim/rng';
 import * as R from '../src/sim/run';
-import { SKILLS, VARIANTS, lvOf, nodeOf, upgradeDiffText } from '../src/sim/skills';
+import { SKILLS, VARIANTS, lvOf, nodeOf, rarityOf, upgradeDiffText } from '../src/sim/skills';
 import type { Build, CombatEvent } from '../src/sim/types';
 
 type CliTier = BotTier | 'auto';
@@ -82,7 +82,7 @@ function describeBuild(b: Build, title: string) {
 
 function show(s: R.RunState) {
   const h = HEROES_BY_ID[s.hero];
-  p(`== Day ${s.day} · HP ${s.hp} · wins ${s.wins}/${R.WIN_TARGET} · losses ${s.losses} · gold ${s.gold} · streak ${s.streak} · phase ${s.phase}${s.ghost ? ' · LAST LIFE' : ''}`);
+  p(`== Day ${s.day} · run HP (lives) ${s.hp}/${R.START_HP} · wins ${s.wins}/${R.WIN_TARGET} · losses ${s.losses} · gold ${s.gold} · streak ${s.streak} · phase ${s.phase}${s.ghost ? ' · LAST LIFE' : ''}`);
   p(`Hero: ${h.name} (${h.id}, line ${heroLine(h.id)}) — ${h.passive}`);
   const b0 = R.toBuild(s);
   const ulv = ultLevel(b0);
@@ -90,15 +90,17 @@ function show(s: R.RunState) {
   p(`   Lv2: when ${h.ult.trigger.split(' · Lv2 ')[1] ?? '-'} → ${h.ult.effect.split(' · Lv2 ')[1] ?? '-'}`);
   p(`Ult pieces now: ${ultPieces(b0)} (${ULT_PIECES[0]} = Lv1, ${ULT_PIECES[1]} = Lv2; each ${heroLine(h.id)} skill or your unique = 1, your first Lv3 one +1) → ult ${ulv ? `Lv${ulv}` : 'locked'} · ${heroLine(h.id)} skills are also stronger (line mastery)`);
   const slots = R.slotsOf(s);
+  if (s.day > 1 && R.slotsFor(s.day) > R.slotsFor(s.day - 1)) p(`★ New today: +1 skill slot (${slots} now)`);
+  if (s.phase === 'shop' && s.skills.length < slots) p(`⚠ ${slots - s.skills.length} empty skill slot(s): buy something before you fight`);
   p(`List (${s.skills.length}/${slots} slots; top to bottom, neighbours can switch on connect bonuses):`);
   s.skills.forEach((k, i) => {
     const bon = (k.bonus ?? []).map((b) => simpleBonus(b, lv(k.v))).join(' | ');
     const after = ultLevel({ hero: s.hero, skills: s.skills.filter((_, j) => j !== i).slice(0, slots) });
     const drop = after < ulv ? ` (selling it drops the ult Lv${ulv} → ${after ? 'Lv' + after : 'locked'})` : '';
-    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
+    p(`   ${i}. ${nodeOf(k).name} [${k.id} Lv${lv(k.v)} ${lineOf(k.id)}]${SKILLS[k.id].hero ? ' [UNIQUE]' : ''}${rarityOf(k.id, k.v) !== 'common' ? ` [${rarityOf(k.id, k.v).toUpperCase()}]` : ''}${markText(k.mark)}${inLine(s.hero, k.id) ? ` (line mastery: numbers +${Math.round((lineAffinity(s.hero) - 1) * 100)}%)` : ''}${i >= slots ? ' (NOT FIGHTING: no slot)' : ''}${drop}\n        ${simpleText(k)}${bon ? `\n        connect: ${bon}` : ''}`);
   });
   if (s.phase === 'shop') {
-    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotPrice(s)}g · wish ${R.wishPrice(s)}g):`);
+    p(`Shop (reroll ${R.REROLL}g · slot ${R.slotPrice(s)}g · wish ${R.wishPrice(s)}g = upgrades a RANDOM skill of yours below Lv3 to a random next branch):`);
     s.shop.forEach((o, i) => {
       if (!o) return p(`   ${i}. (sold)`);
       const up = R.upgradeOf(s, o);
@@ -107,7 +109,7 @@ function show(s: R.RunState) {
       const g = ultGain(b0, o);
       const tag = g.pieces ? ` ★ +1 ult piece${g.lv > ulv ? ` (unlocks ult Lv${g.lv}!)` : ''}` : '';
       const diff = up ? upgradeDiffText(nodeOf(up), nodeOf(k)) : '';
-      p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff} (▼ = worse)` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
+      p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''}${rarityOf(o.id, o.v) !== 'common' ? ` [${rarityOf(o.id, o.v).toUpperCase()}]` : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff}${diff.includes('▼') ? ' (▼ = worse)' : ''}` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
     const oh = oppHero(s);
@@ -124,13 +126,16 @@ function fightSummary(ev: CombatEvent[], names: [string, string], builds: [Build
     const t = (e.t / 10).toFixed(1) + 's';
     if (lines.length >= 400) break;
     const hp = `HP ${names[0]} ${e.s.hp[0]} · ${names[1]} ${e.s.hp[1]}`;
+    /** English verb for side s: "You take" / "Enemy takes" */
+    const v = (s: number, you: string, it: string) => (names[s] === 'You' ? you : it);
     if (e.type === 'ult') lines.push(`  ${t} ★ ${names[e.side]} ULTIMATE ${ultText(builds[e.side].hero, e.lv)} (Lv${e.lv})  ${hp}`);
     else if (e.type === 'cast') lines.push(`  ${t} ${names[e.side]} ${e.skill} Lv${e.lv}${e.from !== undefined ? ' (set off)' : ''}${e.react ? ' (react)' : ''}${e.echo ? ' (echo)' : ''}  ${hp} · shield ${names[0]} ${e.s.sh[0]} · ${names[1]} ${e.s.sh[1]}`);
-    else if (e.type === 'damage' && e.src === 'ult') lines.push(`  ${t}   ${names[e.side]} takes ${e.amount} from the ultimate`);
-    else if (e.type === 'status' && e.status === 'evade') lines.push(`  ${t}   ${names[e.side]} DODGES a hit (${e.value} dodge left)`);
+    else if (e.type === 'damage' && e.src === 'ult') lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'take', 'takes')} ${e.amount} from the ultimate  ${hp}`);
+    else if (e.type === 'status' && e.status === 'evade') lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'DODGE', 'DODGES')} a hit (${e.value} dodge left)`);
     else if (e.type === 'status' && e.status === 'sure') lines.push(`  ${t}   ${names[e.side]} can't dodge: an undodgeable 👁 hit`);
-    else if (e.type === 'status' && e.status === 'cleanse' && e.value > 0) lines.push(`  ${t}   ${names[e.side]} cleanses ${e.value} debuff(s)`);
-    else if (e.type === 'status' && e.status === 'freeze') lines.push(`  ${t}   ${names[e.side]} ${e.value > 0 ? `frozen ${(e.value / 10).toFixed(1)}s` : 'resists a freeze'}`);
+    else if (e.type === 'status' && e.status === 'cleanse' && e.value > 0) lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'cleanse', 'cleanses')} ${e.value} debuff(s)`);
+    else if (e.type === 'status' && e.status === 'shake') lines.push(`  ${t}   ${names[e.side]} ${v(e.side, 'shake', 'shakes')} off freeze/slow (no skill for 4s)`);
+    else if (e.type === 'status' && e.status === 'freeze') lines.push(`  ${t}   ${names[e.side]} ${e.value > 0 ? `${v(e.side, 'are', 'is')} frozen ${(e.value / 10).toFixed(1)}s` : v(e.side, 'resist a freeze', 'resists a freeze')}`);
     else if (e.type === 'status' && e.status === 'rage') lines.push(`  ${t}   ${names[e.side]} RAGE (+${e.value} power)`);
     else if (e.type === 'fatigue') lines.push(`  ${t}   fatigue: both lose ${e.amount}`);
   }

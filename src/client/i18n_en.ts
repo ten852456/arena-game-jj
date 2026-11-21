@@ -350,7 +350,7 @@ export const RUN_ERRORS_EN: Record<string, string> = {
 /** Thai bits inside skill chips (sim/skills.ts chipsOf) → English, applied in this order. */
 export const CHIP_EN: [string, string][] = [
   [' +กันแช่แข็ง 1 ครั้ง', ' +blocks 1 freeze'],
-  [' (ถนัด: ทั้งหมด)', ' (line mastery: all)'],
+  [' (ถนัดสาย: ล้างได้ทั้งหมด)', ' (your line: cleanses all)'],
   [' คูลดาวน์ไม่เริ่มใหม่', ' no cooldown reset'],
   ['↕ สลับบน/ล่าง', '↕ above/below in turn'],
   ['↕ บน+ล่าง', '↕ above+below'],

@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { LV3_DAY, MAX_SLOTS, PRICES, START_HP, damageFor, incomeFor, slotsFor } from '../sim/run';
+import { LV3_DAY, MAX_SLOTS, PRICES, START_HP, SUPPLY_GOLD_FULL, damageFor, incomeFor, slotsFor } from '../sim/run';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
@@ -79,7 +79,8 @@ export function allowances(day: number, rec?: RunRecord, choice?: LastChoice): A
   const { gold, lastChance, deathDay } = runMax(day, rec);
   if (!lastChance) return [{ opt: 'none', cap: () => gold, freeSlots: 0, marks: 0 }];
   const all: Allowance[] = [
-    { opt: 'supply', cap: () => gold + 8, freeSlots: 1, marks: 0 },
+    // 8 gold + a slot, or 12 gold when the slots were already full (run.ts SUPPLY_GOLD_FULL)
+    { opt: 'supply', cap: () => gold + SUPPLY_GOLD_FULL, freeSlots: 1, marks: 0 },
     { opt: 'awaken', cap: (n) => gold + PRICES[1] * Math.min(n, slotsFor(deathDay) + 1), freeSlots: 0, marks: 0 },
     { opt: 'mark', cap: () => gold, freeSlots: 0, marks: 1 },
   ];

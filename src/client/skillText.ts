@@ -8,9 +8,9 @@
 import { L } from '../i18n';
 import { cdTicks, CTL_BASE, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, bonusValue } from '../sim/links';
-import { nodeOf, type Effect, type SkillNode } from '../sim/skills';
+import { LINE_NAME, SKILLS, nodeOf, type Effect, type SkillNode } from '../sim/skills';
 import { T } from '../sim/tuning';
-import type { Bonus, SkillInstance } from '../sim/types';
+import type { Bonus, Line, SkillInstance } from '../sim/types';
 
 type K = Pick<SkillInstance, 'id' | 'v' | 'mark'>;
 type Hit = Extract<Effect, { k: 'hit' }>;
@@ -79,7 +79,7 @@ function simpleEffect(e: Effect): string {
       return (e.keep !== undefined && e.keep < 0.4 ? L('ต้านการคุมมาก', 'Strongly resists control') : L('ต้านการคุม', 'Resists control')) +
         (e.ignoreFreeze ? L(' · กันแช่แข็ง 1 ครั้ง', ' · blocks 1 freeze') : '');
     case 'cleanse':
-      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`ล้างไฟ/พิษ ${e.n} กอง${e.lineAll ? ' (ถนัด: หมด)' : ''}`, `−${e.n} burn/poison${e.lineAll ? ' (mastery: all)' : ''}`);
+      if (e.dot) return e.n >= 99 ? L('พัดไฟ/พิษทิ้งทั้งหมด', 'Blows away all burn/poison') : L(`ล้างไฟ/พิษ ${e.n} กอง${e.lineAll ? ' (สายตัวเอง: ล้างหมด)' : ''}`, `−${e.n} burn/poison${e.lineAll ? ' (your line: all)' : ''}`);
       return e.n >= 99 ? L('ล้างดีบัฟทั้งหมด', 'Cleanses all debuffs') : e.n > 1 ? L(`ล้างดีบัฟ ×${e.n}`, `Cleanses debuffs ×${e.n}`) : L('ล้างดีบัฟ', 'Cleanses a debuff');
     case 'dispel':
       return (e.n >= 99 ? L('ลบบัฟศัตรูทั้งหมด', 'Removes all enemy buffs') : e.n > 1 ? L(`ลบบัฟศัตรู ×${e.n}`, `Removes enemy buffs ×${e.n}`) : L('ลบบัฟศัตรู', 'Removes an enemy buff')) +
@@ -116,7 +116,9 @@ export function simpleBonus(b: Bonus, lv: number): string {
     power: L(`แรงขึ้น ${pct(POWER_BONUS)}`, `${pct(POWER_BONUS)} stronger`),
     trigger: L('ทำงานพร้อมกัน', 'fires together'),
   }[b.e];
-  return L(`ต่อ chain: ${what}`, `Chain: ${what}`);
+  // name the neighbour that switches it on (the skill right above or below in the list)
+  const t = b.t.startsWith('line:') ? L(`skill สาย${LINE_NAME[b.t.slice(5) as Line]}`, `a ${LINE_NAME[b.t.slice(5) as Line]} skill`) : (SKILLS[b.t]?.name ?? b.t);
+  return L(`ติดกับ ${t}: ${what}`, `Next to ${t}: ${what}`);
 }
 
 // ---------------- detailed ----------------

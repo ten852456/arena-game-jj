@@ -290,10 +290,10 @@ export function explain(
   let tiebreak: string | undefined;
   if (bothDown)
     tiebreak = L(
-      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ใครทำดาเมจรวมทั้งการสู้มากกว่าชนะ (เท่ากันดูเลือดที่ติดลบน้อยกว่า): ดาเมจ ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
+      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ใครทำดาเมจรวมทั้งการสู้มากกว่าชนะ (ต่างกันไม่เกิน 5% = เสมอ ไม่เสียเลือดของรอบ): ดาเมจ ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? ` เท่ากันพอดีจึง${drawWord}` : ` → ${N[r.winner as Side]} ชนะ`
       }`,
-      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: whoever dealt more damage over the whole fight wins (a tie goes to the side less below zero): damage ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
+      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: whoever dealt more damage over the whole fight wins (within 5% it is a draw that costs no run HP): damage ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
         draw ? `, exactly equal, so it is a ${drawWord}` : ` → ${N[r.winner as Side]} wins`
       }`,
     );
@@ -331,7 +331,8 @@ export function explain(
       best.reflect ? L(`สะท้อนหนาม ${best.reflect}`, `thorns ${best.reflect}`) : '',
       best.burn ? L(`ไฟ/พิษ ${best.burn}`, `burn/poison ${best.burn}`) : '',
     ].filter(Boolean);
-    return `${best.name} ${best.total} (${pct(best.total, total)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
+    // the same denominator as the "why" line: all damage, the ultimate included
+    return `${best.name} ${best.total} (${pct(best.total, total + ult)}%${parts.length ? ` · ${parts.join(' · ')}` : ''})`;
   };
   fact('damage', L(`ดาเมจรวม: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`, `Total damage: ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}`));
   const mt = top(me);
@@ -783,6 +784,8 @@ export function explain(
       });
   }
 
+  // the same reason twice (two checks can word it alike) is shown once
+  const uniqOut = out.filter((x, i) => out.findIndex((y) => y[1] === x[1]) === i);
   const sq = (t: string) => {
     const s = t.replace(/ {2,}/g, ' ').replace(/ ([,):])/g, '$1').trim();
     return getLang() === 'en' ? s.replace(/\( /g, '(') : s; // English pads every name with spaces
@@ -790,7 +793,7 @@ export function explain(
   for (const m of moments) m.text = sq(m.text);
   for (const l of locks) l.text = sq(l.text);
   return {
-    headline: sq(headline), facts: facts.map(sq), reasons: out.slice(0, 3).map((x) => sq(x[1])), reasonKinds: out.slice(0, 3).map((x) => x[2]), close,
+    headline: sq(headline), facts: facts.map(sq), reasons: uniqOut.slice(0, 3).map((x) => sq(x[1])), reasonKinds: uniqOut.slice(0, 3).map((x) => x[2]), close,
     tiebreak: tiebreak && sq(tiebreak), moments, locks, hpShare, factKinds, names: [names[me], names[foe]],
   };
 }

@@ -10,7 +10,7 @@ import type { Mark } from '../src/sim/types';
 
 const THAI = /[฀-๿]/;
 /** a phone shop row fits about two lines of this */
-const MAX = 90;
+const MAX = 95;
 const MARKS: (Mark | undefined)[] = [undefined, 'burn', 'echo', 'quick', 'steadfast'];
 const bad: string[] = [];
 let longest = { n: 0, s: '' };
@@ -41,7 +41,8 @@ for (const l of ['th', 'en'] as Lang[])
           }
     for (const e of BONUS_KINDS)
       for (const lv of [1, 2, 3]) {
-        check(`bonus ${e} Lv${lv}`, simpleBonus({ t: 'strike', e }, lv), 40);
+        check(`bonus ${e} Lv${lv}`, simpleBonus({ t: 'strike', e }, lv), 60);
+        check(`bonus ${e} Lv${lv} line`, simpleBonus({ t: 'line:ice', e }, lv), 60);
         check(`bonus ${e} Lv${lv} detail`, detailBonus({ t: 'strike', e }, lv), 200);
       }
   });

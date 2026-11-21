@@ -4,7 +4,7 @@
 // A branch may still trade: a number the parent had and the child drops entirely is allowed (it is a different skill
 // shape, the card shows it), but a number it keeps must not go down.
 import { LV3_DAY } from '../src/sim/run';
-import { SKILLS, VARIANTS, lvOf, mainNumbers, type Variant } from '../src/sim/skills';
+import { SKILLS, VARIANTS, flatNumbers, lvOf, mainNumbers, upgradeDiff, upgradeDiffText, type Variant } from '../src/sim/skills';
 import { lengthTarget } from './sim/targets';
 
 const parentOf = (v: string): Variant => (v.length <= 1 ? '' : (v[0] as Variant));
@@ -27,8 +27,25 @@ for (const d of Object.values(SKILLS))
       if (cv !== undefined && cv < pv - 1e-9) bad.push(`${d.id}/${v} ${node.name}: ${k} ${pv} → ${cv} (lower than Lv${lv - 1})`);
     }
   }
+// every number that changes between a level and the next shows in the card's before → after (round 4: pierce, scaling
+// shares, slow %, multipliers … were missing); a branch with any change has a non-empty diff text
+for (const d of Object.values(SKILLS))
+  for (const v of VARIANTS) {
+    if (!v) continue;
+    const from = d.tree[parentOf(v)];
+    const to = d.tree[v];
+    const a = flatNumbers(from);
+    const b = flatNumbers(to);
+    const shown = new Set(upgradeDiff(from, to).map((x) => x.key));
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (Math.abs((a[k] ?? 0) - (b[k] ?? 0)) < 1e-9) continue;
+      const covered = shown.has(k) || [...shown].some((x) => x.startsWith(k + '.'));
+      if (!covered) bad.push(`${d.id}/${v} ${to.name}: ${k} ${a[k] ?? 0} → ${b[k] ?? 0} is not in the upgrade diff`);
+    }
+    if (shown.size && !upgradeDiffText(from, to)) bad.push(`${d.id}/${v}: empty diff text`);
+  }
 if (bad.length) {
   console.error(`upgrade check: ${bad.length} problem(s)\n  ${bad.join('\n  ')}`);
   process.exit(1);
 }
-console.log('upgrade check: no upgrade lowers a number it keeps; every cooldown fits the fights of its first day');
+console.log('upgrade check: no upgrade lowers a number it keeps; every cooldown fits the fights of its first day; every changed number is in the upgrade diff');

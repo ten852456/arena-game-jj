@@ -809,6 +809,17 @@ export function upgradeDiff(from: SkillNode, to: SkillNode): { key: string; icon
 export const upgradeDiffText = (from: SkillNode, to: SkillNode) =>
   upgradeDiff(from, to).map((d) => `${d.icon}${d.fromText}→${d.toText}${d.worse ? '▼' : ''}`).join(' ');
 
+/**
+ * Rarity of a tree variant (a label for the shop and the list; no rule depends on it): Lv1/Lv2 common, Lv3 rare,
+ * and the big Lv3 finishers epic. Pure data, cheap to change.
+ */
+export type Rarity = 'common' | 'rare' | 'epic';
+export const EPIC: Record<string, Variant[]> = {
+  charge: ['a1'], flurry: ['b1'], heavy: ['a1'], shatter: ['a1'], inferno: ['a1'], plague: ['a1'], bulwark: ['a1'],
+  rampage: ['a1'], timewarp: ['b1'], spikewall: ['a1'], execute: ['a1'], strike: ['a1'], frost: ['a1'], blaze: ['a1'],
+};
+export const rarityOf = (id: string, v: string): Rarity => (lvOf(v) < 3 ? 'common' : EPIC[id]?.includes(v as Variant) ? 'epic' : 'rare');
+
 export const isEngine = (id: string) => Object.values(SKILLS[id]?.tree ?? {}).some((n) => !!n.engine);
 
 /** Line names (the UI swaps them for English). */
@@ -896,7 +907,7 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
       case 'charge': out.push({ kw: 'charge', text: `⚡×${e.mult}${e.hits && e.hits > 1 ? ` (${e.hits} ครั้ง)` : ''}` }); break;
       case 'thorns': out.push({ kw: 'thorns', text: `🌵${e.n}${e.perm ? ' ถาวร' : ''}${e.heal !== undefined ? ` ศัตรูฟื้น ${pct(e.heal)}` : ''}` }); break;
       case 'steadfast': out.push({ kw: 'steadfast', text: `🗿${e.keep !== undefined && e.keep !== 0.4 ? ` ${pct(1 - e.keep)}` : ''}${e.ignoreFreeze ? ' +กันแช่แข็ง 1 ครั้ง' : ''}` }); break;
-      case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}${e.lineAll ? ' (ถนัด: ทั้งหมด)' : ''}` }); break;
+      case 'cleanse': out.push({ kw: 'cleanse', text: `${e.n >= 99 ? '✨ทั้งหมด' : e.n > 1 ? `✨×${e.n}` : '✨'}${e.dot ? ' 🔥☠' : ''}${e.lineAll ? ' (ถนัดสาย: ล้างได้ทั้งหมด)' : ''}` }); break;
       case 'dispel': out.push({ kw: 'dispel', text: `${e.n >= 99 ? '💥ทั้งหมด' : e.n > 1 ? `💥×${e.n}` : '💥'}${e.shield !== undefined ? ` โล่${pct(e.shield)}` : ''}${e.steal ? ' ขโมยพลัง' : ''}` }); break;
       case 'leech': out.push({ kw: 'leech', text: `🩸${pct(e.pct)} ครั้งถัดไป` }); break;
     }
