@@ -73,7 +73,10 @@ persistent worker pool (`scripts/tune/pool.ts`; each task carries its knob value
 | fatigue | fatigue-ended fights ≤ 18% per day | 2 |
 | length | average fight length per day inside `lengthTarget` (squared seconds outside) | 30 |
 | watch | each watch build's win rate vs the field ≤ its max (see below) | 5 |
-| dist | Σ (Δ knob / knob range)² — prefer small changes | 25 |
+| inline | in-line bot builds beat off-line builds of the same hero 58–85% (days 4 / 7 / 11; sim v13+) | 1.5 |
+| ultValue | each ultimate is worth 6–15 win-rate points (in-line builds with it vs locked) | 0.5 |
+| day1 | each hero's best day-1 opening vs normal day-1 bots 50–70% | 0.5 |
+| dist | Σ (Δ knob / knob range)² — prefer small changes | 5 |
 
 The limits are a little inside the real targets so noise does not carry a candidate over them.
 
