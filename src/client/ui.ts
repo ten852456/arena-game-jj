@@ -1,7 +1,6 @@
 import { randomAiBuild } from '../sim/bot';
 import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
-import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultGain, ultLevel, ultPieces } from '../sim/heroes';
-import { T as TUNE } from '../sim/tuning';
+import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLevel, ultPieces } from '../sim/heroes';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
 import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
@@ -168,7 +167,7 @@ const playerName = () => (fetchStore(NAME_KEY) || 'ผู้เล่น').slice
 // ---------- helpers ----------
 /** "★ ท่าไม้ตาย เงาจันทร์: when · what" for hero cards */
 function ultHTML(h: (typeof HEROES)[number]) {
-  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · skill สายนี้ Lv3 ตัวแรกนับ +1 · skill สายนี้แรงขึ้น ${Math.round((TUNE['line.affinity'] - 1) * 100)}% (ถนัดสาย)`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · your first Lv3 skill of this line counts +1 · skills of this line are ${Math.round((TUNE['line.affinity'] - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
+  return `<b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${h.ult.name}</b> (${L(`ปลดเมื่อมี skill สาย${LINE_NAME[h.line]} ${ULT_PIECES[0]} ชิ้น, Lv2 ที่ ${ULT_PIECES[1]} ชิ้น · skill สายนี้ Lv3 ตัวแรกนับ +1 · skill สายนี้แรงขึ้น ${Math.round((lineAffinity(h.id) - 1) * 100)}% (ถนัดสาย)`, `unlocks with ${ULT_PIECES[0]} ${LINE_NAME[h.line]} pieces, Lv2 at ${ULT_PIECES[1]} · your first Lv3 skill of this line counts +1 · skills of this line are ${Math.round((lineAffinity(h.id) - 1) * 100)}% stronger (line mastery)`)}): ${h.ult.trigger} → ${h.ult.effect}`;
 }
 /** upgrade card: before → after of each headline number; a number that gets worse is marked ▼ in red */
 function upDiffHTML(owned: SkillInstance, o: R.Offer) {
@@ -189,7 +188,7 @@ function ultTagHTML(r: R.RunState, o: R.Offer) {
   if (!inLine(r.hero, o.id)) return '';
   const b = R.toBuild(r);
   const g = ultGain(b, o);
-  const aff = `${L('ถนัดสาย', 'line mastery')} +${Math.round((TUNE['line.affinity'] - 1) * 100)}%`;
+  const aff = `${L('ถนัดสาย', 'line mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%`;
   if (!g.pieces) return `<span class="mark ult-aff" title="${esc(aff)}">${L('ถนัด', 'mastery')}</span>`;
   const up = g.lv > ultLevel(b);
   const txt = up ? L(`★ +1 ชิ้น · ปลด Lv${g.lv}!`, `★ +1 piece · ult Lv${g.lv}!`) : L('★ +1 ชิ้น', '★ +1 piece');
@@ -729,7 +728,7 @@ function renderShop() {
       const row = `<li class="skillrow line-${SKILLS[k.id].line}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
-        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L('skill สายหลักของฮีโร่: ตัวเลขทั้งหมดแรงขึ้น', 'a skill of your hero’s main line: all its numbers are stronger'))}">${L('ถนัด', 'mastery')} +${Math.round((TUNE['line.affinity'] - 1) * 100)}%</span>` : ''}</div>
+        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L('skill สายหลักของฮีโร่: ตัวเลขทั้งหมดแรงขึ้น', 'a skill of your hero’s main line: all its numbers are stronger'))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
