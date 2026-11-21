@@ -577,6 +577,7 @@ export class CombatScene extends Phaser.Scene {
           dodge: [`${L('หลบ', 'Dodge')} ${e.value}`, '#b6f0c8'],
           evade: [L('หลบได้!', 'Dodged!'), '#b6f0c8'],
           sure: [L('👁 หลบไม่ได้!', '👁 Undodgeable!'), '#ffe08a'],
+          shake: [L('สลัดการคุม!', 'Shook it off!'), '#aaffcc'],
           poison: [L('ติดพิษ', 'Poisoned'), '#c49cff'],
           haste: [`${L('เร่ง', 'Haste')} +${e.value}%`, '#ffd166'],
           wound: [L('แผลลึก', 'Wounded'), '#ff7b5c'],
@@ -591,7 +592,7 @@ export class CombatScene extends Phaser.Scene {
           this.frozenUntil[e.side] = Math.max(this.frozenUntil[e.side], e.t + e.value);
           if (e.side === 1 && e.value >= 15) this.say('frozen');
         }
-        if (e.status === 'cleanse' && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
+        if ((e.status === 'cleanse' || e.status === 'shake') && e.value > 0) this.frozenUntil[e.side] = Math.min(this.frozenUntil[e.side], e.t);
         if (e.status === 'delay' && e.value > 0) this.delayUntil[e.side] = e.t + Math.max(8, Math.min(20, e.value));
         break;
       }

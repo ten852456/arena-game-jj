@@ -134,7 +134,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Moon Shadow',
       get trigger() { return both((lv) => `enemy HP below ${pc(ultTrig('assassin', lv))}%`); },
-      get effect() { return both((lv) => `instant hit ×${r1(ultPow('assassin', lv))} your biggest hit this fight (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), ignores shield; a dodge charge halves it`); },
+      get effect() { return both((lv) => `instant hit of ${pc(ultPow('assassin', lv))}% of the HP the enemy has lost (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), ignores shield; a dodge charge halves it`); },
     },
   },
   duelist: {
@@ -210,7 +210,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Rewind Storm',
       get trigger() { return both((lv) => `${ultTrig('chrono', lv)} slows/delays landed`); },
-      get effect() { return both((lv) => `all skills ready now + blow away every debuff + ${pc(ultPow('chrono', lv))}% faster for 3s`); },
+      get effect() { return both((lv) => `every cooldown jumps ${pc(Math.min(1, ultPow('chrono', lv)))}% forward + blow away every debuff`); },
     },
   },
 };

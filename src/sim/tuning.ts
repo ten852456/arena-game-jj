@@ -80,7 +80,7 @@ export const TUNING = {
   'hp.knight': 1.4,
   'hp.thornguard': 1.44,
   'hp.assassin': 1.08,
-  'hp.duelist': 0.88,
+  'hp.duelist': 1.0,
   'hp.berserker': 1.2,
   'hp.pyro': 1.52,
   'hp.witch': 1.56,
@@ -115,6 +115,8 @@ export const TUNING = {
   'dodge.graze': 0.2,
   /** skills of your hero's own line (its pieces) are this much stronger (ถนัดสาย) */
   'line.affinity': 1.1,
+  /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
+  'shield.guard': 0.15,
   /** per-hero ถนัดสาย (sim v14): heroes whose line pull was weak get more */
   'aff.assassin': 1.4,
   'aff.duelist': 1.35,
@@ -140,17 +142,17 @@ export const TUNING = {
   /** damage ultimates (นักฆ่า, อัศวิน) deal at most this share of the enemy's max HP (Lv2 ×1.4) */
   'ult.cap': 0.3,
   /** นักฆ่า: enemy HP below this share */
-  'ult.assassin.trig': 0.5,
-  /** นักฆ่า: hit = this × your biggest hit so far (ignores shield, can't be dodged) */
-  'ult.assassin.pow': 0.35,
+  'ult.assassin.trig': 0.35,
+  /** นักฆ่า: hit = this × the HP the enemy has lost (capped by ult.cap; ignores shield; a dodge halves it) */
+  'ult.assassin.pow': 0.3,
   /** นักดาบคู่: hits dodged */
   'ult.duelist.trig': 3,
   /** นักดาบคู่: haste share for 3 s (+2 dodge) */
-  'ult.duelist.pow': 0.4,
+  'ult.duelist.pow': 0.3,
   /** อัศวิน: shield gained, share of max HP */
-  'ult.knight.trig': 0.1,
+  'ult.knight.trig': 0.15,
   /** อัศวิน: hit = shield × this (the shield stays) */
-  'ult.knight.pow': 1.8,
+  'ult.knight.pow': 1.4,
   /** นักรบคลั่ง: HP below this share (or a killing blow, whichever comes first) */
   'ult.berserker.trig': 0.2,
   /** นักรบคลั่ง: heals this share of max HP (+2 พลัง; a killing blow leaves 1 HP first) */
@@ -170,7 +172,7 @@ export const TUNING = {
   /** จอมเวทลม: slows / delays landed */
   'ult.chrono.trig': 4,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
-  'ult.chrono.pow': 0.1,
+  'ult.chrono.pow': 0.5,
 };
 // </tuned>
 

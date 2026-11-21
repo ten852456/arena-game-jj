@@ -101,6 +101,8 @@ export const ULT_LV2_TRIG = 0.75;
 export const ULT_LV2_POW = 1.3;
 /** pieces needed for ult Lv1 / Lv2 */
 export const ULT_PIECES = [4, 5] as const;
+/** how many Lv3 skills of the line give the +1 piece */
+export const ULT_LV3_FOR_BONUS = 2;
 const r1 = (x: number) => +x.toFixed(1);
 /** heroes whose trigger is "HP below a share": a sooner trigger is a HIGHER share */
 const TRIG_BELOW = ['assassin'];
@@ -140,7 +142,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'เงาจันทร์',
       get trigger() { return both((lv) => `ศัตรูเลือดต่ำกว่า ${pc(ultTrig('assassin', lv))}%`); },
-      get effect() { return both((lv) => `ตีทันที ×${r1(ultPow('assassin', lv))} ของการตีที่แรงสุดในการสู้นี้ (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) ไม่สนโล่ · แต้มหลบของศัตรูลดเหลือครึ่ง`); },
+      get effect() { return both((lv) => `ตีทันที ${pc(ultPow('assassin', lv))}% ของเลือดที่ศัตรูเสียไปแล้ว (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) ไม่สนโล่ · แต้มหลบของศัตรูลดเหลือครึ่ง`); },
     },
   },
   // ---------------- 💨 dodge ----------------
@@ -280,7 +282,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'พายุย้อนกาล',
       get trigger() { return both((lv) => `ใส่ช้า/ถ่วงเวลาติดครบ ${ultTrig('chrono', lv)} ครั้ง`); },
-      get effect() { return both((lv) => `skill ทุกตัวพร้อมใช้ทันที + พัดดีบัฟทิ้งทั้งหมด + เร็วขึ้น ${pc(ultPow('chrono', lv))}% 3 วิ`); },
+      get effect() { return both((lv) => `คูลดาวน์ทุกตัวเดินหน้าทันที ${pc(Math.min(1, ultPow('chrono', lv)))}% + พัดดีบัฟทิ้งทั้งหมด`); },
     },
   },
 ];
@@ -300,9 +302,10 @@ export function ultPieces(b: Pick<Build, 'hero' | 'skills'>): number {
   for (const k of b.skills) {
     if (!inLine(b.hero, k.id)) continue;
     n++;
-    if (lvOf(k.v) >= 3) lv3 = 1;
+    if (lvOf(k.v) >= 3) lv3++;
   }
-  return n + lv3;
+  // sim v15: the +1 needs TWO Lv3 line skills (one Lv3 gave Lv2 by day 4)
+  return n + (lv3 >= ULT_LV3_FOR_BONUS ? 1 : 0);
 }
 /** ถนัดสาย of a hero: its line skills work at this power (tuning.ts `aff.<hero>`, default `line.affinity`) */
 export const lineAffinity = (hero: string) => T[`aff.${hero}` as keyof typeof T] ?? T['line.affinity'];

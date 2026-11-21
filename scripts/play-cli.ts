@@ -10,7 +10,8 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { randomInt } from 'node:crypto';
 import { detailLines, simpleBonus, simpleText } from '../src/client/skillText';
-import { randomAiBuild, type BotTier } from '../src/sim/bot';
+import { aiBuild, type BotTier } from '../src/sim/bot';
+import { LINES } from '../src/sim/types';
 import { simulate } from '../src/sim/combat';
 import { explain } from '../src/sim/explain';
 import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, lineAffinity, ultGain, ultLevel, ultPieces } from '../src/sim/heroes';
@@ -22,7 +23,7 @@ import type { Build, CombatEvent } from '../src/sim/types';
 
 type CliTier = BotTier | 'auto';
 /** the next opponent is not stored (the save file would leak it): only its day and tier; the build is regenerated from the seed */
-interface Save { s?: R.RunState; seed: number; tier: CliTier; choices?: string[]; opp?: { day: number; tier: BotTier }; history: string[] }
+interface Save { s?: R.RunState; seed: number; tier: CliTier; choices?: string[]; opp?: { day: number; tier: BotTier; hero: string }; history: string[] }
 
 const [file, cmd, ...args] = process.argv.slice(2);
 if (!file || !cmd) {
@@ -44,10 +45,27 @@ const lv = (v: string) => lvOf(v);
 
 /** the server's AI tier rule (src/server/match.ts tierFor) without a rating: easy on days 1–2 or after 2 losses in a row, hard after 3 wins in a row */
 const autoTier = (s: R.RunState): BotTier => (s.day <= 2 || s.streak <= -2 ? 'easy' : s.streak >= 3 ? 'hard' : 'normal');
+/**
+ * Today's opponent: its hero (and tier) is rolled once per day with a real random number and saved, so scouting can show
+ * it; its build is rolled only when you fight, with a fresh random seed, so nothing in the save predicts it.
+ * Like the server: no mirror match on days 1–2, and half of the mirrors re-rolled later.
+ */
+function oppHero(s: R.RunState) {
+  if (!save.opp || save.opp.day !== s.day || !save.opp.hero) {
+    let hero = HEROES[randomInt(0, HEROES.length)].id;
+    if (hero === s.hero && (s.day <= 2 || randomInt(0, 2) === 0)) {
+      const others = HEROES.filter((h) => h.id !== s.hero);
+      hero = others[randomInt(0, others.length)].id;
+    }
+    save.opp = { day: s.day, tier: save.tier === 'auto' ? autoTier(s) : save.tier, hero };
+  }
+  return save.opp;
+}
 function oppFor(s: R.RunState): Build {
-  if (!save.opp || save.opp.day !== s.day) save.opp = { day: s.day, tier: save.tier === 'auto' ? autoTier(s) : save.tier };
-  // like the server: no mirror match on days 1–2
-  return randomAiBuild(s.day, hashSeed(save.seed, 'opp', s.day, s.wins, s.losses), save.opp.tier, s.day <= 2 ? s.hero : undefined);
+  const o = oppHero(s);
+  const line = HEROES_BY_ID[o.hero].line;
+  const second = LINES.filter((l) => l !== line)[randomInt(0, 7)];
+  return aiBuild(o.hero, s.day, [line, second], randomInt(0, 2 ** 31), o.tier);
 }
 const markText = (m?: string) => (m ? ` mark ${R.MARK_INFO[m as keyof typeof R.MARK_INFO].name} (${R.MARK_INFO[m as keyof typeof R.MARK_INFO].desc})` : '');
 /** ult in words at the level it has now */
@@ -92,9 +110,8 @@ function show(s: R.RunState) {
       p(`   ${i}. ${up ? `UPGRADE Lv${lv(up.v)} → ` : ''}${nodeOf(k).name} [${o.id} Lv${lv(o.v)} ${lineOf(o.id)}]${SKILLS[o.id].hero ? ' [UNIQUE]' : ''} ${R.priceOf(o)}g${R.isLocked(s, i) ? ' (locked)' : ''}${tag}\n        ${simpleText(k)}${diff ? `\n        change: ${diff} (▼ = worse)` : ''}${bon ? `\n        connect: ${bon}` : ''}`);
     });
     p('   (indexes do not shift: a bought card leaves an empty place)');
-    const ob = oppFor(s);
-    const olv = ultLevel(ob);
-    p(`Next opponent (scouted): ${HEROES_BY_ID[ob.hero].name} (${ob.hero}, line ${heroLine(ob.hero)}) · ${ob.skills.length} skills · ult ${olv ? `Lv${olv} ★ ${HEROES_BY_ID[ob.hero].ult.name}` : 'locked'} · AI ${save.opp?.tier ?? ''} (skill list hidden until the fight)`);
+    const oh = oppHero(s);
+    p(`Next opponent (scouted): ${HEROES_BY_ID[oh.hero].name} (${oh.hero}, line ${heroLine(oh.hero)}) · AI ${oh.tier} (its build is rolled when you fight)`);
   }
   if (s.phase === 'lastchance') p('You died once: choose `chance awaken` (all Lv1 → Lv2), `chance mark` (a random mark), or `chance supply` (+8 gold, +1 slot).');
   if (s.phase === 'mark') p(`Place mark ${s.pendingMark}: \`mark <listIdx>\` (-1 = skip). ${R.MARK_INFO[s.pendingMark!].name}: ${R.MARK_INFO[s.pendingMark!].desc}`);
@@ -190,7 +207,7 @@ switch (cmd) {
       p(' timeline (casts + special events ★):');
       fightSummary(r.events, ['You', 'Enemy'], [me, opp]).slice(0, 140).forEach((l) => p(l));
       save.history.push(`D${st.day} ${won ? 'W' : 'L'} vs ${opp.hero} ${(r.ticks / 10).toFixed(1)}s`);
-      R.recordResult(st, won, { opp: 'bot', ai: true });
+      R.recordResult(st, won, { opp: 'bot', ai: true }, r.winner === -1);
     } else fail('unknown command ' + cmd);
     if (err) p('✘ ' + err);
     if (st.phase === 'shop' || cmd !== 'fight' || true) show(st);

@@ -2,41 +2,67 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { DAY1_GOLD, LV3_DAY, MAX_SLOTS, PRICES, incomeFor, slotsFor } from '../sim/run';
+import { LV3_DAY, MAX_SLOTS, PRICES, START_HP, damageFor, incomeFor, slotsFor } from '../sim/run';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
 
 const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];
 export const MAX_DAY = 20;
 
-/** Most gold a run can have earned by the end of `day`'s shop: base income + the biggest streak bonus every day + the last-chance supply. */
-export function goldCap(day: number) {
-  let g = DAY1_GOLD;
-  for (let d = 2; d <= day; d++) g += incomeFor(d, 5).base + incomeFor(d, 5).bonus;
-  // the last chance can give 8 gold, or Awaken (every Lv1 skill → Lv2 for free; a first death is day 5 at the earliest)
-  return g + 8 + (day >= 5 ? MAX_SLOTS * PRICES[1] : 0);
+/**
+ * A run's record before `day`: the result of each earlier day (1 = won, 0 = lost or draw). The server knows it from
+ * the fights it ran (RunTrack.days); scripts that have none use the best honest record (every day won).
+ */
+export type RunRecord = (0 | 1)[];
+const allWins = (day: number): RunRecord => Array.from({ length: Math.max(0, day - 1) }, () => 1);
+
+/**
+ * What a run with this record can have had in its shop on `day` (sim v15, exact, run.ts rules): the day-1 gold plus each
+ * later day's income with the streak bonus it really had, and whether the last chance (เสบียงสุดท้าย +8 gold and +1 slot,
+ * or ตื่นพลัง: every Lv1 skill → Lv2) was reached (HP ≤ 0 once). Supply and Awaken are one choice, never both.
+ */
+export function runMax(day: number, rec: RunRecord = allWins(day)) {
+  let gold = 0;
+  let streak = 0;
+  let hp = START_HP;
+  let lastChance = false;
+  for (let d = 1; d <= day; d++) {
+    const inc = incomeFor(d, streak);
+    gold += inc.base + inc.bonus;
+    if (d === day) break;
+    const won = rec[d - 1] === 1;
+    streak = won ? (streak > 0 ? streak + 1 : 1) : streak < 0 ? streak - 1 : -1;
+    if (!won) hp -= damageFor(d);
+    if (hp <= 0 && !lastChance) {
+      lastChance = true;
+      hp = 1;
+    }
+  }
+  return { gold, lastChance };
 }
-/** Least gold a build can have cost: each skill's Lv1 + upgrades at shop prices, plus the slots above the day's own. */
-export function buildCost(b: Build, day: number) {
+/** Most gold a run can have earned by `day`'s shop (all days won, no last chance unless the record says so). */
+export const goldCap = (day: number, rec?: RunRecord) => runMax(day, rec).gold;
+/** Least gold a build can have cost: each skill's Lv1 + upgrades at shop prices, plus every slot above the day's own. */
+export function buildCost(b: Build, day: number, freeSlots = 0) {
   let g = 0;
   for (const s of b.skills) {
     const lv = lvOf(s.v);
     for (let l = 1; l <= lv; l++) g += PRICES[l - 1];
     if (SKILLS[s.id]?.hero) g += 1;
   }
-  // one extra slot can come free from the last chance (เสบียงสุดท้าย); slot prices are 4, 6, 8 …
-  const extra = Math.max(0, b.skills.length - slotsFor(day) - 1);
+  // slot prices are 4, 6, 8 … (the last chance's supply can give one for free)
+  const extra = Math.max(0, b.skills.length - slotsFor(day) - freeSlots);
   for (let i = 0; i < extra; i++) g += 4 + 2 * i;
   return g;
 }
 
 /**
- * Builds come from the client: check the shape, then whether a real run could own it on this day (sim v14 plausibility
- * caps): Lv1 only on day 1, no Lv3 before LV3_DAY, at most 2 bonuses per skill, at most 1 mark unless every skill is
- * Lv3 (moon wishes), and the build's least cost within the most gold a run can earn by then. A full server-authoritative
+ * Builds come from the client: check the shape, then whether this run could own it on this day: day 1 = the hero's
+ * fixed shop, no Lv3 before LV3_DAY, at most 2 bonuses per skill, marks only after a last chance (or all Lv3), and the
+ * build's least cost within the gold this run's record can have earned (`rec`; default = every day won). A full server-authoritative
  * run (server rolls the shop and replays every purchase) would close the rest; see docs/DESIGN_LINES_ULT.md §10c.
  */
-export function validateBuild(x: unknown, day: number): Build | string {
+export function validateBuild(x: unknown, day: number, rec?: RunRecord): Build | string {
   const b = x as Build;
   if (!b || typeof b !== 'object' || !HEROES_BY_ID[b.hero]) return 'bad hero';
   // bought slots can add more than the day gives, but never past MAX_SLOTS
@@ -56,15 +82,23 @@ export function validateBuild(x: unknown, day: number): Build | string {
     });
   }
   if (new Set(skills.map((s) => s.id)).size !== skills.length) return 'duplicate skill';
-  // plausibility for this day
+  // plausibility for this day, from the run's record (sim v15: exact caps, see runMax)
+  const { gold, lastChance } = runMax(day, rec);
   const lvs = skills.map((s) => lvOf(s.v));
-  if (day <= 1 && lvs.some((l) => l > 1)) return 'implausible: upgrades on day 1';
+  if (day <= 1) {
+    // day 1 is the hero's fixed shop: Lv1 only, only those cards, and at most the day's slots
+    const shop = HEROES_BY_ID[b.hero].day1;
+    if (lvs.some((l) => l > 1)) return 'implausible: upgrades on day 1';
+    if (skills.some((s) => !shop.includes(s.id))) return 'implausible: not in the day-1 shop';
+  }
   if (day < LV3_DAY && lvs.some((l) => l >= 3)) return 'implausible: Lv3 before day ' + LV3_DAY;
   if (skills.some((s) => (s.bonus?.length ?? 0) > 2)) return 'implausible: too many bonuses';
+  // marks come from the last chance (one) or from moon wishes once every skill is Lv3
   const marks = skills.filter((s) => s.mark).length;
-  if (marks > 1 && !lvs.every((l) => l >= 3)) return 'implausible: too many marks';
-  if (skills.length > slotsFor(day) + 1 && day <= 2) return 'implausible: too many slots';
-  if (buildCost({ hero: b.hero, skills }, day) > goldCap(day)) return 'implausible: costs more gold than a run can have';
+  if (marks > (lastChance ? 1 : 0) && !lvs.every((l) => l >= 3)) return 'implausible: too many marks';
+  // Awaken (Lv1 → Lv2 for every skill) is worth at most one Lv2 price per skill; Supply is 8 gold + 1 slot: allow the better one
+  const bonusGold = lastChance ? Math.max(8, PRICES[1] * skills.length) : 0;
+  if (buildCost({ hero: b.hero, skills }, day, lastChance ? 1 : 0) > gold + bonusGold) return 'implausible: costs more gold than this run can have';
   const look = Number.isInteger(b.look) && b.look! > 0 && b.look! < 2 ** 32 ? b.look : undefined;
   return { hero: b.hero, skills, ...(look ? { look } : {}) };
 }

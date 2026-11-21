@@ -56,8 +56,8 @@ export const KNOBS: Knob[] = [
   { key: 'burn.scorch', lo: 0, hi: 2, step: 0.25, why: 'burn ticks also burn shield away (🔥 > 🛡)' },
   { key: 'burn.shield', lo: 0.5, hi: 1, step: 0.05, why: 'shield gains while burning (🔥 > 🛡)' },
   // ultimates (sim v12): trigger amount and effect power per hero
-  { key: 'ult.assassin.trig', lo: 0.3, hi: 0.6, step: 0.05, why: 'assassin ult: enemy HP share' },
-  { key: 'ult.assassin.pow', lo: 0.4, hi: 1.5, step: 0.1, why: 'assassin ult: × biggest hit' },
+  { key: 'ult.assassin.trig', lo: 0.2, hi: 0.5, step: 0.05, why: 'assassin ult: enemy HP share' },
+  { key: 'ult.assassin.pow', lo: 0.15, hi: 0.6, step: 0.05, why: 'assassin ult: share of the HP the enemy has lost' },
   { key: 'ult.duelist.trig', lo: 2, hi: 8, step: 1, why: 'duelist ult: dodges' },
   { key: 'ult.duelist.pow', lo: 0.3, hi: 0.8, step: 0.05, why: 'duelist ult: haste' },
   { key: 'ult.knight.trig', lo: 0.05, hi: 0.4, step: 0.05, why: 'knight ult: shield gained / max HP' },
@@ -71,7 +71,7 @@ export const KNOBS: Knob[] = [
   { key: 'ult.witch.trig', lo: 2, hi: 8, step: 1, why: 'witch ult: ice casts' },
   { key: 'ult.witch.pow', lo: 1, hi: 3, step: 0.25, why: 'witch ult: freeze seconds' },
   { key: 'ult.chrono.trig', lo: 2, hi: 8, step: 1, why: 'chrono ult: slows / delays landed' },
-  { key: 'ult.chrono.pow', lo: 0.1, hi: 0.6, step: 0.05, why: 'chrono ult: haste' },
+  { key: 'ult.chrono.pow', lo: 0.2, hi: 0.8, step: 0.05, why: 'chrono ult: cooldowns jump forward by this share' },
 ];
 
 /** Default (current) value of each knob. */

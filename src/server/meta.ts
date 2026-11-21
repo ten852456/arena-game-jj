@@ -5,6 +5,7 @@ import { WIN_TARGET } from '../sim/run';
 import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
 import { MAX_DAY, cleanId, cleanName, intIn, validateBuild } from './validate';
+import { recordOf } from './fight';
 import type { Res } from './fight';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
@@ -48,9 +49,12 @@ export function handleFinish(body: any): Res {
   if (!playerId || !runId || day === null || wins === null || losses === null || !HEROES_BY_ID[hero]) return bad('bad request');
   // one fight per day: the run ends after day `day`'s fight, or during day `day` when conceded before fighting
   if (wins + losses !== day && wins + losses !== day - 1) return bad('wins + losses do not match day');
-  const build = validateBuild(body?.build, day);
+  const pre = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // the final build is judged with the run's record before its last day
+  const build = validateBuild(body?.build, day, recordOf(pre).slice(0, day - 1));
   if (typeof build === 'string') return bad(build);
   if (build.hero !== hero) return bad('build hero mismatch');
+  if (pre?.hero && pre.hero !== hero) return bad('hero does not match this run');
 
   const done = db.runs.find((r) => r.runId === runId);
   if (done) {

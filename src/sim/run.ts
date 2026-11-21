@@ -68,6 +68,8 @@ export interface LogEntry {
   opp: string;
   ai: boolean;
   fightId?: string;
+  /** a draw: no win, no HP lost */
+  draw?: boolean;
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
@@ -210,6 +212,16 @@ function rollShop(s: RunState) {
     while (i < w.length - 1 && (r -= w[i]) >= 0) i++;
     return fresh.splice(i, 1)[0];
   };
+  // sim v15: while a line card is not owned, every roll has at least one new card of the hero's line (upgrades used to crowd them out)
+  const lineNew = (o: Offer | null) => !!o && o.v === '' && SKILLS[o.id].line === line;
+  if (picks.length < need && !picks.some(lineNew) && !kept.some(lineNew)) {
+    const ids = fresh.filter((id) => SKILLS[id].line === line);
+    if (ids.length) {
+      const id = ids[rng.int(ids.length)];
+      fresh.splice(fresh.indexOf(id), 1);
+      picks.push({ id, v: '', bonus: rollBonuses(rng, id, s.hero) });
+    }
+  }
   while (picks.length < need && (fresh.length || ups.length)) {
     const takeUp = ups.length > 0 && (fresh.length === 0 || rng.next() < 0.5);
     if (takeUp) {
@@ -340,15 +352,19 @@ export const toBuild = (s: RunState): Build => ({
   look: lookOf(s),
 });
 
-export function recordResult(s: RunState, won: boolean, info: Omit<LogEntry, 'day' | 'won'>) {
-  s.log.push({ day: s.day, won, ...info });
+/** draw = the fight ended in a draw (a near-even double KO): it is not a win, but costs no HP and resets the streak (sim v15) */
+export function recordResult(s: RunState, won: boolean, info: Omit<LogEntry, 'day' | 'won'>, draw = false) {
+  s.log.push({ day: s.day, won, ...info, ...(draw && !won ? { draw: true } : {}) });
   if (won) {
     s.wins++;
     s.streak = s.streak > 0 ? s.streak + 1 : 1;
   } else {
     s.losses++;
-    s.hp = Math.max(0, s.hp - damageFor(s.day));
-    s.streak = s.streak < 0 ? s.streak - 1 : -1;
+    if (draw) s.streak = 0;
+    else {
+      s.hp = Math.max(0, s.hp - damageFor(s.day));
+      s.streak = s.streak < 0 ? s.streak - 1 : -1;
+    }
   }
   if (s.wins >= WIN_TARGET) {
     s.phase = 'won';

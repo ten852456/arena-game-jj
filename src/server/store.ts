@@ -49,6 +49,8 @@ export interface FightRec {
 /** What the server saw of a run while it was being played: opponents met and result per day. */
 export interface RunTrack {
   playerId?: string;
+  /** the run's hero, bound on its first fight (sim v15) */
+  hero?: string;
   name: string;
   /** opponent snapshot ids and opponent run ids already met in this run (no repeats) */
   snaps: string[];

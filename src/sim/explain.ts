@@ -228,7 +228,7 @@ function lockWindows(r: CombatResult, s: Side): [number, number][] {
       const end = e.t + e.value;
       if (open && e.t <= open[1]) open[1] = Math.max(open[1], end);
       else raw.push((open = [e.t, end]));
-    } else if (e.status === 'cleanse' && e.value > 0 && open && e.t < open[1]) open[1] = e.t;
+    } else if ((e.status === 'cleanse' || e.status === 'shake') && e.value > 0 && open && e.t < open[1]) open[1] = e.t;
     else if (e.status === 'delay' && e.value > 0) raw.push([e.t, e.t + e.value]);
   }
   raw.sort((a, b) => a[0] - b[0]);

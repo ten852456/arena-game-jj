@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 14;
+export const SIM_VERSION = 15;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -70,13 +70,15 @@ export const TRIGGER_GAP = 2 * TPS;
 export const TRIGGER_GAP_MAX = 4 * TPS;
 /** a skill set off by an engine (ฟันเฟือง / เร่งเครื่อง) can't be set off again for at least this long (sim v14) */
 export const ENGINE_GAP = 3 * TPS;
+/** a double KO where the damage dealt is this close (share of the bigger) is a draw */
+export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
 /** after a freeze ends or a delay lands, freeze and delay on that fighter are resisted for this long */
 export const CTL_IMMUNE = 1.5 * TPS;
 /** The control cap also grows with the fight: at tick t at most CTL_BASE + CTL_SHARE × t ticks can have been spent. */
 export const CTL_BASE = 1 * TPS;
-export const CTL_SHARE = 0.3;
+export const CTL_SHARE = 0.25;
 /** A fighter that has not fired any skill for this long shakes off freeze / slow and resists all control until it fires. */
 export const SHAKE_OFF = 4 * TPS;
 /** control shorter than this does not set off ✨/🗿 reactions */
@@ -344,6 +346,10 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
   const first = rng.int(2); // who acts first on even ticks
   const fStart = fatigueStart(day);
   const fStep = fatigueStep(day);
+  // ใจเหล็ก works from the start of the fight when the build owns a skill with it (sim v15: before, only after it fired)
+  for (const f of F)
+    for (const blk of f.blocks)
+      for (const e of nodeOf(blk.inst).fx) if (e.k === 'steadfast') f.ctlKeep = Math.min(f.ctlKeep, e.keep ?? 0.4);
   const fCap = freezeCap(day);
   const sCap = Math.round(fCap * 1.75);
   for (const f of F) f.hooks.onStart?.(hookApi(f));
@@ -424,8 +430,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const pow = ultPow(f.hero, f.ultLv);
     switch (f.hero) {
       case 'assassin': {
-        // ignores shields; a dodge charge can't make it miss, but it halves it (and is used up)
-        let n = Math.min(pow * f.bigHit, ultCap(f, foe));
+        // sim v15: hits harder the more HP the enemy is missing (a finisher), ignores shields; a dodge charge halves it
+        let n = Math.min(pow * (foe.maxHp - foe.hp), ultCap(f, foe));
         if (foe.dodge > 0) {
           foe.dodge--;
           foe.dodges++;
@@ -487,13 +493,13 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         break;
       }
       case 'chrono': {
-        for (const b of f.blocks) b.prog = Math.max(b.prog, b.cd);
+        // sim v15: every cooldown jumps forward by pow of its length (was: all ready at once), then cleanse all
+        for (const b of f.blocks) b.prog = Math.min(b.cd, b.prog + Math.round(b.cd * pow));
         let n = removeDots(f, 99);
         if (f.slowT > 0) { f.slowT = 0; f.slowPct = 0; n++; }
         if (f.frozen > 0) { f.frozen = 0; f.immuneUntil = t + CTL_IMMUNE; n++; }
         if (f.woundT > 0) { f.woundT = 0; n++; }
         emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
-        addHaste(f, pow, 3);
         break;
       }
     }
@@ -594,6 +600,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
           f.chargeHits = 0;
         }
         const pierce = o.pierce ?? 0;
+        // ตั้งรับ: a fighter behind a shield takes less from a direct hit that doesn't fully pierce (🛡 > ⚔)
+        if (foe.shield > 0 && pierce < 1) dmg = Math.max(1, Math.round(dmg * (1 - T['shield.guard'])));
         const hpBefore = foe.hp;
         deal(foe, dmg, 1 - pierce, inst.id, blk.idx, bonusPart);
         const dealt = Math.max(0, hpBefore - Math.max(0, foe.hp)) + 0;
@@ -607,6 +615,9 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         // นักรบหนาม's ultimate: poison thorns
         if (foe.ultUntil > t && f.hp > 0) for (let i = 0; i < 2; i++) addPoison(f, 1, 4, -1);
         return dealt;
+      },
+      spendShield(n) {
+        f.shield = Math.max(0, f.shield - Math.round(n));
       },
       shield(n) {
         n = meltShield(f, n);
@@ -874,7 +885,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       f.frozen = 0;
       f.slowT = 0;
       f.slowPct = 0;
-      emit({ type: 'status', side: f.side, status: 'cleanse', value: 1 });
+      emit({ type: 'status', side: f.side, status: 'shake', value: 1 });
     }
     const frozen = f.frozen > 0;
     if (frozen) {
@@ -954,9 +965,10 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     if (F[0].hp <= 0 || F[1].hp <= 0) {
       // one side down: the other wins. Both down in the same tick (double KO): the side that dealt more damage in the
       // whole fight wins, then the one less below zero, else a draw (sim v14; before: only "less below zero")
+      // (sim v15) damage within DRAW_SHARE of each other is a draw (costs no run HP): "who went further below zero" no longer decides
       if (F[0].hp <= 0 && F[1].hp <= 0) {
         const d = F[0].dealtTotal - F[1].dealtTotal;
-        winner = d !== 0 ? (d > 0 ? 0 : 1) : F[0].hp === F[1].hp ? -1 : F[0].hp > F[1].hp ? 0 : 1;
+        winner = Math.abs(d) <= DRAW_SHARE * Math.max(F[0].dealtTotal, F[1].dealtTotal) ? -1 : d > 0 ? 0 : 1;
       } else winner = F[0].hp > 0 ? 0 : 1;
       decided = true;
       break;

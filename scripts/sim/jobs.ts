@@ -234,7 +234,7 @@ function runRuns(j: Extract<Job, { k: 'runs' }>): RunsRes {
           a.shareN++;
         }
       });
-      recordResult(s, won, { opp: 'bot', ai: true });
+      recordResult(s, won, { opp: 'bot', ai: true }, fight.winner === -1);
     }
     res.runs++;
     res.ult1Day[u1] = (res.ult1Day[u1] ?? 0) + 1;

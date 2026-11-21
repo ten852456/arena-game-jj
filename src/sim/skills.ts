@@ -177,6 +177,8 @@ export interface Ctx {
   /** returns damage dealt, or -1 when the enemy dodged it. pierce = share of shield ignored. leech = share healed. sure = can't be dodged */
   hit(amount: number, o?: { pierce?: number; leech?: number; sure?: boolean }): number;
   shield(n: number): void;
+  /** lose this much of your own shield */
+  spendShield(n: number): void;
   heal(n: number): void;
   burn(dps: number, secs: number): void;
   poison(dps: number, secs: number): void;
@@ -207,6 +209,8 @@ export interface Ctx {
  */
 /** a skill fired at less than this power (engine, echo) gives no dodge charge */
 export const DODGE_MIN_POWER = 0.75;
+/** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
+export const SHIELD_SPEND = 0.5;
 
 export function execNode(node: SkillNode, c: Ctx) {
   let removed = 0;
@@ -220,7 +224,12 @@ export function execNode(node: SkillNode, c: Ctx) {
         const times = e.times ?? 1;
         for (let i = 0; i < times; i++) {
           let n = e.n + (e.perRemoved ?? 0) * removed;
-          if (e.shieldPct) n += c.me.shield * e.shieldPct;
+          // a shield bash spends part of the shield it used (sim v15: before, it stayed, so bash after bash scaled forever)
+          if (e.shieldPct) {
+            const used = c.me.shield * e.shieldPct;
+            n += used;
+            c.spendShield(used * SHIELD_SPEND);
+          }
           if (e.thornsX) n += c.me.thorns * e.thornsX;
           if (e.burnPct) n += c.foe.burnLeft * e.burnPct;
           if (e.poisonPct) n += c.foe.poisonLeft * e.poisonPct;

@@ -6,7 +6,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
-import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild } from './validate';
+import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, validateBuild, type RunRecord } from './validate';
 
 export interface Res {
   status: number;
@@ -15,6 +15,10 @@ export interface Res {
 const bad = (error: string): Res => ({ status: 400, json: { error } });
 
 const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
+
+/** A run's results before today, day 1 first (1 = won, 0 = lost or draw), for validateBuild. */
+export const recordOf = (t?: RunTrack): RunRecord =>
+  t ? Object.keys(t.days).map(Number).sort((a, b) => a - b).map((d) => (t.days[d] === 1 ? 1 : 0)) : [];
 
 function trackOf(runId: string, playerId: string, name: string): RunTrack {
   const t = (db.tracks[runId] ??= { name, snaps: [], opps: [], days: {}, t: Date.now() });
@@ -57,10 +61,13 @@ export function handleFight(body: any): Res {
   const playerId = cleanId(body?.playerId);
   const day = intIn(body?.day, 1, MAX_DAY);
   if (!runId || day === null || !playerId) return bad('bad request');
-  const build = validateBuild(body?.build, day);
-  if (typeof build === 'string') return bad(build);
-  const name = cleanName(body?.name, playerId ?? runId);
   const prev = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
+  // the build must be one this run could own today, judged from the run's own record (results of earlier days)
+  const build = validateBuild(body?.build, day, recordOf(prev));
+  if (typeof build === 'string') return bad(build);
+  // the hero is bound to the run on its first fight: no switching hero (or counter-picking from /api/scout) mid-run
+  if (prev?.hero && build.hero !== prev.hero) return bad('hero does not match this run');
+  const name = cleanName(body?.name, playerId ?? runId);
   // matchmaking and AI difficulty use the server's own rating for this run, never the client's
   const rating = prev?.rating ?? 1000;
   // Each day of a run is fought once: a finished run, or a day already on record, cannot be re-fought
@@ -115,13 +122,15 @@ export function handleFight(body: any): Res {
 
   // What this run has met and how each day went (no repeats, streak for the AI tier, verified wins at run end).
   const track = trackOf(runId, playerId, name);
+  track.hero ??= build.hero;
   track.rating = newRating;
   track.days[day] = won ? 1 : 0;
   if (tutorial) track.tutorial = true;
   // same rules as the client (run.ts recordResult): a loss costs HP by day, the first death is the last chance
   // at 1 HP, the second ends the run, WIN_TARGET wins end it too. A modified client can't fight past its end.
   track.hp ??= START_HP;
-  if (!won) track.hp -= damageFor(day);
+  // a draw (near-even double KO) costs no HP, like run.ts recordResult
+  if (!won && result.winner !== -1) track.hp -= damageFor(day);
   const winsSoFar = Object.values(track.days).filter((d) => d === 1).length;
   if (winsSoFar >= WIN_TARGET) track.over = true;
   else if (track.hp <= 0) {

@@ -1402,6 +1402,8 @@ function describe(e: CombatEvent): string | null {
           return `${who(e.side)} <b>${L('คลั่ง!', 'Rage!')}</b> ${L('พลังโจมตี', 'attack power')} +${e.value}`;
         case 'evade':
           return `&nbsp;&nbsp;${who(e.side)} ${L('หลบการตีได้', vb(e.side, 'dodges the hit', 'dodge the hit'))} 💨 (${L('เหลือ', 'left')} ${e.value})`;
+        case 'shake':
+          return `&nbsp;&nbsp;${who(e.side)} ${L('สลัดการแช่แข็ง/ช้าทิ้ง (ไม่ได้ใช้ skill 4 วิ)', vb(e.side, 'shakes off freeze/slow (no skill for 4s)', 'shake off freeze/slow (no skill for 4s)'))}`;
         case 'sure':
           return `&nbsp;&nbsp;${who(e.side)} ${L('หลบไม่ได้: การตีนี้ไม่พลาด', vb(e.side, "can't dodge: this hit never misses", "can't dodge: this hit never misses"))} 👁`;
         case 'dodge':
@@ -1485,7 +1487,7 @@ async function doFight() {
   last = res;
   // apply the result before the replay plays, so reloading mid-replay can't undo a loss
   r.rating = res.rating;
-  R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId });
+  R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId }, res.result.winner === -1);
   saveRun();
   const oppInfo = res.opponent as FightResponse['opponent'] & { tier?: unknown };
   namesFn = () => [youName(), oppLabel(oppInfo)];

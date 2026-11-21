@@ -252,6 +252,8 @@ export function botShopTurn(s: RunState, rules: BotRules) {
     const full = s.skills.length >= slotsOf(s) - (lazy ? 1 : 0);
     s.shop.forEach((offer, i) => {
       if (!offer || !allowed(rules, offer.id)) return;
+      // easy bots are gentler on day 1: no hero unique (its Lv1 hits far harder than a shared Lv1)
+      if (easy && s.day <= 1 && SKILLS[offer.id].hero) return;
       const id = offer.id;
       if (priceOf(offer) > s.gold) return;
       let score: number;
