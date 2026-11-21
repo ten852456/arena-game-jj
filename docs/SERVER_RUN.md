@@ -54,3 +54,22 @@ mark kinds it rolled. Without owning the shop it still cannot prove:
 - **Which skill a wish mark went on.** The kind is the server's roll; the target is any Lv3 skill the build owned.
 
 All three close when the server owns the run (commands in, state out), as planned above.
+
+## Restart fishing and an abandon penalty for ranked (round 9 plan, not built)
+
+Since sim v20 mark kinds are never sent ahead: a mark is carved hidden and the server reveals its kind in the response
+of the next fight (and it decides whether a hidden mark is the last chance's or a wish's from its own ledger). Relic
+offers are still sent with the fight result of the day before the relic day, because that response is the moment the
+next day starts in the client; fetching them later would not change what a restarting player can see. What is left is
+fishing by restarting: play to day 3, look at day 4's relics, abandon, start again. It costs about 3 days of play and
+nothing else. For a ranked mode:
+
+- **Abandon = a finished run.** A run left without `/api/run/finish` for more than a day, or conceded, is recorded as
+  finished with the wins it had (it shows on the profile and counts as a run played).
+- **Ranked entry cost.** Starting a ranked run costs a small amount of stardust (or one of N daily ranked tickets),
+  paid back with interest only by reaching a set number of wins, so restarting for a better day-4 offer has a price.
+- **Rating decay on abandon.** An abandoned ranked run counts as a loss for the run's rating at its current day.
+- **One live ranked run per player.** A new ranked run cannot start while one is open; the open one must be finished
+  or conceded first (which records it, see above).
+
+These need the player identity the server already keeps (`playerId`, `db.players`) and nothing on the client.
