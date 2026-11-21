@@ -129,6 +129,8 @@ export interface RunState {
   wishes?: number;
   /** marks carved by wishes this run (at most WISH_MARKS_MAX) */
   wishMarks?: number;
+  /** the mark kinds the server rolled for this run (fight response): the next wish marks, and the last chance's */
+  markKinds?: { wish: Mark[]; last: Mark };
   /** run relics owned (relics.ts), at most MAX_RELICS */
   relics?: string[];
   /** the 3 relics offered today (phase 'relic') */
@@ -356,6 +358,12 @@ export const wishPrice = (s: RunState) => WISH_BASE + 2 * (s.wishes ?? 0) + (wis
  * WISH_BASE + 2k, a mark wish MARK_WISH_EXTRA more; earlier upgrade wishes that day only make it dearer.
  */
 export const markWishCost = (n: number) => Array.from({ length: Math.max(0, n) }, (_, k) => WISH_BASE + MARK_WISH_EXTRA + 2 * k).reduce((a, b) => a + b, 0);
+/**
+ * The kind of mark a run gets (sim v19, security review): the server rolls it from its own run seed and sends it in the
+ * fight response (`markKinds`), so a client can't choose its marks. idx = the run's n-th wish mark, or 'last' for the
+ * last chance's mark. Offline runs roll with their own seed.
+ */
+export const markKindFor = (seed: number, idx: number | 'last'): Mark => MARKS[hashSeed(seed, 'markkind', idx) % MARKS.length];
 export type WishKind = 'upgrade' | 'mark' | null;
 /**
  * What a wish does now: upgrade a random skill below Lv3; once EVERY skill is Lv3 (sim v18: not merely "none can go up
@@ -388,7 +396,7 @@ export function wish(s: RunState): WishResult {
     });
     return { idx: i, from, v: k.v };
   }
-  k.mark = rng.pick(MARKS);
+  k.mark = s.markKinds?.wish[s.wishMarks ?? 0] ?? rng.pick(MARKS);
   s.wishMarks = (s.wishMarks ?? 0) + 1;
   return { idx: i, from, mark: k.mark };
 }
@@ -515,7 +523,7 @@ export function chooseLastChance(s: RunState, opt: LastChanceOption) {
     }
   }
   if (opt === 'mark') {
-    s.pendingMark = new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+    s.pendingMark = s.markKinds?.last ?? new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
     s.phase = 'mark';
     return;
   }

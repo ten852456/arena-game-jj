@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../sim/links';
-import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markWishCost, slotsFor } from '../sim/run';
+import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markKindFor, markWishCost, slotsFor } from '../sim/run';
 import { RELIC_DAYS, isRelic, relicsAllowed, rollRelicOffer, skillLinesOf } from '../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../sim/skills';
 import type { Build, Mark } from '../sim/types';
@@ -97,7 +97,9 @@ export function allowances(day: number, rec?: RunRecord, choice?: LastChoice): A
   return choice && choice !== 'none' ? all.filter((a) => a.opt === choice) : all;
 }
 
-/** gold for stars from..to (sim v17: 5 / 6 / 7) */
+/** most stars a run can add in one day (a star card shows at most once per shop roll; sim v19 security tightening) */
+export const STARS_PER_DAY = 4;
+/** gold for stars from..to */
 export const starCost = (from: number, to: number) => STAR_PRICES.slice(from, to).reduce((a, b) => a + b, 0);
 /** price paid for a skill from level `from` (0 = not owned) up to its level now */
 const pricesFrom = (id: string, from: number, to: number) => {
@@ -115,8 +117,14 @@ const sameBonus = (a: Build['skills'][number], b: Build['skills'][number]) => JS
 export function spendDelta(prev: Build | undefined, cur: Build, day: number, paidSlots = 0, freeSlots = 0) {
   let g = 0;
   const kept = new Set<string>();
-  // marks gained today: a mark on a skill that did not carry that same mark yesterday (sim v18 ledger)
-  const gainedMarks = cur.skills.filter((k) => k.mark && prev?.skills.find((x) => x.id === k.id)?.mark !== k.mark).length;
+  // marks gained today: a mark on a skill that did not carry that same mark yesterday on the same branch line
+  // (sim v19: a Lv3 branch swap is a sell + rebuy, which loses the mark)
+  const gained = cur.skills.filter((k) => {
+    if (!k.mark) return false;
+    const p = prev?.skills.find((x) => x.id === k.id);
+    return !(p && p.mark === k.mark && k.v.startsWith(p.v) && lvOf(k.v) >= lvOf(p.v));
+  });
+  const gainedMarks = gained.length;
   for (const k of cur.skills) {
     const p = prev?.skills.find((x) => x.id === k.id);
     const continued = p && sameBonus(p, k) && k.v.startsWith(p.v) && lvOf(k.v) >= lvOf(p.v);
@@ -130,7 +138,12 @@ export function spendDelta(prev: Build | undefined, cur: Build, day: number, pai
   for (const p of prev?.skills ?? []) if (!kept.has(p.id)) g -= lvOf(p.v) + (p.star ?? 0);
   const need = Math.max(0, cur.skills.length - slotsFor(day) - freeSlots);
   for (let i = paidSlots; i < need; i++) g += 4 + 2 * i;
-  return { gold: g, paidSlots: Math.max(paidSlots, need), gainedMarks };
+  // stars gained today (a star card is at most one per shop roll; sim v19 caps a day at STARS_PER_DAY)
+  const gainedStars = cur.skills.reduce((n, k) => {
+    const p = prev?.skills.find((x) => x.id === k.id && x.v === k.v);
+    return n + Math.max(0, (k.star ?? 0) - (p?.star ?? 0));
+  }, 0);
+  return { gold: g, paidSlots: Math.max(paidSlots, need), gainedMarks, gained, gainedStars };
 }
 
 /**
@@ -142,7 +155,7 @@ export interface Ledger { spent: number; paidSlots: number; wishMarks: number; f
 /** the ledger key of a way: its option and its free slots (the two Supply ways differ there) */
 export const wayKey = (a: { opt: string; freeSlots: number }) => `${a.opt}:${a.freeSlots}`;
 export function spendCheck(
-  prev: { build?: Build; spent?: number; paidSlots?: number; wishMarks?: number; freeMarks?: number; ledger?: Record<string, Ledger> } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
+  prev: { build?: Build; spent?: number; paidSlots?: number; wishMarks?: number; freeMarks?: number; ledger?: Record<string, Ledger>; relicSeed?: number } | undefined, build: Build, day: number, rec?: RunRecord, choice?: LastChoice,
 ) {
   // ONE last-chance way must allow the whole build at once (security review): its marks, the build's own cost and the
   // running spend are all checked against the same way, never one way for one check and another for the next
@@ -169,6 +182,10 @@ export function spendCheck(
       // sim v18 ledger: a gained mark is the last chance's free one (once) or a paid moon wish (WISH_MARKS_MAX a run)
       const free = Math.min(Math.max(0, a.marks - L.freeMarks), d.gainedMarks);
       const paid = d.gainedMarks - free;
+      // sim v19 (security review): the kinds are the server's rolls, and a wish mark needs every older skill at Lv3
+      if (d.gainedMarks && prev?.relicSeed !== undefined && !marksMatch(d.gained.map((k) => k.mark!), free, L.wishMarks, prev.relicSeed)) return [];
+      if (paid && build.skills.some((k) => prev?.build?.skills.some((p) => p.id === k.id) && lvOf(k.v) < 3)) return [];
+      if (prev?.build && d.gainedStars > STARS_PER_DAY) return [];
       return [{
         opt: a.opt, key, cap: a.cap(build.skills.length),
         spent: L.spent + d.gold + markWishCost(paid), paidSlots: d.paidSlots, wishMarks: L.wishMarks + paid, freeMarks: L.freeMarks + free,
@@ -177,6 +194,20 @@ export function spendCheck(
     .filter((x) => x.spent <= x.cap && x.wishMarks <= WISH_MARKS_MAX);
 }
 
+/**
+ * Do the marks gained today match the server's rolls? `free` of them may be the last chance's mark (its kind), the rest
+ * must be the run's next wish marks in order (any order within the day).
+ */
+export function marksMatch(kinds: string[], free: number, wishDone: number, seed: number) {
+  const left = [...kinds];
+  if (free > 0) {
+    const i = left.indexOf(markKindFor(seed, 'last'));
+    if (i < 0) return false;
+    left.splice(i, 1);
+  }
+  const want = left.map((_, j) => markKindFor(seed, wishDone + j)).sort();
+  return JSON.stringify([...left].sort()) === JSON.stringify(want);
+}
 /** relics `cur` can have after `prev` (the run's last fought build): every old relic kept, at most one new and only on a relic day */
 export function relicsFollow(prev: string[], cur: string[], day: number, hasPrev: boolean) {
   if (prev.some((r) => !cur.includes(r))) return false;

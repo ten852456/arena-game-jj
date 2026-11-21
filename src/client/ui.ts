@@ -15,7 +15,7 @@ import { GROUP_ICON, RELICS_BY_ID, relicFits, relicText, skillLinesOf } from '..
 import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
-import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
+import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, Mark, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
 import type { CombatScene } from './combatScene';
@@ -1574,6 +1574,12 @@ async function doFight() {
   last = res;
   // apply the result before the replay plays, so reloading mid-replay can't undo a loss
   r.rating = res.rating;
+  const mk = (res as { markKinds?: { wish?: unknown; last?: unknown } }).markKinds;
+  if (mk && Array.isArray(mk.wish) && typeof mk.last === 'string') {
+    // the server's index 0 is the run's next wish mark: keep the client's array aligned with wishMarks
+    const done = r.wishMarks ?? 0;
+    r.markKinds = { wish: [...Array(done).fill('echo'), ...mk.wish.filter((x): x is Mark => R.MARKS.includes(x as Mark))], last: mk.last as Mark };
+  }
   const nextRelics = (res as { nextRelics?: unknown }).nextRelics;
   if (Array.isArray(nextRelics)) r.relicNext = { day: r.day + 1, ids: nextRelics.filter((x): x is string => typeof x === 'string') };
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId }, res.result.winner === -1);

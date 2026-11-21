@@ -104,6 +104,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
       res.push({ day: s.day, status: st, err: f?.error, offer });
       if (st !== 200) break;
       if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      if (f.markKinds) s.markKinds = { wish: [...Array(s.wishMarks ?? 0).fill('echo'), ...f.markKinds.wish], last: f.markKinds.last };
       s.rating = f.rating;
       recordResult(s, f.won, { opp: f.opponent.name, ai: f.opponent.ai, fightId: f.fightId }, f.result.winner === -1);
     }
@@ -213,6 +214,44 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   check('finish oracle: a claim off the record gets one answer (409) for every relic', fAns.size === 1 && [...fAns][0].startsWith('409'), [...fAns].join(' | '));
   const [, br] = await post('/api/run/finish', { runId: h.s.id, playerId: t, name: '', hero: fb.hero, wins: h.s.wins, losses: h.s.losses, day: h.s.day, build: { ...fb, relics: [...(fb.relics ?? []).slice(0, 2), RELICS.find((r) => !(fb.relics ?? []).includes(r.id))!.id] } });
   check('finish oracle: a bad relic and an unpaid build get the same error', br?.error === fj?.error && fj?.error === 'implausible build', `${br?.error} / ${fj?.error}`);
+  // round 8: mark kinds are the server's rolls; a wish mark needs the older skills at Lv3; a Lv3 branch swap loses the mark
+  const MK = ['burn', 'echo', 'quick', 'steadfast'] as const;
+  let honestKind = '';
+  const wrongKind = await play(t + '-wk', 'knight', 12, (day, b) => {
+    // replace the honest wish mark's kind with another kind
+    const k = b.skills.find((x) => x.mark);
+    if (!k || honestKind) return null;
+    honestKind = k.mark!;
+    return { ...b, skills: b.skills.map((x) => (x === k ? { ...x, mark: MK.find((m) => m !== k.mark)! } : x)) };
+  }, (s) => {
+    if (s.day < 9) return false;
+    lv3Only(s);
+    if (wishKind(s) === 'mark' && s.gold >= wishPrice(s)) wish(s);
+    return true;
+  });
+  const wkRow = wrongKind.res.find((r) => r.status !== 200);
+  check('forge: a wish mark of another kind than the server rolled → 400', !!honestKind && wkRow?.status === 400, `honest ${honestKind || 'none'} · ${wkRow?.status} ${wkRow?.err ?? ''}`);
+  const lowOld = await play(t + '-lo', 'knight', 10, (day, b) => {
+    if (day !== 10) return null;
+    const lv3 = b.skills.find((x) => x.v.length === 2);
+    const low = b.skills.find((x) => x.v.length < 2);
+    if (!lv3 || !low) return null;
+    return { ...b, skills: b.skills.map((x) => (x === lv3 ? { ...x, mark: 'quick' as const } : x)) };
+  });
+  const lo10 = lowOld.res.find((r) => r.day === 10);
+  check('forge: a wish mark while an older skill is below Lv3 → 400', !lo10 || lo10.status === 400, `${lo10?.status} ${lo10?.err ?? ''}`);
+  const swapMark = await play(t + '-sm', 'knight', 12, (day, b) => {
+    const k = b.skills.find((x) => x.mark && x.v.length === 2);
+    if (!k || day < 10) return null;
+    return { ...b, skills: b.skills.map((x) => (x === k ? { ...x, v: (x.v[0] === 'a' ? 'b' : 'a') + x.v[1] } : x)) };
+  }, (s) => {
+    if (s.day < 9) return false;
+    lv3Only(s);
+    if (wishKind(s) === 'mark' && s.gold >= wishPrice(s)) wish(s);
+    return true;
+  });
+  const smRow = swapMark.res.find((r) => r.status !== 200);
+  check('forge: a mark kept through a Lv3 branch swap → 400', smRow?.status === 400, `${smRow?.day} ${smRow?.status} ${smRow?.err ?? ''}`);
   // 4 the client's wish rules match the server's: no mark wish before every skill is Lv3
   const early = newRun('knight', 77, t + '-ew');
   early.day = 3; early.gold = 50;

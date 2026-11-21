@@ -1,7 +1,7 @@
 // POST /api/fight and GET /api/scout.
 import { randomInt, randomUUID } from 'node:crypto';
 import { SIM_VERSION, simulate } from '../sim/combat';
-import { START_HP, WIN_TARGET, damageFor } from '../sim/run';
+import { START_HP, WIN_TARGET, WISH_MARKS_MAX, damageFor, markKindFor } from '../sim/run';
 import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
@@ -200,6 +200,8 @@ export function handleFight(body: any): Res {
       },
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
+      // the mark kinds this run will get (the server's rolls; the client can't pick its marks)
+      markKinds: { wish: [0, 1].map((i) => markKindFor(track.relicSeed!, (track.wishMarks ?? 0) + i)).slice(0, Math.max(0, WISH_MARKS_MAX - (track.wishMarks ?? 0))), last: markKindFor(track.relicSeed!, 'last') },
       // tomorrow is a relic day: the 3 relics the server will accept (the client shows these)
       ...(serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills) } : {}),
       result, won, rating: newRating,
