@@ -3,6 +3,7 @@ import { HEROES } from '../sim/heroes';
 import { drawTownBackdrop, FOLK_COLORS, makeTownArt, R, RABBIT } from './townArt';
 import { BUILDINGS, BUILDING_BY_ID, RABBIT_X, WORLD_W } from './townData';
 import { ZOOM } from './view';
+import { perf } from './perf';
 import { L } from '../i18n';
 
 let resolveTown!: (s: TownScene) => void;
@@ -76,7 +77,7 @@ export class TownScene extends Phaser.Scene {
       // desktop hover: warm tint + soft glow (glow needs WebGL; canvas renderer just tints)
       img.on('pointerover', () => {
         img.setTint(0xfff1c8);
-        if (b.open && !img.preFX?.list.length) img.preFX?.addGlow(0xffd56b, 3, 0, false, 0.1, 12);
+        if (b.open && perf().hoverGlow && !img.preFX?.list.length) img.preFX?.addGlow(0xffd56b, 3, 0, false, 0.1, 12);
       });
       img.on('pointerout', () => {
         img.clearTint();

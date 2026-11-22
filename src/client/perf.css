@@ -1,0 +1,42 @@
+/* Graphics tiers (perf.ts sets html[data-perf]). Loaded last so it wins.
+   medium: half the night sky, no glass blur (blur repaints whatever scrolls under it)
+   low:    no night sky, no decorative loops and glows that repaint every frame.
+           Pulses that tell the player something (guide, upgrade ready, low HP, last chance) stay. */
+
+html[data-perf='medium'] #ambient .amb-x { display: none; }
+html[data-perf='medium'] .sv-fight,
+html[data-perf='low'] .sv-fight { backdrop-filter: none; }
+
+html[data-perf='low'] #ambient { display: none; }
+html[data-perf='low'] header .logo-moon,
+html[data-perf='low'] .hud-heart { animation: none; filter: none; }
+html[data-perf='low'] .hero-art svg,
+html[data-perf='low'] .mm-sky i,
+html[data-perf='low'] .mm-over.won .mm-over-hero .hero-art svg,
+html[data-perf='low'] .star-pips.max .sp.on,
+html[data-perf='low'] .star-pips.max .sp-img,
+html[data-perf='low'] .mk-hidden .mk-c,
+html[data-perf='low'] .mk-hidden .mk-c .dart,
+html[data-perf='low'] .re-spot,
+html[data-perf='low'] .rlm-risk,
+html[data-perf='low'] .cg-bead,
+html[data-perf='low'] .up-shine::before { animation: none; }
+html[data-perf='low'] .cgap.on .cg-line { animation: none; box-shadow: 0 0 6px var(--ch-gold); }
+html[data-perf='low'] .up-shine { display: none; }
+
+/* graphics row in the settings panel (soundPanel.ts) */
+.perf-set { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 226, 160, 0.25); }
+.perf-set-h { font-size: 13px; color: #ffe2a0; margin-bottom: 6px; }
+.perf-opts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.vol-panel .perf-opts button {
+  min-height: 32px; padding: 0 4px; border-radius: 10px; font-size: 13px; cursor: pointer; color: #2a1f4a;
+}
+.vol-panel .perf-opts button[aria-pressed='true'] { background: #ffcf6b; color: #2a1f4a; border-color: #ffcf6b; font-weight: 600; }
+.perf-note { margin-top: 6px; font-size: 12px; color: #c9bfe8; line-height: 1.35; }
+.perf-note b { color: #ffe2a0; font-weight: 600; }
+.perf-reload { margin-left: 4px; padding: 0 8px; min-height: 26px; border-radius: 8px; font-size: 12px; cursor: pointer;
+  background: rgba(255, 207, 107, 0.15); color: #ffe2a0; border: 1px solid rgba(255, 207, 107, 0.5); }
+@media (max-height: 500px), (max-width: 420px) {
+  .perf-set { margin-top: 6px; padding-top: 5px; }
+  .perf-opts button { min-height: 28px; }
+}

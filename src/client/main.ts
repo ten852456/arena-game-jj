@@ -22,6 +22,8 @@ import './runend.css'; // end of run: after theme.css so it wins
 import './depth.css'; // relics, stars, marks, branch picker, build card, codex
 import { initCodex } from './codex';
 import { initDepthArt } from './depthArt';
+import { attachPerf, bootProfile, loopLimit } from './perf';
+import './perf.css'; // graphics tiers: after every other sheet so it wins
 
 initIcons();
 
@@ -75,9 +77,11 @@ async function boot() {
     height: H * ZOOM,
     backgroundColor: '#231c48',
     antialias: true,
+    fps: { limit: loopLimit(bootProfile) }, // graphics tier (perf.ts): low caps at 30 fps
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.NO_CENTER }, // #stage always has the game's aspect (layout.ts)
     scene: [TownScene, CombatScene], // both start; the UI keeps one awake and sleeps the other
   });
+  attachPerf(game); // frame cap follows the tier; auto mode drops a tier if the frame rate stays low
   // re-read #stage's size first: refresh() alone would scale to the stale parent size
   setGameRefresh(() => {
     game.scale.getParentBounds();

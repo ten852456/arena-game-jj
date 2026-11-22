@@ -14,6 +14,7 @@ import { chainPopup } from './fightChain';
 import { ArenaLife, HeroIdle } from './idle';
 import { SKILL_ICON_IDS, skillIcon } from './assets';
 import { FxLayer, fxPlan, reducedMotion } from './fx';
+import { perf } from './perf';
 import { FighterFx, type FighterState } from './fighterFx';
 import { LINE_HEX, SkillStrip, type StripState } from './skillStrip';
 
@@ -634,8 +635,8 @@ export class CombatScene extends Phaser.Scene {
         this.bannerPlate.setScale(0.5);
         if (w === 0 && !this.quiet) {
           this.life.cheer();
-          confetti(this, POS[0], GROUND - HERO_H - 10);
-          this.time.delayedCall(180, () => confetti(this, W / 2, 150, 30));
+          confetti(this, POS[0], GROUND - HERO_H - 10, Math.round(46 * perf().confetti));
+          this.time.delayedCall(180, () => confetti(this, W / 2, 150, Math.round(30 * perf().confetti)));
         }
         this.tweens.add({ targets: this.banner, scale: fit, duration: 250, ease: 'Back.Out' });
         this.tweens.add({ targets: this.bannerPlate, scale: 1, duration: 250, ease: 'Back.Out' });
@@ -902,7 +903,7 @@ export class CombatScene extends Phaser.Scene {
       this.fxl.projectile(hx, CHEST - 10, POS[foe] - dir * 16, CHEST, travel, color, Math.min(1.4, 0.85 + dmg / 30), lead + antic);
     }
     if (!ok) return;
-    const cm = this.speed >= 4 ? 0.55 : 1;
+    const cm = (this.speed >= 4 ? 0.55 : 1) * perf().fx; // graphics tier (perf.ts)
     const plan = fxPlan(inst);
     this.fxl.baseDelay = lead + antic;
     for (const kind of plan.c) this.fxl.play(kind, POS[e.side], CHEST, dir, 1, lm, cm);

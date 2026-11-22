@@ -87,6 +87,7 @@ export function setGameRefresh(fn: () => void) {
 }
 
 // ---------- night sky behind the panels ----------
+// .amb-x = the half that medium graphics hides; low hides the whole sky (perf.css)
 function mountAmbient() {
   if (document.getElementById('ambient')) return;
   const sky = document.createElement('div');
@@ -97,9 +98,9 @@ function mountAmbient() {
   let seed = 7;
   const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280);
   for (let i = 0; i < 22; i++)
-    bits.push(`<i class="amb-star" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 70).toFixed(1)}%;--d:${(2 + rnd() * 4).toFixed(1)}s;--o:${(-rnd() * 6).toFixed(1)}s;--s:${(1 + rnd() * 2.2).toFixed(1)}px"></i>`);
+    bits.push(`<i class="amb-star${i % 2 ? ' amb-x' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;top:${(rnd() * 70).toFixed(1)}%;--d:${(2 + rnd() * 4).toFixed(1)}s;--o:${(-rnd() * 6).toFixed(1)}s;--s:${(1 + rnd() * 2.2).toFixed(1)}px"></i>`);
   for (let i = 0; i < 9; i++)
-    bits.push(`<i class="amb-petal" style="left:${(rnd() * 100).toFixed(1)}%;--d:${(14 + rnd() * 14).toFixed(1)}s;--o:${(-rnd() * 28).toFixed(1)}s;--x:${(40 + rnd() * 120).toFixed(0)}px;--r:${(rnd() * 360).toFixed(0)}deg"></i>`);
+    bits.push(`<i class="amb-petal${i % 2 ? ' amb-x' : ''}" style="left:${(rnd() * 100).toFixed(1)}%;--d:${(14 + rnd() * 14).toFixed(1)}s;--o:${(-rnd() * 28).toFixed(1)}s;--x:${(40 + rnd() * 120).toFixed(0)}px;--r:${(rnd() * 360).toFixed(0)}deg"></i>`);
   for (let i = 0; i < 4; i++)
     bits.push(`<i class="amb-lantern" style="left:${(8 + i * 27 + rnd() * 8).toFixed(1)}%;--d:${(4 + rnd() * 3).toFixed(1)}s;--o:${(-rnd() * 4).toFixed(1)}s"></i>`);
   sky.innerHTML = bits.join('');

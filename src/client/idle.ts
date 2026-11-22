@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ensureChibiExtras } from './chibi';
+import { onPerf } from './perf';
 import { ARENA_LANTERNS, ARENA_STANDS, FOLK_COLORS, R, makeArenaLifeArt } from './townArt';
 
 /**
@@ -28,6 +29,9 @@ export class ArenaLife {
   /** per bunny: base y, next hop time, hop start time, hop height */
   private bv = new Float32Array(BUNNIES * 4);
   private still = reducedMotion();
+  /** graphics tier (perf.ts): how many petals fall, whether the stands hop */
+  private nPetals = PETALS;
+  private hops = true;
 
   constructor(
     private scene: Phaser.Scene,
@@ -60,6 +64,12 @@ export class ArenaLife {
       this.petals.push(p);
       this.resetPetal(i, false);
     }
+    onPerf((p) => {
+      this.nPetals = this.still ? 0 : p.petals;
+      this.hops = p.hops;
+      this.petals.forEach((pt, i) => pt.setVisible(i < this.nPetals));
+      if (!p.hops) for (let i = 0; i < BUNNIES; i++) this.bunnies[i].y = this.bv[i * 4];
+    });
   }
 
   private resetPetal(i: number, top: boolean) {
@@ -90,7 +100,7 @@ export class ArenaLife {
       if (!this.still) this.glows[i].x = this.lanterns[i].x - Math.sin(ph) * 1.2;
     }
     if (this.still) return;
-    for (let i = 0; i < PETALS; i++) {
+    for (let i = 0; i < this.nPetals; i++) {
       const p = this.petals[i];
       const o = i * 4;
       p.x += this.pv[o] * dt + Math.sin(now / 600 + this.pv[o + 2]) * 0.012 * dt;
@@ -98,6 +108,7 @@ export class ArenaLife {
       p.rotation += this.pv[o + 3] * dt * 0.05;
       if (p.y > this.h + 6 || p.x > this.w + 10) this.resetPetal(i, true);
     }
+    if (!this.hops) return;
     for (let i = 0; i < BUNNIES; i++) {
       const o = i * 4;
       const b = this.bunnies[i];

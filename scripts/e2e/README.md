@@ -34,3 +34,9 @@ clickable town map (drag is not a tap, tapping the selected arena enters it). `O
 in Thai and English at 1280x720, 844x390 and 390x844. It covers the staged reveal (mid and final screenshots), tap to
 skip, reduced motion, no page scroll, "play again" on screen, the records, stardust bar, next goal, last-fight tip and
 share card (PNG plus download), Enter / R to the hero pick, and a one-tap quick start. The reward call is stubbed.
+
+## Graphics tiers
+
+`e2e-perf.mjs` (same setup) checks the auto graphics tier (desktop 8 cores → high, 4 cores → medium, phone → medium,
+2 GB Android → low), the four buttons in the settings panel, the 30 fps cap and 1.5× canvas on low, the CSS layers per
+tier, and that the auto watchdog drops a tier when the frame rate stays low.
