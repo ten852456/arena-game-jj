@@ -140,7 +140,10 @@ function mountRotateHint() {
   });
   document.body.appendChild(tip);
   // it goes away by itself after a while (and for good once closed)
-  setTimeout(() => tip.classList.add('gone'), 9000);
+  setTimeout(() => {
+    tip.classList.add('gone');
+    setTimeout(() => tip.remove(), 1000); // out of the page once faded (screen readers kept reading it)
+  }, 9000);
 }
 
 export function initLayout() {

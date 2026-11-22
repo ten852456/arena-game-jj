@@ -4,7 +4,7 @@ import { MARK_INFO } from '../sim/run';
 import { KEYWORDS, LINE_NAME, ROLE_NAME, SKILLS, type Keyword } from '../sim/skills';
 import { BUILDINGS_EN, LINE_EN, ROLE_EN, CHIP_EN, HEROES_EN, KEYWORDS_EN, MARKS_EN, RUN_ERRORS_EN, SKILLS_EN, SLIDES_EN } from './i18n_en';
 import { BUILDINGS } from './townData';
-import { SLIDES } from './tutorialSlides';
+import { SLIDES, fillRules } from './tutorialSlides';
 
 /**
  * Language switch for the browser (Thai / English). Game data keeps its text in plain fields (name, desc, …) that the
@@ -46,7 +46,10 @@ function apply(l: Lang) {
   for (const k of Object.keys(ROLE_NAME) as (keyof typeof ROLE_NAME)[]) ROLE_NAME[k] = (en && ROLE_EN[k]) || TH.role[k];
   for (const [k, m] of Object.entries(MARK_INFO)) Object.assign(m, (en && MARKS_EN[k]) || TH.marks[k]);
   for (const b of BUILDINGS) Object.assign(b, (en && BUILDINGS_EN[b.id]) || TH.buildings[b.id]);
-  SLIDES.forEach((s, i) => Object.assign(s, (en && SLIDES_EN[i]) || TH.slides[i]));
+  SLIDES.forEach((s, i) => {
+    const src = (en && SLIDES_EN[i]) || TH.slides[i];
+    Object.assign(s, { title: src.title, body: src.body.map(fillRules) });
+  });
 }
 
 const listeners: ((l: Lang) => void)[] = [];

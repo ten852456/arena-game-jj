@@ -26,6 +26,16 @@ export const H = 300;
 const GROUND = 250;
 const POS = [205, 435];
 const FONT = 'Kanit, sans-serif';
+export const SPEED_KEY = 'mochi.speed';
+function savedSpeed() {
+  try {
+    const n = Number(localStorage.getItem(SPEED_KEY));
+    return n === 1 || n === 2 || n === 4 ? n : 2;
+  } catch {
+    return 2;
+  }
+}
+
 const SIDE_COLOR = ['#9fd3ff', '#ffaaaa'];
 /** chibi height in world units, feet to the top of the art */
 const HERO_H = 116;
@@ -45,7 +55,8 @@ export interface PlayData {
 
 /** Side-view replay: our hero left, enemy right, executing skill in the center. */
 export class CombatScene extends Phaser.Scene {
-  speed = 2;
+  /** fight speed (1, 2 or 4): the player's last choice, kept across fights and visits (ui.ts saves it) */
+  speed = savedSpeed();
   private fighters!: Phaser.GameObjects.Image[];
   /** texture prefix per fighter once its chibi textures are ready (see ensureChibi) */
   private keys: (string | null)[] = [null, null];

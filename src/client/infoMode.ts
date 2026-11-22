@@ -2,7 +2,10 @@
  * Simple / detailed skill info.
  * Every skill is rendered both ways (simple sentence + full chips); a body class picks which one shows:
  * `body.info-detail` = detailed (the saved setting, or Alt held down on desktop). So switching never re-renders.
- * - Simple (default): one plain line per skill, plain chain words, short tooltips.
+ * - Simple (default): fewer things on screen. Each skill is a row of icon + word pills, only chains you can make,
+ *   and whole layers stay hidden: hero rules, shop how-to notes, the firing timeline, rarity / mastery tags, the
+ *   fight log and glossary, and the result's stats (behind one button). Playtests (5 personas, Nov 2026) showed that
+ *   swapping icons for sentences alone did not feel simpler: what overwhelmed people was the number of things.
  * - Detailed: all chips, exact numbers, plus the internals (ticks, formulas, bonus math) in tooltips.
  * The toggle lives in the header (ⓘ) and in the 🎚 settings panel; the choice is saved in localStorage.
  */
@@ -13,7 +16,7 @@ import { lvOf, nodeOf } from '../sim/skills';
 import type { Bonus, SkillInstance } from '../sim/types';
 import { onLang } from './lang';
 import { targetIcon, targetWords } from './shop/chains';
-import { detailBonus, detailLines, simpleBonus, simpleText } from './skillText';
+import { detailBonus, detailLines, simpleBonus, simpleParts, simpleText } from './skillText';
 import './infomode.css';
 
 type K = Pick<SkillInstance, 'id' | 'v' | 'mark'>;
@@ -68,8 +71,12 @@ const finePointer = () => typeof matchMedia === 'function' && matchMedia('(hover
 
 // ---------------- HTML pieces for ui.ts ----------------
 
-/** the plain one-line description (shown in simple mode, next to the hidden chips) */
-export const simpleSkillHTML = (k: K, haste = 0) => `<span class="sk-simple info-simp">${esc(simpleText(k, haste))}</span>`;
+/** The plain description (simple mode, next to the hidden chips): one pill per effect, an icon and a few words,
+ *  so icon readers and word readers both get it at a glance. The cooldown pill comes last. */
+export const simpleSkillHTML = (k: K, haste = 0) =>
+  `<span class="sk-simple info-simp" aria-label="${esc(simpleText(k, haste))}">${simpleParts(k, haste)
+    .map(([ico, t]) => `<span class="sp${ico === '⏱' ? ' sp-cd' : ''}"><i aria-hidden="true">${ico}</i>${esc(t)}</span>`)
+    .join('')}</span>`;
 
 /** a connect bonus as words: [partner icon] ต่อ chain: +2 ดาเมจ */
 export function simpleBonusChip(b: Bonus, lv: number, st: 'on' | 'can' | 'off', tip: string) {
@@ -81,7 +88,8 @@ export function simpleBonusChip(b: Bonus, lv: number, st: 'on' | 'can' | 'off', 
 /** both rows of connect-bonus chips: the detailed pictures and the simple words */
 export function bonusRows(detailChips: string[], bonus: Bonus[], lv: number, states: ('on' | 'can' | 'off')[], tips: string[]) {
   return `<span class="bonus-row info-det">${detailChips.join('')}</span>` +
-    `<span class="bonus-row info-simp">${bonus.map((b, bi) => simpleBonusChip(b, lv, states[bi], tips[bi])).join('')}</span>`;
+    // simple: only the bonuses a skill you own can switch on (the rest is noise until you buy their partner)
+    `<span class="bonus-row info-simp">${bonus.map((b, bi) => (states[bi] === 'off' ? '' : simpleBonusChip(b, lv, states[bi], tips[bi]))).join('')}</span>`;
 }
 
 /** cooldown cut from the active haste bonuses */
@@ -123,7 +131,7 @@ export function simpleDeltaHTML(owned: K, v: string) {
 export const settingsRowHTML = () =>
   `<div class="info-set"><div class="info-set-h">${L('คำอธิบาย skill', 'Skill info')}</div>
     <label class="vol-mute"><input type="checkbox" data-info ${detail ? 'checked' : ''}> ${L('คำอธิบายแบบละเอียด', 'Detailed info')}</label>
-    <div class="info-set-note">${L('แบบง่าย: ประโยคสั้นๆ · แบบละเอียด: ตัวเลขทั้งหมดและสูตร', 'Simple: one short line · Detailed: every number and formula')}${finePointer() ? L(' · กด Alt ค้างเพื่อดูชั่วคราว', ' · hold Alt to peek') : ''}</div></div>`;
+    <div class="info-set-note">${L('แบบง่าย: เห็นแค่ที่ต้องใช้เลือก ซ่อนกฎยาว ไทม์ไลน์ บันทึกการสู้ และสถิติ · แบบละเอียด: เห็นทุกอย่าง ตัวเลข สูตร และโซ่ทุกเส้น', 'Simple: only what you need to choose; long rules, the timeline, the fight log and stats stay hidden · Detailed: everything, every number, formula and chain')}${finePointer() ? L(' · กด Alt ค้างเพื่อดูชั่วคราว', ' · hold Alt to peek') : ''}</div></div>`;
 
 /** ⓘ button in the header: simple ↔ detailed */
 function mountHeaderToggle() {

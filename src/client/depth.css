@@ -140,10 +140,10 @@
 .uc-step em { font-style: normal; color: var(--ok); font-weight: 800; margin-left: 2px; }
 .uc-step.done { border-color: rgba(178, 235, 203, 0.55); background: rgba(178, 235, 203, 0.1); }
 .uc-sep { color: #8f84bb; margin: 0 1px; }
-.up { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1.5px solid #8f84bb; }
-.up.on { background: var(--m-moon); border-color: var(--ink-deep); box-shadow: 0 0 4px rgba(255, 227, 163, 0.6); }
-.up.l3 { border-radius: 2px; transform: rotate(45deg) scale(0.85); }
-.up.l3.on { background: var(--epic); }
+i.up { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1.5px solid #8f84bb; }
+i.up.on { background: var(--m-moon); border-color: var(--ink-deep); box-shadow: 0 0 4px rgba(255, 227, 163, 0.6); }
+i.up.l3 { border-radius: 2px; transform: rotate(45deg) scale(0.85); }
+i.up.l3.on { background: var(--epic); }
 .up-img { width: 11px; height: 11px; }
 /* shop card tag: this card moves ult Lv2 forward */
 .mark.ult-lv2 { background: #2c2357; color: var(--m-moon); border: 1.5px solid var(--m-moon); margin-left: 4px; font-weight: 700; }

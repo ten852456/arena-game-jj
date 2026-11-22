@@ -784,7 +784,7 @@ const FIELD: Record<string, [string, string, ('pct' | 'sec' | 'flag' | 'num')?]>
   'cleanse.n': ['ล้าง', 'cleanse'], 'cleanse.dot': ['ล้างแค่ไฟ/พิษ', 'only burn/poison', 'flag'], 'cleanse.lineAll': ['ล้างหมดเมื่อเป็นสายฮีโร่', 'clears all for your hero’s line', 'flag'], 'cleanse': ['ล้าง', 'cleanse', 'flag'],
   'dispel.n': ['สลาย', 'dispel'], 'dispel.shield': ['สลายโล่', 'dispel shield', 'pct'], 'dispel.steal': ['ขโมยพลัง', 'steal power', 'flag'], 'dispel': ['สลาย', 'dispel', 'flag'],
   'leech.pct': ['ดูดเลือดครั้งหน้า', 'next-hit leech', 'pct'], 'leech': ['ดูดเลือด', 'leech', 'flag'], 'engine.power': ['แรงที่สั่ง', 'engine power', 'pct'], 'engine.n': ['สั่งกี่ตัว', 'fires'],
-  'engine.keep': ['คูลดาวน์ไม่เริ่มใหม่', 'keeps cooldown', 'flag'], 'cd': ['คูลดาวน์', 'cooldown', 'sec'],
+  'engine.keep': ['คูลดาวน์ไม่เริ่มใหม่', 'keeps cooldown', 'flag'], 'cd': ['⏱ ทุก', '⏱ every', 'sec'],
   'shield': ['โล่', 'shield', 'flag'], 'heal': ['ฟื้น', 'heal', 'flag'],
 };
 /** fields where a lower number is better (sim v16 audit: cooldown, what the enemy keeps, the control that still lands) */

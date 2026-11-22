@@ -2,12 +2,17 @@
 body:not(.info-detail) .info-det { display: none !important; }
 body.info-detail .info-simp { display: none !important; }
 
-/* the plain one-line description */
+/* the plain description: one pill per effect (icon + a few words) */
 .sk-simple {
-  display: block; margin-top: 2px; font-size: 13px; line-height: 1.3; color: var(--mn-cream, #f3ecff);
-  overflow-wrap: anywhere;
+  display: flex; flex-wrap: wrap; gap: 3px 4px; margin-top: 3px; font-size: 14px; line-height: 1.25; color: var(--mn-cream, #f3ecff);
 }
-.offer-desc .sk-simple { text-align: center; font-size: 12.5px; }
+.sk-simple .sp {
+  display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px 1px 5px; border-radius: 999px; max-width: 100%;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(212, 200, 247, 0.28);
+}
+.sk-simple .sp i { font-style: normal; font-size: 13px; }
+.sk-simple .sp-cd { color: #cfc6f2; background: transparent; border-style: dashed; }
+.offer-desc .sk-simple { justify-content: center; font-size: 13.5px; }
 .hero-uniq .sk-simple, .heroes .desc .sk-simple { font-size: 12px; color: inherit; }
 .tnode .sk-simple { font-size: 12px; }
 
@@ -49,3 +54,34 @@ body.info-alt header .info-btn { box-shadow: 0 0 0 2px #ffcf6b; }
 }
 .alt-hint.out { opacity: 0; }
 .alt-hint kbd { font: inherit; font-weight: 700; padding: 0 5px; border-radius: 4px; background: #ffe2a0; color: #3a2400; }
+
+/* ---------- simple mode = fewer things on screen, not just other words ---------- */
+/* chain mates on a shop card, in words */
+.pairs-s { margin-top: 4px; font-size: 13px; color: #b8f5c4; text-align: center; }
+.pairs-s b { color: #e9ffe9; }
+.pairs-s .pc-ok { position: static; display: inline-grid; }
+/* fight: the log is hidden, one calm line instead */
+.fv-watch { margin: 10px 4px; font-size: 15px; color: var(--mn-cream, #f3ecff); text-align: center; opacity: 0.85; }
+/* result: run hearts as a picture, the rest behind one button */
+.rv-hearts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 6px 0; font-size: 22px; }
+.rv-hearts .rvh-h { color: #ff7d9c; }
+.rv-hearts s { opacity: 0.55; }
+.rv-hearts b { color: #ffd0dc; font-size: 28px; }
+.rv-hearts small { flex-basis: 100%; font-size: 12.5px; color: #c9bfe8; }
+body:not(.info-detail) .rv-main:not(.more) .rv-more,
+body:not(.info-detail) .rv-main:not(.more) .xv-list { display: none; }
+.rv-main.more .rv-more-btn { display: none; }
+.rv-more-btn { display: block; margin: 10px auto 4px; }
+/* hero pick: with the rules hidden, the cards have room for bigger art and words */
+/* only where the cards are wide enough (an upright phone has three narrow cards: the art would cover the name) */
+@media (min-width: 900px) and (min-height: 501px) {
+  body:not(.info-detail) .heroes.pick3 .hero .hero-art { --s: 4.6; }
+  body:not(.info-detail) .heroes.pick3 .hero .hero-style { font-size: 15px; line-height: 1.4; }
+}
+/* ult checklist: only the next step to reach (Lv1, or Lv2 once Lv1 is done) */
+body:not(.info-detail) .ult-chk:not(.lv1):not(.lv2) .uc-step ~ .uc-step,
+body:not(.info-detail) .ult-chk.lv1 .uc-step.done { display: none; }
+/* branch picker: the branch as pills + the number changes, nothing else */
+.bp-simple { margin: 4px 0; }
+.bp-simple .sk-simple { justify-content: center; }
+body:not(.info-detail) .bp-diff { font-size: 15px; }

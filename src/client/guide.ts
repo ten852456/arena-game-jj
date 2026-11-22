@@ -112,12 +112,9 @@ const STEPS: Step[] = [
     id: 'chain',
     view: 'shop',
     target: () => [$('.sv-mine .chain-panel'), $('.sv-mine .skilllist')].filter((e): e is Element => !!e),
-    title: () => L('🔗 โซ่ = หัวใจของเกม', '🔗 Chains are the heart of the game'),
-    text: () =>
-      L(
-        'skill ที่อยู่ติดกันจะต่อโซ่ ได้โบนัสเพิ่ม · โบนัสโซ่สุ่มใหม่ทุกรอบ อ่านทุกครั้งนะ',
-        'Skills next to each other form a chain and get bonuses. Chain bonuses change every run, so read them each time!',
-      ),
+    title: () => L('🔗 วางติดกัน = ต่อโซ่', '🔗 Side by side = a chain'),
+    // the chain panel right under this bubble already shows it as a picture: [skill] + [skill] = bonus
+    text: () => L('สองตัวนี้ติดกัน เลยได้โบนัสตามรูป ☝', 'These two sit together, so they get the bonus in the picture ☝'),
     next: () => L('เข้าใจแล้ว ▶', 'Got it ▶'),
   },
   {
@@ -133,7 +130,7 @@ const STEPS: Step[] = [
     view: 'fighting',
     passive: true,
     target: () => $('.mm-speed'),
-    text: () => L('skill ทำงานเองเมื่อคูลดาวน์ครบ นั่งดูได้เลย · กด 2x ให้เร็วขึ้น', 'Skills fire on their own when their cooldown is ready. Just watch! Tap 2x to speed up.'),
+    text: () => L('นั่งดูได้เลย skill ทำงานเองตามเวลาของมัน ⏱ · กด 1x 2x 4x เปลี่ยนความเร็ว', 'Just watch: each skill fires on its own timer ⏱ · tap 1x 2x 4x to change speed'),
     done: () => H.view() === 'result',
   },
   {
@@ -143,8 +140,8 @@ const STEPS: Step[] = [
     title: () => (H.lastWon() ? L('ชนะแล้ว! 🎉', 'You won! 🎉') : L('เกือบแล้ว!', 'So close!')),
     text: () =>
       H.lastWon()
-        ? L('ตรงนี้บอกว่าทำไมคุณชนะ อ่านหลังทุกไฟต์ จะเก่งขึ้นเร็ว', 'This tells you why you won. Read it after every fight to get better fast.')
-        : L('ตรงนี้บอกว่าทำไมแพ้ และครั้งหน้าควรลองอะไร', 'This tells you why you lost and what to try next.'),
+        ? L('กล่องนี้กล่องเดียวพอ: บอกว่าชนะเพราะตัวไหน', 'This one box is enough: it tells you which skill won it')
+        : L('กล่องนี้กล่องเดียวพอ: บอกว่าแพ้เพราะอะไร และลองอะไรต่อ', 'This one box is enough: why you lost and what to try next'),
     next: () => L('ต่อไป ▶', 'Next ▶'),
   },
   {

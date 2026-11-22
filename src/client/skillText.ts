@@ -25,7 +25,14 @@ export const cdSecs = (ticks: number) => String(+(ticks / 10).toFixed(1));
 
 // ---------------- simple ----------------
 
+/** one piece of the plain line: an icon and a few words ("⚔", "ตี 6") */
+export type SimplePart = [icon: string, text: string];
+
 function simpleHit(e: Hit): string {
+  return simpleHitParts(e).map((p) => p[1]).join(' · ');
+}
+
+function simpleHitParts(e: Hit): SimplePart[] {
   const add: string[] = [];
   if (e.shieldPct) add.push(L('แรงจากโล่', 'shield'));
   if (e.thornsX) add.push(L('แรงจากหนาม', 'thorns'));
@@ -39,16 +46,35 @@ function simpleHit(e: Hit): string {
   else s = L(`ตีด้วย${add.join(' + ')}`, `Hits = ${add.join(' + ')}`);
   if (e.times && e.times > 1) s += L(` · ${e.times} ที`, ` ×${e.times}`);
   if (e.ifSlowed) s = L(`ถ้าศัตรูช้า: ${s}`, `If slowed: ${s.replace(/^Hits/, 'hits')}`);
-  const tail: string[] = [];
-  if (e.pierce) tail.push(e.pierce >= 1 ? L('ทะลุโล่', 'ignores shield') : L(`ทะลุโล่ ${pct(e.pierce)}`, `${pct(e.pierce)} pierce`));
-  if (e.exec) tail.push(L('แรงขึ้นเมื่อศัตรูเลือดต่ำ', 'stronger vs low HP'));
-  if (e.frozen) tail.push(L('แรงขึ้นเมื่อศัตรูแข็ง', 'stronger vs frozen'));
-  if (e.noShield) tail.push(L('แรงขึ้นถ้าศัตรูไม่มีโล่', 'stronger vs no shield'));
-  if (e.leech) tail.push(L('ดูดเลือด', 'drains HP'));
-  if (e.burn) tail.push(L(`ติดไฟ ${s1(e.burn[1])} วิ`, `burns ${s1(e.burn[1])}s`));
-  if (e.poison) tail.push(L(`ติดพิษ ${s1(e.poison[1])} วิ`, `poisons ${s1(e.poison[1])}s`));
-  if (e.sure) tail.push(L('หลบไม่ได้', "can't be dodged"));
-  return [s, ...tail].join(' · ');
+  const tail: SimplePart[] = [];
+  if (e.pierce) tail.push(['🗡', e.pierce >= 1 ? L('ทะลุโล่', 'ignores shield') : L(`ทะลุโล่ ${pct(e.pierce)}`, `${pct(e.pierce)} pierce`)]);
+  if (e.exec) tail.push(['💀', L('แรงขึ้นเมื่อศัตรูเลือดต่ำ', 'stronger vs low HP')]);
+  if (e.frozen) tail.push(['❄', L('แรงขึ้นเมื่อศัตรูแข็ง', 'stronger vs frozen')]);
+  if (e.noShield) tail.push(['🛡', L('แรงขึ้นถ้าศัตรูไม่มีโล่', 'stronger vs no shield')]);
+  if (e.leech) tail.push(['🩸', L('ดูดเลือด', 'drains HP')]);
+  if (e.burn) tail.push(['🔥', L(`ติดไฟ ${s1(e.burn[1])} วิ`, `burns ${s1(e.burn[1])}s`)]);
+  if (e.poison) tail.push(['☠', L(`ติดพิษ ${s1(e.poison[1])} วิ`, `poisons ${s1(e.poison[1])}s`)]);
+  if (e.sure) tail.push(['🎯', L('หลบไม่ได้', "can't be dodged")]);
+  return [['⚔', s.replace(' · ', ', ')], ...tail];
+}
+
+const EFFECT_ICON: Record<Effect['k'], string> = {
+  hit: '⚔', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', dodge: '💨', haste: '»', wound: '🩹', freeze: '❄', slow: '🐌',
+  delay: '⏪', grow: '💪', charge: '✊', thorns: '🌵', steadfast: '🪨', cleanse: '✨', dispel: '🚫', leech: '🩸',
+};
+
+/** The plain line as pieces with an icon each: what the skill does, then how often. */
+export function simpleParts(k: K, haste = 0): SimplePart[] {
+  const n = nodeOf(k);
+  const parts: SimplePart[] = [];
+  const en = simpleEngine(n);
+  if (en) parts.push(['⚙', en]);
+  for (const e of n.fx) {
+    if (e.k === 'hit') parts.push(...simpleHitParts(e));
+    else parts.push([EFFECT_ICON[e.k], simpleEffect(e)]);
+  }
+  parts.push(['⏱', L(`ทุก ${cdSecs(cdTicks(k, haste))} วิ`, `every ${cdSecs(cdTicks(k, haste))}s`)]);
+  return parts;
 }
 
 function simpleEffect(e: Effect): string {

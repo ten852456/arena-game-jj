@@ -64,7 +64,7 @@ export const RELICS: RelicDef[] = [
   { id: 'permafrost', icon: '🧊', group: 'ice', name: ['น้ำแข็งนิรันดร์', 'Permafrost'],
     desc: () => T['relic.permafrostCd'] > 0
       ? [`แช่แข็งนานขึ้น ${T['relic.permafrost']} วิ แต่คูลดาวน์ทุกตัว +${pc(T['relic.permafrostCd'])}%`, `your freezes last ${T['relic.permafrost']}s longer, but every cooldown is ${pc(T['relic.permafrostCd'])}% longer`]
-      : [`แช่แข็งนานขึ้น ${T['relic.permafrost']} วิ (ยังอยู่ใต้เพดานการคุม)`, `your freezes last ${T['relic.permafrost']}s longer (still under the control cap)`] },
+      : [`แช่แข็งนานขึ้น ${T['relic.permafrost']} วิ`, `your freezes last ${T['relic.permafrost']}s longer`] },
   { id: 'brittle', icon: '💎', group: 'ice', also: ['hit'], name: ['เปราะ', 'Brittle'],
     desc: () => [`ตีศัตรูที่ถูกแช่แข็งแรง +${pc(T['relic.brittle'])}%`, `hits on a frozen enemy deal +${pc(T['relic.brittle'])}%`] },
   // 🌪 wind

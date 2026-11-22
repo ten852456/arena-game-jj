@@ -268,7 +268,7 @@ export const HEROES: HeroDef[] = [
     ult: {
       name: 'ยุคน้ำแข็ง',
       get trigger() { return both((lv) => `ใช้ skill สายน้ำแข็งครบ ${ultTrig('witch', lv)} ครั้ง`); },
-      get effect() { return both((lv) => `แช่แข็ง ${r1(ultPow('witch', lv))} วิ (ไม่ลดจากโดนถี่ แต่ยังอยู่ใต้เพดาน) + การตีถัดไป ×${lv >= 2 ? 2.4 : 2}`); },
+      get effect() { return both((lv) => `แช่แข็ง ${r1(ultPow('witch', lv))} วิ + การตีถัดไป ×${lv >= 2 ? 2.4 : 2}`); },
     },
   },
   // ---------------- 🌪 wind ----------------

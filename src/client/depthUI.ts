@@ -63,7 +63,7 @@ export function relicRisk(id: string, skills: Pick<SkillInstance, 'mark' | 'mark
     case 'lonewolf':
       return {
         band: L(`ใช้ได้แค่ ${LONE_MAX} skill · ปิดท่าไม้ตาย Lv2`, `Max ${LONE_MAX} skills · blocks ult Lv2`),
-        now: skills ? L(`ตอนนี้มี ${skills.length} ตัว${skills.length > LONE_MAX ? ' (ยังไม่มีผล)' : ''}`, `you have ${skills.length}${skills.length > LONE_MAX ? ' (no effect yet)' : ''}`) : L(`ult Lv2 ต้องมีสกิลสาย ${ULT_PIECES[1]} ตัว`, `ult Lv2 needs ${ULT_PIECES[1]} line skills`),
+        now: skills ? L(`ตอนนี้มี ${skills.length} ตัว${skills.length > LONE_MAX ? ' (ยังไม่มีผล)' : ''}`, `you have ${skills.length}${skills.length > LONE_MAX ? ' (no effect yet)' : ''}`) : L(`ท่าไม้ตาย Lv2 ต้องมีสกิลสาย ${ULT_PIECES[1]} ตัว`, `ult Lv2 needs ${ULT_PIECES[1]} line skills`),
         ok: skills ? skills.length <= LONE_MAX : null,
       };
     case 'sigil':
@@ -209,8 +209,8 @@ export function ultLv2Step(hero: string, skills: SkillInstance[], o: { id: strin
   if (o.star || !inLine(hero, o.id)) return '';
   const b = { hero, skills };
   if (ultLevel(b) >= 2) return '';
-  if (o.v === '' && ultPieces(b) < ULT_PIECES[1] && ultPieces(b) >= ULT_PIECES[0] - 1) return L(`ชิ้นที่ ${ultPieces(b) + 1}/${ULT_PIECES[1]} → ult Lv2`, `piece ${ultPieces(b) + 1}/${ULT_PIECES[1]} → ult Lv2`);
-  if (o.v !== '' && lvOf(o.v) >= 3 && ultLv3(b) < ULT_LV2_LV3) return L(`Lv3 ตัวที่ ${ultLv3(b) + 1}/${ULT_LV2_LV3} → ult Lv2`, `Lv3 #${ultLv3(b) + 1}/${ULT_LV2_LV3} → ult Lv2`);
+  if (o.v === '' && ultPieces(b) < ULT_PIECES[1] && ultPieces(b) >= ULT_PIECES[0] - 1) return L(`ชิ้นที่ ${ultPieces(b) + 1}/${ULT_PIECES[1]} → ท่าไม้ตาย Lv2`, `piece ${ultPieces(b) + 1}/${ULT_PIECES[1]} → ult Lv2`);
+  if (o.v !== '' && lvOf(o.v) >= 3 && ultLv3(b) < ULT_LV2_LV3) return L(`Lv3 ตัวที่ ${ultLv3(b) + 1}/${ULT_LV2_LV3} → ท่าไม้ตาย Lv2`, `Lv3 #${ultLv3(b) + 1}/${ULT_LV2_LV3} → ult Lv2`);
   return '';
 }
 

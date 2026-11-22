@@ -7,6 +7,17 @@ export interface Slide {
 }
 
 /** Bump the suffix to show the tutorial again to everyone after big changes. */
+import { LOSS_CAP, START_HP, WIN_TARGET, damageFor } from '../sim/run';
+
+/** first day a loss costs the cap */
+const capDay = Array.from({ length: 30 }, (_, i) => i + 1).find((d) => damageFor(d) >= LOSS_CAP) ?? 1;
+const RULES: Record<string, string> = {
+  WIN: String(WIN_TARGET), HP: String(START_HP), LOSS1: String(damageFor(1)), CAP: String(LOSS_CAP),
+  PRECAP: String(capDay - 1), CAPDAY: String(capDay),
+};
+/** Fill {WIN} {HP} {LOSS1} {CAP} {PRECAP} {CAPDAY} with the real run rules (the English slides use them). */
+export const fillRules = (s: string) => s.replace(/\{(\w+)\}/g, (m, k: string) => RULES[k] ?? m);
+
 export const TUTORIAL_KEY = 'arena.tutorial.list.v2';
 
 const chip = (cls: string, text: string) => `<span class="kw kw-${cls}">${text}</span>`;
@@ -17,8 +28,8 @@ export const SLIDES: Slide[] = [
     title: 'ยินดีต้อนรับสู่ Arena',
     body: [
       'เลือกฮีโร่ ซื้อ skill ทีละวัน แล้วส่ง build ของคุณไปสู้กับ build ของผู้เล่นคนอื่น',
-      'เป้าหมาย: <b>ชนะให้ครบ 10 ครั้ง</b> ก่อน <b>เลือด 17</b> จะหมด',
-      'แพ้แต่ละครั้งเสียเลือด <b>2–5</b> ตามวัน (วัน 1–3 เสีย 2, วัน 10 ขึ้นไปเสีย 5) ยิ่งนานยิ่งเสี่ยง',
+      `เป้าหมาย: <b>ชนะให้ครบ ${WIN_TARGET} ครั้ง</b> ก่อน <b>เลือด ${START_HP}</b> จะหมด`,
+      `แพ้แต่ละครั้งเสียเลือด <b>${damageFor(1)}–${LOSS_CAP}</b> ตามวัน (วัน 1–${capDay - 1} เสีย ${damageFor(1)}, วัน ${capDay} ขึ้นไปเสีย ${LOSS_CAP}) ยิ่งนานยิ่งเสี่ยง`,
     ],
   },
   {

@@ -120,7 +120,7 @@ async function playGuide(label, ctxOpts, lang = 'th-TH') {
   await shot('6-chain');
   const active = await p.evaluate(() => document.querySelectorAll('.cgap.on').length);
   ok(`${label}: the two skills form an active chain`, active >= 1, `${active} chain links`);
-  ok(`${label}: chain text says bonuses change every run`, /ทุกรอบ|every run/.test(await p.locator('.gd-text').innerText()));
+  ok(`${label}: chain step points at the chain picture (one short line)`, await (async () => { const t = await p.locator('.gd-text').innerText(); return /ตามรูป|in the picture/.test(t) && t.length < 80; })());
   await p.locator('.gd-next').click();
   ok(`${label}: step fight`, await waitStep(p, 'fight'));
   await shot('7-fight');

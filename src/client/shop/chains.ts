@@ -135,7 +135,8 @@ export function chainPanelHTML(skills: SkillInstance[], act: ActiveBonus[]) {
   );
   const body = on.length || almost.length
     ? `<ul class="ceq-list">${on.join('')}${almost.slice(0, 3).join('')}</ul>`
-    : `<p class="ceq-empty">${L('ยังไม่มีโซ่ · ดูไอคอน ⇅ บนแต่ละ skill แล้ววางตัวที่ตรงกันไว้ติดกัน', 'No chains yet · check the ⇅ icons on each skill and put the matching one right next to it')}</p>`;
+    : `<p class="ceq-empty info-det">${L('ยังไม่มีโซ่ · ดูไอคอน ⇅ บนแต่ละ skill แล้ววางตัวที่ตรงกันไว้ติดกัน', 'No chains yet · check the ⇅ icons on each skill and put the matching one right next to it')}</p>` +
+      `<p class="ceq-empty info-simp">${L('ยังไม่มีโซ่ · ซื้อการ์ดที่เขียน 🔗 ต่อโซ่กับ แล้วมันจะไปวางติดกันเอง', 'No chains yet · buy a card that says 🔗 Chains with, and it lands next to its partner')}</p>`;
   return `<aside class="chain-panel" aria-label="${L('โซ่ที่ทำงาน', 'Active chains')}">
     <div class="cp-h"><span>${L('🔗 โซ่ที่ทำงาน', '🔗 Active chains')}</span><span class="cp-count">${act.length}/${total}</span></div>${body}</aside>`;
 }
@@ -161,7 +162,14 @@ export function offerPairsHTML(r: RunState, o: Offer, tipFor: (b: Bonus) => stri
         `${ico(skillIcon(k.id), 'pc-ico')}<i class="pc-ok" aria-hidden="true">✓</i><b class="pc-amt">${bonusShort(b, lv)}</b></span>`);
     }
   if (!chips.length) return '';
-  return `<div class="pairs"><span class="pairs-h">${L('เข้ากับ:', 'Pairs with:')}</span>${chips.join('')}</div>`;
+  // simple mode: just the names of the skills you own that it chains with, in words
+  const mates = new Set<string>();
+  (o.bonus ?? []).forEach((b) => r.skills.forEach((k) => SKILLS[k.id] && matches(b.t, k) && mates.add(nodeOf(k).name)));
+  r.skills.forEach((k) => (k.bonus ?? []).some((b) => matches(b.t, { id: o.id })) && mates.add(nodeOf(k).name));
+  const simple = mates.size
+    ? `<div class="pairs-s info-simp">🔗 ${L('ต่อโซ่กับ', 'Chains with')} <b>${[...mates].map(esc).join(', ')}</b> <i class="pc-ok" aria-hidden="true">✓</i></div>`
+    : '';
+  return `<div class="pairs info-det"><span class="pairs-h">${L('เข้ากับ:', 'Pairs with:')}</span>${chips.join('')}</div>${simple}`;
 }
 
 /** Best list position for a new offer (most active links). null if it links with nothing. */

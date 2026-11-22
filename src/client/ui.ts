@@ -18,7 +18,7 @@ import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf,
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, Mark, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
-import type { CombatScene } from './combatScene';
+import { SPEED_KEY, type CombatScene } from './combatScene';
 import { BUILDINGS, BUILDING_BY_ID } from './townData';
 import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
@@ -568,8 +568,8 @@ function renderTitle() {
       <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120"></div>
     ${stageSlot(true, 'pick-slot')}
     <p class="pick-rules">${L(
-      `ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด 2–5 ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
-      `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs 2–5 HP depending on the day · fight other players' builds from the same day`,
+      `ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด ${R.damageFor(1)}–${R.LOSS_CAP} ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
+      `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs ${R.damageFor(1)}–${R.LOSS_CAP} HP depending on the day · fight other players' builds from the same day`,
     )}</p>
   </div>
   <section class="pick-main glass">
@@ -587,9 +587,9 @@ function renderTitle() {
         ${heroArt(h.id, '', R.lookFor(nextSeed!, h.id))}
         <b class="hero-nm">${h.name}</b><span class="tag">${lineLabel(h.line)}</span>
         <span class="hero-style">${h.style}</span>
-        <span class="hero-passive">${h.passive}</span>
-        <span class="hero-ult small">${ultHTML(h)}</span>
-        <span class="muted hero-uniq">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
+        <span class="hero-passive info-det">${h.passive}</span>
+        <span class="hero-ult small info-det">${ultHTML(h)}</span>
+        <span class="muted hero-uniq info-det">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
         <span class="hero-go">${L('เริ่มด้วยตัวนี้ ▶', 'Start with this hero ▶')}</span>
       </button>`,
     ).join('')}</div>
@@ -762,15 +762,16 @@ function branchHTML() {
     return `<div class="bp-opt rar-${rar}">
       ${rar !== 'common' ? `<span class="bp-rar">${D.rarityName(rar)}</span>` : ''}
       <h4>${esc(nodeOf(k).name)} <small>Lv${lvOf(v)}</small></h4>
-      <span class="bp-style">${L('ทาง', 'Branch')} ${v.toUpperCase()}${SKILLS[o.id].tree[v[0] as 'a'].style ? ` · ${esc(SKILLS[o.id].tree[v[0] as 'a'].style!)}` : ''}</span>
-      <dl class="bp-ba"><dt>${L('ตอนนี้', 'Now')}</dt><dd>${esc(now)}</dd><dt>${L('หลังอัป', 'After')}</dt><dd class="after">${esc(simpleText(k))}</dd></dl>
+      <span class="bp-style info-det">${L('ทาง', 'Branch')} ${v.toUpperCase()}${SKILLS[o.id].tree[v[0] as 'a'].style ? ` · ${esc(SKILLS[o.id].tree[v[0] as 'a'].style!)}` : ''}</span>
+      <dl class="bp-ba info-det"><dt>${L('ตอนนี้', 'Now')}</dt><dd>${esc(now)}</dd><dt>${L('หลังอัป', 'After')}</dt><dd class="after">${esc(simpleText(k))}</dd></dl>
+      <div class="bp-simple info-simp">${simpleSkillHTML(k)}</div>
       ${diff.length ? `<div class="bp-diff">${diff.map((d) => `<span class="${d.worse ? 'worse' : ''}">${esc(d.text)}${d.worse ? ' ▼' : ''}</span>`).join('')}</div>` : ''}
-      ${nx.length ? `<div class="bp-next">${L('Lv3 ต่อไป', 'Lv3 next')}: ${nx.map((n) => `${esc(nodeOf({ id: o.id, v: n.x }).name)}${n.rar === 'epic' ? ' ◆' : n.rar === 'rare' ? ' ◇' : ''}`).join(L(' หรือ ', ' or '))}</div>` : ''}
+      ${nx.length ? `<div class="bp-next info-det">${L('Lv3 ต่อไป', 'Lv3 next')}: ${nx.map((n) => `${esc(nodeOf({ id: o.id, v: n.x }).name)}${n.rar === 'epic' ? ' ◆' : n.rar === 'rare' ? ' ◇' : ''}`).join(L(' หรือ ', ' or '))}</div>` : ''}
       <button class="buy primary" data-a="buy" data-i="${branchOpen}" data-v="${v}" ${why ? 'disabled' : ''}>${buyLabel(why, L('เลือกทางนี้', 'Take this branch'), price, poor)}</button>
     </div>`;
   };
   return `<div class="modal bp-modal" data-a="branchClose"><div class="modal-box bp-box" role="dialog" aria-label="${esc(L('เลือกทางอัปเกรด', 'Pick an upgrade branch'))}">
-    <div class="bp-head"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><h3>${L('เลือกทาง', 'Pick a branch')}: ${esc(nodeOf(up).name)} Lv${lvOf(up.v)} → Lv${lvOf(o.v)}<small>${L('เลือกแล้วย้อนกลับไม่ได้ · ช่องเดิม โบนัสเชื่อมต่อเดิม', 'No going back · same slot, same connect bonuses')}</small></h3>
+    <div class="bp-head"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><h3>${L('เลือกทาง', 'Pick a branch')}: ${esc(nodeOf(up).name)} Lv${lvOf(up.v)} → Lv${lvOf(o.v)}<small class="info-det">${L('เลือกแล้วย้อนกลับไม่ได้ · ช่องเดิม โบนัสเชื่อมต่อเดิม', 'No going back · same slot, same connect bonuses')}</small></h3>
       <button class="small ghost" data-a="branchClose">${L('ปิด ✕', 'Close ✕')}</button></div>
     <div class="bp-opts">${opts.map(card).join('')}</div>
   </div></div>`;
@@ -822,7 +823,7 @@ function renderShop() {
       return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
         ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
-        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : rarityTag(o.v ? o : null)}${o.star ? '' : ultTagHTML(r, o)}</div>
+        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : `<span class="info-det">${rarityTag(o.v ? o : null)}</span>`}${o.star ? '' : ultTagHTML(r, o)}</div>
         ${choiceHTML(r, o, i, why, price, poor) || `${up ? (o.star ? starDiff(o.star) : upDiffHTML(up, o)) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? (o.star ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : L('อัปเกรด', 'Upgrade')) : L('ซื้อ', 'Buy'), price, poor)}</button>`}
@@ -836,7 +837,7 @@ function renderShop() {
       const row = `<li class="skillrow line-${SKILLS[k.id].line}${rarityOf(k.id, k.v) === 'epic' ? ' row-epic' : ''}${(k.star ?? 0) >= 3 ? ' row-star3' : ''}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
-        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}<span class="sk-tags">${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${rarityTag(k.v ? { id: k.id, v: k.v } : null)}${inLine(r.hero, k.id) ? ` <span class="mark ult-aff" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</span></div>
+        <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}<span class="sk-tags">${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}<span class="info-det">${rarityTag(k.v ? { id: k.id, v: k.v } : null)}</span>${inLine(r.hero, k.id) ? ` <span class="mark ult-aff info-det" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</span></div>
         <div class="sk-btns">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
@@ -858,7 +859,7 @@ function renderShop() {
     ${stageSlot(true, 'sv-slot')}
     <div class="sv-hero glass">
       <div class="svh-name"><b>${hero.name}</b> <span class="tag">${lineLabel(hero.line)}</span></div>
-      <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''} · ${hero.passive}</p>
+      <p class="sv-sub">${L('วันนี้ได้', 'Today')} +${inc.base}${inc.bonus ? L(` และโบนัส +${inc.bonus}`, ` and bonus +${inc.bonus}`) : ''}<span class="info-det"> · ${hero.passive}</span></p>
       <div class="sv-sub sv-ult">${ultProgressHTML(r)}</div>${relicsHTML(r.relics)}${D.markCountHTML(r.skills, r.wishMarks ?? 0)}
     </div>
     <div class="mm-scout-slot sv-scout"></div>
@@ -867,7 +868,7 @@ function renderShop() {
   <section class="sv-sec sv-shop">
     <div class="sv-h">${goldPillHTML(r.gold)}<h3>${L('ร้าน skill', 'Skill shop')}</h3>
       <button class="reroll" data-a="reroll" ${r.gold < R.REROLL || r.day <= 1 ? 'disabled' : ''} title="${r.day <= 1 ? L('วันแรกเป็นร้านประจำฮีโร่', 'Day 1 is your hero’s shop') : L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} ${coinHTML(R.REROLL)}</button></div>
-    <p class="sv-note">${L(
+    <p class="sv-note info-det">${L(
       '<b>ลากการ์ด</b>ไปวางในรายการ skill ของคุณ (หรือแตะการ์ด แล้วแตะ <b>+</b> ตรงที่อยากวาง) · การ์ด <b>▲</b> = อัปเกรด skill ที่มีอยู่',
       '<b>Drag a card</b> into your skill list (or tap a card, then tap <b>+</b> where you want it) · a <b>▲</b> card levels up a skill you own',
     )} · 🔓 ${L('ล็อกการ์ดไว้ถึงพรุ่งนี้ได้ฟรี', 'lock a card until tomorrow for free')}${nLocked ? L(` (ล็อกอยู่ ${nLocked})`, ` (${nLocked} locked)`) : ''}</p>
@@ -882,13 +883,13 @@ function renderShop() {
     <div class="sv-h"><h3>${L('skill ของคุณ', 'Your skills')} <span class="sv-count">${r.skills.length}/${slots}</span></h3>
       <span class="sv-hint">${L(`โบนัสเชื่อมต่อทำงาน ${act.length} อัน`, `${act.length} connect bonuses active`)}</span></div>
     ${chainPanelHTML(r.skills, act)}
-    <p class="sv-note">${L(
+    <p class="sv-note info-det">${L(
       'ลาก <b>⠿</b> เพื่อจัดลำดับ (หรือกด ▲▼): skill ที่อยู่ติดกัน (บน/ล่าง) เปิด 🔗 โบนัสเชื่อมต่อของกันและกัน · ถ้าครบเวลาพร้อมกัน ตัวบนทำงานก่อน',
       'Drag <b>⠿</b> to reorder (or press ▲▼): skills next to each other (above/below) switch on each other’s 🔗 connect bonuses · when two are ready at once, the upper one goes first',
     )}</p>
     <div class="list-wrap">
       <ol class="skilllist">${rows}${empty}</ol>
-      <div class="tl" aria-label="${L('ลำดับการทำงาน', 'Firing order')}">
+      <div class="tl info-det" aria-label="${L('ลำดับการทำงาน', 'Firing order')}">
         <div class="tl-h"><b>${L(`⏱ ใครทำงานก่อน: ${TIMELINE_SECS} วิแรก`, `⏱ Who goes first: the first ${TIMELINE_SECS}s`)}</b>
           <span class="tl-legend"><i class="tl-dot own"></i> ${L('ครบคูลดาวน์', 'cooldown ready')} <i class="tl-dot trig">⚡</i> ${L('โบนัสสั่งให้ทำงานตาม', 'fired by a bonus')}</span></div>
         <div id="timeline">${timelineHTML(R.toBuild(r).skills, r.hero)}</div>
@@ -922,7 +923,7 @@ function renderFighting() {
   return `<div class="fightv">
   <div class="fv-arena">
     ${stageSlot(false, 'fv-slot')}
-    <div class="fv-gloss glass"><b class="fv-gh">${L('📖 คำศัพท์ในไฟต์', '📖 Fight words')}</b><p class="muted small glossary">${L(
+    <div class="fv-gloss glass info-det"><b class="fv-gh">${L('📖 คำศัพท์ในไฟต์', '📖 Fight words')}</b><p class="muted small glossary">${L(
     `<b>พลังโจมตี</b> = ดาเมจเพิ่มให้ทุกการโจมตีของทุก skill · <b>รวมพลัง</b> = การโจมตีครั้งถัดไป 1 ครั้งแรงขึ้น ·
     <b>หนาม</b> = สะท้อนดาเมจทุกครั้งที่โดนตี · <b>ใจเหล็ก</b> = โดนแช่แข็ง/ช้าน้อยลง 60% · <b>ไฟ</b> = เสียเลือดทุกวิ ไม่สนโล่ ·
     <b>แช่แข็ง</b> = skill ทุกตัวหยุดนับคูลดาวน์ · <b>ช้า</b> = คูลดาวน์ทุกตัวเดินช้าลง`,
@@ -938,8 +939,9 @@ function renderFighting() {
     <button class="small" data-a="skip">${L('ข้าม ⏭', 'Skip ⏭')}</button>
   </div>
   <div id="fv-dots" class="fv-dots" aria-live="off"></div>
-  <div class="fv-logh">${L('📜 บันทึกการสู้ (ล่าสุดอยู่บน)', '📜 Fight log (newest on top)')}</div>
-  <ol id="log" class="log"></ol>
+  <div class="fv-logh info-det">${L('📜 บันทึกการสู้ (ล่าสุดอยู่บน)', '📜 Fight log (newest on top)')}</div>
+  <ol id="log" class="log info-det"></ol>
+  <p class="fv-watch info-simp">${L('นั่งดูได้เลย skill ทำงานเอง ✨', 'Sit back: your skills fire on their own ✨')}</p>
   </aside>
   </div>`;
 }
@@ -1154,20 +1156,24 @@ function renderResult() {
     <h2 class="${f.won ? 'win' : 'lose'}">${f.won ? L('ชนะ', 'Victory') : draw ? L('เสมอ (นับเป็นแพ้)', 'Draw (counts as a loss)') : L('แพ้', 'Defeat')} · ${L('วันที่', 'day')} ${lastDay}${x?.close ? ` <span class="mm-tag close">${L('สูสี!', 'Close!')}</span>` : ''}</h2>
     <p>${L('คู่ต่อสู้', 'Opponent')}: <b class="who s1">${esc(oname)}</b> · ${HEROES_BY_ID[f.opponent.build.hero].name}
      ${f.offline ? `<span class="muted">${L('(ออฟไลน์: เซิร์ฟเวอร์ไม่ตอบ สู้กับ AI ในเครื่อง)', '(offline: the server did not answer, so you fought a local AI)')}</span>` : ''}</p>
-    <p>${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `Wins: ${r.wins}/${R.WIN_TARGET}`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
+    <p class="info-det">${f.won ? L(`ชนะแล้ว ${r.wins}/${R.WIN_TARGET}`, `Wins: ${r.wins}/${R.WIN_TARGET}`) : L(`เสียเลือด ${lastDamage} · เหลือ ${Math.max(0, r.hp)}`, `Lost ${lastDamage} HP · ${Math.max(0, r.hp)} left`)} · ${L('คะแนน build ใหม่', 'new build rating')} ${f.rating}</p>
+    ${f.won ? '' : `<p class="rv-hearts info-simp" aria-label="${L(`หัวใจของรอบ เหลือ ${Math.max(0, r.hp)} จาก ${R.START_HP}`, `Run hearts: ${Math.max(0, r.hp)} of ${R.START_HP} left`)}"><span class="rvh-h">❤</span> <s>${Math.max(0, r.hp) + lastDamage}</s> → <b>${Math.max(0, r.hp)}</b><small>${L(`หัวใจของทั้งรอบ (คนละอันกับเลือดในไฟต์) · หมดเมื่อไรจบรอบ`, `hearts for the whole run (not the fight's HP bar) · the run ends at 0`)}</small></p>`}
   ${f.won ? winRewardHTML(r) : ''}
   ${revealHTML()}
   </div>
   <div class="actions rv-actions"><button class="primary" data-a="next">${L('ต่อไป ▶', 'Continue ▶')}</button>${x && !x.close ? `<button data-a="rewatch">${L('▶ ดูไฟต์นี้อีกครั้ง', '▶ Watch this fight again')}</button>` : ''}</div>
   </div>
   <div class="rv-main glass">
-  ${x ? P.fightHighlights(x, { replayAction: 'rewatch' }) : ''}
+  <div class="rv-more">${x ? P.fightHighlights(x, { replayAction: 'rewatch' }) : ''}</div>
   <h3>${L('สรุปการสู้', 'Fight summary')}</h3>
   ${x ? explainHTML(f.result, x, 0) : ''}
+  <button class="ghost rv-more-btn info-simp" data-a="more">${L('ดูสถิติทั้งหมด ▾', 'All the numbers ▾')}</button>
+  <div class="rv-more">
   ${lastBuild ? vsSummary(f.result, [lastBuild, f.opponent.build], [youName(), oname]) : ''}
   <h3>${L(`build ของ ${esc(oname)}`, `Build of ${esc(oname)}`)}</h3>
   ${buildList(f.opponent.build)}
   ${link ? `<p class="muted">${L('ลิงก์ replay:', 'Replay link:')} <input class="link" readonly value="${esc(link)}" onclick="this.select()"></p>` : ''}
+  </div>
   </div>
   </div>`;
 }
@@ -1925,8 +1931,19 @@ function onClick(ev: Event) {
     case 'fight':
       void doFight();
       return;
+    case 'more': {
+      // simple mode result: open the full numbers in place
+      const main = (ev.target as HTMLElement).closest('.rv-main');
+      main?.classList.add('more');
+      return;
+    }
     case 'speed':
       scene.speed = n;
+      try {
+        localStorage.setItem(SPEED_KEY, String(n));
+      } catch {
+        /* private mode: this visit only */
+      }
       document.querySelectorAll('[data-a="speed"]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.i === arg));
       return;
     case 'skip':

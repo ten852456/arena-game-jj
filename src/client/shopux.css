@@ -284,7 +284,8 @@ body.skill-dragging .sell-jar { border-color: var(--gold); color: var(--cream, #
   .hud-star svg { width: 22px; height: 22px; }
   .shopv .hud .hud-rate { display: none; }
   .shopv .hud .stats-right { order: 4; }
-  body.skill-dragging .sell-jar { position: fixed; left: 12px; right: 12px; bottom: 84px; z-index: 50; margin: 0; }
+  /* at the top, not the bottom: dragging a skill down the list to reorder it must never land in the jar and sell it */
+  body.skill-dragging .sell-jar { position: fixed; left: 12px; right: 12px; top: 64px; bottom: auto; z-index: 50; margin: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

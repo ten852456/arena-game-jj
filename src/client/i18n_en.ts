@@ -198,7 +198,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
     ult: {
       name: 'Ice Age',
       get trigger() { return both((lv) => `${ultTrig('witch', lv)} ice skill casts`); },
-      get effect() { return both((lv) => `freeze ${r1(ultPow('witch', lv))}s (no repeat penalty, still under the cap) + next hit ×${lv >= 2 ? 2.4 : 2}`); },
+      get effect() { return both((lv) => `freeze ${r1(ultPow('witch', lv))}s + next hit ×${lv >= 2 ? 2.4 : 2}`); },
     },
   },
   chrono: {
@@ -260,14 +260,16 @@ export const BUILDINGS_EN: Record<string, { name: string; desc: string; future?:
   arena: { name: 'Arena', desc: 'The only way to earn rewards from the rulers: win 10 times before your HP runs out' },
 };
 
-/** Tutorial slides, same order as tutorialSlides.ts (the art stays as it is). */
+/** Tutorial slides, same order as tutorialSlides.ts (the art stays as it is). {WIN} {HP} {LOSS1} {CAP} {PRECAP} {CAPDAY}
+ *  are filled from the run rules by tutorialSlides.ts fillRules (this file is imported by sim/heroes.ts, so it
+ *  must not import sim/run.ts). */
 export const SLIDES_EN: { title: string; body: string[] }[] = [
   {
     title: 'Welcome to the Arena',
     body: [
       'Pick a hero, buy skills day by day, then send your build to fight other players’ builds',
-      'Goal: <b>win 10 times</b> before your <b>20 HP</b> runs out',
-      'Each loss costs <b>2–5</b> HP depending on the day (days 1–3 cost 2, day 10 and later cost 5). The longer the run, the bigger the risk',
+      'Goal: <b>win {WIN} times</b> before your <b>{HP} HP</b> runs out',
+      'Each loss costs <b>{LOSS1}–{CAP}</b> HP depending on the day (days 1–{PRECAP} cost {LOSS1}, day {CAPDAY} and later cost {CAP}). The longer the run, the bigger the risk',
     ],
   },
   {
