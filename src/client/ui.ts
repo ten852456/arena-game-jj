@@ -1307,7 +1307,7 @@ function playLast() {
 // ---------- on-chain mode ----------
 async function chainBoot() {
   try {
-    const st = await C.chainConnect();
+    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } });
     if (st.run) run = C.runOf(st.run, uid());
     if (st.seed !== null) nextSeed = st.seed;
     chainState = 'ready';
