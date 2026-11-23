@@ -16,6 +16,7 @@
     "set_session": "9c877e6fb8cec28d",
     "player_permission": "421f0b799e3cf86d",
     "delegate_player": "eb9ff566a1c7fe59",
-    "join_pool": "0e413e107411c36b"
+    "join_pool": "0e413e107411c36b",
+    "revoke_session": "565cc678900207c2"
   }
 }

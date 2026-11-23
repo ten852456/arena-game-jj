@@ -269,8 +269,9 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
   const ph = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined);
   const burner = new URLSearchParams(location.search).get('wallet') === 'burner';
+  const say = (state: ChainStatus, msg: string) => { setChainStatus(state, msg); onStatus(msg); };
   if (ph && !burner) {
-    onStatus('connecting Phantom…');
+    say('connecting', 'connecting Phantom…');
     phantom = ph;
     owner = (await ph.connect()).publicKey;
   } else {
@@ -290,7 +291,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
   if (tee() && (await base.getBalance(owner)) < 20_000_000) throw new Error(`wallet ${owner.toBase58()} needs devnet SOL (≥ 0.02)`);
   // owner signature 1 (first time): season account (+ fund the session key, + delegate to the TEE)
   if (!(await base.getAccountInfo(playerPda(), 'confirmed'))) {
-    onStatus('approve 1/2 in your wallet: create your season account');
+    say('approve', 'approve 1/2 in your wallet: create your season account');
     const ixs = [ix('init_player', [...u32(cfg!.season), ...u16(cfg!.shard)], [W(owner, true), W(playerPda()), Rd(SystemProgram.programId)])];
     if (tee()) {
       if (!owner.equals(session.publicKey)) ixs.push(SystemProgram.transfer({ fromPubkey: owner, toPubkey: session.publicKey, lamports: 10_000_000 }));
@@ -306,7 +307,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
   const dv = new DataView(p.buffer);
   const live = new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey) && Number(dv.getBigInt64(OFF.sessionExpiry, true)) > Date.now() / 1000 + 600;
   if (!live && !owner.equals(session.publicKey)) {
-    onStatus('approve 2/2 in your wallet: let this browser play for 7 days');
+    say('approve', 'approve 2/2 in your wallet: let this browser play for 7 days');
     const ixs = [ix('set_session', [...session.publicKey.toBytes(), ...i64(Math.floor(Date.now() / 1000) + 7 * 86400 - 120)], [Rd(owner, true), W(playerPda())])];
     if (tee()) ixs.push(playerPermissionIx());
     await sendOwner(game, ixs);
@@ -324,7 +325,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
     p = await player();
   }
   const status = p![OFF.status];
-  onStatus('');
+  say('ready', '');
   return {
     status,
     run: status === 2 ? p!.slice(OFF.run, OFF.run + 164) : null,
@@ -380,14 +381,24 @@ export interface ChainFight {
 
 /** Send the queued actions + the fight in one transaction; returns the fight as the chain resolved it. */
 export async function chainFight(): Promise<ChainFight> {
-  const sig = await sendSession([...queueIxs(), ix('fight', [], keysF())]);
+  setChainStatus('sending', 'fight on chain…');
+  let sig: string;
+  try {
+    sig = await sendSession([...queueIxs(), ix('fight', [], keysF())]);
+  } catch (e) {
+    setChainStatus('error', (e as Error).message);
+    throw e;
+  }
+  setChainStatus('ready');
   const p = (await player())!;
   const dv = new DataView(p.buffer);
   const res = p[OFF.lastResult];
-  return {
+  const f: ChainFight = {
     seed: dv.getUint32(OFF.lastSeed, true), day: p[OFF.lastDay], opp: buildOf(p.subarray(OFF.lastOpp, OFF.lastOpp + 82)),
     ghost: p[OFF.lastKind] === 1, won: res === 2, draw: res === 1, run: p.slice(OFF.run, OFF.run + 164), sig,
   };
+  noteChainFight(f);
+  return f;
 }
 
 /** After a concede: send the queue + finish_run (archives the ghost, updates the ranking). */
@@ -397,3 +408,70 @@ export async function chainFinish(): Promise<void> {
 
 /** Byte-for-byte check of the local state against the chain's. */
 export const sameAsChain = (local: RunState, chain: Uint8Array) => eq(runBytes(local), chain);
+
+// ---------------- what the chain UI shows (chainUi.ts) ----------------
+export type ChainStatus = 'off' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
+let status: { state: ChainStatus; msg: string } = { state: chainOn() ? 'connecting' : 'off', msg: '' };
+const listeners: (() => void)[] = [];
+export const onChain = (f: () => void) => listeners.push(f);
+export const chainStatus = () => status;
+export function setChainStatus(state: ChainStatus, msg = '') {
+  status = { state, msg };
+  for (const f of listeners) f();
+}
+export interface LastFight { day: number; won: boolean; draw: boolean; ghost: boolean; seed: number; sig: string; at: number }
+let lastFight: LastFight | null = null;
+export const chainLastFight = () => lastFight;
+export function noteChainFight(f: ChainFight) {
+  lastFight = { day: f.day, won: f.won, draw: f.draw, ghost: f.ghost, seed: f.seed, sig: f.sig, at: Date.now() };
+  for (const g of listeners) g();
+}
+
+export interface ChainProfile {
+  mode: 'local' | 'tee';
+  network: string;
+  owner: string;
+  phantom: boolean;
+  session: string;
+  sessionExpiresAt: number | null;
+  player: string;
+  program: string;
+  season: number;
+  ownerSol: number;
+  sessionSol: number;
+  runsStarted: number;
+  bestScore: number;
+  status: string;
+  run: { hero: string; day: number; wins: number; losses: number; hp: number; gold: number; phase: string } | null;
+}
+const STATUS_NAMES = ['idle', 'picking a hero', 'in a run', 'run ended', 'season finalized'];
+
+/** Everything the profile window shows, read from the chain (the session key can read the private account). */
+export async function chainProfile(): Promise<ChainProfile | null> {
+  if (!cfg) return null;
+  const p = await player().catch(() => null);
+  const [ownerSol, sessionSol] = await Promise.all([base.getBalance(owner).catch(() => 0), base.getBalance(session.publicKey).catch(() => 0)]);
+  const dv = p ? new DataView(p.buffer) : null;
+  const run = p && p[OFF.status] === 2 ? runOf(p.slice(OFF.run, OFF.run + 164), 'x') : null;
+  const sessionLive = p && new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey);
+  return {
+    mode: cfg.mode ?? 'local',
+    network: cfg.mode === 'tee' ? 'Solana devnet + MagicBlock TEE' : 'local validator',
+    owner: owner.toBase58(), phantom: !!phantom, session: session.publicKey.toBase58(),
+    sessionExpiresAt: sessionLive && dv ? Number(dv.getBigInt64(OFF.sessionExpiry, true)) * 1000 : null,
+    player: playerPda().toBase58(), program: cfg.program, season: cfg.season,
+    ownerSol: ownerSol / 1e9, sessionSol: sessionSol / 1e9,
+    runsStarted: dv ? dv.getUint32(8 + 64, true) : 0, bestScore: dv ? dv.getUint32(8 + 72, true) : 0,
+    status: p ? STATUS_NAMES[p[OFF.status]] ?? '?' : 'no account yet',
+    run: run ? { hero: run.hero, day: run.day, wins: run.wins, losses: run.losses, hp: run.hp, gold: run.gold, phase: run.phase } : null,
+  };
+}
+
+/** Owner revokes this browser's session key (wallet popup); the next action asks for a new approval. */
+export async function chainRevoke(): Promise<void> {
+  if (!cfg || owner.equals(session.publicKey)) throw new Error('nothing to revoke (burner wallet)');
+  await sendOwner(game, [ix('revoke_session', [], [Rd(owner, true), W(playerPda())])]);
+}
+
+export const explorerUrl = (addr: string, kind: 'address' | 'tx' = 'address') =>
+  cfg?.mode === 'tee' ? `https://explorer.solana.com/${kind}/${addr}?cluster=devnet` : `https://explorer.solana.com/${kind}/${addr}?cluster=custom&customUrl=${encodeURIComponent(cfg?.rpc ?? '')}`;

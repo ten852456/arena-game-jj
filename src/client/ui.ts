@@ -8,6 +8,7 @@ import * as P from './views/pages';
 import { hashSeed } from '../sim/rng';
 import * as R from './runChain';
 import * as C from './chain';
+import { mountChainUi } from './chainUi';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
@@ -1306,6 +1307,7 @@ function playLast() {
 
 // ---------- on-chain mode ----------
 async function chainBoot() {
+  mountChainUi();
   try {
     const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } });
     if (st.run) run = C.runOf(st.run, uid());
@@ -1316,6 +1318,7 @@ async function chainBoot() {
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
   } catch (e) {
     chainState = 'error';
+    C.setChainStatus('error', (e as Error).message);
     console.error('[chain]', e);
     toast = L('เชื่อมต่อ chain ไม่ได้: ', 'Chain connection failed: ') + (e as Error).message;
   }
