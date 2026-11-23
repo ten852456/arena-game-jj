@@ -369,20 +369,30 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     }
     await sendOwner(base, ixs);
   }
-  // wait until the game RPC (TEE) sees the account
+  const waitPlayer = async (what: string) => {
+    say('connecting', what);
+    let q: Uint8Array | null = null;
+    for (let i = 0; i < 60 && !(q = await player()); i++) await sleep(1500);
+    if (!q) throw new Error('season account not visible on the game RPC');
+    return q;
+  };
+  const burnerOwner = owner.equals(session.publicKey);
+  // a just-created account: wait until the game RPC (TEE) sees it. An existing account is private on the TEE:
+  // a browser key that is not its member yet (new browser, after logging out) cannot read it until step 2.
   let p: Uint8Array | null = null;
-  say('connecting', tee() ? 'waiting for your account on the TEE…' : 'reading your account…');
-  for (let i = 0; i < 60 && !(p = await player()); i++) await sleep(1500);
-  if (!p) throw new Error('season account not visible on the game RPC');
-  // owner signature 2 (first time / after expiry): approve this browser's session key (+ privacy on the TEE)
-  const dv = new DataView(p.buffer);
-  const live = new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey) && Number(dv.getBigInt64(OFF.sessionExpiry, true)) > Date.now() / 1000 + 600;
-  if (!live && !owner.equals(session.publicKey)) {
+  if (fresh || burnerOwner) p = await waitPlayer(tee() ? 'waiting for your account on the TEE…' : 'reading your account…');
+  else {
+    say('connecting', 'reading your account…');
+    for (let i = 0; i < 3 && !(p = await player()); i++) await sleep(1000);
+  }
+  // owner signature 2 (first time / new browser key / after expiry): approve this browser's key (+ privacy on the TEE)
+  const live = !!p && new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey) && Number(new DataView(p.buffer).getBigInt64(OFF.sessionExpiry, true)) > Date.now() / 1000 + 600;
+  if (!live && !burnerOwner) {
     say('approve', 'approve 2/2 in your wallet: let this browser play for 7 days');
     const ixs = [ix('set_session', [...session.publicKey.toBytes(), ...i64(Math.floor(Date.now() / 1000) + 7 * 86400 - 120)], [Rd(owner, true), W(playerPda())])];
     if (tee()) ixs.push(playerPermissionIx());
     await sendOwner(game, ixs);
-    p = await player();
+    p = await waitPlayer('reading your account…');
   } else if (!live && tee()) {
     // burner owner on the TEE: privacy still needed
     await sendOwner(game, [playerPermissionIx()]);
