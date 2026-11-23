@@ -54,6 +54,45 @@ const LOGIN_KEY = 'arena.chain.login';
 /** this browser logged in before (reconnect without a popup on load) */
 export const chainRemembered = () => { try { return localStorage.getItem(LOGIN_KEY) === '1'; } catch { return false; } };
 export class NotLoggedIn extends Error {}
+/** keys in this browser: the burner owner, and one session key per owner wallet (so wallets never share one) */
+const BURNER_KEY = 'arena.chain.burner';
+const sessionStore = (o: PublicKey) => `arena.chain.key.${o.toBase58()}`;
+function loadKey(name: string, create: boolean): Keypair | null {
+  try {
+    const s = localStorage.getItem(name);
+    if (s) return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(s)));
+  } catch { /* none */ }
+  if (!create) return null;
+  const k = Keypair.generate();
+  try { localStorage.setItem(name, JSON.stringify([...k.secretKey])); } catch { /* private mode */ }
+  return k;
+}
+/**
+ * One tab plays a wallet at a time (two tabs sending from the same session key would race on the same account).
+ * `take` moves the game to this tab: the other tab is told and stops.
+ */
+let tabLockFor = '';
+let releaseTab: (() => void) | null = null;
+let onTabLost: () => void = () => {};
+export const setOnTabLost = (f: () => void) => { onTabLost = f; };
+async function lockTab(o: PublicKey, take: boolean): Promise<boolean> {
+  const name = `mochi-chain-${o.toBase58()}`;
+  if (tabLockFor === name) return true;
+  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  if (!locks) return true;
+  return new Promise<boolean>((resolve) => {
+    locks.request(name, take ? { steal: true } : { ifAvailable: true }, (lock) => {
+      if (!lock) { resolve(false); return undefined; }
+      tabLockFor = name;
+      resolve(true);
+      return new Promise<void>((r) => { releaseTab = r; });
+    }).catch(() => {
+      // another tab took the game (steal)
+      if (tabLockFor === name) { tabLockFor = ''; releaseTab = null; onTabLost(); }
+    });
+  });
+}
+export class OtherTab extends Error {}
 
 export const chainOn = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('chain') === '1';
 
@@ -262,20 +301,10 @@ export const chainInfo = () => (cfg ? { mode: cfg.mode ?? 'local', owner: owner.
  * Connect the owner wallet, set up the season account and the session key if needed (≤ 2 owner signatures,
  * first time only), and return the chain's current run (if any).
  */
-export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
+export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false, take = false): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
   // &net=local: the local validator config; default: /chain.json (devnet + TEE)
   cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json')).json();
   base = new Connection(cfg!.rpc, 'confirmed');
-  let k: Keypair | null = null;
-  try {
-    const s = localStorage.getItem('arena.chain.key');
-    if (s) k = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(s)));
-  } catch { /* none */ }
-  if (!k) {
-    k = Keypair.generate();
-    try { localStorage.setItem('arena.chain.key', JSON.stringify([...k.secretKey])); } catch { /* private mode */ }
-  }
-  session = k;
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
   const ph = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined);
   const burner = new URLSearchParams(location.search).get('wallet') === 'burner';
@@ -293,9 +322,22 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     }
     // switching account in Phantom: start over with the new wallet
     ph.on?.('accountChanged', () => location.reload());
+    // migrate the old shared key (one per browser) to this wallet's own slot
+    if (!loadKey(sessionStore(owner), false)) {
+      try {
+        const old = localStorage.getItem('arena.chain.key');
+        if (old) { localStorage.setItem(sessionStore(owner), old); localStorage.removeItem('arena.chain.key'); }
+      } catch { /* private mode */ }
+    }
+    session = loadKey(sessionStore(owner), true)!;
   } else {
     phantom = null;
+    session = loadKey(BURNER_KEY, true)!;
     owner = session.publicKey;
+  }
+  if (!(await lockTab(owner, take))) {
+    setChainStatus('othertab');
+    throw new OtherTab('this wallet is already playing in another tab');
   }
   if (tee()) {
     const url = cfg!.tee!.startsWith('/') ? `${location.origin}${cfg!.tee}` : cfg!.tee!;
@@ -312,7 +354,13 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   if (tee() && (await within(base.getBalance(owner), 30_000, 'devnet RPC (balance)')) < 20_000_000) throw new Error(`wallet ${owner.toBase58()} needs devnet SOL (≥ 0.02): turn on Testnet Mode in Phantom → Solana Devnet and get SOL from faucet.solana.com`);
   say('connecting', 'looking for your season account…');
   // owner signature 1 (first time): season account (+ fund the session key, + delegate to the TEE)
-  if (!(await base.getAccountInfo(playerPda(), 'confirmed'))) {
+  const fresh = !(await base.getAccountInfo(playerPda(), 'confirmed'));
+  // existing account, new browser key (other browser, or after logging out): the key needs SOL for its fees
+  if (!fresh && tee() && !owner.equals(session.publicKey) && (await base.getBalance(session.publicKey)) < 3_000_000) {
+    say('approve', 'approve in your wallet: 0.01 SOL for this browser\'s game key (pays its fees)');
+    await sendOwner(base, [SystemProgram.transfer({ fromPubkey: owner, toPubkey: session.publicKey, lamports: 10_000_000 })]);
+  }
+  if (fresh) {
     say('approve', 'approve 1/2 in your wallet: create your season account');
     const ixs = [ix('init_player', [...u32(cfg!.season), ...u16(cfg!.shard)], [W(owner, true), W(playerPda()), Rd(SystemProgram.programId)])];
     if (tee()) {
@@ -434,7 +482,7 @@ export async function chainFinish(): Promise<void> {
 export const sameAsChain = (local: RunState, chain: Uint8Array) => eq(runBytes(local), chain);
 
 // ---------------- what the chain UI shows (chainUi.ts) ----------------
-export type ChainStatus = 'off' | 'loggedout' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
+export type ChainStatus = 'off' | 'loggedout' | 'othertab' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
 let status: { state: ChainStatus; msg: string } = { state: chainOn() ? 'connecting' : 'off', msg: '' };
 const listeners: (() => void)[] = [];
 export const onChain = (f: () => void) => listeners.push(f);
@@ -522,7 +570,11 @@ export async function chainLogout(): Promise<void> {
     }
   }
   try { await phantom?.disconnect(); } catch { /* already */ }
-  for (const k of ['arena.chain.key', 'arena.chain.teeToken', LOGIN_KEY]) {
+  const mine = owner && !owner.equals(session.publicKey) ? [sessionStore(owner)] : [];
+  releaseTab?.();
+  releaseTab = null;
+  tabLockFor = '';
+  for (const k of [...mine, 'arena.chain.key', 'arena.chain.teeToken', LOGIN_KEY]) {
     try { localStorage.removeItem(k); } catch { /* private mode */ }
   }
   phantom = null;

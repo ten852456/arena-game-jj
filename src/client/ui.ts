@@ -1307,9 +1307,17 @@ function playLast() {
 
 // ---------- on-chain mode ----------
 /** on load: reconnect silently if this browser logged in before; otherwise wait for "Connect Phantom" */
-async function chainBoot(interactive = false) {
+async function chainBoot(interactive = false, take = false) {
   mountChainUi();
-  setChainHandlers({ login: () => void chainBoot(true), logout: chainLogout });
+  setChainHandlers({ login: () => void chainBoot(true), logout: chainLogout, take: () => void chainBoot(true, true) });
+  C.setOnTabLost(() => {
+    chainState = 'off';
+    run = null;
+    view = 'town';
+    C.setChainStatus('othertab');
+    toast = L('ย้ายไปเล่นในแท็บอื่นแล้ว', 'The game moved to another tab');
+    render();
+  });
   if (!interactive && !C.chainRemembered() && new URLSearchParams(location.search).get('wallet') !== 'burner') {
     chainState = 'off';
     C.setChainStatus('loggedout');
@@ -1319,7 +1327,7 @@ async function chainBoot(interactive = false) {
   }
   chainState = 'connecting';
   try {
-    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } }, !interactive);
+    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } }, !interactive, take);
     if (st.run) run = C.runOf(st.run, uid());
     if (st.seed !== null) nextSeed = st.seed;
     chainState = 'ready';
@@ -1327,6 +1335,12 @@ async function chainBoot(interactive = false) {
     console.info('[chain] connected', info);
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
   } catch (e) {
+    if (e instanceof C.OtherTab) {
+      chainState = 'off';
+      toast = L('กระเป๋านี้เล่นอยู่ในแท็บอื่น กดปุ่มมุมขวาบนเพื่อย้ายมาเล่นที่นี่', 'This wallet is playing in another tab: use the top-right button to play here');
+      render();
+      return;
+    }
     if (e instanceof C.NotLoggedIn) {
       chainState = 'off';
       toast = L('เชื่อมต่อ Phantom (ปุ่มมุมขวาบน) เพื่อเล่นบน chain', 'Connect Phantom (top right) to play on chain');

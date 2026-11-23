@@ -11,7 +11,7 @@ const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let badge: HTMLElement;
 /** set by the UI: log in (connect the wallet) and log out (forget this browser's session) */
-let handlers: { login: () => void; logout: () => Promise<void> } = { login: () => {}, logout: async () => {} };
+let handlers: { login: () => void; logout: () => Promise<void>; take: () => void } = { login: () => {}, logout: async () => {}, take: () => {} };
 export const setChainHandlers = (h: typeof handlers) => { handlers = h; };
 let modal: HTMLElement | null = null;
 let solCache: number | null = null;
@@ -45,11 +45,16 @@ function renderBadge() {
   const net = info ? (info.mode === 'tee' ? 'Devnet · TEE' : 'Local') : '…';
   const lf = C.chainLastFight();
   const state = {
-    off: '', loggedout: '', connecting: L('กำลังเชื่อมต่อ…', 'connecting…'), approve: L('รออนุมัติใน wallet', 'approve in wallet'),
+    off: '', loggedout: '', othertab: '', connecting: L('กำลังเชื่อมต่อ…', 'connecting…'), approve: L('รออนุมัติใน wallet', 'approve in wallet'),
     ready: '', sending: L('ส่งขึ้น chain…', 'sending…'), error: L('ผิดพลาด', 'error'),
   }[st.state];
   const wallet = info ? `${info.phantom ? 'Phantom' : 'burner'} ${short(info.owner)}` : '';
   const fight = lf ? `⚔ ${L('วัน', 'day')} ${lf.day} ${lf.won ? L('ชนะ', 'won') : lf.draw ? L('เสมอ', 'draw') : L('แพ้', 'lost')} · ${lf.ghost ? 'ghost' : 'bot'}` : '';
+  if (st.state === 'othertab') {
+    badge.innerHTML = `<span class="dot"></span><span>${L('เปิดเล่นอยู่ในแท็บอื่น', 'Playing in another tab')}</span><span class="login">${L('เล่นในแท็บนี้', 'Play here')}</span>`;
+    badge.title = L('กระเป๋านี้เล่นอยู่ในอีกแท็บ กดเพื่อย้ายมาเล่นที่แท็บนี้ (แท็บเดิมจะหยุด)', 'This wallet is playing in another tab. Click to move the game here (the other tab stops).');
+    return;
+  }
   if (st.state === 'loggedout') {
     badge.innerHTML = `<span class="dot"></span><span>◎ <span class="net">${net === '…' ? 'Solana' : net}</span></span><span class="login">${L('เชื่อมต่อ Phantom', 'Connect Phantom')}</span>`;
     badge.title = L('เข้าสู่ระบบด้วย Phantom เพื่อเล่นบน chain', 'Log in with Phantom to play on chain');
@@ -154,7 +159,8 @@ export function mountChainUi() {
   badge.id = 'chain-badge';
   badge.addEventListener('click', () => {
     const s = C.chainStatus().state;
-    if (s === 'loggedout' || s === 'error') handlers.login();
+    if (s === 'othertab') handlers.take();
+    else if (s === 'loggedout' || s === 'error') handlers.login();
     else if (s !== 'connecting' && s !== 'approve') void openModal();
   });
   document.body.appendChild(badge);
