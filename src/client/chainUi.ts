@@ -10,6 +10,9 @@ import { L } from '../i18n';
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let badge: HTMLElement;
+let connectSince = 0;
+// re-render once a second while connecting so the "stuck? reset" hint appears
+setInterval(() => { const s = C.chainStatus().state; if (badge && (s === 'connecting' || s === 'approve')) renderBadge(); }, 1000);
 /** set by the UI: log in (connect the wallet) and log out (forget this browser's session) */
 let handlers: { login: () => void; logout: () => Promise<void>; take: () => void } = { login: () => {}, logout: async () => {}, take: () => {} };
 export const setChainHandlers = (h: typeof handlers) => { handlers = h; };
@@ -61,7 +64,9 @@ function renderBadge() {
     return;
   }
   const stepMsg = (st.state === 'connecting' || st.state === 'approve' || st.state === 'error') && st.msg ? st.msg : '';
-  badge.innerHTML = `<span class="dot ${st.state}"></span><span>◎ <span class="net">${net}</span></span>${wallet ? `<span>${esc(wallet)}</span>` : ''}${solCache !== null ? `<span class="net">${solCache.toFixed(3)} SOL</span>` : ''}${stepMsg ? `<span class="net">${esc(stepMsg.length > 70 ? stepMsg.slice(0, 70) + '…' : stepMsg)}</span>` : state ? `<span class="net">${state}</span>` : ''}${fight ? `<span class="fight">${esc(fight)}</span>` : ''}`;
+  if (st.state === 'connecting' || st.state === 'approve') { if (!connectSince) connectSince = Date.now(); } else connectSince = 0;
+  const slow = connectSince && Date.now() - connectSince > 25_000;
+  badge.innerHTML = `<span class="dot ${st.state}"></span><span>◎ <span class="net">${net}</span></span>${wallet ? `<span>${esc(wallet)}</span>` : ''}${solCache !== null ? `<span class="net">${solCache.toFixed(3)} SOL</span>` : ''}${stepMsg ? `<span class="net">${esc(stepMsg.length > 70 ? stepMsg.slice(0, 70) + '…' : stepMsg)}</span>` : state ? `<span class="net">${state}</span>` : ''}${fight ? `<span class="fight">${esc(fight)}</span>` : ''}${slow ? `<span class="login">${L('ค้าง? กดเพื่อรีเซ็ต', 'Stuck? Click to reset')}</span>` : ''}`;
   badge.title = st.msg || L('ข้อมูลบน blockchain ของคุณ', 'Your on-chain profile');
 }
 
@@ -161,7 +166,11 @@ export function mountChainUi() {
     const s = C.chainStatus().state;
     if (s === 'othertab') handlers.take();
     else if (s === 'loggedout' || s === 'error') handlers.login();
-    else if (s !== 'connecting' && s !== 'approve') void openModal();
+    else if ((s === 'connecting' || s === 'approve') && connectSince && Date.now() - connectSince > 25_000) {
+      // stuck: forget this browser's chain data and start over (the account on chain is kept)
+      C.chainResetBrowser();
+      location.reload();
+    } else if (s !== 'connecting' && s !== 'approve') void openModal();
   });
   document.body.appendChild(badge);
   renderBadge();

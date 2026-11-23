@@ -54,6 +54,24 @@ const LOGIN_KEY = 'arena.chain.login';
 /** this browser logged in before (reconnect without a popup on load) */
 export const chainRemembered = () => { try { return localStorage.getItem(LOGIN_KEY) === '1'; } catch { return false; } };
 export class NotLoggedIn extends Error {}
+/** forget every on-chain key / token / login flag in this browser (the accounts on chain are untouched) */
+export function chainResetBrowser(): void {
+  try {
+    for (const k of Object.keys(localStorage)) if (k.startsWith('arena.chain.')) localStorage.removeItem(k);
+  } catch { /* private mode */ }
+}
+/** a new season (or &reset=1 in the URL) starts this browser clean */
+function resetIfNewSeason(season: number): void {
+  try {
+    const url = new URL(location.href);
+    if (url.searchParams.get('reset') === '1' || localStorage.getItem('arena.chain.season') !== String(season)) {
+      console.info('[chain] step: clearing this browser\'s old chain data');
+      chainResetBrowser();
+      localStorage.setItem('arena.chain.season', String(season));
+      if (url.searchParams.has('reset')) { url.searchParams.delete('reset'); history.replaceState(null, '', url); }
+    }
+  } catch { /* private mode */ }
+}
 /** keys in this browser: the burner owner, and one session key per owner wallet (so wallets never share one) */
 const BURNER_KEY = 'arena.chain.burner';
 const sessionStore = (o: PublicKey) => `arena.chain.key.${o.toBase58()}`;
@@ -303,7 +321,8 @@ export const chainInfo = () => (cfg ? { mode: cfg.mode ?? 'local', owner: owner.
  */
 export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false, take = false): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
   // &net=local: the local validator config; default: /chain.json (devnet + TEE)
-  cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json')).json();
+  cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json', { cache: 'no-store' })).json();
+  resetIfNewSeason(cfg!.season);
   base = new Connection(cfg!.rpc, 'confirmed');
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
   const ph = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined);
