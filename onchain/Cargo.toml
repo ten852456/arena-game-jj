@@ -1,0 +1,21 @@
+# Mochi Moon on-chain: the Rust game engine (bit-exact port of src/sim) and the Solana program that runs it.
+[workspace]
+members = [
+    "programs/mochi-game",
+    "engine/mochi-engine"
+]
+resolver = "2"
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+[profile.release.build-override]
+opt-level = 3
+incremental = false
+codegen-units = 1
+
+# The engine's arithmetic is bounded by design (verified with overflow checks on in the 20k-fight debug
+# differential run); programs keep overflow checks.
+[profile.release.package.mochi-engine]
+overflow-checks = false

@@ -100,6 +100,57 @@ More detail: [deploy/RAILWAY.md](deploy/RAILWAY.md).
 A tutorial pops up the first time the game is opened in a browser (8 slides). Reopen it any time with
 **? วิธีเล่น** at the top right. Your run is saved in your browser, so you can close the tab and continue later.
 
+## On-chain mode (Solana devnet + MagicBlock TEE)
+
+The arena can also run fully on chain: the same game rules run as a Solana program (`onchain/`) inside a MagicBlock
+private ephemeral rollup (TEE), so runs are verifiable and opponents' builds stay hidden until the season ends.
+It is a **devnet prototype** (test SOL only): not audited, not for mainnet.
+
+**Play it:**
+
+```bash
+npm run dev
+```
+
+Open **http://localhost:5173/?chain=1** with the [Phantom](https://phantom.com) wallet extension:
+
+1. In Phantom: **Settings → Developer Settings → Testnet Mode → Solana Devnet**, and get devnet SOL
+   (≥ 0.02) from https://faucet.solana.com.
+2. Press **Connect Phantom** (badge at the top right) and approve twice (first time only): create your season
+   account, then let this browser play for 7 days. After that the game plays without wallet popups: a browser
+   game key signs every action, and it can only play, never move your SOL.
+3. Click the badge for your on-chain profile: wallet, season account, runs, best score, game key, log out.
+
+| URL option | What it does |
+|---|---|
+| `?chain=1` | on-chain mode, devnet + TEE, Phantom |
+| `&net=local` | use a local validator (`src/client/public/chain-local.json`) |
+| `&wallet=burner` | throwaway in-browser wallet instead of Phantom (testing) |
+| `&reset=1` | forget this browser's chain keys and login (your accounts on chain are kept) |
+
+The season the client plays is set in `src/client/public/chain.json` (program, season, TEE endpoint).
+Details on the program, engine, scripts and how to deploy: **[onchain/README.md](onchain/README.md)**.
+
+### TS → Rust: keep the on-chain engine in sync
+
+The TypeScript sim (`src/sim`) is the single source of truth. The Rust engine (`onchain/engine/mochi-engine`)
+is a bit-exact port of it. After changing the game:
+
+```bash
+npm run ts-to-rust                     # codegen + parity test (2,000 fights + 2,000 runs, about 1 minute)
+npm run ts-to-rust -- --cases 20000    # bigger parity run
+npm run ts-to-rust -- --no-test        # regenerate data.rs only
+```
+
+1. **codegen:** skills, heroes, tuning and combat constants from `src/sim` → `onchain/engine/mochi-engine/src/data.rs`
+2. **parity cases** from the TS sim: every fight with a hash of the full state after every tick, every run with a
+   hash of the run state after every action
+3. **cargo test:** the Rust engine must reproduce every hash exactly (runs Rust natively, or through WSL on Windows)
+
+Data changes (numbers, new skill variants made of existing effects) need nothing else. A change to the **rules**
+in `combat.ts` / `run.ts` must be ported by hand to `combat.rs` / `run.rs`; the script fails and says so until the
+port is exact. Bump `SIM_VERSION` for rule changes, then rebuild and redeploy the program and start a new season.
+
 ## Developer commands
 
 | Command | What it does |
@@ -110,6 +161,7 @@ A tutorial pops up the first time the game is opened in a browser (8 slides). Re
 | `npm run explain` | prints the Thai post-fight explanation for a few bot fights |
 | `npm run smoke` | against a running server: two players meet async, replay re-simulates identically, cheat build rejected |
 | `npm run typecheck` | TypeScript check |
+| `npm run ts-to-rust` | regenerate the on-chain Rust engine's data from `src/sim` and prove Rust = TS (see On-chain mode) |
 
 ## Structure
 
@@ -131,7 +183,15 @@ src/client/   Phaser 3 + HTML UI (Thai text in HTML/Kanit)
   townArt.ts     all town pixel art drawn in code (buildings, parallax mountains/castle/forest)
   townData.ts    landmark list: name, position, what it does / will do
   combatScene.ts side-view arena replay (colosseum background)
-scripts/      determinism, balance, smoke tests
+  chain.ts       on-chain mode: Phantom + browser game key, TEE login, sends actions/fights, reads the chain
+  chainUi.ts     wallet badge + on-chain profile window, log in / log out
+scripts/      determinism, balance, smoke tests, ts-to-rust.ts (TS → Rust codegen + parity test)
+onchain/      Solana side (see onchain/README.md)
+  engine/mochi-engine   Rust port of src/sim, bit-exact; data.rs is generated
+  engine/codegen.mts    src/sim → data.rs
+  engine/diff/          TS-side parity case generators
+  programs/mochi-game   Anchor program: seasons, runs, fights, ghosts, rewards (MagicBlock TEE)
+  scripts/              season setup (local / devnet), devnet end-to-end + session-key tests
 ```
 
 **Key idea:** the server runs the fight and returns the events plus the seed. The browser only plays them back.

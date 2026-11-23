@@ -19,7 +19,8 @@
     "exploit": "tsx scripts/exploit.ts",
     "explain": "tsx scripts/explain-check.ts",
     "tune": "tsx scripts/tune.ts",
-    "i18n": "tsx scripts/i18n-check.ts"
+    "i18n": "tsx scripts/i18n-check.ts",
+    "ts-to-rust": "tsx scripts/ts-to-rust.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.7",

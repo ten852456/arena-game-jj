@@ -1,0 +1,10 @@
+[package]
+name = "mochi-engine"
+version = "0.1.0"
+edition = "2021"
+description = "Mochi Moon game engine (sim v12): integer-only, no heap, shared by the Solana program and host tests"
+
+[lib]
+name = "mochi_engine"
+
+[dependencies]
