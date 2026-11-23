@@ -18,10 +18,12 @@
     "sim": "tsx scripts/sim.ts",
     "exploit": "tsx scripts/exploit.ts",
     "explain": "tsx scripts/explain-check.ts",
-"tune": "tsx scripts/tune.ts",
+    "tune": "tsx scripts/tune.ts",
     "i18n": "tsx scripts/i18n-check.ts"
   },
   "dependencies": {
+    "@solana/web3.js": "^1.98.4",
+    "buffer": "^6.0.3",
     "phaser": "^3.90.0"
   },
   "devDependencies": {

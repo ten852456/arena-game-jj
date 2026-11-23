@@ -6,7 +6,8 @@ import { fatigueStart } from '../sim/combat';
 import * as M from './views/meta';
 import * as P from './views/pages';
 import { hashSeed } from '../sim/rng';
-import * as R from '../sim/run';
+import * as R from './runChain';
+import * as C from './chain';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
@@ -68,6 +69,10 @@ let run: R.RunState | null = null;
 let view: View = 'title';
 /** seed of the next run: it also decides which heroes are offered. Kept until a run starts, so leaving the screen does not re-roll. */
 let nextSeed: number | null = null;
+/** on-chain mode (?chain=1): connection state, a pending begin_run, the chain state after the last fight */
+let chainState: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
+let chainSeedPending = false;
+let chainAfter: Uint8Array | null = null;
 let last: FightResponse | null = null;
 let lastDay = 0;
 let lastDamage = 0;
@@ -458,7 +463,16 @@ function renderTown() {
 }
 
 function renderTitle() {
-  const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
+  if (C.chainOn() && !runActive() && nextSeed === null && chainState === 'ready' && !chainSeedPending) {
+    // the run seed (and so the hero choices) comes from the chain
+    chainSeedPending = true;
+    void C.chainBeginRun().then(
+      (sd) => { nextSeed = sd; chainSeedPending = false; render(); },
+      (e) => { chainSeedPending = false; toast = (e as Error).message; render(); },
+    );
+  }
+  const waitChain = C.chainOn() && nextSeed === null;
+  const offered = runActive() || waitChain ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
   if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
   if (scene) scene.idle(previewHero, runActive() ? R.lookOf(run!) : 0);
   const resume = runActive()
@@ -1201,31 +1215,58 @@ async function doFight() {
   lastDay = r.day;
   lastDamage = R.damageFor(r.day);
   let res: FightResponse;
-  try {
-    // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
-    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId() };
-    res = await api.fight(body as Parameters<typeof api.fight>[0]);
-    M.rememberFromFight(res);
-    if (import.meta.env.DEV) {
-      // the browser can re-run the exact fight from the seed — this is what makes replays shareable
-      const local = simulate(build, res.opponent.build, res.seed, r.day);
-      if (JSON.stringify(local) !== JSON.stringify(res.result)) console.warn('[arena] client/server sim mismatch');
+  if (C.chainOn()) {
+    try {
+      // queued shop actions + the fight in one transaction; the chain picks the opponent and stores the fight
+      const f = await C.chainFight();
+      const result = simulate(build, f.opp, f.seed, r.day);
+      if ((result.winner === 0) !== f.won) console.error('[chain] TS replay winner differs from the chain');
+      res = {
+        seed: f.seed, day: f.day, result, won: f.won, rating: r.rating,
+        opponent: { name: `${f.ghost ? 'Ghost' : 'AI'} · ${withLang('th', () => HEROES_BY_ID[f.opp.hero].name)}`, ai: !f.ghost, build: f.opp, rating: r.rating },
+      };
+      chainAfter = f.run;
+    } catch (err) {
+      busy = false;
+      toast = L('ส่งไฟต์ขึ้น chain ไม่ได้: ', 'Could not send the fight: ') + (err as Error).message;
+      await chainResync();
+      return;
     }
-  } catch (err) {
-    console.warn('[arena] server unavailable, fighting a local AI', err);
-    const seed = hashSeed(r.seed, 'offline', r.day, Date.now());
-    const opp = randomAiBuild(r.day, seed);
-    const result = simulate(build, opp, seed, r.day);
-    res = {
-      seed, day: r.day, result, won: result.winner === 0, rating: r.rating, offline: true,
-      // Thai like the server's AI names (shown through displayName)
-      opponent: { name: `AI · ${withLang('th', () => HEROES_BY_ID[opp.hero].name)}`, ai: true, build: opp, rating: r.rating },
-    };
+  } else {
+  try {
+      // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
+      const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId() };
+      res = await api.fight(body as Parameters<typeof api.fight>[0]);
+      M.rememberFromFight(res);
+      if (import.meta.env.DEV) {
+        // the browser can re-run the exact fight from the seed — this is what makes replays shareable
+        const local = simulate(build, res.opponent.build, res.seed, r.day);
+        if (JSON.stringify(local) !== JSON.stringify(res.result)) console.warn('[arena] client/server sim mismatch');
+      }
+    } catch (err) {
+      console.warn('[arena] server unavailable, fighting a local AI', err);
+      const seed = hashSeed(r.seed, 'offline', r.day, Date.now());
+      const opp = randomAiBuild(r.day, seed);
+      const result = simulate(build, opp, seed, r.day);
+      res = {
+        seed, day: r.day, result, won: result.winner === 0, rating: r.rating, offline: true,
+        // Thai like the server's AI names (shown through displayName)
+        opponent: { name: `AI · ${withLang('th', () => HEROES_BY_ID[opp.hero].name)}`, ai: true, build: opp, rating: r.rating },
+      };
+    }
   }
   last = res;
   // apply the result before the replay plays, so reloading mid-replay can't undo a loss
   r.rating = res.rating;
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId });
+  if (chainAfter) {
+    // the chain is authoritative: the local state must be byte-identical, otherwise take the chain's
+    if (!C.sameAsChain(r, chainAfter)) {
+      console.error('[chain] local run state differs from the chain: using the chain state');
+      Object.assign(r, C.runOf(chainAfter, r.id), { log: r.log, rating: r.rating });
+    }
+    chainAfter = null;
+  }
   saveRun();
   const oppInfo = res.opponent as FightResponse['opponent'] & { tier?: unknown };
   namesFn = () => [youName(), oppLabel(oppInfo)];
@@ -1261,6 +1302,50 @@ function playLast() {
       render();
     },
   );
+}
+
+// ---------- on-chain mode ----------
+async function chainBoot() {
+  try {
+    const st = await C.chainConnect();
+    if (st.run) run = C.runOf(st.run, uid());
+    if (st.seed !== null) nextSeed = st.seed;
+    chainState = 'ready';
+    const info = C.chainInfo();
+    console.info('[chain] connected', info);
+    toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
+  } catch (e) {
+    chainState = 'error';
+    console.error('[chain]', e);
+    toast = L('เชื่อมต่อ chain ไม่ได้: ', 'Chain connection failed: ') + (e as Error).message;
+  }
+  render();
+}
+async function chainStart(hero: string, seed: number) {
+  if (busy) return;
+  busy = true;
+  try {
+    await C.chainPickHero(R.heroChoices(seed).indexOf(hero));
+    nextSeed = null;
+    run = R.newRun(hero, seed, uid());
+    view = 'shop';
+  } catch (e) {
+    toast = (e as Error).message;
+  }
+  busy = false;
+  render();
+}
+/** after a failed transaction: reload the run from the chain (the chain wins) */
+async function chainResync() {
+  try {
+    const st = await C.chainConnect();
+    run = st.run ? C.runOf(st.run, run?.id ?? uid()) : run && (run.phase === 'won' || run.phase === 'dead') ? run : null;
+    if (st.seed !== null) nextSeed = st.seed;
+  } catch (e) {
+    console.error('[chain] resync', e);
+  }
+  view = run ? phaseView(run) : 'title';
+  render();
 }
 
 function phaseView(r: R.RunState): View {
@@ -1332,6 +1417,10 @@ function onClick(ev: Event) {
       {
         const seed = nextSeed ?? randSeed();
         if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
+        if (C.chainOn()) {
+          void chainStart(arg, seed);
+          return;
+        }
         nextSeed = null;
         run = R.newRun(arg, seed, uid());
       }
@@ -1411,6 +1500,7 @@ function onClick(ev: Event) {
     case 'concedeYes':
       confirmConcede = false;
       R.concede(run!);
+      if (C.chainOn()) void C.chainFinish().catch((e) => { toast = (e as Error).message; render(); });
       if (view === 'fighting') {
         scene.idle(null); // stop the replay
         busy = false;
@@ -1619,7 +1709,8 @@ export function startUI(st: Stage) {
     render();
     if (view === 'fighting' || view === 'replay') logHist.slice(-80).forEach(writeLog);
   });
-  run = loadRun();
+  run = C.chainOn() ? null : loadRun();
+  if (C.chainOn()) void chainBoot();
   const rid = new URLSearchParams(location.search).get('replay');
   if (rid) {
     stage.show('combat');
