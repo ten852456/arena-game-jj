@@ -313,7 +313,7 @@ function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 }
 
 // ---------------- public API for the UI ----------------
-export const chainInfo = () => (cfg ? { mode: cfg.mode ?? 'local', owner: owner.toBase58(), session: session.publicKey.toBase58(), phantom: !!phantom, player: playerPda().toBase58(), season: cfg.season } : null);
+export const chainInfo = () => (cfg && owner && session ? { mode: cfg.mode ?? 'local', owner: owner.toBase58(), session: session.publicKey.toBase58(), phantom: !!phantom, player: playerPda().toBase58(), season: cfg.season } : null);
 
 /**
  * Connect the owner wallet, set up the season account and the session key if needed (≤ 2 owner signatures,
@@ -324,6 +324,9 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json', { cache: 'no-store' })).json();
   resetIfNewSeason(cfg!.season);
   base = new Connection(cfg!.rpc, 'confirmed');
+  // a new attempt: nothing from a previous wallet / key until this one is known
+  owner = undefined as unknown as PublicKey;
+  session = undefined as unknown as Keypair;
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
   const ph = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined);
   const burner = new URLSearchParams(location.search).get('wallet') === 'burner';
@@ -549,7 +552,7 @@ const STATUS_NAMES = ['idle', 'picking a hero', 'in a run', 'run ended', 'season
 
 /** Everything the profile window shows, read from the chain (the session key can read the private account). */
 export async function chainProfile(): Promise<ChainProfile | null> {
-  if (!cfg) return null;
+  if (!cfg || !owner || !session) return null;
   const p = await player().catch(() => null);
   const [ownerSol, sessionSol] = await Promise.all([base.getBalance(owner).catch(() => 0), base.getBalance(session.publicKey).catch(() => 0)]);
   const dv = p ? new DataView(p.buffer) : null;
@@ -570,7 +573,7 @@ export async function chainProfile(): Promise<ChainProfile | null> {
 
 /** Owner revokes this browser's session key (wallet popup); the next action asks for a new approval. */
 export async function chainRevoke(): Promise<void> {
-  if (!cfg || owner.equals(session.publicKey)) throw new Error('nothing to revoke (burner wallet)');
+  if (!cfg || !owner || !session || owner.equals(session.publicKey)) throw new Error('nothing to revoke (burner wallet)');
   await sendOwner(game, [ix('revoke_session', [], [Rd(owner, true), W(playerPda())])]);
 }
 
@@ -599,7 +602,7 @@ export async function chainLogout(): Promise<void> {
     }
   }
   try { await phantom?.disconnect(); } catch { /* already */ }
-  const mine = owner && !owner.equals(session.publicKey) ? [sessionStore(owner)] : [];
+  const mine = owner && session && !owner.equals(session.publicKey) ? [sessionStore(owner)] : [];
   releaseTab?.();
   releaseTab = null;
   tabLockFor = '';
