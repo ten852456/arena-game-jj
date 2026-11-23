@@ -45,9 +45,15 @@ export interface ChainConfig {
 interface Phantom {
   isPhantom?: boolean;
   publicKey?: PublicKey;
-  connect(): Promise<{ publicKey: PublicKey }>;
+  connect(opts?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: PublicKey }>;
+  disconnect(): Promise<void>;
   signTransaction(tx: Transaction): Promise<Transaction>;
+  on?(ev: 'accountChanged' | 'disconnect', cb: (pk?: PublicKey | null) => void): void;
 }
+const LOGIN_KEY = 'arena.chain.login';
+/** this browser logged in before (reconnect without a popup on load) */
+export const chainRemembered = () => { try { return localStorage.getItem(LOGIN_KEY) === '1'; } catch { return false; } };
+export class NotLoggedIn extends Error {}
 
 export const chainOn = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('chain') === '1';
 
@@ -252,7 +258,7 @@ export const chainInfo = () => (cfg ? { mode: cfg.mode ?? 'local', owner: owner.
  * Connect the owner wallet, set up the season account and the session key if needed (≤ 2 owner signatures,
  * first time only), and return the chain's current run (if any).
  */
-export async function chainConnect(onStatus: (s: string) => void = () => {}): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
+export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
   // &net=local: the local validator config; default: /chain.json (devnet + TEE)
   cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json')).json();
   base = new Connection(cfg!.rpc, 'confirmed');
@@ -273,7 +279,16 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
   if (ph && !burner) {
     say('connecting', 'connecting Phantom…');
     phantom = ph;
-    owner = (await ph.connect()).publicKey;
+    try {
+      // silent: reconnect only if this site is already trusted (no popup)
+      owner = (await ph.connect(silent ? { onlyIfTrusted: true } : undefined)).publicKey;
+    } catch (e) {
+      phantom = null;
+      setChainStatus('loggedout');
+      throw silent ? new NotLoggedIn('not logged in') : e;
+    }
+    // switching account in Phantom: start over with the new wallet
+    ph.on?.('accountChanged', () => location.reload());
   } else {
     phantom = null;
     owner = session.publicKey;
@@ -325,6 +340,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}): Pr
     p = await player();
   }
   const status = p![OFF.status];
+  try { localStorage.setItem(LOGIN_KEY, '1'); } catch { /* private mode */ }
   say('ready', '');
   return {
     status,
@@ -410,7 +426,7 @@ export async function chainFinish(): Promise<void> {
 export const sameAsChain = (local: RunState, chain: Uint8Array) => eq(runBytes(local), chain);
 
 // ---------------- what the chain UI shows (chainUi.ts) ----------------
-export type ChainStatus = 'off' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
+export type ChainStatus = 'off' | 'loggedout' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
 let status: { state: ChainStatus; msg: string } = { state: chainOn() ? 'connecting' : 'off', msg: '' };
 const listeners: (() => void)[] = [];
 export const onChain = (f: () => void) => listeners.push(f);
@@ -475,3 +491,35 @@ export async function chainRevoke(): Promise<void> {
 
 export const explorerUrl = (addr: string, kind: 'address' | 'tx' = 'address') =>
   cfg?.mode === 'tee' ? `https://explorer.solana.com/${kind}/${addr}?cluster=devnet` : `https://explorer.solana.com/${kind}/${addr}?cluster=custom&customUrl=${encodeURIComponent(cfg?.rpc ?? '')}`;
+
+/**
+ * Log out: return the session key's leftover SOL to the wallet (best effort), forget the session key and the TEE
+ * token in this browser, disconnect Phantom. The season account stays on chain, owned by the wallet: logging in
+ * again (on any browser) continues it after approving a new session key.
+ */
+export async function chainLogout(): Promise<void> {
+  if (cfg && session && owner && !owner.equals(session.publicKey)) {
+    try {
+      const bal = await base.getBalance(session.publicKey);
+      const fee = 5000;
+      if (bal > fee) {
+        const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: session.publicKey, toPubkey: owner, lamports: bal - fee }));
+        tx.feePayer = session.publicKey;
+        tx.recentBlockhash = (await base.getLatestBlockhash('confirmed')).blockhash;
+        tx.sign(session);
+        await confirm(base, await base.sendRawTransaction(tx.serialize(), { skipPreflight: true }));
+      }
+    } catch (e) {
+      console.warn('[chain] could not return the session SOL', e);
+    }
+  }
+  try { await phantom?.disconnect(); } catch { /* already */ }
+  for (const k of ['arena.chain.key', 'arena.chain.teeToken', LOGIN_KEY]) {
+    try { localStorage.removeItem(k); } catch { /* private mode */ }
+  }
+  phantom = null;
+  cfg = null;
+  queue.length = 0;
+  lastFight = null;
+  setChainStatus('loggedout');
+}

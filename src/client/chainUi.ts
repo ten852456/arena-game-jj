@@ -10,6 +10,9 @@ import { L } from '../i18n';
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 let badge: HTMLElement;
+/** set by the UI: log in (connect the wallet) and log out (forget this browser's session) */
+let handlers: { login: () => void; logout: () => Promise<void> } = { login: () => {}, logout: async () => {} };
+export const setChainHandlers = (h: typeof handlers) => { handlers = h; };
 let modal: HTMLElement | null = null;
 let solCache: number | null = null;
 
@@ -20,7 +23,8 @@ const CSS = `
 #chain-badge .dot{width:8px;height:8px;border-radius:50%;background:#888;flex:none}
 #chain-badge .dot.ready{background:#4ade80}#chain-badge .dot.sending,#chain-badge .dot.connecting,#chain-badge .dot.approve{background:#facc15}
 #chain-badge .dot.error{background:#f87171}
-#chain-badge .net{opacity:.75;font-weight:500}#chain-badge .fight{opacity:.85;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chain-badge .net{opacity:.75;font-weight:500}
+#chain-badge .login{background:#ab9ff2;color:#1c1530;border-radius:999px;padding:3px 10px;font-weight:700}#chain-badge .fight{opacity:.85;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #chain-modal{position:fixed;inset:0;z-index:10000;background:rgba(10,6,16,.6);display:flex;align-items:flex-start;justify-content:center;padding:56px 16px 16px;overflow:auto}
 #chain-modal .card{width:min(520px,100%);background:#1f1829;color:#f4ecff;border-radius:16px;padding:16px 18px;border:1px solid rgba(255,255,255,.12);
   font:14px/1.45 system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.5)}
@@ -41,11 +45,16 @@ function renderBadge() {
   const net = info ? (info.mode === 'tee' ? 'Devnet · TEE' : 'Local') : '…';
   const lf = C.chainLastFight();
   const state = {
-    off: '', connecting: L('กำลังเชื่อมต่อ…', 'connecting…'), approve: L('รออนุมัติใน wallet', 'approve in wallet'),
+    off: '', loggedout: '', connecting: L('กำลังเชื่อมต่อ…', 'connecting…'), approve: L('รออนุมัติใน wallet', 'approve in wallet'),
     ready: '', sending: L('ส่งขึ้น chain…', 'sending…'), error: L('ผิดพลาด', 'error'),
   }[st.state];
   const wallet = info ? `${info.phantom ? 'Phantom' : 'burner'} ${short(info.owner)}` : '';
   const fight = lf ? `⚔ ${L('วัน', 'day')} ${lf.day} ${lf.won ? L('ชนะ', 'won') : lf.draw ? L('เสมอ', 'draw') : L('แพ้', 'lost')} · ${lf.ghost ? 'ghost' : 'bot'}` : '';
+  if (st.state === 'loggedout') {
+    badge.innerHTML = `<span class="dot"></span><span>◎ <span class="net">${net === '…' ? 'Solana' : net}</span></span><span class="login">${L('เชื่อมต่อ Phantom', 'Connect Phantom')}</span>`;
+    badge.title = L('เข้าสู่ระบบด้วย Phantom เพื่อเล่นบน chain', 'Log in with Phantom to play on chain');
+    return;
+  }
   badge.innerHTML = `<span class="dot ${st.state}"></span><span>◎ <span class="net">${net}</span></span>${wallet ? `<span>${esc(wallet)}</span>` : ''}${solCache !== null ? `<span class="net">${solCache.toFixed(3)} SOL</span>` : ''}${state ? `<span class="net">${state}</span>` : ''}${fight ? `<span class="fight">${esc(fight)}</span>` : ''}`;
   badge.title = st.msg || L('ข้อมูลบน blockchain ของคุณ', 'Your on-chain profile');
 }
@@ -106,6 +115,7 @@ async function openModal() {
     </div>` : ''}
     <div class="actions">
       ${p.phantom ? `<button class="warn" data-x="revoke">${L('ยกเลิก session key', 'Revoke session key')}</button>` : ''}
+      <button class="warn" data-x="logout">${L('ออกจากระบบ', 'Log out')}</button>
       <button data-x="refresh">${L('รีเฟรช', 'Refresh')}</button>
       <button data-x="close">${L('ปิด', 'Close')}</button>
     </div>`;
@@ -113,6 +123,10 @@ async function openModal() {
   card.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((b) => b.addEventListener('click', () => { void navigator.clipboard?.writeText(b.dataset.copy!); b.textContent = '✓'; }));
   card.querySelector('[data-x="close"]')!.addEventListener('click', closeModal);
   card.querySelector('[data-x="refresh"]')!.addEventListener('click', () => void openModal());
+  card.querySelector('[data-x="logout"]')!.addEventListener('click', async () => {
+    closeModal();
+    await handlers.logout();
+  });
   card.querySelector('[data-x="revoke"]')?.addEventListener('click', async () => {
     try {
       C.setChainStatus('approve', L('อนุมัติการยกเลิกใน wallet', 'approve the revoke in your wallet'));
@@ -137,7 +151,11 @@ export function mountChainUi() {
   document.head.appendChild(style);
   badge = document.createElement('div');
   badge.id = 'chain-badge';
-  badge.addEventListener('click', () => void openModal());
+  badge.addEventListener('click', () => {
+    const s = C.chainStatus().state;
+    if (s === 'loggedout' || s === 'error') handlers.login();
+    else if (s !== 'connecting' && s !== 'approve') void openModal();
+  });
   document.body.appendChild(badge);
   renderBadge();
   C.onChain(() => {

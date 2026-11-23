@@ -8,7 +8,7 @@ import * as P from './views/pages';
 import { hashSeed } from '../sim/rng';
 import * as R from './runChain';
 import * as C from './chain';
-import { mountChainUi } from './chainUi';
+import { mountChainUi, setChainHandlers } from './chainUi';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { ARCH_NAME, KEYWORDS, SKILLS, chipsOf, lvOf, nextVariants, nodeOf, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, SkillInstance } from '../sim/types';
@@ -1306,10 +1306,20 @@ function playLast() {
 }
 
 // ---------- on-chain mode ----------
-async function chainBoot() {
+/** on load: reconnect silently if this browser logged in before; otherwise wait for "Connect Phantom" */
+async function chainBoot(interactive = false) {
   mountChainUi();
+  setChainHandlers({ login: () => void chainBoot(true), logout: chainLogout });
+  if (!interactive && !C.chainRemembered() && new URLSearchParams(location.search).get('wallet') !== 'burner') {
+    chainState = 'off';
+    C.setChainStatus('loggedout');
+    toast = L('เชื่อมต่อ Phantom (ปุ่มมุมขวาบน) เพื่อเล่นบน chain', 'Connect Phantom (top right) to play on chain');
+    render();
+    return;
+  }
+  chainState = 'connecting';
   try {
-    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } });
+    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } }, !interactive);
     if (st.run) run = C.runOf(st.run, uid());
     if (st.seed !== null) nextSeed = st.seed;
     chainState = 'ready';
@@ -1317,11 +1327,27 @@ async function chainBoot() {
     console.info('[chain] connected', info);
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
   } catch (e) {
+    if (e instanceof C.NotLoggedIn) {
+      chainState = 'off';
+      toast = L('เชื่อมต่อ Phantom (ปุ่มมุมขวาบน) เพื่อเล่นบน chain', 'Connect Phantom (top right) to play on chain');
+      render();
+      return;
+    }
     chainState = 'error';
     C.setChainStatus('error', (e as Error).message);
     console.error('[chain]', e);
     toast = L('เชื่อมต่อ chain ไม่ได้: ', 'Chain connection failed: ') + (e as Error).message;
   }
+  render();
+}
+async function chainLogout() {
+  await C.chainLogout();
+  chainState = 'off';
+  run = null;
+  nextSeed = null;
+  chainSeedPending = false;
+  view = 'town';
+  toast = L('ออกจากระบบแล้ว', 'Logged out');
   render();
 }
 async function chainStart(hero: string, seed: number) {
