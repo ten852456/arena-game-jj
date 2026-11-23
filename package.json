@@ -19,7 +19,8 @@
     "exploit": "tsx scripts/exploit.ts",
     "explain": "tsx scripts/explain-check.ts",
 "tune": "tsx scripts/tune.ts",
-    "i18n": "tsx scripts/i18n-check.ts"
+    "i18n": "tsx scripts/i18n-check.ts",
+    "facts": "tsx scripts/facts.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0"
