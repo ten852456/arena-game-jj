@@ -1,6 +1,6 @@
 import { ONE, P, mulP } from './fixed';
 import { T } from './tuning';
-import type { Archetype, StatusKind } from './types';
+import type { Archetype, DamageKind, StatusKind } from './types';
 
 /** HP multiplier of a hero (tuning.ts) */
 const hpOf = (id: string) => (hp: number) => Math.round(hp * T[`hp.${id}` as keyof typeof T]);
@@ -38,7 +38,8 @@ export interface CombatHooks {
   maxHp?(hp: number): number;
   startShield?(n: number, maxHp: number): number;
   onStart?(me: HookFighter): void;
-  onDamaged?(me: HookFighter, amount: number, src: string): void;
+  /** kind = what dealt the damage (sim v13: no longer the skill id, see types.ts DamageKind) */
+  onDamaged?(me: HookFighter, amount: number, kind: DamageKind): void;
   /** multiplier given by a charge skill this fighter casts */
   chargeMult?(m: number): number;
   /** freeze this fighter applies to the enemy, in ppm ticks (sim v12), before diminishing returns */
@@ -124,8 +125,9 @@ export const HEROES: HeroDef[] = [
     style: 'โตไม่หยุด: สะสมพลังโจมตีทีละนิด ยิ่งสู้นานและยิ่งโดนตี ยิ่งตีแรง',
     hooks: {
       maxHp: hpOf('berserker'),
-      onDamaged(me, _n, src) {
-        if (src !== 'burn' && src !== 'fatigue' && src !== 'thorns' && me.hp > 0) {
+      onDamaged(me, _n, kind) {
+        // only real hits count (sim v13: hits of the skill เกราะหนาม, id 'thorns', count too; thorns reflection does not)
+        if (kind === 'hit' && me.hp > 0) {
           me.flags.hitsTaken = (me.flags.hitsTaken ?? 0) + 1;
           if (me.flags.hitsTaken % T['berserker.hits'] === 0) me.grow(1);
         }

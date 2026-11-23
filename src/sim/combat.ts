@@ -5,7 +5,7 @@ import { Rng } from './rng';
 import { T } from './tuning';
 import { SKILLS, execNode, lvOf, nodeOf, reacts, type Ctx, type FighterView } from './skills';
 import type {
-  BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
+  BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, DamageKind, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
 } from './types';
 
 /**
@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 12;
+export const SIM_VERSION = 13;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -291,7 +291,8 @@ export function simulate(
 
   /** owner = the attacker's block that gets credit (idx into its build.skills), -1 = none */
   /** shieldable: true / false, or the share of the hit (ppm) that shields can block */
-  function deal(target: Fighter, amount: number, shieldable: boolean | number, src: string, owner = -1, bonusPart = 0) {
+  /** src = skill id for hits (for the UI), 'thorns' / 'burn' / 'fatigue' otherwise; kind = what dealt it (rules) */
+  function deal(target: Fighter, amount: number, shieldable: boolean | number, src: string, kind: DamageKind, owner = -1, bonusPart = 0) {
     if (amount <= 0 || target.hp <= 0) return;
     let blocked = 0;
     const share = shieldable === true ? ONE : shieldable === false ? 0 : shieldable;
@@ -305,8 +306,8 @@ export function simulate(
       st.d += amount;
       st.bd += Math.min(amount, bonusPart);
     }
-    emit({ type: 'damage', side: target.side, amount: amount - blocked, blocked, src });
-    target.hooks.onDamaged?.(hookApi(target), amount - blocked, src);
+    emit({ type: 'damage', side: target.side, amount: amount - blocked, blocked, src, kind });
+    target.hooks.onDamaged?.(hookApi(target), amount - blocked, kind);
   }
 
   function addBurn(foe: Fighter, dps: number, secs: number, idx: number) {
@@ -363,7 +364,7 @@ export function simulate(
           f.chargeHits = 0;
         }
         const hpBefore = foe.hp;
-        deal(foe, dmg, ONE - P(o.pierce ?? 0), inst.id, blk.idx, bonusPart);
+        deal(foe, dmg, ONE - P(o.pierce ?? 0), inst.id, 'hit', blk.idx, bonusPart);
         const dealt = Math.max(0, hpBefore - Math.max(0, foe.hp));
         const leech = P(o.leech ?? 0) + f.leechNext;
         f.leechNext = 0;
@@ -371,7 +372,7 @@ export function simulate(
         // thorns reflect at most THORNS_MAX of the hit (hooks can change it, e.g. a thorns hero reflects more)
         let th = Math.min(sum(foe.thorns), ceilDiv(dmg * 3, 4)); // THORNS_MAX = 3/4
         if (foe.hooks.thornsReflect) th = foe.hooks.thornsReflect(th, sum(foe.thorns), dmg);
-        if (th > 0 && f.hp > 0) deal(f, th, true, 'thorns', foe.thorns[0]?.idx ?? -1);
+        if (th > 0 && f.hp > 0) deal(f, th, true, 'thorns', 'thorns', foe.thorns[0]?.idx ?? -1);
         return dealt;
       },
       shield(n) {
@@ -691,7 +692,7 @@ export function simulate(
         const total = f.burns.reduce((n, x) => n + x.dps, 0);
         const foeStats = F[1 - f.side].stats;
         for (const x of f.burns) if (foeStats[x.idx]) foeStats[x.idx].d += x.dps;
-        deal(f, total, false, 'burn');
+        deal(f, total, false, 'burn', 'burn');
         f.burns = f.burns.map((x) => ({ ...x, t: x.t - TPS })).filter((x) => x.t > 0);
       }
     }
@@ -699,7 +700,7 @@ export function simulate(
     if (t >= fStart && (t - fStart) % TPS === 0) {
       const n = ((t - fStart) / TPS + 1) * fStep;
       emit({ type: 'fatigue', amount: n });
-      for (const f of F) deal(f, n, false, 'fatigue');
+      for (const f of F) deal(f, n, false, 'fatigue', 'fatigue');
     }
 
     if (opts.digest) opts.digest(digestOf(t, F));

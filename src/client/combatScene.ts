@@ -654,7 +654,8 @@ export class CombatScene extends Phaser.Scene {
       if (kill) this.killBlow(s);
       return;
     }
-    if (e.src === 'thorns') {
+    if (e.kind === 'thorns') {
+      // a thorns reflection (sim v13 kind; hits of the skill เกราะหนาม are kind 'hit' and play as normal hits):
       // the thorns owner (the one who was hit) pricks the attacker back
       this.ffx.thornFlash(att);
       if (e.amount > 0) this.ffx.number(s, `-${e.amount}`, 'thorns', 0.95);

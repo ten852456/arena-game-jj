@@ -93,22 +93,12 @@ const skillName = (id: string) =>
 const hasFx = (k: Pick<SkillInstance, 'id' | 'v'>, kind: string) => nodeOf(k).fx.some((e) => e.k === kind);
 
 /**
- * Damage events that are thorns reflections. The thorns skill (id 'thorns') hits with src 'thorns' too, so tell them apart:
- * a reflection comes right after a hit on the other side, with no cast in between.
+ * Damage events that are thorns reflections (sim v13: the event says so in `kind`; hits of the skill เกราะหนาม, whose
+ * id is also 'thorns', are kind 'hit').
  */
 export function reflectEvents(events: CombatEvent[]): Set<CombatEvent> {
   const out = new Set<CombatEvent>();
-  events.forEach((e, j) => {
-    if (e.type !== 'damage' || e.src !== 'thorns') return;
-    for (let k = j - 1; k >= 0; k--) {
-      const p = events[k];
-      if (p.t !== e.t || p.type === 'cast') return;
-      if (p.type === 'damage') {
-        if (p.side !== e.side) out.add(e);
-        return;
-      }
-    }
-  });
+  for (const e of events) if (e.type === 'damage' && e.kind === 'thorns') out.add(e);
   return out;
 }
 
