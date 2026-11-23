@@ -1,3 +1,4 @@
+import { ONE, P, mulP } from './fixed';
 import { T, onTuning } from './tuning';
 import type { Archetype, SkillInstance } from './types';
 
@@ -146,8 +147,10 @@ export interface FighterView {
 }
 
 export interface Ctx {
-  /** scale a number by the cast power (echo mark casts at 50%) */
+  /** scale a data number by the cast power (echo mark casts at 50%): max(1, round(n × power)) */
   v(n: number): number;
+  /** the same for an amount already in ppm (sim v12 integer maths) */
+  vP(nP: number): number;
   readonly me: FighterView;
   readonly foe: FighterView;
   /** returns damage dealt. pierce = share of shield ignored. leech = share healed */
@@ -180,16 +183,17 @@ export function execNode(node: SkillNode, c: Ctx) {
         if (e.ifSlowed && !c.foe.slowed) break;
         const times = e.times ?? 1;
         for (let i = 0; i < times; i++) {
-          let n = e.n + (e.perRemoved ?? 0) * removed;
-          if (e.shieldPct) n += c.me.shield * e.shieldPct;
-          if (e.thornsX) n += c.me.thorns * e.thornsX;
-          if (e.burnPct) n += c.foe.burnLeft * e.burnPct;
-          if (n <= 0) break;
-          let mult = 1;
-          if (e.exec && c.foe.hp < c.foe.maxHp * e.exec[0]) mult *= e.exec[1];
-          if (e.frozen && c.foe.frozen) mult *= e.frozen;
-          if (e.noShield && c.foe.shield <= 0) mult *= e.noShield;
-          c.hit(c.v(n * mult), { pierce: e.pierce, leech: e.leech });
+          // sim v12: integer ppm maths (same formula as v11, exact rounding)
+          let nP = P(e.n) + P(e.perRemoved ?? 0) * removed;
+          if (e.shieldPct) nP += c.me.shield * P(e.shieldPct);
+          if (e.thornsX) nP += c.me.thorns * P(e.thornsX);
+          if (e.burnPct) nP += c.foe.burnLeft * P(e.burnPct);
+          if (nP <= 0) break;
+          let m = ONE;
+          if (e.exec && c.foe.hp * ONE < c.foe.maxHp * P(e.exec[0])) m = mulP(m, P(e.exec[1]));
+          if (e.frozen && c.foe.frozen) m = mulP(m, P(e.frozen));
+          if (e.noShield && c.foe.shield <= 0) m = mulP(m, P(e.noShield));
+          c.hit(c.vP(mulP(nP, m)), { pierce: e.pierce, leech: e.leech });
           if (e.burn) c.burn(c.v(e.burn[0]), e.burn[1]);
         }
         break;

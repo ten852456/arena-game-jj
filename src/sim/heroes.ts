@@ -1,3 +1,4 @@
+import { ONE, P, mulP } from './fixed';
 import { T } from './tuning';
 import type { Archetype, StatusKind } from './types';
 
@@ -40,18 +41,18 @@ export interface CombatHooks {
   onDamaged?(me: HookFighter, amount: number, src: string): void;
   /** multiplier given by a charge skill this fighter casts */
   chargeMult?(m: number): number;
-  /** freeze ticks this fighter applies to the enemy, before diminishing returns */
-  freezeTicks?(ticks: number): number;
+  /** freeze this fighter applies to the enemy, in ppm ticks (sim v12), before diminishing returns */
+  freezeTicks?(ticksP: number): number;
   /** thorns damage reflected when this fighter is hit: capped value, total thorns, size of the hit */
   thornsReflect?(capped: number, total: number, hit: number): number;
   /** thorns this fighter gains last this many seconds (default 10); สลายเวท only takes half of a stack */
   thornsSecs?: number;
-  /** damage of each hit this fighter deals (after growth and charge) */
+  /** damage of each hit this fighter deals (after growth and charge); integer in, integer out (sim v12) */
   onHit?(me: HookFighter, dmg: number): number;
   /** seconds a burn this fighter applies lasts */
   burnSecs?(secs: number): number;
-  /** slow this fighter applies: [percent 0..1, seconds] */
-  slow?(pct: number, secs: number): [number, number];
+  /** slow this fighter applies, in ppm (sim v12): [share 0..ONE, seconds × ONE] */
+  slow?(pctP: number, secsP: number): [number, number];
 }
 
 export interface HeroDef {
@@ -99,7 +100,7 @@ export const HEROES: HeroDef[] = [
       maxHp: hpOf('assassin'),
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
-        return me.flags.hits === 1 ? dmg * T['assassin.first'] : dmg;
+        return me.flags.hits === 1 ? mulP(dmg, P(T['assassin.first'])) : dmg;
       },
     },
   },
@@ -111,7 +112,7 @@ export const HEROES: HeroDef[] = [
       maxHp: hpOf('duelist'),
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
-        return me.flags.hits % 3 === 0 ? dmg + Math.max(1, Math.round(dmg * T['duelist.third'])) : dmg;
+        return me.flags.hits % 3 === 0 ? dmg + Math.max(1, mulP(dmg, P(T['duelist.third']))) : dmg;
       },
     },
     botWant: ['jab', 'flurry', 'strike'],
@@ -140,7 +141,7 @@ export const HEROES: HeroDef[] = [
     id: 'pyro', day1: ['inferno', 'ignite', 'train', 'jab', 'chill'], name: 'นักเวทเพลิง', arch: 'scaling', unique: 'inferno',
     passive: `${hpTxt('pyro')}ไฟที่คุณจุดติดนานขึ้น ${pc(T['pyro.burn'] - 1)}%`,
     style: 'ไฟซ้อนไฟ: จุดไฟหลายกองให้ซ้อนกัน แล้วระเบิดเพลิงตามไฟที่ยังเหลือ (ไม่สนโล่)',
-    hooks: { maxHp: hpOf('pyro'), burnSecs: (s) => Math.round(s * T['pyro.burn']) },
+    hooks: { maxHp: hpOf('pyro'), burnSecs: (s) => mulP(s, P(T['pyro.burn'])) },
     botWant: ['ignite', 'inferno', 'amplify'],
   },
   // ---------------- control ----------------
@@ -148,7 +149,7 @@ export const HEROES: HeroDef[] = [
     id: 'witch', day1: ['shatter', 'frost', 'strike', 'chill', 'jab'], name: 'แม่มดน้ำแข็ง', arch: 'control', unique: 'shatter',
     passive: `เลือดสูงสุด +${pc(T['hp.witch'] - 1)}% · การแช่แข็งที่คุณใส่ศัตรูนานขึ้น ${T['witch.freeze']} วิ`,
     style: 'หยุดเวลา: แช่แข็งศัตรูแล้วทุบน้ำแข็งแรง x3 ระหว่างที่ศัตรูขยับไม่ได้',
-    hooks: { maxHp: hpOf('witch'), freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10) },
+    hooks: { maxHp: hpOf('witch'), freezeTicks: (tP) => tP + Math.round(T['witch.freeze'] * 10) * ONE },
   },
   {
     id: 'chrono', day1: ['timewarp', 'chill', 'frost', 'strike', 'dispel'], name: 'จอมเวทเวลา', arch: 'control', unique: 'timewarp',
@@ -156,8 +157,8 @@ export const HEROES: HeroDef[] = [
     style: 'ถ่วงเวลา: ทำให้ศัตรูช้าและดึงคูลดาวน์ถอยหลัง skill ศัตรูแทบไม่ได้ออก',
     hooks: {
       maxHp: hpOf('chrono'),
-      slow: (p, s) => [p + 0.1, s + 1],
-      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? dmg * 1.1 : dmg),
+      slow: (p, s) => [p + 100_000, s + ONE],
+      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? mulP(dmg, 1_100_000) : dmg),
     },
     botWant: ['timewarp', 'frost', 'chill'],
   },
