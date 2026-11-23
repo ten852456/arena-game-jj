@@ -46,6 +46,10 @@ export interface Look {
 
 const P: Record<Slot, Record<string, Part>> = {
   ears: {
+    // sim v21: แมวกวัก
+    cat: { d: (p) => both(`<path d="M48 76 L54 24 L90 50 Z" fill="${p.body}" ${st()}/><path d="M57 62 L60 38 L78 51 Z" fill="${p.inner}"/>`) },
+    // sim v21: เต่าเซียน (the hat covers the head)
+    none: { d: () => '' },
     bunny: { d: (p) => both(`<ellipse cx="74" cy="30" rx="14" ry="36" transform="rotate(-14 74 30)" fill="${p.body}" ${st()}/><ellipse cx="74" cy="33" rx="6.5" ry="25" transform="rotate(-14 74 33)" fill="${p.inner}"/>`) },
     perky: { d: (p) => both(`<ellipse cx="66" cy="42" rx="16" ry="28" transform="rotate(-26 66 42)" fill="${p.body}" ${st()}/><ellipse cx="66" cy="45" rx="8" ry="19" transform="rotate(-26 66 45)" fill="${p.inner}"/>`) },
     tipped: {
@@ -71,6 +75,11 @@ const P: Record<Slot, Record<string, Part>> = {
   },
   headgear: {
     none: { d: () => '' },
+    sagehat: {
+      d: (p) =>
+        `<path d="M22 78 Q100 6 178 78 Q100 92 22 78 Z" fill="#e8c37a" ${st()}/><path d="M60 52 Q100 40 140 52" fill="none" stroke="#c99a4a" stroke-width="3"/>` +
+        `<path d="M44 68 Q100 54 156 68" fill="none" stroke="${p.outfit}" stroke-width="7"/><circle cx="100" cy="30" r="7" fill="${p.accent}" ${st(3)}/>`,
+    },
     helmet: { d: (p) => `<path d="M100 32 C 96 12 112 2 128 8 C 118 13 113 21 111 33 Z" fill="${p.accent}" ${st()}/><path d="M36 84 C 36 46 64 30 100 30 C 136 30 164 46 164 84 Q100 70 36 84 Z" fill="${p.metal}" ${st()}/><path d="M100 32 L100 74" stroke="${shade(p.metal, -0.18)}" stroke-width="4" stroke-linecap="round"/><path d="M34 84 Q100 70 166 84 L166 92 Q100 78 34 92 Z" fill="${p.trim}" ${st()}/>` },
     leaf: { d: (p) => `<path d="M34 88 C 30 48 66 28 100 28 C 138 28 170 50 166 88 Q100 68 34 88 Z" fill="${p.outfit}" ${st()}/><path d="M60 52 Q70 62 72 76 M140 52 Q130 62 128 76" stroke="${shade(p.outfit, -0.25)}" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M100 30 Q98 18 104 10" fill="none" ${st(3.5)}/><path d="M104 12 C 112 0 128 2 131 8 C 122 17 110 17 104 12 Z" fill="${p.accent}" ${st(3)}/><path d="M100 19 C 90 9 76 11 73 17 C 82 24 94 24 100 19 Z" fill="${p.accent}" ${st(3)}/>` },
     hood: { d: (p) => `<path d="M28 126 C 20 72 32 46 60 34 C 80 26 120 26 140 34 C 168 46 180 72 172 126 C 160 106 146 88 100 86 C 54 88 40 106 28 126 Z" fill="${p.outfit}" ${st()}/><path d="M44 108 C 56 94 76 90 100 90" fill="none" stroke="${shade(p.outfit, 0.18)}" stroke-width="3" stroke-linecap="round"/><path d="M40 92 Q100 74 160 92 L158 102 Q100 84 42 102 Z" fill="${p.trim}" ${st(3)}/>` },
@@ -81,6 +90,12 @@ const P: Record<Slot, Record<string, Part>> = {
     starcap: { d: (p) => `<path d="M40 86 C 40 44 80 28 112 32 C 144 36 166 30 178 54 C 170 52 162 56 158 66 C 160 74 160 80 158 86 Q100 70 40 86 Z" fill="${p.outfit}" ${st()}/><circle cx="179" cy="56" r="9" fill="${p.trim}" ${st(3.5)}/>` + star4(78, 56, 6, p.trim) + star4(120, 46, 5, p.trim) + star4(140, 70, 4, p.trim) },
   },
   outfit: {
+    bellcollar: {
+      d: (p) =>
+        `<path d="M62 148 Q100 136 138 148 L142 188 Q100 200 58 188 Z" fill="${p.outfit}" ${st()}/>` +
+        `<path d="M64 150 Q100 164 136 150" fill="none" stroke="#d8504a" stroke-width="10" stroke-linecap="round"/>` +
+        `<circle cx="100" cy="163" r="9" fill="#ffd36e" ${st(3)}/><path d="M93 164 L107 164" stroke="${L}" stroke-width="2.5"/><circle cx="100" cy="168" r="1.8" fill="${L}"/>`,
+    },
     plate: { d: (p) => `<path d="M64 150 C 70 140 130 140 136 150 L 138 180 C 122 194 78 194 62 180 Z" fill="${p.metal}" ${st()}/><path d="M100 148 L100 182" stroke="${p.trim}" stroke-width="6" stroke-linecap="round"/><path d="M62 176 Q100 190 138 176 L138 185 Q100 199 62 185 Z" fill="${shade(p.outfit, -0.2)}" ${st(3.5)}/><rect x="93" y="180" width="14" height="11" rx="3" fill="${p.trim}" ${st(3)}/>` },
     tunic: { d: (p) => `<path d="M62 148 Q100 136 138 148 L142 188 Q100 200 58 188 Z" fill="${p.outfit}" ${st()}/><path d="M60 172 Q100 184 140 172" fill="none" stroke="${p.trim}" stroke-width="6" stroke-linecap="round"/>` + [70, 88, 106, 124].map((x) => `<path d="M${x} 190 q6 10 12 0 q-6 -6 -12 0z" fill="${p.accent}" ${st(2.5)}/>`).join('') },
     scarf: { d: (p) => `<path d="M62 148 Q100 136 138 148 L142 188 Q100 200 58 188 Z" fill="${p.outfit}" ${st()}/><path d="M124 150 L152 182 L138 188 L114 158 Z" fill="${p.trim}" ${st(3.5)}/><path d="M58 140 Q100 158 142 140 L142 153 Q100 171 58 153 Z" fill="${p.trim}" ${st(3.5)}/>` },
@@ -90,6 +105,12 @@ const P: Record<Slot, Record<string, Part>> = {
   },
   back: {
     none: { d: () => '' },
+    shell: {
+      d: (p) =>
+        `<ellipse cx="100" cy="150" rx="74" ry="58" fill="#7cc46a" ${st()}/><ellipse cx="100" cy="150" rx="56" ry="42" fill="#9edb83" ${st(3)}/>` +
+        `<path d="M100 112 L124 128 L120 158 L80 158 L76 128 Z" fill="none" stroke="#5a9a4a" stroke-width="4" stroke-linejoin="round"/>` +
+        `<path d="M76 128 L50 120 M124 128 L150 120 M80 158 L64 182 M120 158 L136 182" stroke="#5a9a4a" stroke-width="4" stroke-linecap="round"/>`,
+    },
     cape: { d: (p) => `<path d="M64 140 C 50 168 44 192 34 207 Q100 194 166 207 C 156 192 150 168 136 140 Z" fill="${shade(p.outfit, -0.28)}" ${st()}/>` },
     thorns: {
       d: (p) => {
@@ -114,6 +135,16 @@ const P: Record<Slot, Record<string, Part>> = {
     },
   },
   weapon: {
+    koban: {
+      d: (p) =>
+        `<ellipse cx="152" cy="140" rx="21" ry="28" fill="#ffd36e" ${st()}/><ellipse cx="152" cy="140" rx="13" ry="19" fill="none" stroke="#e0a92c" stroke-width="3"/>` +
+        `<path d="M156 128 A 11 11 0 1 0 156 152 A 8 8 0 1 1 156 128 Z" fill="#fff3c4"/><path d="M140 122 L144 116" stroke="#fff" stroke-width="3" stroke-linecap="round"/>`,
+    },
+    gourdstaff: {
+      d: (p) =>
+        `<rect x="143" y="74" width="8" height="106" rx="4" fill="${WOOD}" ${st(3.5)}/><circle cx="147" cy="66" r="11" fill="#e8a14a" ${st()}/>` +
+        `<circle cx="147" cy="46" r="8" fill="#e8a14a" ${st()}/><path d="M147 38 L147 32" ${st(3)}/><path d="M138 62 Q147 58 156 62" fill="none" stroke="${p.accent}" stroke-width="3"/>`,
+    },
     sword: { d: (p) => `<path d="M141 150 L141 96 L147 84 L153 96 L153 150 Z" fill="${p.metal}" ${st()}/><path d="M147 94 L147 144" stroke="#fff" stroke-opacity=".75" stroke-width="2.5" stroke-linecap="round"/><rect x="130" y="148" width="34" height="8" rx="4" fill="${p.trim}" ${st(3.5)}/><rect x="143" y="156" width="8" height="16" rx="3" fill="${shade(p.outfit, -0.25)}" ${st(3)}/><circle cx="147" cy="175" r="5" fill="${p.trim}" ${st(3)}/>` },
     rapier: { d: (p) => `<path d="M145 150 L147 58 L149 150 Z" fill="${p.metal}" ${st(3)}/><path d="M134 151 C 134 140 160 140 160 151 C 160 159 134 159 134 151 Z" fill="${p.trim}" ${st(3.5)}/><rect x="143" y="157" width="8" height="14" rx="3" fill="${shade(p.outfit, -0.25)}" ${st(3)}/>` },
     dagger: { d: (p) => `<path d="M141 152 L141 128 L147 114 L153 128 L153 152 Z" fill="${p.metal}" ${st()}/><rect x="134" y="150" width="26" height="7" rx="3.5" fill="${p.trim}" ${st(3)}/><rect x="143" y="157" width="8" height="14" rx="3" fill="${shade(p.outfit, -0.25)}" ${st(3)}/>` },
@@ -135,6 +166,12 @@ const P: Record<Slot, Record<string, Part>> = {
   },
   offhand: {
     none: { d: () => '' },
+    paw: {
+      d: (p) =>
+        `<path d="M40 150 L40 112" stroke="${p.body}" stroke-width="16" stroke-linecap="round"/><path d="M40 150 L40 112" fill="none" ${st(2)} opacity=".0"/>` +
+        `<ellipse cx="40" cy="104" rx="15" ry="16" fill="${p.body}" ${st()}/><ellipse cx="40" cy="108" rx="6" ry="5" fill="${p.inner}"/>` +
+        [[31, 97], [40, 93], [49, 97]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.6" fill="${p.inner}"/>`).join(''),
+    },
     shield: { d: (p) => `<circle cx="52" cy="166" r="27" fill="${p.metal}" ${st()}/><circle cx="52" cy="166" r="18" fill="${p.outfit}" ${st(3)}/>` + star4(52, 166, 9, p.trim) },
     buckler: {
       d: (p) =>
@@ -150,6 +187,7 @@ const P: Record<Slot, Record<string, Part>> = {
   },
   fx: {
     none: { d: () => '' },
+    coins: { d: () => ([[28, 70, 7], [176, 46, 6], [182, 128, 7], [22, 150, 5]] as const).map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="#ffd36e" ${st(2.5)}/><circle cx="${x - r / 3}" cy="${y - r / 3}" r="${r / 3}" fill="#fff6d0"/>`).join('') },
     sparkles: { d: (p) => star4(28, 64, 9, p.accent) + star4(174, 40, 7, p.accent) + star4(180, 132, 8, p.trim) + star4(20, 150, 6, p.trim) },
     embers: { d: (p) => ([[36, 140], [166, 116], [58, 58], [152, 52], [24, 98], [180, 170]] as const).map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 2 ? 4 : 5.5}" fill="${i % 2 ? p.trim : p.accent}" ${st(2)}/>`).join('') },
     frost: { d: (p) => ([[26, 70, 8], [176, 44, 6], [182, 140, 7], [18, 156, 5]] as const).map(([x, y, r]) => [0, 60, 120].map((a) => `<path d="M${x} ${y - r} L${x} ${y + r}" transform="rotate(${a} ${x} ${y})" stroke="${p.accent}" stroke-width="3" stroke-linecap="round"/>`).join('')).join('') },
@@ -205,6 +243,16 @@ const CLASSES: Record<string, ClassDef> = {
     icon: { headgear: 'witch', weapon: 'icewand', back: 'crystals' }, accent: '#8fe8ff',
     base: { parts: { ears: 'floppy', eyes: 'sparkle', mouth: 'smile', headgear: 'witch', outfit: 'robe', back: 'crystals', weapon: 'icewand', offhand: 'orb', fx: 'frost' }, pal: { body: '#f6fbff', inner: '#ffb8cf', outfit: '#4f78c8', trim: '#c8eeff', metal: '#dfe8f5', accent: '#8fe8ff' } },
     outfits: ['robe', 'scarf'], fx: ['none', 'frost'],
+  },
+  luckycat: {
+    icon: { ears: 'cat', weapon: 'koban', offhand: 'paw' }, accent: '#ffd36e',
+    base: { parts: { ears: 'cat', eyes: 'happy', mouth: 'cat', headgear: 'none', outfit: 'bellcollar', back: 'none', weapon: 'koban', offhand: 'paw', fx: 'coins' }, pal: { body: '#ffffff', inner: '#ffb3c1', outfit: '#d8504a', trim: '#ffd36e', metal: '#ffd95e', accent: '#ffd36e' } },
+    outfits: ['bellcollar'], fx: ['none', 'coins'],
+  },
+  sage: {
+    icon: { ears: 'none', headgear: 'sagehat', back: 'shell', weapon: 'gourdstaff' }, accent: '#b4b8ff',
+    base: { parts: { ears: 'none', eyes: 'sleepy', mouth: 'smile', headgear: 'sagehat', outfit: 'robe', back: 'shell', weapon: 'gourdstaff', offhand: 'none', fx: 'sparkles' }, pal: { body: '#eef6e4', inner: '#ffc4a8', outfit: '#3fa7a0', trim: '#fbe0a0', metal: '#c9d8b6', accent: '#b4b8ff' } },
+    outfits: ['robe', 'tunic', 'scarf'], fx: ['none', 'sparkles'],
   },
   chrono: {
     icon: { headgear: 'starcap', weapon: 'hourglass', back: 'halo' }, accent: '#c49bff',

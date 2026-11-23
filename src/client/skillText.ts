@@ -8,7 +8,7 @@
 import { L } from '../i18n';
 import { cdTicks, CLEANSE_MAX, CTL_MIN_T, CTL_SHARE, SHAKE_OFF, THORNS_MAX, TRIGGER_GAP, TRIGGER_GAP_MAX } from '../sim/combat';
 import { HASTE_BONUS, POWER_BONUS, bonusValue } from '../sim/links';
-import { LINE_NAME, SKILLS, nodeOf, type Effect, type SkillNode } from '../sim/skills';
+import { LINE_NAME, SKILLS, TIME_CAP_S, nodeOf, type Effect, type SkillNode } from '../sim/skills';
 import { T } from '../sim/tuning';
 import type { Bonus, Line, SkillInstance } from '../sim/types';
 
@@ -28,6 +28,12 @@ export const cdSecs = (ticks: number) => String(+(ticks / 10).toFixed(1));
 /** one piece of the plain line: an icon and a few words ("⚔", "ตี 6") */
 export type SimplePart = [icon: string, text: string];
 
+/** "2 + 0.3 ทุกวินาที" for a shield / heal that grows with ⏳ time or 💰 worth */
+const grown = (e: { n: number; perSec?: number; perWorth?: number }) =>
+  [e.n ? String(e.n) : '', e.perSec ? `${e.perSec}/วิ ⏳` : '', e.perWorth ? `${e.perWorth}×มูลค่า 💰` : ''].filter(Boolean).join(' + ');
+const grownEn = (e: { n: number; perSec?: number; perWorth?: number }) =>
+  [e.n ? String(e.n) : '', e.perSec ? `${e.perSec}/s ⏳` : '', e.perWorth ? `${e.perWorth}×worth 💰` : ''].filter(Boolean).join(' + ');
+
 function simpleHit(e: Hit): string {
   return simpleHitParts(e).map((p) => p[1]).join(' · ');
 }
@@ -41,6 +47,8 @@ function simpleHitParts(e: Hit): SimplePart[] {
   if (e.perBurn) add.push(L(`${e.perBurn} ต่อกองไฟ`, `${e.perBurn} per burn`));
   if (e.perDodge) add.push(L(`${e.perDodge} ต่อแต้มหลบ`, `${e.perDodge} per dodge`));
   if (e.perRemoved) add.push(L(`${e.perRemoved} ต่อของที่ลบได้`, `${e.perRemoved} per removed`));
+  if (e.perSec) add.push(L(`${e.perSec}/วิ ⏳`, `${e.perSec}/s ⏳`));
+  if (e.perWorth) add.push(L(`${e.perWorth}×มูลค่า 💰`, `${e.perWorth}×worth 💰`));
   let s: string;
   if (e.n > 0) s = L(`ตี ${e.n}`, `Hits ${e.n}`) + add.map((a) => ` + ${a}`).join('');
   else s = L(`ตีด้วย${add.join(' + ')}`, `Hits = ${add.join(' + ')}`);
@@ -60,7 +68,7 @@ function simpleHitParts(e: Hit): SimplePart[] {
 
 const EFFECT_ICON: Record<Effect['k'], string> = {
   hit: '⚔', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', dodge: '💨', haste: '»', wound: '🩹', freeze: '❄', slow: '🐌',
-  delay: '⏪', grow: '💪', charge: '✊', thorns: '🌵', steadfast: '🪨', cleanse: '✨', dispel: '🚫', leech: '🩸',
+  delay: '⏪', grow: '💪', charge: '✊', thorns: '🌵', steadfast: '🪨', cleanse: '✨', dispel: '🚫', leech: '🩸', accel: '⏫',
 };
 
 /** The plain line as pieces with an icon each: what the skill does, then how often. */
@@ -80,8 +88,9 @@ export function simpleParts(k: K, haste = 0): SimplePart[] {
 function simpleEffect(e: Effect): string {
   switch (e.k) {
     case 'hit': return simpleHit(e);
-    case 'shield': return L(`ได้โล่ ${e.n}`, `Shield ${e.n}`);
-    case 'heal': return L(`ฟื้น ${e.n}`, `Heal ${e.n}`);
+    case 'shield': return L(`ได้โล่ ${grown(e)}`, `Shield ${grownEn(e)}`);
+    case 'heal': return L(`ฟื้น ${grown(e)}`, `Heal ${grownEn(e)}`);
+    case 'accel': return L(`ยิ่งใช้ยิ่งเร็ว (เร็วขึ้น ${pct(e.pct)} ต่อครั้ง)`, `Speeds up (${pct(e.pct)} faster per cast)`);
     case 'burn':
       return L(`ติดไฟ ${num(e.dps)}/วิ ${s1(e.secs)} วิ`, `Burns ${num(e.dps)}/s for ${s1(e.secs)}s`) +
         (e.stacks && e.stacks > 1 ? ` ×${e.stacks}` : '') + (e.growthHalf ? L(' (แรงขึ้นตามพลัง)', ' (+power)') : '');
@@ -159,6 +168,8 @@ function hitFormula(e: Hit): string {
   if (e.perBurn) base.push(L(`${e.perBurn}×กองไฟบนศัตรู`, `${e.perBurn}×enemy burn stacks`));
   if (e.perDodge) base.push(L(`${e.perDodge}×แต้มหลบของคุณ`, `${e.perDodge}×your dodge charges`));
   if (e.perRemoved) base.push(L(`${e.perRemoved}×ของที่ลบได้`, `${e.perRemoved}×things removed`));
+  if (e.perSec) base.push(L(`${e.perSec}×วินาทีที่สู้มา (นับถึง ${TIME_CAP_S})`, `${e.perSec}×seconds of fight (up to ${TIME_CAP_S})`));
+  if (e.perWorth) base.push(L(`${e.perWorth}×มูลค่า build 💰`, `${e.perWorth}×build worth 💰`));
   const mult: string[] = [];
   if (e.exec) mult.push(L(`×${e.exec[1]} ถ้าศัตรูเลือด<${pct(e.exec[0])}`, `×${e.exec[1]} if enemy HP<${pct(e.exec[0])}`));
   if (e.frozen) mult.push(L(`×${e.frozen} ถ้าศัตรูแข็ง`, `×${e.frozen} if frozen`));
@@ -221,6 +232,7 @@ function effectDetail(e: Effect): string {
         `💥 removes ${e.n >= 99 ? 'all' : e.n} of each enemy buff + ${pct(e.shield ?? 0.2)} shield${e.steal ? ' · you gain the power removed' : ''}`,
       );
     case 'leech': return L(`🩸 การตีถัดไปฟื้น ${pct(e.pct)} ของดาเมจ`, `🩸 next hit heals ${pct(e.pct)} of its damage`);
+    case 'accel': return L(`⏫ ทุกครั้งที่ทำงาน คูลดาวน์ของตัวมันเองสั้นลง ${pct(e.pct)} ของเดิม (สั้นสุด ${pct(e.min)}) จนจบการสู้`, `⏫ every cast cuts its own cooldown by ${pct(e.pct)} of the base (down to ${pct(e.min)}) until the fight ends`);
   }
 }
 

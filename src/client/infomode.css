@@ -85,3 +85,17 @@ body:not(.info-detail) .ult-chk.lv1 .uc-step.done { display: none; }
 .bp-simple { margin: 4px 0; }
 .bp-simple .sk-simple { justify-content: center; }
 body:not(.info-detail) .bp-diff { font-size: 15px; }
+
+/* ---------- skill popover (hover / tap a skill): icon, what makes it different, ult piece, next paths ---------- */
+.tooltip:has(.sk-pop) { max-width: 340px; padding: 10px 12px; }
+.sk-pop .sp-head { display: flex; gap: 10px; align-items: center; border-left: 0; padding-left: 0; }
+.sk-pop .sp-icon { width: 48px; height: 48px; flex: none; }
+.sk-pop .sp-blurb { margin: 6px 0 4px; font-size: 14px; line-height: 1.4; color: #fff3e2; font-weight: 600; }
+.sk-pop .sp-ult { margin-top: 6px; padding: 4px 8px; border-radius: 10px; font-size: 13px; }
+.sk-pop .sp-ult.yes { background: rgba(255, 211, 110, 0.18); color: #ffe39a; }
+.sk-pop .sp-ult.no { background: rgba(255, 255, 255, 0.06); color: #c9c2e8; }
+.sk-pop .sp-next { margin-top: 6px; font-size: 12.5px; line-height: 1.45; }
+html.big-text .sk-pop .sp-blurb { font-size: 16px; }
+html.big-text .sk-pop .sp-ult, html.big-text .sk-pop .sp-next { font-size: 14.5px; }
+.sk-pop .sp-scale { margin-top: 6px; padding: 4px 8px; border-radius: 10px; background: rgba(180, 184, 255, 0.12); font-size: 13px; line-height: 1.4; }
+html.big-text .sk-pop .sp-scale { font-size: 14.5px; }

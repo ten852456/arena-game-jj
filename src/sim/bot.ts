@@ -2,7 +2,7 @@ import { HEROES, HEROES_BY_ID, ULT_LV2_LV3, ULT_PIECES, ultLv3, ultPieces } from
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
-  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, reroll, sell, slotPrice, slotsOf, toBuild, upgradeOf,
+  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, relicRerollsLeft, reroll, rerollRelic, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
 import { RELICS_BY_ID, RELIC_DAYS, relicFits, relicFitsBuild, rollRelicOffer } from './relics';
@@ -90,11 +90,15 @@ function nodeValue(n: SkillNode, has: Set<Effect['k'] | 'frozenHit'>): number {
         if (e.poison) d += e.poison[0] * e.poison[1] * 0.7;
         if (e.sure) d *= 1.05;
         if (e.perRemoved) d += e.perRemoved * 0.5;
+        // ⏳ / 💰 (sim v21): a typical mid fight (10 s) and a typical build worth (30)
+        if (e.perSec) d += e.perSec * 10 * (e.times ?? 1);
+        if (e.perWorth) d += e.perWorth * 30 * (e.times ?? 1);
         v += d;
         break;
       }
-      case 'shield': v += e.n * 0.7; break;
-      case 'heal': v += e.n * 0.8; break;
+      case 'shield': v += (e.n + (e.perSec ?? 0) * 10 + (e.perWorth ?? 0) * 30) * 0.7; break;
+      case 'heal': v += (e.n + (e.perSec ?? 0) * 10 + (e.perWorth ?? 0) * 30) * 0.8; break;
+      case 'accel': v += e.pct * 20; break;
       case 'burn': v += (e.dps * e.secs * 0.8 + (e.growthHalf && has.has('grow') ? 4 : 0)) * (e.stacks ?? 1); break;
       case 'poison': v += e.dps * e.secs * 0.7 * (e.stacks ?? 1); break;
       case 'dodge': v += e.n * 3; break;
@@ -233,6 +237,16 @@ export function botRelic(s: RunState, tier: BotTier): number {
     if (v > bv) [best, bv] = [i, v];
   });
   return best;
+}
+
+/** does a bot spend its free relic reroll? easy: a third of the time; normal / hard: when nothing offered fits the build */
+export function botRelicReroll(s: RunState, tier: BotTier): boolean {
+  if (!relicRerollsLeft(s)) return false;
+  const offer = s.relicOffer ?? [];
+  if (tier === 'easy') return new Rng(hashSeed(s.seed, 'relicre', s.day)).next() < 0.33;
+  const line = HEROES_BY_ID[s.hero]?.line;
+  const good = offer.some((id) => relicFitsBuild(id, s.skills) || (id === 'sigil' && s.skills.filter((k) => k.mark).length >= 2) || (id === 'lonewolf' && s.skills.length <= 3));
+  return !good && !(tier === 'normal' && offer.some((id) => relicFits(id, line)));
 }
 
 // ---------------- shop turn ----------------
@@ -491,7 +505,10 @@ function hardShopTurn(s: RunState, rules: BotRules) {
 
 /** One full shop day for a bot: shop, then sort the list (easy keeps buy order). */
 export function botDay(s: RunState, rules: BotRules) {
-  if (s.phase === 'relic') pickRelic(s, botRelic(s, rules.tier ?? 'normal'));
+  if (s.phase === 'relic') {
+    if (botRelicReroll(s, rules.tier ?? 'normal')) rerollRelic(s);
+    pickRelic(s, botRelic(s, rules.tier ?? 'normal'));
+  }
   botShopTurn(s, rules);
   if ((rules.tier ?? 'normal') !== 'easy') arrangeList(s.skills);
 }
@@ -508,7 +525,7 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
   for (let d = 1; d <= day; d++) {
     if (d > 1) {
       s.day = d;
-      s.gold += incomeFor(d, 0).base;
+      s.gold += incomeFor(d, 0, hero).base;
       s.rolls = 0;
       reroll(s); // costs 1, but gives a fresh shop for the day
       s.gold += 1;
@@ -516,6 +533,7 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
       if (RELIC_DAYS.includes(d)) {
         s.relicDays = [...(s.relicDays ?? []), d];
         s.relicOffer = rollRelicOffer(s.seed, s.hero, d, s.relics ?? [], toBuild(s).skills);
+        s.relicRolls = 0;
         if (s.relicOffer.length) s.phase = 'relic';
       }
     }

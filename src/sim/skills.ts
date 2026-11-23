@@ -7,12 +7,19 @@ import type { Line, SkillInstance } from './types';
  * (execNode) and the UI turns them into icon + number chips (keyword tooltips explain each icon).
  */
 
+/** ⏳ time skills count fight seconds up to this many (sim v21) */
+export const TIME_CAP_S = 24;
+/** 💰 gold skills: what a skill adds to the build's worth (gold put in, roughly: Lv1 3 · Lv2 6 · Lv3 10, +3 per ★) */
+export const WORTH_BY_LV = [0, 3, 6, 10] as const;
+export const worthOf = (skills: Pick<SkillInstance, 'v' | 'star'>[]) =>
+  skills.reduce((a, k) => a + WORTH_BY_LV[k.v.length === 0 ? 1 : k.v.length === 1 ? 2 : 3] + 3 * (k.star ?? 0), 0);
+
 // ---------------- keywords (icons the UI shows; tooltips explain them) ----------------
 
 export type Keyword =
   | 'hit' | 'pierce' | 'shield' | 'heal' | 'leech' | 'burn' | 'freeze' | 'slow' | 'delay' | 'grow' | 'charge'
   | 'thorns' | 'steadfast' | 'cleanse' | 'dispel' | 'exec' | 'shatter' | 'gear' | 'overclock' | 'cd'
-  | 'dodge' | 'poison' | 'haste' | 'wound' | 'sure';
+  | 'dodge' | 'poison' | 'haste' | 'wound' | 'sure' | 'time' | 'worth' | 'accel';
 
 export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: string }> = {
   hit: { icon: '⚔', name: 'ตี', desc: 'ทำดาเมจใส่ศัตรู (+พลังที่สะสม) · ×N = ตี N ครั้ง' },
@@ -39,6 +46,9 @@ export const KEYWORDS: Record<Keyword, { icon: string; name: string; desc: strin
   shatter: { icon: '🧊', name: 'ทุบน้ำแข็ง', desc: 'แรงขึ้นเมื่อศัตรูกำลังถูกแช่แข็ง' },
   gear: { icon: '⚙', name: 'ฟันเฟือง', desc: 'ทุกครั้งที่ทำงาน สั่ง skill ข้างบนหรือข้างล่างให้ทำงานทันที สลับกันทีละตัว ที่แรงตาม % · คูลดาวน์ของตัวนั้นเดินต่อตามปกติ · อยู่ขอบ list = สั่งตัวเดียวถี่ขึ้น' },
   overclock: { icon: '🚀', name: 'เร่งเครื่อง', desc: 'สั่ง skill ข้างบนและข้างล่างให้ทำงานพร้อมกันทันที ที่แรงตาม % · แล้วคูลดาวน์ของสองตัวนั้นเริ่มนับใหม่ (คุ้มกับ skill คูลดาวน์ยาว)' },
+  time: { icon: '⏳', name: 'ยิ่งนานยิ่งแรง', desc: `ตัวเลขนี้เพิ่มขึ้นทุกวินาทีที่การสู้ยืดออกไป (นับถึงวินาทีที่ ${TIME_CAP_S})` },
+  worth: { icon: '💰', name: 'มูลค่า build', desc: 'ตัวเลขนี้เพิ่มตามทองที่คุณลงไปกับ skill ทุกตัว (Lv1 = 3 · Lv2 = 6 · Lv3 = 10 · ดาวละ +3) ยิ่งอัปเยอะยิ่งแรง' },
+  accel: { icon: '⏫', name: 'ยิ่งใช้ยิ่งเร็ว', desc: 'ทุกครั้งที่ skill นี้ทำงาน คูลดาวน์ของมันเองสั้นลง X% (จนเหลือไม่ต่ำกว่าที่บอก) จนจบการสู้' },
   cd: { icon: '⏱', name: 'คูลดาวน์', desc: 'ใช้ได้ทุกกี่วินาที (ทุก skill นับพร้อมกัน)' },
 };
 
@@ -82,9 +92,14 @@ export type Effect =
       sure?: boolean;
       /** + this much per debuff removed / buff removed by an earlier cleanse / dispel in the same cast */
       perRemoved?: number;
+      /** ⏳ + this much per second of the fight so far (up to TIME_CAP_S) */
+      perSec?: number;
+      /** 💰 + this much per point of build worth (worthOf) */
+      perWorth?: number;
     }
-  | { k: 'shield'; n: number }
-  | { k: 'heal'; n: number }
+  | { k: 'shield'; n: number; perSec?: number; perWorth?: number }
+  | { k: 'heal'; n: number; perSec?: number; perWorth?: number }
+  | { k: 'accel'; /** each cast cuts this skill's own cooldown by this share of its base */ pct: number; /** never below this share of the base */ min: number }
   | { k: 'burn'; dps: number; secs: number; /** + half your พลัง per second */ growthHalf?: boolean; /** this many separate stacks */ stacks?: number }
   | { k: 'poison'; dps: number; secs: number; /** this many separate stacks */ stacks?: number }
   | { k: 'dodge'; n: number }
@@ -201,6 +216,12 @@ export interface Ctx {
   /** returns buffs removed */
   dispel(n: number, shield: number, steal: boolean): number;
   leech(pct: number): void;
+  /** ⏳ seconds of the fight so far, capped at TIME_CAP_S */
+  readonly secs: number;
+  /** 💰 the caster's build worth (hero passives included) */
+  readonly worth: number;
+  /** ⏫ cut this skill's own cooldown */
+  accel(pct: number, min: number): void;
 }
 
 /**
@@ -233,6 +254,8 @@ export function execNode(node: SkillNode, c: Ctx) {
           if (e.poisonPct) n += c.foe.poisonLeft * e.poisonPct;
           if (e.perBurn) n += c.foe.burnStacks * e.perBurn;
           if (e.perDodge) n += c.me.dodge * e.perDodge;
+          if (e.perSec) n += c.secs * e.perSec;
+          if (e.perWorth) n += c.worth * e.perWorth;
           if (n <= 0) break;
           let mult = 1;
           if (e.exec && c.foe.hp < c.foe.maxHp * e.exec[0]) mult *= e.exec[1];
@@ -247,8 +270,9 @@ export function execNode(node: SkillNode, c: Ctx) {
         }
         break;
       }
-      case 'shield': c.shield(c.v(e.n)); break;
-      case 'heal': c.heal(c.v(e.n)); break;
+      case 'shield': c.shield(c.v(e.n + (e.perSec ?? 0) * c.secs + (e.perWorth ?? 0) * c.worth)); break;
+      case 'heal': c.heal(c.v(e.n + (e.perSec ?? 0) * c.secs + (e.perWorth ?? 0) * c.worth)); break;
+      case 'accel': c.accel(e.pct, e.min); break;
       case 'burn':
         for (let i = 0; i < (e.stacks ?? 1); i++) c.burn(c.v(e.dps + (e.growthHalf ? Math.floor(c.me.growth / 2) : 0)), e.secs);
         break;
@@ -563,6 +587,68 @@ const BASE_LIST: SkillDef[] = [
     b1: E('เร่งถี่', 4, { kind: 'overclock', power: 0.85 }),
     b2: E('เร่งต่อเนื่อง', 4.5, { kind: 'overclock', power: 0.75, keep: true }),
   }),
+  // ======================= 💰 gold (sim v21): stronger the more gold the build is worth =======================
+  // core: a coin toss that grows with the build's worth
+  def('coin', 'gold', {
+    '': N('ปาเหรียญ', 4.5, [hit(3, { perWorth: 0.05 })]),
+    a: N('เหรียญหนัก', 4.5, [hit(4, { perWorth: 0.07 })], 'ตีแรง'),
+    a1: N('เหรียญทองคำ', 4.5, [hit(5, { perWorth: 0.1 })]),
+    a2: N('เหรียญทะลวง', 4.5, [hit(4, { perWorth: 0.08, pierce: 1 })]),
+    b: N('เหรียญรัว', 4.5, [hit(2, { perWorth: 0.04, times: 2 })], 'ตีหลายครั้ง'),
+    b1: N('ฝนเหรียญ', 4.5, [hit(2, { perWorth: 0.04, times: 3 })]),
+    b2: N('เหรียญดูดเลือด', 4.5, [hit(2, { perWorth: 0.04, times: 2, leech: 0.3 })]),
+  }),
+  // tech: buy time: a gold shield and the enemy's cooldowns pushed back
+  def('bribe', 'gold', {
+    '': N('ติดสินบน', 6, [{ k: 'shield', n: 1, perWorth: 0.03 }, { k: 'delay', secs: 0.6 }]),
+    a: N('กำแพงทอง', 6, [{ k: 'shield', n: 2, perWorth: 0.05 }, { k: 'delay', secs: 0.6 }], 'กำแพง'),
+    a1: N('คลังทอง', 6, [{ k: 'shield', n: 3, perWorth: 0.07 }, { k: 'delay', secs: 0.7 }]),
+    a2: N('ทองล้างมลทิน', 6, [{ k: 'shield', n: 2, perWorth: 0.05 }, { k: 'delay', secs: 0.6 }, { k: 'cleanse', n: 1 }]),
+    b: N('จ่ายให้หยุด', 6, [{ k: 'shield', n: 1, perWorth: 0.03 }, { k: 'delay', secs: 0.9 }], 'ซื้อเวลา'),
+    b1: N('เหมาทั้งเวลา', 6, [{ k: 'shield', n: 1, perWorth: 0.03 }, { k: 'delay', secs: 1.2 }]),
+    b2: N('ซื้อตัว', 6, [{ k: 'shield', n: 1, perWorth: 0.03 }, { k: 'delay', secs: 0.9 }, { k: 'dispel', n: 1 }]),
+  }),
+  // payoff: one slow, sure hit worth the whole build
+  def('jackpot', 'gold', {
+    '': N('แจ็กพอต', 8, [hit(5, { perWorth: 0.2, sure: true })]),
+    a: N('แจ็กพอตใหญ่', 8, [hit(5, { perWorth: 0.25, sure: true })], 'ทีเดียวแรงมาก'),
+    a1: N('แจ็กพอตแตก', 8, [hit(5, { perWorth: 0.35, sure: true })]),
+    a2: N('แจ็กพอตปิดเกม', 8, [hit(5, { perWorth: 0.25, sure: true, exec: [0.5, 1.4] })]),
+    b: N('แจ็กพอตไว', 6.5, [hit(5, { perWorth: 0.2, sure: true })], 'ใช้บ่อย'),
+    b1: N('แจ็กพอตถี่', 5.5, [hit(5, { perWorth: 0.2, sure: true })]),
+    b2: N('แจ็กพอตเกราะทอง', 6.5, [hit(5, { perWorth: 0.2, sure: true }), { k: 'shield', n: 0, perWorth: 0.09 }]),
+  }),
+  // ======================= ⏳ time (sim v21): stronger the longer the fight goes =======================
+  // core: an alarm clock that hits harder every second
+  def('tick', 'time', {
+    '': N('นาฬิกาปลุก', 4.5, [hit(2, { perSec: 0.6 })]),
+    a: N('ปลุกแรง', 4.5, [hit(3, { perSec: 0.75 })], 'ตีแรง'),
+    a1: N('ปลุกสะท้าน', 4.5, [hit(4, { perSec: 1.0 })]),
+    a2: N('ปลุกทะลวง', 4.5, [hit(3, { perSec: 0.85, pierce: 1 })]),
+    b: N('ปลุกรัว', 4.5, [hit(1, { perSec: 0.35, times: 2 })], 'ตีหลายครั้ง'),
+    b1: N('ปลุกไม่หยุด', 4.5, [hit(1, { perSec: 0.35, times: 3 })]),
+    b2: N('ปลุกดูดเลือด', 4.5, [hit(1, { perSec: 0.35, times: 2, leech: 0.3 })]),
+  }),
+  // tech: a calm mind: a shield that grows with time, and control bounces off
+  def('patience', 'time', {
+    '': N('สมาธิ', 6, [{ k: 'shield', n: 1, perSec: 0.3 }, { k: 'steadfast', keep: 0.55 }]),
+    a: N('สมาธิแน่วแน่', 6, [{ k: 'shield', n: 2, perSec: 0.45 }, { k: 'steadfast', keep: 0.55 }], 'กำแพง'),
+    a1: N('สมาธิหินผา', 6, [{ k: 'shield', n: 3, perSec: 0.6 }, { k: 'steadfast', keep: 0.5 }]),
+    a2: N('สมาธิบริสุทธิ์', 6, [{ k: 'shield', n: 2, perSec: 0.45 }, { k: 'steadfast', keep: 0.55 }, { k: 'cleanse', n: 1 }]),
+    b: N('สมาธิฟื้นกาย', 6, [{ k: 'shield', n: 1, perSec: 0.3 }, { k: 'heal', n: 1, perSec: 0.35 }], 'ฟื้นตัว'),
+    b1: N('ลมหายใจยาว', 6, [{ k: 'shield', n: 1, perSec: 0.3 }, { k: 'heal', n: 2, perSec: 0.55 }]),
+    b2: N('สมาธิสะสม', 6, [{ k: 'shield', n: 1, perSec: 0.3 }, { k: 'heal', n: 1, perSec: 0.35 }, { k: 'grow', n: 1 }]),
+  }),
+  // payoff: a pendulum that swings faster every time
+  def('pendulum', 'time', {
+    '': N('ลูกตุ้ม', 7, [hit(5), { k: 'accel', pct: 0.15, min: 0.45 }]),
+    a: N('ลูกตุ้มหนัก', 7, [hit(7), { k: 'accel', pct: 0.12, min: 0.45 }], 'ตีแรง'),
+    a1: N('ลูกตุ้มทลาย', 7, [hit(9), { k: 'accel', pct: 0.12, min: 0.45 }]),
+    a2: N('ลูกตุ้มทะลวง', 7, [hit(7, { pierce: 1 }), { k: 'accel', pct: 0.12, min: 0.45 }]),
+    b: N('ลูกตุ้มเร็ว', 7, [hit(5), { k: 'accel', pct: 0.22, min: 0.4 }], 'เร่งเร็ว'),
+    b1: N('ลูกตุ้มพายุ', 7, [hit(6), { k: 'accel', pct: 0.25, min: 0.35 }]),
+    b2: N('ลูกตุ้มเร่งกาย', 7, [hit(5), { k: 'accel', pct: 0.22, min: 0.4 }, { k: 'haste', pct: 0.2, secs: 2 }]),
+  }),
   // ======================= hero uniques (count for their hero's line) =======================
   def('execute', 'hit', {
     '': N('ปลิดชีพ', 5, [hit(10, { exec: [0.5, 1.5] })]),
@@ -636,6 +722,24 @@ const BASE_LIST: SkillDef[] = [
     b1: N('ลมตัด', 4.5, [hit(13), { k: 'delay', secs: 1.25 }]),
     b2: N('ลมเร่ง', 4.5, [hit(11), { k: 'delay', secs: 1.25 }, { k: 'haste', pct: 0.3, secs: 3 }]),
   }, 'chrono'),
+  def('goldrain', 'gold', {
+    '': N('ฝนทอง', 5, [hit(3, { perWorth: 0.03, times: 3 })]),
+    a: N('ฝนทองหนัก', 5, [hit(4, { perWorth: 0.04, times: 3 })], 'ตีแรง'),
+    a1: N('พายุทอง', 5, [hit(4, { perWorth: 0.04, times: 4 })]),
+    a2: N('ฝนทองไม่พลาด', 5, [hit(4, { perWorth: 0.04, times: 3, sure: true })]),
+    b: N('ฝนทองคุ้มกัน', 5, [hit(3, { perWorth: 0.03, times: 3 }), { k: 'shield', n: 1, perWorth: 0.04 }], 'วนโล่'),
+    b1: N('ม่านทอง', 5, [hit(3, { perWorth: 0.03, times: 3 }), { k: 'shield', n: 2, perWorth: 0.07 }]),
+    b2: N('ฝนทองชุบชีวิต', 5, [hit(3, { perWorth: 0.03, times: 3 }), { k: 'heal', n: 1, perWorth: 0.05 }]),
+  }, 'luckycat'),
+  def('ageless', 'time', {
+    '': N('พลังพันปี', 5, [hit(3, { perSec: 0.85 })]),
+    a: N('พันปีหนัก', 5, [hit(4, { perSec: 1.1 })], 'ตีแรง'),
+    a1: N('หมื่นปี', 5, [hit(5, { perSec: 1.35, sure: true })]),
+    a2: N('พันปีเติบโต', 5, [hit(4, { perSec: 1.1 }), { k: 'grow', n: 1 }]),
+    b: N('กระดองพันปี', 5, [hit(3, { perSec: 0.85 }), { k: 'shield', n: 1, perSec: 0.3 }], 'วนโล่'),
+    b1: N('กระดองหมื่นปี', 5, [hit(3, { perSec: 0.85 }), { k: 'shield', n: 1, perSec: 0.45 }]),
+    b2: N('พันปีฟื้นคืน', 5, [hit(3, { perSec: 0.85 }), { k: 'heal', n: 1, perSec: 0.5 }]),
+  }, 'sage'),
 ];
 
 // ---------------- tuning multipliers (tuning.ts) ----------------
@@ -670,9 +774,11 @@ function scaleEffect(e: Effect, m: number, ctl: number): Effect {
       if (e.poisonPct) o.poisonPct = sc(e.poisonPct, m);
       if (e.perBurn) o.perBurn = sc(e.perBurn, m, 2);
       if (e.perDodge) o.perDodge = sc(e.perDodge, m, 2);
+      if (e.perSec) o.perSec = sc(e.perSec, m, 100);
+      if (e.perWorth) o.perWorth = sc(e.perWorth, m, 100);
       return o;
     }
-    case 'shield': case 'heal': return { ...e, n: sc(e.n, m) };
+    case 'shield': case 'heal': return { ...e, n: sc(e.n, m), ...(e.perSec ? { perSec: sc(e.perSec, m, 100) } : {}), ...(e.perWorth ? { perWorth: sc(e.perWorth, m, 100) } : {}) };
     case 'burn': case 'poison': return { ...e, dps: sc(e.dps, m, 2) };
     case 'charge': return m === 1 ? e : { ...e, mult: rnd(1 + (e.mult - 1) * m, 20) };
     case 'freeze': case 'delay': return { ...e, secs: sc(e.secs, ctl) };
@@ -724,7 +830,9 @@ export function mainNumbers(n: SkillNode): Partial<Record<MainKey, number>> {
   const o: Partial<Record<MainKey, number>> = {};
   const add = (k: MainKey, v: number) => (o[k] = +((o[k] ?? 0) + v).toFixed(2));
   for (const e of n.fx) {
-    if (e.k === 'hit' && !e.ifSlowed && e.n > 0) add('hit', e.n * (e.times ?? 1));
+    // ⏳ / 💰 parts count at a typical mid-game value (10 s, worth 30) so upgrades compare
+    if (e.k === 'hit' && !e.ifSlowed && (e.n > 0 || e.perSec || e.perWorth)) add('hit', (e.n + (e.perSec ?? 0) * 10 + (e.perWorth ?? 0) * 30) * (e.times ?? 1));
+    else if ((e.k === 'shield' || e.k === 'heal') && (e.perSec || e.perWorth)) add(e.k, e.n + (e.perSec ?? 0) * 10 + (e.perWorth ?? 0) * 30);
     else if (e.k === 'shield' || e.k === 'heal' || e.k === 'dodge' || e.k === 'grow' || e.k === 'thorns') add(e.k, e.n);
     else if (e.k === 'burn' || e.k === 'poison') add(e.k, e.dps * e.secs * (e.stacks ?? 1));
     else if (e.k === 'freeze' || e.k === 'delay') add(e.k, e.secs);
@@ -771,6 +879,10 @@ const FIELD: Record<string, [string, string, ('pct' | 'sec' | 'flag' | 'num')?]>
   'hit.sure': ['ไม่พลาด', 'can’t miss', 'flag'], 'hit.burn.0': ['ไฟต่อครั้ง', 'burn per hit'], 'hit.burn.1': ['ไฟนาน', 'burn for', 'sec'],
   'hit.poison.0': ['พิษต่อครั้ง', 'poison per hit'], 'hit.poison.1': ['พิษนาน', 'poison for', 'sec'], 'hit.perRemoved': ['ต่อดีบัฟที่ล้าง', 'per cleansed'],
   'hit.ifSlowed': ['ตีเมื่อศัตรูช้า', 'hit if slowed', 'flag'], 'hit': ['การตี', 'hit', 'flag'],
+  'hit.perSec': ['ตี+ต่อวินาที', 'hit +per second'], 'hit.perWorth': ['ตี+ต่อมูลค่า', 'hit +per worth'],
+  'shield.perSec': ['โล่+ต่อวินาที', 'shield +per second'], 'shield.perWorth': ['โล่+ต่อมูลค่า', 'shield +per worth'],
+  'heal.perSec': ['ฟื้น+ต่อวินาที', 'heal +per second'], 'heal.perWorth': ['ฟื้น+ต่อมูลค่า', 'heal +per worth'],
+  'accel.pct': ['เร็วขึ้นต่อครั้ง', 'faster per cast', 'pct'], 'accel.min': ['เร็วสุดเหลือ', 'fastest at', 'pct'], 'accel': ['ยิ่งใช้ยิ่งเร็ว', 'speeds up', 'flag'],
   'shield.n': ['โล่', 'shield'], 'heal.n': ['ฟื้น', 'heal'], 'burn.dps': ['ไฟ/วิ', 'burn/s'], 'burn.secs': ['ไฟนาน', 'burn for', 'sec'],
   'burn.stacks': ['กองไฟ', 'burn stacks'], 'burn.growthHalf': ['ไฟ+½พลัง', 'burn +½ power', 'flag'], 'burn': ['ไฟ', 'burn', 'flag'],
   'poison.dps': ['พิษ/วิ', 'poison/s'], 'poison.secs': ['พิษนาน', 'poison for', 'sec'], 'poison.stacks': ['กองพิษ', 'poison stacks'], 'poison': ['พิษ', 'poison', 'flag'],
@@ -873,11 +985,13 @@ export const EPIC: Record<string, Variant[]> = {
   strike: ['a2'], charge: ['a1'], riposte: ['a1'], flurry: ['a2'], stoneskin: ['b1'], bulwark: ['a1'], feast: ['b2'],
   rampage: ['a2'], inferno: ['a1'], ignite: ['a2'], spikewall: ['a1'], plague: ['a1'], shatter: ['a1'], frost: ['a1'],
   timewarp: ['b2'], dispel: ['b2'], gear: ['b2'], overclock: ['b2'],
+  jackpot: ['a2'], coin: ['b2'], goldrain: ['a2'], pendulum: ['b1'], tick: ['a1'], ageless: ['a1'],
 };
 export const RARE: Record<string, Variant[]> = {
   heavy: ['a2'], execute: ['a1'], jab: ['b2'], sidestep: ['b2'], shield: ['a2'], cleanse: ['a1'], train: ['b2'],
   mend: ['a2'], blaze: ['a2'], scorch: ['a1'], venom: ['a2'], thorns: ['a2'], icelance: ['a2'], glacier: ['a2'],
   tailwind: ['a1'], chill: ['a2'], ironwill: ['a1'],
+  bribe: ['b2'], patience: ['a2'],
 };
 export const rarityOf = (id: string, v: string): Rarity =>
   lvOf(v) < 3 ? 'common' : EPIC[id]?.includes(v as Variant) ? 'epic' : RARE[id]?.includes(v as Variant) ? 'rare' : 'common';
@@ -897,11 +1011,13 @@ export const LINE_NAME: Record<Line | 'none', string> = {
   poison: 'พิษ',
   ice: 'น้ำแข็ง',
   wind: 'ลม',
+  gold: 'ทอง',
+  time: 'เวลา',
   none: 'ทั่วไป',
 };
 /** Line icons (same in every language). */
 export const LINE_ICON: Record<Line | 'none', string> = {
-  hit: '⚔', dodge: '💨', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', ice: '❄', wind: '🌪', none: '⚙',
+  hit: '⚔', dodge: '💨', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', ice: '❄', wind: '🌪', gold: '💰', time: '⏳', none: '⚙',
 };
 /** Role of a shared skill in its line: core (adds the line's element), payoff (cashes it in), tech (answers the lines it loses to). */
 export type Role = 'core' | 'payoff' | 'tech';
@@ -914,6 +1030,8 @@ export const SKILL_ROLE: Record<string, Role> = {
   venom: 'core', plague: 'payoff', thorns: 'tech',
   frost: 'core', icelance: 'payoff', glacier: 'tech',
   chill: 'core', tailwind: 'payoff', dispel: 'tech',
+  coin: 'core', jackpot: 'payoff', bribe: 'tech',
+  tick: 'core', pendulum: 'payoff', patience: 'tech',
 };
 export const ROLE_NAME: Record<Role, string> = { core: 'แกน', payoff: 'จบ', tech: 'แก้ทาง' };
 /** "⚔ ตี" */
@@ -947,6 +1065,8 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
         if (e.perBurn) parts.push(`${e.perBurn}/🔥`);
         if (e.perDodge) parts.push(`${e.perDodge}/💨`);
         if (e.perRemoved) parts.push(`${e.perRemoved}/อย่าง`);
+        if (e.perSec) parts.push(`${e.perSec}/⏳วิ`);
+        if (e.perWorth) parts.push(`${e.perWorth}/💰`);
         out.push({ kw: 'hit', text: `⚔${parts.join('+')}${e.times && e.times > 1 ? ` ×${e.times}` : ''}${e.ifSlowed ? ' (ถ้าช้า)' : ''}` });
         if (e.pierce) out.push({ kw: 'pierce', text: e.pierce >= 1 ? '🗡' : `🗡${pct(e.pierce)}` });
         if (e.exec) out.push({ kw: 'exec', text: `🎯<${pct(e.exec[0])} ×${e.exec[1]}` });
@@ -958,8 +1078,9 @@ export function chipsOf(node: SkillNode, cdTicks = node.cd): Chip[] {
         if (e.sure) out.push({ kw: 'sure', text: '👁' });
         break;
       }
-      case 'shield': out.push({ kw: 'shield', text: `🛡${e.n}` }); break;
-      case 'heal': out.push({ kw: 'heal', text: `❤${e.n}` }); break;
+      case 'shield': out.push({ kw: e.perWorth ? 'worth' : e.perSec ? 'time' : 'shield', text: `🛡${[e.n || '', e.perSec ? `${e.perSec}/⏳วิ` : '', e.perWorth ? `${e.perWorth}/💰` : ''].filter(Boolean).join('+')}` }); break;
+      case 'heal': out.push({ kw: e.perWorth ? 'worth' : e.perSec ? 'time' : 'heal', text: `❤${[e.n || '', e.perSec ? `${e.perSec}/⏳วิ` : '', e.perWorth ? `${e.perWorth}/💰` : ''].filter(Boolean).join('+')}` }); break;
+      case 'accel': out.push({ kw: 'accel', text: `⏫${pct(e.pct)}/ครั้ง (สุด ${pct(e.min)})` }); break;
       case 'burn': out.push({ kw: 'burn', text: `🔥${e.dps}${e.growthHalf ? '+½💪' : ''} ${sec(e.secs)}${e.stacks && e.stacks > 1 ? ` ×${e.stacks}` : ''}` }); break;
       case 'poison': out.push({ kw: 'poison', text: `☠${e.dps} ${sec(e.secs)}${e.stacks && e.stacks > 1 ? ` ×${e.stacks}` : ''}` }); break;
       case 'dodge': out.push({ kw: 'dodge', text: `💨+${e.n}` }); break;

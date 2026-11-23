@@ -57,6 +57,8 @@ const BEATS: Record<Line, [Line, Line, string, string]> = {
   poison: ['shield', 'dodge', 'พิษไม่สนโล่ และหลบไม่ได้', 'poison ignores shields and cannot be dodged'],
   ice: ['wind', 'heal', 'แช่แข็งหยุดความเร็ว และหยุดคูลดาวน์ฮีล', 'freeze stops haste and stops healing cooldowns'],
   wind: ['poison', 'burn', 'ลมพัดดีบัฟทิ้ง', 'wind blows debuffs away'],
+  gold: ['dodge', 'heal', 'แจ็กพอตหลบไม่ได้ และตีก้อนใหญ่เกินกว่าจะฟื้นทัน', 'the jackpot can’t be dodged, and its big hits outpace healing'],
+  time: ['ice', 'wind', 'สมาธิกันการคุม และยิ่งถ่วงเวลา ยิ่งแรง', 'calm mind shrugs off control, and every delay only makes it stronger'],
 };
 const LINE_SAYS: Record<Line, [string, string]> = {
   hit: ['ตีแรง รวมพลัง ปลิดชีพ', 'big hits, charge, executes'],
@@ -67,6 +69,8 @@ const LINE_SAYS: Record<Line, [string, string]> = {
   poison: ['พิษซ้อนกองนาน ลดการฟื้นของศัตรู', 'long stacking poison that cuts enemy healing'],
   ice: ['แช่แข็ง ทุบน้ำแข็ง', 'freeze, then shatter'],
   wind: ['เร่งตัวเอง ทำศัตรูช้า พัดดีบัฟทิ้ง', 'haste yourself, slow the enemy, blow debuffs away'],
+  gold: ['ลงทองกับ skill ยิ่งมาก ยิ่งตีแรง แจ็กพอตก้อนใหญ่', 'the more gold in your skills, the harder you hit; big jackpots'],
+  time: ['ยิ่งสู้นานยิ่งแรง ลูกตุ้มยิ่งใช้ยิ่งเร็ว', 'stronger every second; a pendulum that speeds up'],
 };
 const lineChip = (l: Line | 'none') => `<span class="cx-line line-${l}">${LINE_ICON[l]} ${esc(LINE_NAME[l])}</span>`;
 const link = (target: string, text: string) => `<a class="cx-link" data-codex="${target}" href="#">${text}</a>`;

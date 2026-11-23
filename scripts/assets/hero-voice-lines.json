@@ -1,0 +1,170 @@
+{
+  "about": "Per-hero voice lines (sim v21): pick = when you choose the hero, ult = when its ultimate fires, win = sometimes after a won fight. One Gemini voice per hero, picked to match its style.",
+  "heroes": {
+    "assassin": {
+      "voice": "Enceladus",
+      "pick": {
+        "th": "เงาจันทร์ พร้อมลงมือ",
+        "en": "Moon shadow, ready."
+      },
+      "ult": {
+        "th": "เงาจันทร์ ปลิดชีพ!",
+        "en": "Moon Shadow!"
+      },
+      "win": {
+        "th": "จบงานแล้ว",
+        "en": "Job done."
+      }
+    },
+    "duelist": {
+      "voice": "Puck",
+      "pick": {
+        "th": "มาเต้นรำกันเถอะ!",
+        "en": "Shall we dance?"
+      },
+      "ult": {
+        "th": "ร่ายรำดาบ!",
+        "en": "Blade Dance!"
+      },
+      "win": {
+        "th": "พลาดหมดเลยนะ!",
+        "en": "Missed me!"
+      }
+    },
+    "knight": {
+      "voice": "Alnilam",
+      "pick": {
+        "th": "โล่นี้จะปกป้องเอง",
+        "en": "This shield will hold."
+      },
+      "ult": {
+        "th": "ป้อมจันทรา!",
+        "en": "Moon Fortress!"
+      },
+      "win": {
+        "th": "ยืนหยัดได้!",
+        "en": "We stood firm!"
+      }
+    },
+    "berserker": {
+      "voice": "Fenrir",
+      "pick": {
+        "th": "มาเลย! ยิ่งเจ็บยิ่งมันส์!",
+        "en": "Bring it on!",
+        "asr_ok": [
+          "มาเลย ยิ่งเจ็บยิ่งมัน"
+        ]
+      },
+      "ult": {
+        "th": "ไม่ยอมตาย!",
+        "en": "I won't fall!"
+      },
+      "win": {
+        "th": "ฮ่า! อีกสักยก!",
+        "en": "Ha! Another round!",
+        "asr_ok": [
+          "Another round!"
+        ]
+      }
+    },
+    "pyro": {
+      "voice": "Sadachbia",
+      "pick": {
+        "th": "ไฟพร้อมแล้ว!",
+        "en": "Let's light it up!"
+      },
+      "ult": {
+        "th": "สุริยะดับ!",
+        "en": "Sunfall!",
+        "asr_ok": [
+          "สุริยาดับ"
+        ]
+      },
+      "win": {
+        "th": "ไหม้เกรียมเลย!",
+        "en": "Toasty!"
+      }
+    },
+    "thornguard": {
+      "voice": "Algenib",
+      "pick": {
+        "th": "แตะข้าเมื่อไร เจ็บแน่",
+        "en": "Touch me and regret it.",
+        "asr_ok": [
+          "แตะข้าเมื่อไหร่ เจ็บแน่"
+        ]
+      },
+      "ult": {
+        "th": "หนามพิษ!",
+        "en": "Venom thorns!"
+      },
+      "win": {
+        "th": "พิษซึมเข้ากระดูกแล้ว",
+        "en": "The poison wins."
+      }
+    },
+    "witch": {
+      "voice": "Achernar",
+      "pick": {
+        "th": "หนาวหน่อยนะ",
+        "en": "It's getting chilly."
+      },
+      "ult": {
+        "th": "ยุคน้ำแข็ง!",
+        "en": "Ice Age!"
+      },
+      "win": {
+        "th": "แข็งทื่อเลย",
+        "en": "Frozen solid."
+      }
+    },
+    "chrono": {
+      "voice": "Vindemiatrix",
+      "pick": {
+        "th": "ลมพัดเวลามาแล้ว",
+        "en": "The wind turns time."
+      },
+      "ult": {
+        "th": "พายุย้อนกาล!",
+        "en": "Rewind Storm!"
+      },
+      "win": {
+        "th": "ช้าไปก้าวหนึ่งนะ",
+        "en": "One step too slow.",
+        "asr_ok": [
+          "ช้าไปก้าวนึงนะ"
+        ]
+      }
+    },
+    "luckycat": {
+      "voice": "Laomedeia",
+      "pick": {
+        "th": "เงินทองไหลมาเทมา!",
+        "en": "Fortune, come my way!"
+      },
+      "ult": {
+        "th": "แมวกวักนำโชค!",
+        "en": "Beckoning Fortune!"
+      },
+      "win": {
+        "th": "กำไรเห็นๆ!",
+        "en": "Pure profit!"
+      }
+    },
+    "sage": {
+      "voice": "Gacrux",
+      "pick": {
+        "th": "ใจเย็นๆ เวลายังเหลือเยอะ",
+        "en": "Patience. We have time."
+      },
+      "ult": {
+        "th": "กาลเวลาหยุดนิ่ง!",
+        "en": "Time stands still!"
+      },
+      "win": {
+        "th": "ช้าๆ ได้พร้าเล่มงาม",
+        "en": "Slow and steady."
+      }
+    }
+  }
+}

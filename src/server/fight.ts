@@ -260,12 +260,16 @@ export function handleFight(body: any): Res {
       ...(tutorial ? { tutorial: true } : {}),
       // hidden marks this fight revealed: list index → kind (the server's roll)
       ...(revealed.length ? { revealed } : {}),
-      // tomorrow is a relic day: the 3 relics the server will accept (the client shows these)
-      ...(serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills).length && !track.over ? { nextRelics: serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills) } : {}),
+      // tomorrow is a relic day: the 3 relics the server will accept (the client shows these) and the free rerolls
+      ...relicFields(serverRelicOffer(track, build.hero, day + 1, build.relics, build.skills), !!track.over),
       result, won, rating: newRating,
     },
   };
 }
+
+/** fight response fields for tomorrow's relic offer: nextRelics (the offer) and nextRelicsRe (its rerolls) */
+const relicFields = (offers: string[][], over: boolean) =>
+  over || !offers[0]?.length ? {} : { nextRelics: offers[0], ...(offers.length > 1 ? { nextRelicsRe: offers.slice(1) } : {}) };
 
 /** Today's arena: line mix of the builds this run could meet (no builds, no names). */
 export function handleScout(q: URLSearchParams): Res {

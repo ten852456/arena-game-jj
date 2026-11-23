@@ -26,6 +26,11 @@ const pc = (x: number) => Math.round(x * 100);
 export const RELIC_DAYS = [4, 7, 10];
 export const MAX_RELICS = RELIC_DAYS.length;
 export const RELIC_OFFER = 3;
+/** free rerolls of a relic offer per relic day (tuning.ts relic.rerolls; 0 = none) */
+export const relicRerolls = () => T['relic.rerolls'];
+/** every relic a relic day can show: the offer and each reroll after it (what the server accepts) */
+export const relicOffersAll = (seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []) =>
+  Array.from({ length: 1 + relicRerolls() }, (_, r) => rollRelicOffer(seed, hero, day, owned, skills, r));
 /** a relic of the hero's line is this many times as likely as any other in the offer (after the first one is owned) */
 const LINE_W = 1.3;
 
@@ -72,6 +77,16 @@ export const RELICS: RelicDef[] = [
     desc: () => [`ความช้าที่คุณใส่ +${pc(T['relic.gale'])}% และนานขึ้น 1 วิ`, `your slows are +${pc(T['relic.gale'])}% stronger and last 1s longer`] },
   { id: 'tailspin', icon: '🪁', group: 'wind', also: ['dodge'], name: ['ว่าวลม', 'Tailspin'],
     desc: () => [`ความเร็วที่คุณได้นานขึ้น ${T['relic.tailspin']} วิ และ +10%`, `your haste lasts ${T['relic.tailspin']}s longer and is +10%`] },
+  // 💰 gold (sim v21)
+  { id: 'piggybank', icon: '🐷', group: 'gold', name: ['กระปุกออมสิน', 'Piggy bank'],
+    desc: () => [`มูลค่า build 💰 นับเพิ่ม +${pc(T['relic.piggybank'])}%`, `your build worth 💰 counts +${pc(T['relic.piggybank'])}%`] },
+  { id: 'luckycoin', icon: '🪙', group: 'gold', also: ['shield'], name: ['เหรียญนำโชค', 'Lucky coin'],
+    desc: () => [`เริ่มสู้พร้อมโล่เท่ามูลค่า build 💰 ×${T['relic.luckycoin']}`, `start each fight with a shield of your build worth 💰 ×${T['relic.luckycoin']}`] },
+  // ⏳ time (sim v21)
+  { id: 'sundial', icon: '🕰️', group: 'time', name: ['นาฬิกาแดด', 'Sundial'],
+    desc: () => [`ตัวนับวินาที ⏳ ของ skill สายเวลาเดินเร็วขึ้น +${pc(T['relic.sundial'])}%`, `the ⏳ seconds your skills count run ${pc(T['relic.sundial'])}% faster`] },
+  { id: 'oldroots', icon: '🌳', group: 'time', also: ['heal'], name: ['รากไม้ร้อยปี', 'Old roots'],
+    desc: () => [`ทุก ${T['relic.oldroots']} วิ ได้พลัง +1 จนจบการสู้`, `+1 power every ${T['relic.oldroots']}s until the fight ends`] },
   // ✦ generic / hybrid enablers
   { id: 'quickdraw', icon: '⏱️', group: 'any', also: ['ice', 'wind'], name: ['ชักไว', 'Quickdraw'],
     desc: () => [`ทุก skill เริ่มสู้ด้วยคูลดาวน์ไปแล้ว ${pc(T['relic.quickdraw'])}%`, `every skill starts the fight ${pc(T['relic.quickdraw'])}% through its cooldown`] },
@@ -108,6 +123,7 @@ export const NEEDS: Record<string, string[]> = {
   whetstone: ['line:hit', 'charge'], executioner: ['line:hit', 'exec'], counterstep: ['dodge'], featherstep: ['dodge'], spikedshield: ['shield'], bastion: ['shield'],
   overflow: ['heal'], vitality: ['heal'], meltdown: ['burn'], kindling: ['burn'], virulence: ['poison'], rot: ['poison'],
   permafrost: ['freeze'], brittle: ['freeze'], gale: ['slow'], tailspin: ['haste'],
+  piggybank: ['worth'], luckycoin: ['worth'], sundial: ['time'], oldroots: ['time'],
 };
 /** the effects a list of skills applies: their effect kinds, plus what their hits carry (burn, poison, shield bash …) */
 export function buildEffects(skills: { id: string; v: string }[]) {
@@ -125,6 +141,8 @@ export function buildEffects(skills: { id: string; v: string }[]) {
         if (e.shieldPct) out.add('shield');
         if (e.exec) out.add('exec');
       }
+      if ((e.k === 'hit' || e.k === 'shield' || e.k === 'heal') && e.perWorth) out.add('worth');
+      if ((e.k === 'hit' || e.k === 'shield' || e.k === 'heal') && e.perSec) out.add('time');
     }
   }
   return out;
@@ -151,7 +169,7 @@ export const skillLinesOf = (skills: { id: string }[], lineOf: (id: string) => s
 /** does this relic suit `line` (its own group, or one of the lines it also suits)? */
 export const relicFits = (id: string, line?: string) => !!line && (RELICS_BY_ID[id]?.group === line || !!RELICS_BY_ID[id]?.also?.includes(line as Line));
 export const GROUP_ICON: Record<RelicGroup, string> = {
-  hit: '⚔', dodge: '💨', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', ice: '❄', wind: '🌪', any: '✦', cheese: '☢',
+  hit: '⚔', dodge: '💨', shield: '🛡', heal: '❤', burn: '🔥', poison: '☠', ice: '❄', wind: '🌪', gold: '💰', time: '⏳', any: '✦', cheese: '☢',
 };
 
 /**
@@ -159,13 +177,15 @@ export const GROUP_ICON: Record<RelicGroup, string> = {
  * line while the run owns none of its line's relics (then line relics are only weighted ×1.3), the rest from everything
  * else (other lines, generic and cheese relics).
  */
-export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []): string[] {
-  const rng = new Rng(hashSeed(seed, 'relic', day));
+export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = [], roll = 0): string[] {
+  // roll 1 = the reroll (RELIC_REROLLS): 3 new relics, none of the first offer's
+  const first = roll > 0 ? rollRelicOffer(seed, hero, day, owned, skills, roll - 1) : [];
+  const rng = new Rng(roll > 0 ? hashSeed(seed, 'relic', day, 're', roll) : hashSeed(seed, 'relic', day));
   const line = HEROES_BY_ID[hero]?.line;
   // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line
   const fits = (id: string) => (skills.length ? relicFitsBuild(id, skills) : relicFits(id, line));
   // lone wolf only from day 7 (sim v20)
-  const pool = RELICS.filter((r) => !owned.includes(r.id) && (r.id !== 'lonewolf' || day >= 7));
+  const pool = RELICS.filter((r) => !owned.includes(r.id) && !first.includes(r.id) && (r.id !== 'lonewolf' || day >= 7));
   const out: string[] = [];
   // always at least one that fits the build (sim v18: a line it owns skills of, not only the hero's nominal line);
   // the hero's own line is weighted ×LINE_W in the rest

@@ -2,9 +2,10 @@
 // Values are saved by audio.ts (localStorage) and applied immediately.
 import { L } from '../i18n';
 import { onLang } from './lang';
-import { getAudioSettings, setMuted, setVolume, sfx, voice, type Channel } from './audio';
+import { getAudioSettings, setMuted, setVoiceTalk, setVolume, sfx, voice, voiceTalk, VOICE_TALKS, type Channel, type VoiceTalk } from './audio';
 import './sound.css';
 import { isDetail, onInfoMode, setDetail, settingsRowHTML } from './infoMode';
+import { bigTextRowHTML, isBigText, setBigText } from './textSize';
 import { device, needsReload, onPerf, perfMode, perfTier, setPerfMode, type PerfMode, type Tier } from './perf';
 
 const TIER_NAME: Record<Tier, [string, string]> = { high: ['สูง', 'High'], medium: ['กลาง', 'Medium'], low: ['ต่ำ', 'Low'] };
@@ -28,6 +29,14 @@ function perfRowHTML() {
   return `<div class="perf-set"><div class="perf-set-h">${L('กราฟิก', 'Graphics')}</div>
     <div class="perf-opts" role="group" aria-label="${L('ระดับกราฟิก', 'Graphics quality')}">${MODES.map(btn).join('')}</div>
     <div class="perf-note">${note}${reload}</div></div>`;
+}
+
+const TALK_NAME: Record<VoiceTalk, [string, string]> = { all: ['ทุกครั้ง', 'Always'], some: ['บางครั้ง', 'Now and then'], key: ['ตอนสำคัญ', 'Big moments'] };
+/** how often the announcer speaks (audio.ts VoiceTalk) */
+function talkRowHTML() {
+  const m = voiceTalk();
+  return `<div class="perf-set talk-set"><div class="perf-set-h">🗣️ ${L('เสียงพากย์พูดบ่อยแค่ไหน', 'How often the voice speaks')}</div>
+    <div class="perf-opts" role="group">${VOICE_TALKS.map((x) => `<button type="button" data-sfx="none" data-talk="${x}" aria-pressed="${x === m}">${L(...TALK_NAME[x])}</button>`).join('')}</div></div>`;
 }
 
 const ROWS: { ch: Channel; icon: string; th: string; en: string }[] = [
@@ -67,7 +76,9 @@ export function mountSoundPanel(onChange: () => void) {
           <span class="vol-val">${Math.round(s[r.ch] * 100)}</span></label>`,
       ).join('')}
       <label class="vol-mute"><input type="checkbox" ${s.muted ? 'checked' : ''}> ${L('ปิดเสียงทั้งหมด', 'Mute everything')}</label>
+      ${talkRowHTML()}
       ${settingsRowHTML()}
+      ${bigTextRowHTML()}
       ${perfRowHTML()}`;
   };
 
@@ -88,6 +99,10 @@ export function mountSoundPanel(onChange: () => void) {
   // preview the level when a slider is released
   panel.addEventListener('change', (ev) => {
     const t = ev.target as HTMLInputElement;
+    if (t.type === 'checkbox' && t.dataset.bigtext !== undefined) {
+      if (t.checked !== isBigText()) setBigText(t.checked);
+      return;
+    }
     if (t.type === 'checkbox' && t.dataset.info !== undefined) {
       if (t.checked !== isDetail()) setDetail(t.checked);
       return;
@@ -97,7 +112,7 @@ export function mountSoundPanel(onChange: () => void) {
       onChange();
       return;
     }
-    if (t.dataset.ch === 'voice') voice('fight');
+    if (t.dataset.ch === 'voice') voice('fight', true);
     else if (t.dataset.ch === 'sfx' || t.dataset.ch === 'master') sfx('click', { force: true });
   });
   panel.addEventListener('click', (ev) => {
@@ -109,6 +124,12 @@ export function mountSoundPanel(onChange: () => void) {
       sfx('click', { force: true });
     }
     if (el.closest('[data-reload]')) location.reload();
+    const tb = el.closest<HTMLElement>('[data-talk]');
+    if (tb) {
+      setVoiceTalk(tb.dataset.talk as VoiceTalk);
+      panel.querySelector('.talk-set')!.outerHTML = talkRowHTML();
+      voice('fight', true);
+    }
   });
 
   const open = () => {

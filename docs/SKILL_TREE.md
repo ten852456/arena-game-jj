@@ -1,5 +1,30 @@
 # Skill tree, keywords and the new start
 
+## Sim v21 (23 Nov 2026): 💰 gold and ⏳ time lines, two new heroes, a free relic reroll
+
+Playtest asks: "off-line skills feel thin and I can't tell which is good", "a hero that plays with money", "a hero
+that gets stronger the longer it fights", "each skill should read as different". Ten lines now; the numbers live in
+`src/sim/skills.ts` × `src/sim/tuning.ts` as always.
+
+- **💰 ทอง (gold)**: numbers grow with the build's **worth** (`worthOf`: Lv1 3 · Lv2 6 · Lv3 10 · +3 per ★, the gold put
+  into skills). Weak on day 1, strong once upgraded. Skills: ปาเหรียญ `coin` (core), ติดสินบน `bribe` (tech: gold
+  shield + delay), แจ็กพอต `jackpot` (payoff: slow sure hit worth the build), unique ฝนทอง `goldrain`.
+  Hero **แมวกวัก `luckycat`**: +1 gold every day from day 2 (run.ts `incomeFor`, the server cap follows the hero) and
+  worth ×`luckycat.worth`. Ult แมวกวักนำโชค: after N gold casts, a hit of worth × pow (capped) and half of it as shield.
+- **⏳ เวลา (time)**: numbers grow with the fight's seconds (`perSec`, counted up to `TIME_CAP_S` = 24). Skills:
+  นาฬิกาปลุก `tick` (core), สมาธิ `patience` (tech: a shield that grows + iron will), ลูกตุ้ม `pendulum` (payoff:
+  `accel`, its own cooldown shrinks every cast), unique พลังพันปี `ageless`. Hero **เต่าเซียน `sage`**: +1 power
+  every `sage.grow` seconds. Ult กาลเวลาหยุดนิ่ง: at N seconds every skill fires once at pow power.
+- New effect fields: `hit.perSec`, `hit.perWorth`, `shield/heal.perSec`, `shield/heal.perWorth`, effect `accel`
+  (keywords ⏳ `time`, 💰 `worth`, ⏫ `accel`). Relics: กระปุกออมสิน `piggybank`, เหรียญนำโชค `luckycoin`,
+  นาฬิกาแดด `sundial`, รากไม้ร้อยปี `oldroots`.
+- Counter web adds gold > dodge, heal (the jackpot can't be dodged; big hits outpace healing) and time > ice, wind
+  (calm mind resists control; delays only make the fight longer).
+- **Relic reroll**: each relic day's offer can be rerolled once for free (`relic.rerolls`; 3 new relics, none of the
+  first 3). The server sends `nextRelicsRe` with `nextRelics` and accepts a relic from either offer. Measured with
+  `npm run tune -- --eval --set "relic.rerolls=0|relic.rerolls=1"`: slightly better score, wind hero reach-10 +4.
+- Bots value ⏳ at 10 s and 💰 at worth 30, and reroll a relic offer when nothing in it fits their build.
+
 ## Sim v12 (20 Nov 2026): 8 lines replace the 4 archetypes · tables regenerated for sim v20 (lines round 9, 21 Nov)
 
 Branch `feat/lines`. Design: docs/DESIGN_LINES_ULT.md. **Live numbers are in `src/sim/skills.ts` × `src/sim/tuning.ts`**;

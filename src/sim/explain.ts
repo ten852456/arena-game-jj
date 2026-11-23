@@ -33,6 +33,9 @@ export interface Explanation {
   reasonKinds: LineKind[];
   /** the display names the text was written with, [me, foe] (the UI colours them) */
   names: [string, string];
+  /** skill ids the shown reasons advise (to buy, or to level up when owned), main reason first: the next shop
+   *  marks these cards so "try X" can be acted on without reading */
+  suggest: string[];
 }
 
 /** Topic of one explanation line. Reasons put "what to try" after " → ". */
@@ -418,8 +421,8 @@ export function explain(
   const topTip = (() => {
     const b = dmg[me].reduce<SkillDamage | null>((x, y) => (!x || y.total > x.total ? y : x), null);
     const k = b && b.idx >= 0 ? mySkills[b.idx] : null;
-    if (k && lvOf(k.v) < 3) return { th: `อัป ${b!.name} (skill ทำดาเมจมากสุด, Lv${lvOf(k.v)}) หรือซื้อช่อง skill เพิ่มในร้าน`, en: `level up ${b!.name} (your top damage skill, Lv${lvOf(k.v)}), or buy another skill slot in the shop` };
-    return { th: 'skill หลักเต็มขั้นแล้ว: ซื้อช่อง skill เพิ่ม หรือเพิ่ม skill สายหลักให้ปลดท่าไม้ตาย', en: 'your main skill is maxed: buy another skill slot, or add line skills toward the ultimate' };
+    if (k && lvOf(k.v) < 3) return { ids: [k.id], th: `อัป ${b!.name} (skill ทำดาเมจมากสุด, Lv${lvOf(k.v)}) หรือซื้อช่อง skill เพิ่มในร้าน`, en: `level up ${b!.name} (your top damage skill, Lv${lvOf(k.v)}), or buy another skill slot in the shop` };
+    return { ids: [] as string[], th: 'skill หลักเต็มขั้นแล้ว: ซื้อช่อง skill เพิ่ม หรือเพิ่ม skill สายหลักให้ปลดท่าไม้ตาย', en: 'your main skill is maxed: buy another skill slot, or add line skills toward the ultimate' };
   })();
   /** the build already deals burn / poison (don't tell it to "use burn") */
   const myDot = mySkills.some((k) => nodeOf(k).fx.some((e) => e.k === 'burn' || e.k === 'poison' || (e.k === 'hit' && (!!e.burn || !!e.poison))));
@@ -447,6 +450,8 @@ export function explain(
    * opts = [skill id, what it does]
    */
   const reported = new Set<number>();
+  /** advice text → the skill ids it names */
+  const adviceIds = new Map<string, string[]>();
   const advise = (opts: [string, string][], fallback = '') => {
     const buy = opts.filter(([id]) => ownIdx(id) < 0).map(([id, what]) => `${skillName(id)} (${what})`);
     const notes: string[] = [];
@@ -469,7 +474,11 @@ export function explain(
         );
     }
     const parts = [buy.length ? L(`ลอง ${buy.join(' หรือ ')}`, `try ${buy.join(' or ')}`) : fallback, notes.join(' · ')].filter(Boolean);
-    return parts.join(' · ');
+    const text = parts.join(' · ');
+    // the ones to buy, plus owned ones below Lv3 (an upgrade card for them helps too)
+    const ids = opts.map(([id]) => id).filter((id) => { const i = ownIdx(id); return i < 0 || lvOf(mySkills[i].v) < 3; });
+    if (text && ids.length) adviceIds.set(text, ids);
+    return text;
   };
 
   // ---------- reasons (scored, highest first) ----------
@@ -814,7 +823,12 @@ export function explain(
   };
   for (const m of moments) m.text = sq(m.text);
   for (const l of locks) l.text = sq(l.text);
+  const suggest: string[] = [];
+  adviceIds.set(topTip.th, topTip.ids).set(topTip.en, topTip.ids);
+  for (const [, text] of uniqOut.slice(0, 3))
+    for (const [tip, ids] of adviceIds) if (text.includes(tip)) for (const id of ids) if (!suggest.includes(id)) suggest.push(id);
   return {
+    suggest,
     headline: sq(headline), facts: facts.map(sq), reasons: uniqOut.slice(0, 3).map((x) => sq(x[1])), reasonKinds: uniqOut.slice(0, 3).map((x) => x[2]), close,
     tiebreak: tiebreak && sq(tiebreak), moments, locks, hpShare, factKinds, names: [names[me], names[foe]],
   };

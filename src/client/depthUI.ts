@@ -8,7 +8,7 @@ import { L, getLang } from '../i18n';
 import { HEROES_BY_ID, inLine, ultLevel, ultLv3, ultPieces, ULT_LV2_LV3, ULT_PIECES, ultProgressText } from '../sim/heroes';
 import { GROUP_ICON, MAX_RELICS, RELIC_DAYS, RELICS_BY_ID, relicFitsBuild, relicHint, type RelicGroup } from '../sim/relics';
 import * as R from '../sim/run';
-import { LINE_NAME, SKILLS, lvOf, nodeOf, rarityOf } from '../sim/skills';
+import { LINE_ICON, LINE_NAME, SKILLS, lvOf, nodeOf, rarityOf } from '../sim/skills';
 import { T } from '../sim/tuning';
 import { starPower } from '../sim/combat';
 import type { Mark, SkillInstance } from '../sim/types';
@@ -194,9 +194,19 @@ export function ultChecklistHTML(hero: string, skills: SkillInstance[]) {
       : artOr(on ? DEPTH_FILES.ultPipOn : DEPTH_FILES.ultPipOff, `<i class="up${on ? ' on' : ''}"></i>`, `up-img${on ? '' : ' off'}`);
   const row = (n: number, have: number, cls = '') => Array.from({ length: n }, (_, j) => pip(j < have, cls)).join('');
   const tip = `<div class="tt-h"><b>★ ${esc(h.ult.name)}</b></div><div class="desc">${esc(L(ultProgressText(b, true), ultProgressText(b, false)))}</div><div class="muted small">${esc(h.ult.trigger)} → ${esc(h.ult.effect)}</div>`;
+  // playtest 2026-11-23 ("how does each hero unlock its ult?"): the Lv1 slots show the line skills you own, and one
+  // line says what to collect (locked) or when it fires (unlocked)
+  const mine = skills.filter((k) => inLine(hero, k.id)).slice(0, ULT_PIECES[0]);
+  const slots = Array.from({ length: ULT_PIECES[0] }, (_, j) =>
+    mine[j] ? `<img class="uc-sk" src="${skillIcon(mine[j].id)}" alt="">` : `<i class="uc-empty">${LINE_ICON[h.line]}</i>`).join('');
+  const lv1Trig = h.ult.trigger.split(' · Lv2')[0];
+  const how = lv >= 1
+    ? L(`ใช้เองตอนสู้เมื่อ: ${lv1Trig}`, `Fires by itself when: ${lv1Trig}`)
+    : L(`ซื้อ skill ${LINE_ICON[h.line]} สาย${LINE_NAME[h.line]} อีก ${ULT_PIECES[0] - Math.min(p, ULT_PIECES[0])} ใบ → ปลดล็อก`, `Buy ${ULT_PIECES[0] - Math.min(p, ULT_PIECES[0])} more ${LINE_ICON[h.line]} ${LINE_NAME[h.line]} skill(s) → unlocks`);
   return `<div class="ult-chk${lv ? ` lv${lv}` : ''}" data-ttxt="${esc(tip)}" data-codex="hero:${hero}" aria-label="${esc(L(ultProgressText(b, true), ultProgressText(b, false)))}">
     <span class="uc-name">★ ${esc(h.ult.name)}</span>
-    <span class="uc-step${lv >= 1 ? ' done' : ''}"><b>Lv1</b>${row(ULT_PIECES[0], p)}${lv >= 1 ? '<em>✓</em>' : `<small>${Math.min(p, ULT_PIECES[0])}/${ULT_PIECES[0]}</small>`}</span>
+    <span class="uc-how">${esc(how)}</span>
+    <span class="uc-step${lv >= 1 ? ' done' : ''}"><b>Lv1</b><span class="uc-slots">${slots}</span>${lv >= 1 ? '<em>✓</em>' : `<small>${Math.min(p, ULT_PIECES[0])}/${ULT_PIECES[0]}</small>`}</span>
     <span class="uc-step${lv >= 2 ? ' done' : ''}"><b>Lv2</b>${row(ULT_PIECES[1], p)}<span class="uc-sep">+</span>${row(ULT_LV2_LV3, l3, ' l3')}${lv >= 2 ? '<em>✓</em>' : `<small>${Math.min(p, ULT_PIECES[1])}/${ULT_PIECES[1]} · Lv3 ${Math.min(l3, ULT_LV2_LV3)}/${ULT_LV2_LV3}</small>`}</span>
   </div>`;
 }

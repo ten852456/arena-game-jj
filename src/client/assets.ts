@@ -41,18 +41,20 @@ export const SKILL_ICON_IDS = [
   'flurry', 'rampage', 'inferno', 'shatter', 'timewarp',
   // sim v12 line skills (icons are placeholders copied from a related skill until real art exists)
   'riposte', 'sidestep', 'mend', 'blaze', 'scorch', 'venom', 'plague', 'icelance', 'glacier', 'tailwind',
+  // sim v21 💰 gold and ⏳ time lines
+  'coin', 'bribe', 'jackpot', 'goldrain', 'tick', 'patience', 'pendulum', 'ageless',
 ] as const;
 export type SkillIconId = (typeof SKILL_ICON_IDS)[number];
 /** Round skill badge (archetype colour ring + symbol), transparent 128x128 webp; looks right from 32 to 128 px. */
 export const skillIcon = (id: SkillIconId | string) => `${BASE}img/skills/${id}.webp`;
 
-export const LINE_ICON_IDS = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind', 'none'] as const;
+export const LINE_ICON_IDS = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind', 'gold', 'time', 'none'] as const;
 export type LineIconId = (typeof LINE_ICON_IDS)[number];
 /** Line emblem in the same badge style, transparent 128x128 webp (placeholders copied from the old archetype badges). */
 export const lineIcon = (line: LineIconId) => `${BASE}img/line/${line}.webp`;
 /** Line ring colours used by the badges (handy for matching UI borders / synergy chips). */
 export const LINE_COLORS: Record<LineIconId, string> = {
-  hit: '#ff9a9a', dodge: '#b6f0c8', shield: '#9ccbff', heal: '#ffb3d9', burn: '#ffb070', poison: '#c49cff', ice: '#9df0ff', wind: '#d8f5a2', none: '#c6c1e8',
+  hit: '#ff9a9a', dodge: '#b6f0c8', shield: '#9ccbff', heal: '#ffb3d9', burn: '#ffb070', poison: '#c49cff', ice: '#9df0ff', wind: '#d8f5a2', gold: '#ffd36e', time: '#b4b8ff', none: '#c6c1e8',
 };
 
 export const SFX_NAMES = [
@@ -77,3 +79,6 @@ export type AudioExt = 'ogg' | 'mp3';
 export const sfxUrl = (name: SfxName, ext: AudioExt) => `${BASE}sfx/${name}.${ext}`;
 export const musicUrl = (track: MusicTrack, ext: AudioExt) => `${BASE}music/${track}.${ext}`;
 export const voiceUrl = (lang: Lang, key: VoiceKey, ext: AudioExt) => `${BASE}voice/${lang}/${key}.${ext}`;
+/** per-hero lines (sim v21, scripts/assets/hero-voice.mjs): pick / ult / win, one voice per hero */
+export type HeroVoiceKind = 'pick' | 'ult' | 'win';
+export const heroVoiceUrl = (lang: Lang, hero: string, kind: HeroVoiceKind, ext: AudioExt) => `${BASE}voice/${lang}/hero/${hero}_${kind}.${ext}`;

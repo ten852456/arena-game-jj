@@ -77,7 +77,7 @@ for (const choice of ['mark', 'awaken', 'supply'] as const) {
       }
       const f = r.json as any;
       if (chosen) { honest[choice]++; chosen = false; }
-      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics, ...(Array.isArray(f.nextRelicsRe) ? { re: f.nextRelicsRe } : {}) };
       s.online = true;
       for (const x of f.revealed ?? []) { const k = s.skills[x.idx]; if (k) { k.mark = x.mark; delete k.markHidden; } }
       s.rating = f.rating;

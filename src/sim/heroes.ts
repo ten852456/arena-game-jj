@@ -69,6 +69,8 @@ export interface CombatHooks {
   onSecond?(me: HookFighter, sec: number): void;
   /** share of its cooldown the top skill of the list has already done when the fight starts */
   headStart?(): number;
+  /** 💰 build worth multiplier (แมวกวัก) */
+  worth?(): number;
 }
 
 /** What a hero's ultimate does, in words (Thai; client/i18n_en.ts has English). Numbers come from tuning.ts. */
@@ -286,6 +288,38 @@ export const HEROES: HeroDef[] = [
       name: 'พายุย้อนกาล',
       get trigger() { return both((lv) => `ใส่ช้า/ถ่วงเวลาติดครบ ${ultTrig('chrono', lv)} ครั้ง`); },
       get effect() { return both((lv) => `คูลดาวน์ทุกตัวเดินหน้าทันที ${pc(Math.min(1, ultPow('chrono', lv)))}% + พัดดีบัฟทิ้งทั้งหมด`); },
+    },
+  },
+  // ---------------- 💰 gold (sim v21) ----------------
+  {
+    id: 'luckycat', day1: ['goldrain', 'coin', 'bribe', 'jackpot', 'strike'], name: 'แมวกวัก', line: 'gold', unique: 'goldrain',
+    passive: `${hpTxt('luckycat')}ได้เงินเพิ่ม +${T['luckycat.income']} ทุกวัน (ตั้งแต่วันที่ 2) · มูลค่า build 💰 ของคุณนับเพิ่ม ${pc(T['luckycat.worth'] - 1)}%`,
+    style: 'เงินคือพลัง: ยิ่งลงทองกับ skill มาก ทุกการตีสายทองยิ่งแรง ช่วงแรกเบา แต่ยิ่งอัปยิ่งโหด',
+    hooks: { maxHp: hpOf('luckycat'), worth: () => T['luckycat.worth'] },
+    botWant: ['coin', 'goldrain', 'jackpot'],
+    ult: {
+      name: 'แมวกวักนำโชค',
+      get trigger() { return both((lv) => `ใช้ skill สายทองครบ ${ultTrig('luckycat', lv)} ครั้ง`); },
+      get effect() { return both((lv) => `ตีทันทีเท่ามูลค่า build ×${r1(ultPow('luckycat', lv))} (ไม่เกิน ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% ของเลือดศัตรู) และได้โล่ครึ่งหนึ่งของที่ตี`); },
+    },
+  },
+  // ---------------- ⏳ time (sim v21) ----------------
+  {
+    id: 'sage', day1: ['ageless', 'tick', 'patience', 'pendulum', 'strike'], name: 'เต่าเซียน', line: 'time', unique: 'ageless',
+    passive: `${hpTxt('sage')}ทุก ${T['sage.grow']} วิ ได้พลัง +1 (ไม่จำกัด)`,
+    style: 'ยิ่งนานยิ่งเก่ง: เริ่มช้า ตั้งรับให้รอด แล้วทุกวินาทีที่ผ่านไป skill สายเวลายิ่งแรงขึ้นเรื่อยๆ',
+    hooks: {
+      maxHp: hpOf('sage'),
+      onSecond(me, sec) {
+        const n = T['sage.grow'];
+        if (n > 0 && sec > 0 && sec % n === 0) me.grow(1);
+      },
+    },
+    botWant: ['tick', 'ageless', 'patience'],
+    ult: {
+      name: 'กาลเวลาหยุดนิ่ง',
+      get trigger() { return both((lv) => `การสู้ผ่านไป ${ultTrig('sage', lv)} วิ`); },
+      get effect() { return both((lv) => `ล้างไฟ/พิษบนตัวทั้งหมด แล้ว skill ทุกตัวของคุณทำงานพร้อมกันทันที 1 ครั้ง ที่แรง ${pc(ultPow('sage', lv))}%`); },
     },
   },
 ];

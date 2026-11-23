@@ -151,6 +151,7 @@ export class CombatScene extends Phaser.Scene {
   /** hits landed by the cast in progress per side (the first one gets the full hit-stop) */
   private castHits = [0, 0];
   private lastStatus = [-1e9, -1e9];
+  private lastWord = ['', ''];
 
   constructor() {
     super({ key: 'combat', active: true });
@@ -469,11 +470,15 @@ export class CombatScene extends Phaser.Scene {
   }
 
   /** status words over a fighter ("Frozen!", "Power 3"): small pooled numbers in the status colour */
-  private float(side: number, text: string, color: string) {
+  private float(side: number, text: string, color: string, force = false) {
     if (this.quiet) return;
-    // fast forward: at most one status word per fighter every 300ms so they don't pile up
-    if (this.speed >= 4 && this.time.now - this.lastStatus[side] < 300) return;
-    this.lastStatus[side] = this.time.now;
+    // at most one status word per fighter every 350–550ms (real time, longer when faster), and the same word not
+    // again within a second ("ติดไฟ ติดไฟ"): words are for reading, the numbers carry the action
+    const now = this.time.now;
+    if (!force && now - this.lastStatus[side] < 250 + 75 * this.speed) return;
+    if (!force && text === this.lastWord[side] && now - this.lastStatus[side] < 1000) return;
+    this.lastStatus[side] = now;
+    this.lastWord[side] = text;
     this.ffx.number(side, text, 'status', 0.72, false, color);
   }
 
@@ -632,7 +637,7 @@ export class CombatScene extends Phaser.Scene {
           this.tweens.killTweensOf(this.skillText);
           this.tweens.add({ targets: this.skillText, alpha: 0, scale: 1, delay: this.dur(900), duration: this.dur(500) });
           this.pose(e.side, 'cast');
-          this.float(e.side, L('ท่าไม้ตาย!', 'Ultimate!'), '#ffd166');
+          this.float(e.side, L('ท่าไม้ตาย!', 'Ultimate!'), '#ffd166', true);
         }
         break;
       }

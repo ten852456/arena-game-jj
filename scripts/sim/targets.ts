@@ -50,6 +50,8 @@ export const BEATS: Record<string, [string, string]> = {
   poison: ['shield', 'dodge'],
   ice: ['wind', 'heal'],
   wind: ['poison', 'burn'],
+  gold: ['dodge', 'heal'],
+  time: ['ice', 'wind'],
 };
 /** heroes whose ultimate is meant to fire less often (finisher / last stand) */
 export const ULT_LOW = ['assassin', 'berserker'];

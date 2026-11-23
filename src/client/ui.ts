@@ -14,7 +14,7 @@ import * as R from '../sim/run';
 import { GROUP_ICON, RELICS_BY_ID, relicFitsBuild, relicHint, relicText } from '../sim/relics';
 import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
-import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
+import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, TIME_CAP_S, worthOf, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, Mark, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
@@ -28,15 +28,16 @@ import { bindChainResize, chainDirs, chainPanelHTML, defaultSlot, dragPreview, g
 import { COIN as COIN_I, coinFly, coinHTML, goldPillHTML, hudAfterRender, hudHTML, popRow } from './shop/hud';
 import { initShopDrag, shopDragging } from './shop/shopdrag';
 import { clearPick, goToPick, picked, setPick } from './shop/pick';
-import { music, sfx, voice } from './audio';
+import { heroVoice, music, setVoiceHero, sfx, voice } from './audio';
 import { IMAGES, skillIcon, lineIcon } from './assets';
 import { L, getLang } from '../i18n';
 import { MARKS_EN } from './i18n_en';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
 import { setView } from './layout';
-import { bonusRows, detailTipHTML, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
+import { bonusRows, detailTipHTML, showingDetail, simpleDeltaHTML, simpleSkillHTML, simpleTipHTML } from './infoMode';
 import * as D from './depthUI';
 import { simpleText } from './skillText';
+import { skillBlurb } from './skillBlurb';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
 
 export interface Stage {
@@ -82,6 +83,10 @@ let nextSeed: number | null = null;
 let last: FightResponse | null = null;
 let lastDay = 0;
 let lastDamage = 0;
+/** skills the last lost fight's explanation advised: the next shop marks their cards (💡) */
+let tipIds: string[] = [];
+/** the day the "you can still buy something" nudge was shown (simple mode: once a day, the next press fights) */
+let goldNudgeDay = 0;
 /** the build used in the last fight (stats are indexed by its skills) */
 let lastBuild: Build | null = null;
 let replayResult: CombatResult | null = null;
@@ -220,9 +225,13 @@ function ultTagHTML(r: R.RunState, o: R.Offer) {
   if (!g.pieces) return `<span class="mark ult-aff" title="${esc(aff)}">${L('ถนัด', 'mastery')}</span>`;
   const up = g.lv > ultLevel(b);
   // a new line skill = +1 piece; an upgrade to Lv3 = one of the 2 Lv3 that Lv2 needs
-  const what = o.v ? L('★ Lv3 สู่ท่าไม้ตาย Lv2', '★ Lv3 toward ult Lv2') : L('★ +1 ชิ้น', '★ +1 piece');
+  const what = o.v ? L('★ Lv3 สู่ท่าไม้ตาย Lv2', '★ Lv3 toward ult Lv2') : L('★ ท่าไม้ตาย +1', '★ ult +1');
   const txt = up ? `${what} · ${L(`ปลด Lv${g.lv}!`, `ult Lv${g.lv}!`)}` : what;
   return `<span class="mark ult-piece${up ? ' ult-up' : ''}" title="${esc(`${L('ชิ้นท่าไม้ตาย', 'ultimate piece')} · ${aff}`)}">${txt}</span>`;
+}
+/** a hero's own unique card already wears the gold ★ tag: a second "ult +1" chip only pushes the Buy button off a sideways phone, so keep it only when it unlocks a level */
+function uniqUltTag(unique: boolean | string | undefined, tag: string) {
+  return unique && !tag.includes('ult-up') ? '' : tag;
 }
 /** shop: "★ เงาจันทร์ 2/3" ult piece counter for the run's build */
 function ultProgressHTML(r: R.RunState) {
@@ -346,15 +355,55 @@ function kwTip(kw: Keyword) {
 }
 
 /** Hover details for a skill: name, chips, each keyword explained, the branch it is on. */
+/** popover: does this skill count toward the hero's ★ ultimate? (playtest: "I can't tell how each hero unlocks its ult") */
+function ultRowHTML(id: string) {
+  const r = run;
+  const h = r ? HEROES_BY_ID[r.hero] : null;
+  if (!r || !h) return '';
+  const owned = r.skills.filter((x) => inLine(r.hero, x.id)).length;
+  if (inLine(r.hero, id))
+    return `<div class="sp-ult yes">★ ${L(`นับเป็นชิ้นท่าไม้ตาย <b>${esc(h.ult.name)}</b> (มีแล้ว ${owned}/3)`, `Counts toward <b>${esc(h.ult.name)}</b> (you have ${owned}/3)`)}</div>`;
+  return `<div class="sp-ult no">☆ ${L(`ไม่นับท่าไม้ตาย: ${esc(h.name)} ใช้ skill สาย ${lineLabel(h.line)}`, `Doesn’t count toward the ult: ${esc(h.name)} needs ${lineLabel(h.line)} skills`)}</div>`;
+}
+/** popover for 💰 / ⏳ skills: the number it really has now (worth of this run's build) or at 5 / 10 / 20 s */
+function scaleRowHTML(k: Pick<SkillInstance, 'id' | 'v'>) {
+  const n = nodeOf(k);
+  const hit = n.fx.find((e) => e.k === 'hit' && (e.perWorth || e.perSec)) as Extract<(typeof n.fx)[number], { k: 'hit' }> | undefined;
+  const other = n.fx.find((e) => (e.k === 'shield' || e.k === 'heal') && (e.perWorth || e.perSec)) as { k: 'shield' | 'heal'; n: number; perWorth?: number; perSec?: number } | undefined;
+  const e = hit ?? other;
+  if (!e) return '';
+  const word = hit ? L('ตี', 'hit') : e.k === 'shield' ? L('โล่', 'shield') : L('ฟื้น', 'heal');
+  if (e.perWorth) {
+    const r = run;
+    const w = r ? Math.round(worthOf(r.skills) * (HEROES_BY_ID[r.hero]?.hooks.worth?.() ?? 1)) : 0;
+    if (!r) return '';
+    const v = Math.round(e.n + e.perWorth * w);
+    return `<div class="sp-scale">💰 ${L(`มูลค่า build ตอนนี้ <b>${w}</b> → ${word} ≈ <b>${v}</b> (อัปเกรด skill ไหนก็ได้ ตัวนี้ยิ่งแรง)`, `Build worth now <b>${w}</b> → ${word} ≈ <b>${v}</b> (upgrading any skill makes this stronger)`)}</div>`;
+  }
+  const at = (t: number) => Math.round(e.n + (e.perSec ?? 0) * Math.min(TIME_CAP_S, t));
+  return `<div class="sp-scale">⏳ ${L(`${word}ที่วินาที 3 / 10 / 20: <b>${at(3)}</b> → <b>${at(10)}</b> → <b>${at(20)}</b>`, `${word} at 3 / 10 / 20 s: <b>${at(3)}</b> → <b>${at(10)}</b> → <b>${at(20)}</b>`)}</div>`;
+}
+/** popover: what this skill can turn into next */
+function nextRowHTML(k: Pick<SkillInstance, 'id' | 'v'>) {
+  const nx = nextVariants(k.v);
+  if (!nx.length) return '';
+  const d = SKILLS[k.id];
+  return `<div class="sp-next"><span class="muted">${L(`อัปเป็น Lv${lvOf(k.v) + 1} ได้ 2 ทาง:`, `Lv${lvOf(k.v) + 1} has 2 paths:`)}</span> ${nx
+    .map((v) => `<b>${esc(d.tree[v].name)}</b>${d.tree[v].style ? ` <small class="muted">(${esc(d.tree[v].style!)})</small>` : ''}`)
+    .join(` <span class="muted">${L('หรือ', 'or')}</span> `)}</div>`;
+}
+
 function tipBody(k: Pick<SkillInstance, 'id' | 'v' | 'mark' | 'bonus'>, note = '', on: Set<number> | null = null) {
   const d = SKILLS[k.id];
   const node = nodeOf(k);
   const kws = [...new Set(chipsOf(node).map((c) => c.kw))].filter((kw) => kw !== 'cd');
   const branch = k.v.length >= 1 ? d.tree[k.v[0] as 'a' | 'b'].style : '';
-  return `<div class="tt-h line-${d.line}"><b>${node.name}</b> <small>Lv${lvOf(k.v)}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}
-      ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}</div>
-    <div class="muted small">${lineLabel(d.line)}${SKILL_ROLE[d.id] ? ` · ${ROLE_NAME[SKILL_ROLE[d.id]]}` : ''}${branch ? L(` · ทาง${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div>
-    ${simpleTipHTML(k, on)}<div class="info-det">
+  const blurb = skillBlurb(k.id);
+  return `<div class="sk-pop"><div class="tt-h line-${d.line} sp-head"><img class="sp-icon" src="${skillIcon(k.id)}" alt=""><div><b>${node.name}</b> <small>Lv${lvOf(k.v)}</small>${d.hero ? ` <span class="mark">${L('เฉพาะ', 'unique')}</span>` : ''}
+      ${k.mark ? ` <span class="mark">${R.MARK_INFO[k.mark].name}</span>` : ''}
+    <div class="muted small">${lineLabel(d.line)}${SKILL_ROLE[d.id] ? ` · ${ROLE_NAME[SKILL_ROLE[d.id]]}` : ''}${branch ? L(` · ทาง${branch}`, ` · ${branch}`) : ''}${k.v ? L(` · มาจาก ${d.name}`, ` · from ${d.name}`) : ''}</div></div></div>
+    ${blurb ? `<p class="sp-blurb">${esc(blurb)}</p>` : ''}
+    ${simpleTipHTML(k, on)}${scaleRowHTML(k)}${ultRowHTML(k.id)}${nextRowHTML(k)}</div><div class="info-det">
     <div>${chipsHTML(k)}</div>
     <ul class="kwlist">${kws.map((kw) => `<li><b>${KEYWORDS[kw].icon} ${KEYWORDS[kw].name}</b> ${KEYWORDS[kw].desc}</li>`).join('')}</ul>
     ${k.bonus?.length ? `<div class="muted small">${L('โบนัสเชื่อมต่อ (skill ช่องบนหรือล่าง):', 'Connect bonuses (skill above or below):')}</div><ul class="kwlist bonus">${k.bonus.map((b, bi) => `<li class="${on?.has(bi) ? 'on' : ''}">🔗${BONUS_ICON[b.e]} ${bonusText(b, lvOf(k.v))}${on?.has(bi) ? ' <b class="ok">✓</b>' : ''}</li>`).join('')}</ul>` : ''}
@@ -489,7 +538,10 @@ function render() {
   afterRender = null;
   if (view === 'shop') fx?.();
   setView(view);
-  if (view === 'shop') mountScout();
+  if (view === 'shop') {
+    mountScout();
+    watchMoreBelow();
+  }
   if (view === 'over') overAfterRender();
   else RF.stop();
   // selected skill (tap on mobile) shows the same colour highlight as hover
@@ -587,6 +639,7 @@ function renderTitle() {
         ${heroArt(h.id, '', R.lookFor(nextSeed!, h.id))}
         <b class="hero-nm">${h.name}</b><span class="tag">${lineLabel(h.line)}</span>
         <span class="hero-style">${h.style}</span>
+        <span class="hero-ult-how info-simp">★ ${esc(h.ult.name)}: ${L(`ซื้อ skill ${LINE_ICON[h.line]} สาย${LINE_NAME[h.line]} 3 ใบ เพื่อปลดท่าไม้ตาย`, `buy 3 ${LINE_ICON[h.line]} ${LINE_NAME[h.line]} skills to unlock the ultimate`)}</span>
         <span class="hero-passive info-det">${h.passive}</span>
         <span class="hero-ult small info-det">${ultHTML(h)}</span>
         <span class="muted hero-uniq info-det">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
@@ -789,7 +842,8 @@ function renderRelic() {
   <p class="rv-lead">${L('เลือก 1 ชิ้น ใช้ได้ทั้งรอบ หรือข้ามไป', 'Pick 1; it lasts the whole run. Or skip')}</p>
   ${relicsHTML(r.relics)}
   <div class="shop relic-shop">${cards}</div>
-  <div class="actions"><button class="ghost" data-a="relic" data-i="-1">${L('ข้าม ไม่เอาชิ้นไหน', 'Skip, take none')}</button></div>
+  <div class="actions">${R.relicRerollsLeft(r) ? `<button class="relic-re" data-a="relicReroll" title="${esc(L('3 ชิ้นนี้จะหายไป แล้วได้ 3 ชิ้นใหม่ (ฟรี)', 'These 3 go away and you get 3 new ones (free)'))}">🎲 ${L(`สุ่มใหม่ (ฟรี เหลือ ${R.relicRerollsLeft(r)})`, `Reroll (free, ${R.relicRerollsLeft(r)} left)`)}</button>` : ''}<button class="ghost" data-a="relic" data-i="-1">${L('ข้าม ไม่เอาชิ้นไหน', 'Skip, take none')}</button></div>
+  ${(r.relicRolls ?? 0) > 0 && !R.relicRerollsLeft(r) ? `<p class="muted small">${L('สุ่มใหม่แล้ว: ชุดนี้คือชุดสุดท้าย', 'Rerolled: this is the last set')}</p>` : ''}
   </section>
   </div>`;
 }
@@ -820,10 +874,11 @@ function renderShop() {
       const badge = isUp
         ? `<span class="up-badge" aria-label="${L(`อัปเกรดเป็น Lv${lvOf(o.v)}`, `Upgrades to Lv${lvOf(o.v)}`)}">▲ Lv${lvOf(o.v)}</span><span class="up-shine" aria-hidden="true"></span>`
         : '';
-      return `<div class="card offer line-${d.line}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
-        ${badge}<div class="offer-top">${lockBtn}<span class="offer-lv">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+      const tipped = tipIds.includes(o.id);
+      return `<div class="card offer line-${d.line}${tipped ? ' tip-pick' : ''}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
+        ${badge}${tipped ? `<span class="tip-badge">💡 ${L('ไฟต์ที่แล้วแนะนำ', 'Last fight’s tip')}</span>` : ''}<div class="offer-top">${lockBtn}<span class="offer-lv">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
-        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : `<span class="info-det">${rarityTag(o.v ? o : null)}</span>`}${o.star ? '' : ultTagHTML(r, o)}</div>
+        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : `<span class="info-det">${rarityTag(o.v ? o : null)}</span>`}${o.star ? '' : uniqUltTag(d.hero, ultTagHTML(r, o))}</div>
         ${choiceHTML(r, o, i, why, price, poor) || `${up ? (o.star ? starDiff(o.star) : upDiffHTML(up, o)) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? (o.star ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : L('อัปเกรด', 'Upgrade')) : L('ซื้อ', 'Buy'), price, poor)}</button>`}
@@ -872,6 +927,7 @@ function renderShop() {
       '<b>ลากการ์ด</b>ไปวางในรายการ skill ของคุณ (หรือแตะการ์ด แล้วแตะ <b>+</b> ตรงที่อยากวาง) · การ์ด <b>▲</b> = อัปเกรด skill ที่มีอยู่',
       '<b>Drag a card</b> into your skill list (or tap a card, then tap <b>+</b> where you want it) · a <b>▲</b> card levels up a skill you own',
     )} · 🔓 ${L('ล็อกการ์ดไว้ถึงพรุ่งนี้ได้ฟรี', 'lock a card until tomorrow for free')}${nLocked ? L(` (ล็อกอยู่ ${nLocked})`, ` (${nLocked} locked)`) : ''}</p>
+    ${tipLineHTML(r)}
     <div class="shop">${shop}${slotCard(r)}${wishCard(r)}</div>
     <div class="sell-jar" aria-label="${L('โหลขาย: ลาก skill มาวางที่นี่เพื่อขาย', 'Sell jar: drag a skill here to sell it')}">
       <span class="jar-ico" aria-hidden="true"><i class="coin-ico"></i><i class="coin-ico"></i><i class="coin-ico"></i></span>
@@ -907,6 +963,55 @@ function renderShop() {
     <button class="ghost" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
   </div>
   </div>`;
+}
+
+/**
+ * The shop panel scrolls on its own (phones held sideways show one row of cards): while there is more below,
+ * a "▼ more cards" tab sits at its bottom edge, so a cut-off card reads as "scroll", not as "that is all".
+ */
+function watchMoreBelow() {
+  const sec = $panel.querySelector<HTMLElement>('.sv-shop');
+  if (!sec) return;
+  let tab = sec.querySelector<HTMLButtonElement>('.more-below');
+  if (!tab) {
+    tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'more-below';
+    tab.dataset.sfx = 'none';
+    tab.textContent = L('▼ การ์ดอีก', '▼ More');
+    tab.addEventListener('click', () => sec.scrollBy({ top: sec.clientHeight * 0.8, behavior: 'smooth' }));
+    // in the shop's header row, next to the reroll: never over a card's buy button
+    (sec.querySelector('.sv-h') ?? sec).appendChild(tab);
+  }
+  const t = tab;
+  const paint = () => t.classList.toggle('on', sec.scrollHeight - sec.scrollTop - sec.clientHeight > 24);
+  sec.addEventListener('scroll', paint, { passive: true });
+  paint();
+}
+
+/** "You still have gold": the buyable cards glow, the first scrolls into view, the fight button says press again. */
+function nudgeBuy(idx: number[]) {
+  const cards = idx.map((i) => $panel.querySelector<HTMLElement>(`.card.offer[data-tip="s:${i}"]`)).filter((c): c is HTMLElement => !!c);
+  cards.forEach((c) => {
+    c.classList.remove('nudge');
+    void c.offsetWidth; // restart the animation
+    c.classList.add('nudge');
+  });
+  // a line at the top of the shop (the fight button is too small on a phone held sideways to carry it)
+  const shop = $panel.querySelector('.sv-shop .sv-h');
+  if (shop && !$panel.querySelector('.nudge-note'))
+    shop.insertAdjacentHTML('afterend', `<p class="tip-line nudge-note">🪙 ${L(`ยังมีเงิน ${run!.gold} ซื้อได้อีก ${idx.length} ใบ (ใบที่เรืองแสง) · กดสู้อีกครั้งถ้าจะสู้เลย`, `${run!.gold} gold left: ${idx.length} glowing card(s) you can buy · press Fight again to fight anyway`)}</p>`);
+  $panel.querySelector('.sv-shop')?.scrollTo({ top: 0, behavior: 'smooth' });
+  sfx('click', { force: true });
+}
+
+/** After a loss: the advised skills that are not in today's shop, with a nudge to reroll (none listed if all are there). */
+function tipLineHTML(r: R.RunState) {
+  if (!tipIds.length) return '';
+  const missing = tipIds.filter((id) => SKILLS[id] && !r.shop.some((o) => o?.id === id));
+  if (missing.length < tipIds.length) return ''; // at least one advised card is here, and it glows
+  const nm = missing.slice(0, 2).map((id) => SKILLS[id].name).join(L(' หรือ ', ' or '));
+  return `<p class="tip-line">💡 ${L(`ไฟต์ที่แล้วแนะนำ ${esc(nm)} แต่ร้านวันนี้ไม่มี · ลอง 🎲 สุ่มใหม่ หรืออัป skill ที่มีอยู่`, `Last fight suggested ${esc(nm)}, not in today's shop · try 🎲 reroll, or level up what you have`)}</p>`;
 }
 
 /** Give up the whole run. Shown in the top bar of the shop and during your own fights. */
@@ -1149,6 +1254,7 @@ function renderResult() {
   const oname = names[1];
   const x = lastBuild ? explain(f.result, [lastBuild, f.opponent.build], 0, [youName(), oname], { drawIsLoss: true }) : null;
   const draw = f.result.winner === -1;
+  tipIds = !f.won && x ? x.suggest : [];
   return `<div class="resv">
   <div class="rv-side">
   ${stageSlot(false, 'rv-slot')}
@@ -1181,7 +1287,7 @@ function renderResult() {
 /** The prize strip on a won fight: this win's star landing in the 10-star row, tomorrow's coins, the streak,
  * and how far the crown is. Animated once (CSS), with confetti from the card. */
 function winRewardHTML(r: R.RunState) {
-  const inc = R.incomeFor(r.day, r.streak);
+  const inc = R.incomeFor(r.day, r.streak, r.hero);
   const left = Math.max(0, R.WIN_TARGET - r.wins);
   const stars = Array.from({ length: R.WIN_TARGET }, (_, i) =>
     `<i class="wr-star${i < r.wins ? ' on' : ''}${i === r.wins - 1 ? ' new' : ''}" style="--i:${i}"></i>`).join('');
@@ -1699,7 +1805,10 @@ async function doFight() {
       }
     }
   const nextRelics = (res as { nextRelics?: unknown }).nextRelics;
-  if (Array.isArray(nextRelics)) r.relicNext = { day: r.day + 1, ids: nextRelics.filter((x): x is string => typeof x === 'string') };
+  const reRelics = (res as { nextRelicsRe?: unknown }).nextRelicsRe;
+  const strs = (a: unknown[]) => a.filter((x): x is string => typeof x === 'string');
+  if (Array.isArray(nextRelics))
+    r.relicNext = { day: r.day + 1, ids: strs(nextRelics), ...(Array.isArray(reRelics) ? { re: reRelics.filter(Array.isArray).map(strs) } : {}) };
   R.recordResult(r, res.won, { opp: res.opponent.name, ai: res.opponent.ai, fightId: res.fightId }, res.result.winner === -1);
   saveRun();
   const oppInfo = res.opponent as FightResponse['opponent'] & { tier?: unknown };
@@ -1709,6 +1818,7 @@ async function doFight() {
   noteFight(r, res, build, lastDay);
   view = 'fighting';
   sfx('fight_start');
+  setVoiceHero(r.hero);
   voice('fight');
   music('battle');
   render();
@@ -1824,6 +1934,7 @@ function onClick(ev: Event) {
         if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
         nextSeed = null;
         run = R.newRun(arg, seed, uid());
+        heroVoice(arg, 'pick', true); // the hero greets you in its own voice (sim v21)
       }
       view = 'shop';
       break;
@@ -1862,6 +1973,10 @@ function onClick(ev: Event) {
       branchOpen = null;
       render();
       return;
+    case 'relicReroll':
+      err = R.rerollRelic(run!);
+      if (!err) sfx('reroll');
+      break;
     case 'relic':
       err = R.pickRelic(run!, n);
       if (!err) view = phaseView(run!);
@@ -1928,9 +2043,18 @@ function onClick(ev: Event) {
       }
       view = 'over';
       break;
-    case 'fight':
+    case 'fight': {
+      // simple mode, once a day: gold left and a card you can buy → point at it instead of fighting
+      const r = run;
+      const canBuy = r ? r.shop.map((_, i) => i).filter((i) => !offerWhy(r, i)) : [];
+      if (r && canBuy.length && !showingDetail() && goldNudgeDay !== r.day) {
+        goldNudgeDay = r.day;
+        nudgeBuy(canBuy);
+        return;
+      }
       void doFight();
       return;
+    }
     case 'more': {
       // simple mode result: open the full numbers in place
       const main = (ev.target as HTMLElement).closest('.rv-main');

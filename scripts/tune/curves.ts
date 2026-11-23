@@ -30,6 +30,9 @@ export const HERO_CURVE: Record<string, Shape> = {
   knight: 'flat',
   berserker: 'flat',
   pyro: 'flat',
+  // sim v21: money grows with upgrades (weak start, strongest late); time holds steady and leans late
+  luckycat: 'late',
+  sage: 'steadyLate',
 };
 
 /** Half-width of the band around the curve (win-rate points): inside it costs nothing. */

@@ -65,6 +65,11 @@ python scripts/assets/images.py --wide        # only set 2 (set 1 is also rebuil
 python scripts/assets/contact_sheet.py out.png  # review sheet: every icon at 128/64/40/32 px on dark + light
 ```
 
+**Sim v21 icons** (23 Nov 2026): `skills/{coin,bribe,jackpot,goldrain,tick,patience,pendulum,ageless}.webp` and
+`line/{gold,time}.webp`, same badge prompt as the rest (gold ring `#ffd36e`, time ring `#b4b8ff`, a small star on the
+two hero uniques), two Codex runs of five; raw PNGs in `scripts/assets/.cache/raw/new21/`, keyed and cropped with
+`images.badge`.
+
 Processing: wide backgrounds are centre-cropped to 16:9 and scaled to 1920×1080 (webp quality lowered until
 ≤ 450 KB); the game backdrop also gets a light blur, −15 % saturation and −18 % brightness; the panel texture is
 blended with a half-offset copy so it tiles; badges are keyed, cropped square around the badge and scaled to 128 px.
@@ -144,6 +149,13 @@ node scripts/assets/voice.mjs export           # encode the voices chosen in voi
 Tip for Thai: prefer words ASR cannot mishear (e.g. "เริ่มสู้กันเลย" instead of a bare "สู้"); a loanword may come
 back in Latin letters ("Perfect"), which `asr_ok` in the JSON accepts.
 
+### Hero voices (sim v21)
+
+`assets/voice/<th|en>/hero/<hero>_<pick|ult|win>.ogg` + `.mp3`: one Gemini voice per hero (list and lines in
+`scripts/assets/hero-voice-lines.json`), made and checked with `scripts/assets/hero-voice.mjs gen|asr|export`.
+`pick` plays when you choose the hero, `ult` when its ultimate fires, `win` on about half of the won fights
+(instead of the announcer).
+
 ## Audio module (`src/client/audio.ts`)
 
 - `initAudio({ uiSounds: true })` once at boot (done in `main.ts`). Sound starts on the first tap/click/key
@@ -152,8 +164,11 @@ back in Latin letters ("Perfect"), which `asr_ok` in the JSON accepts.
 - `sfx(name, { volume?, rate? })`: lazy-loaded, cached, throttled (same sound ≥ 45 ms apart, ≤ 6 per 120 ms, so
   skip / fast-forward does not machine-gun).
 - `music(track | null, fadeSeconds = 1.2)`: crossfade between loops; at most two decoded loops kept in memory.
-- `voice(key)`: plays the clip for `getLang()`; a new line cuts the previous one. `setLang('th' | 'en')`
-  (default `'th'`) is for the UI language switch.
+- `voice(key, force?)`: plays the clip for `getLang()`; a new line cuts the previous one. `setLang('th' | 'en')`
+  (default `'th'`) is for the UI language switch. How chatty it is follows `settings.talk` (🎚 panel, sim v21):
+  `all` = every line; `some` (default) = big moments always, routine lines (fight, new day, victory, combo …) at most
+  once per their gap and then by chance, never two within 8 s; `key` = only welcome, last chance, champion, perfect,
+  the first shop and the hero's pick / ult lines. `heroVoice(hero, 'pick' | 'ult' | 'win')` plays a hero's own line.
 - `combatSfx(event, me = 0)`: one call per combat event → hit / crit / shield / freeze / burn / chain, KO, then
   win or lose jingle + voice.
 - Settings: `getAudioSettings()`, `setVolume('master' | 'music' | 'sfx' | 'voice', 0..1)`, `setMuted()`,

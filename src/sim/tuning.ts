@@ -50,6 +50,10 @@ export const TUNING = {
   'line.ice.lv3': 1.7,
   'line.wind.lv1': 1.3,
   'line.wind.lv3': 1.2,
+  'line.gold.lv1': 1.2,
+  'line.gold.lv3': 0.38,
+  'line.time.lv1': 0.9,
+  'line.time.lv3': 1.4,
   // ---- hero-unique skill power at Lv1 and Lv3 ----
   'uniq.knight.lv1': 0.65,
   'uniq.knight.lv3': 1.25,
@@ -67,6 +71,10 @@ export const TUNING = {
   'uniq.witch.lv3': 1.3,
   'uniq.chrono.lv1': 1.3,
   'uniq.chrono.lv3': 1.25,
+  'uniq.luckycat.lv1': 1.5,
+  'uniq.luckycat.lv3': 0.4,
+  'uniq.sage.lv1': 0.85,
+  'uniq.sage.lv3': 1.4,
   // ---- hero-unique skill cooldown multiplier (all levels) ----
   'cd.knight': 1,
   'cd.thornguard': 1.1,
@@ -76,6 +84,8 @@ export const TUNING = {
   'cd.pyro': 0.8,
   'cd.witch': 1.1,
   'cd.chrono': 0.95,
+  'cd.luckycat': 1,
+  'cd.sage': 1,
   // ---- hero max HP multiplier ----
   'hp.knight': 1.16,
   'hp.thornguard': 1.15,
@@ -85,6 +95,8 @@ export const TUNING = {
   'hp.pyro': 1.55,
   'hp.witch': 1.28,
   'hp.chrono': 1.32,
+  'hp.luckycat': 1.2,
+  'hp.sage': 1.25,
   // ---- hero passives ----
   /** อัศวิน: start shield, share of max HP */
   'knight.shield': 0.05,
@@ -133,6 +145,8 @@ export const TUNING = {
   /** ★★★ signature: each cast echoes once more at this power */
   'star.echo': 0.18,
   // ---- run relics (sim v17, relics.ts) ----
+  /** free rerolls of the relic offer per relic day */
+  'relic.rerolls': 1,
   'relic.whetstone': 0.12,
   'relic.executioner': 0.35,
   'relic.counterstep': 1.2,
@@ -159,6 +173,10 @@ export const TUNING = {
   'relic.glassDmg': 0.45,
   'relic.lonewolf': 0.5,
   'relic.sigil': 0.25,
+  'relic.piggybank': 0.3,
+  'relic.luckycoin': 0.15,
+  'relic.sundial': 0.3,
+  'relic.oldroots': 6,
   /** a fighter with shield takes this much less from a direct hit that doesn't fully pierce (ตั้งรับ) */
   /** share of the shield a shield bash (โล่เป็นดาเมจ) used that it spends */
   'shield.spend': 0.25,
@@ -172,10 +190,18 @@ export const TUNING = {
   'aff.thornguard': 1.35,
   'aff.witch': 1.45,
   'aff.chrono': 1.35,
+  'aff.luckycat': 1.35,
+  'aff.sage': 1.35,
   /** a charge (รวมพลัง) waits for a hit of at least this much (before power and charge) */
   'charge.min': 4,
   /** จอมเวทลม: hits on a slowed / frozen enemy deal this much more */
   'chrono.slowHit': 0.05,
+  /** แมวกวัก (sim v21): 💰 build worth counts × this */
+  'luckycat.worth': 0.9,
+  /** แมวกวัก: + gold every day from day 2 */
+  'luckycat.income': 1,
+  /** เต่าเซียน: +1 พลัง every this many seconds */
+  'sage.grow': 4,
   /** a burning fighter's shield gains × this (ไฟละลายโล่) */
   /** each burn tick also removes this × the burn per second of shield (ไฟเผาโล่) */
   'burn.scorch': 0.5,
@@ -225,6 +251,14 @@ export const TUNING = {
   'ult.chrono.trig': 3,
   /** จอมเวทลม: haste share for 3 s (+ all skills ready, cleanse all) */
   'ult.chrono.pow': 0.3,
+  /** แมวกวัก: 💰 gold line casts */
+  'ult.luckycat.trig': 4,
+  /** แมวกวัก: hit = build worth × this (capped by ult.cap), and half of it as shield */
+  'ult.luckycat.pow': 0.25,
+  /** เต่าเซียน: seconds of fight */
+  'ult.sage.trig': 9,
+  /** เต่าเซียน: every skill fires once now at this power */
+  'ult.sage.pow': 0.7,
 };
 // </tuned>
 

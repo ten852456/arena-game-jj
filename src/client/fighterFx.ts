@@ -72,6 +72,9 @@ export class FighterFx {
   private ni = 0;
   private lastNum = [-1e9, -1e9];
   private stack = [0, 0];
+  /** status words ("Burning", "Frozen!") have their own lane above the numbers, two rows at most */
+  private lastWord = [-1e9, -1e9];
+  private wordRow = [0, 0];
   private now = 0;
 
   constructor(
@@ -143,11 +146,23 @@ export class FighterFx {
     const j = this.ni;
     this.ni = (this.ni + 1) % NUMS;
     const t = this.nums[j];
-    const near = this.now - this.lastNum[i] < 280;
-    this.stack[i] = near ? (this.stack[i] + 1) % 4 : 0;
-    this.lastNum[i] = this.now;
-    const x = this.pos[i] + (Math.random() * 20 - 10) + (i === 0 ? -1 : 1) * this.stack[i] * 9;
-    const y = this.ground - this.heroH * 0.9 - this.stack[i] * 17 - (kind === 'status' ? 22 : 0);
+    let x: number;
+    let y: number;
+    if (kind === 'status') {
+      // own lane: a second word while the first is still up goes one row higher and to the outside, never a third row
+      // (playtests: "แผลลึก ติดไฟ ติดไฟ" piled into one unreadable block over the enemy's name)
+      const near = this.now - this.lastWord[i] < 700;
+      this.wordRow[i] = near ? (this.wordRow[i] + 1) % 2 : 0;
+      this.lastWord[i] = this.now;
+      x = this.pos[i] + (i === 0 ? -1 : 1) * (this.wordRow[i] * 26);
+      y = this.ground - this.heroH * 0.9 - 30 - this.wordRow[i] * 20;
+    } else {
+      const near = this.now - this.lastNum[i] < 280;
+      this.stack[i] = near ? (this.stack[i] + 1) % 3 : 0;
+      this.lastNum[i] = this.now;
+      x = this.pos[i] + (Math.random() * 16 - 8) + (i === 0 ? 1 : -1) * this.stack[i] * 12;
+      y = this.ground - this.heroH * 0.9 + 10 - this.stack[i] * 17;
+    }
     t.setText(gold ? text + '!' : text)
       .setFontSize(Math.round(28 * size))
       .setColor(gold ? '#ffd84a' : (color ?? NUM_COLOR[kind]))

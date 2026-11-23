@@ -756,6 +756,8 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
   --l-poison: #9b5de5; --p-poison: #c49cff;
   --l-ice: #3cc6e0; --p-ice: #9df0ff;
   --l-wind: #8cc63f; --p-wind: #d8f5a2;
+  --l-gold: #e0a92c; --p-gold: #ffd36e;
+  --l-time: #7f86e8; --p-time: #b4b8ff;
   --l-none: #9aa4ad; --p-none: #c6c1e8;
 }
 .line-hit { border-left-color: var(--l-hit) !important; --pa: var(--p-hit); } .tt-h.line-hit { border-color: var(--l-hit); } .modal-box.line-hit { border-top-color: var(--l-hit); } .a-hit { background: var(--l-hit); }
@@ -766,6 +768,8 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
 .line-poison { border-left-color: var(--l-poison) !important; --pa: var(--p-poison); } .tt-h.line-poison { border-color: var(--l-poison); } .modal-box.line-poison { border-top-color: var(--l-poison); } .a-poison { background: var(--l-poison); }
 .line-ice { border-left-color: var(--l-ice) !important; --pa: var(--p-ice); } .tt-h.line-ice { border-color: var(--l-ice); } .modal-box.line-ice { border-top-color: var(--l-ice); } .a-ice { background: var(--l-ice); }
 .line-wind { border-left-color: var(--l-wind) !important; --pa: var(--p-wind); } .tt-h.line-wind { border-color: var(--l-wind); } .modal-box.line-wind { border-top-color: var(--l-wind); } .a-wind { background: var(--l-wind); }
+.line-gold { border-left-color: var(--l-gold) !important; --pa: var(--p-gold); } .tt-h.line-gold { border-color: var(--l-gold); } .modal-box.line-gold { border-top-color: var(--l-gold); } .a-gold { background: var(--l-gold); }
+.line-time { border-left-color: var(--l-time) !important; --pa: var(--p-time); } .tt-h.line-time { border-color: var(--l-time); } .modal-box.line-time { border-top-color: var(--l-time); } .a-time { background: var(--l-time); }
 .line-none { border-left-color: var(--l-none) !important; --pa: var(--p-none); } .tt-h.line-none { border-color: var(--l-none); } .modal-box.line-none { border-top-color: var(--l-none); } .a-none { background: var(--l-none); }
 .log .ult, #log .ult { color: #ffd166; }
 .shopv .line-hit { --pa: var(--p-hit); }
@@ -776,6 +780,8 @@ header .lang button, header .tut-open, header .mute-btn { min-height: 44px; }
 .shopv .line-poison { --pa: var(--p-poison); }
 .shopv .line-ice { --pa: var(--p-ice); }
 .shopv .line-wind { --pa: var(--p-wind); }
+.shopv .line-gold { --pa: var(--p-gold); }
+.shopv .line-time { --pa: var(--p-time); }
 .shopv .line-none { --pa: var(--p-none); }
 
 /* sim v17: branch choice, stars, relics */

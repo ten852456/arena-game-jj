@@ -29,11 +29,12 @@ export const KNOBS: Knob[] = [
   { key: 'control', lo: 0.8, hi: 1.2, step: 0.05, why: 'freeze / slow / delay length (0-skill, control heroes)' },
   ...LINES.flatMap((a) => [
     { key: `line.${a}.lv1` as TuningKey, lo: 0.6, hi: 1.6, step: 0.05, why: `${a} line shared skills, early (Lv1)` },
-    { key: `line.${a}.lv3` as TuningKey, lo: 0.6, hi: 1.6, step: 0.05, why: `${a} line shared skills, late (Lv3)` },
+    // 💰 gold scales with build worth, which grows late by itself: its Lv3 multiplier sits lower
+    { key: `line.${a}.lv3` as TuningKey, lo: a === 'gold' ? 0.3 : 0.6, hi: 1.6, step: 0.05, why: `${a} line shared skills, late (Lv3)` },
   ]),
   ...HEROES.flatMap((h) => [
     { key: `uniq.${h.id}.lv1` as TuningKey, lo: 0.6, hi: 1.7, step: 0.05, why: `${h.id} unique skill Lv1 (early curve)` },
-    { key: `uniq.${h.id}.lv3` as TuningKey, lo: 0.6, hi: 1.7, step: 0.05, why: `${h.id} unique skill Lv3 (late curve)` },
+    { key: `uniq.${h.id}.lv3` as TuningKey, lo: h.id === 'luckycat' ? 0.3 : 0.6, hi: 1.7, step: 0.05, why: `${h.id} unique skill Lv3 (late curve)` },
   ]),
   ...HEROES.map((h): Knob => ({ key: `cd.${h.id}` as TuningKey, lo: 0.8, hi: ['assassin', 'duelist', 'berserker', 'chrono'].includes(h.id) ? 1 : 1.2, step: 0.05, why: `${h.id} unique skill cooldown (short = early; 5 s uniques stay early hitters)` })),
   ...HEROES.map((h): Knob => {
@@ -73,6 +74,13 @@ export const KNOBS: Knob[] = [
   { key: 'ult.witch.trig', lo: 2, hi: 8, step: 1, why: 'witch ult: ice casts' },
   { key: 'ult.witch.pow', lo: 1, hi: 3, step: 0.25, why: 'witch ult: freeze seconds' },
   { key: 'ult.chrono.trig', lo: 2, hi: 8, step: 1, why: 'chrono ult: slows / delays landed' },
+  { key: 'luckycat.worth', lo: 0.8, hi: 1.4, step: 0.05, why: 'luckycat: build worth multiplier' },
+  { key: 'sage.grow', lo: 3, hi: 8, step: 1, why: 'sage: +1 power every N seconds' },
+  { key: 'ult.luckycat.trig', lo: 2, hi: 8, step: 1, why: 'luckycat ult: gold casts' },
+  { key: 'ult.luckycat.pow', lo: 0.2, hi: 0.8, step: 0.05, why: 'luckycat ult: × build worth' },
+  { key: 'ult.sage.trig', lo: 5, hi: 14, step: 1, why: 'sage ult: fight seconds' },
+  { key: 'ult.sage.pow', lo: 0.4, hi: 1.2, step: 0.05, why: 'sage ult: power of the all-skills volley' },
+  { key: 'relic.rerolls', lo: 0, hi: 1, step: 1, why: 'free relic rerolls per relic day (0 / 1)' },
   { key: 'ult.chrono.pow', lo: 0.2, hi: 0.8, step: 0.05, why: 'chrono ult: cooldowns jump forward by this share' },
 ];
 

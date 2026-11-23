@@ -53,6 +53,16 @@ export const SKILLS_EN: Record<string, Record<string, string>> = {
   spikewall: { _: 'Venom Spike Fort', a: 'Venom Thorn Burst | Poison into damage', a1: 'Venom Spike Spray', a2: 'Venom Thorn Ring', b: 'Plant Venom Thorns | Stack poison', b1: 'Venom Thorn Garden', b2: 'Healing Venom Thorns' },
   shatter: { _: 'Shatter', a: 'Crack | Freeze combo', a1: 'Smash to Bits', a2: 'Shatter & Freeze', b: 'Straight Smash | No combo needed', b1: 'Piercing Smash', b2: 'Cold Smash' },
   timewarp: { _: 'Back Wind', a: 'Strong Back Wind | Lock time', a1: 'Time-stop Wind', a2: 'Back Wind & Slow', b: 'Sharp Wind | Damage', b1: 'Slicing Wind', b2: 'Rushing Wind' },
+  // 💰 gold (sim v21)
+  coin: { _: 'Coin Toss', a: 'Heavy Coin | Big hits', a1: 'Gold Coin', a2: 'Piercing Coin', b: 'Coin Flurry | Many hits', b1: 'Coin Rain', b2: 'Draining Coin' },
+  bribe: { _: 'Bribe', a: 'Gold Wall | Wall', a1: 'Treasury', a2: 'Clean Money', b: 'Pay to Pause | Buy time', b1: 'Buy All the Time', b2: 'Buy Them Out' },
+  jackpot: { _: 'Jackpot', a: 'Big Jackpot | One huge hit', a1: 'Mega Jackpot', a2: 'Final Jackpot', b: 'Quick Jackpot | Use often', b1: 'Rapid Jackpot', b2: 'Golden Guard Jackpot' },
+  goldrain: { _: 'Gold Rain', a: 'Heavy Gold Rain | Big hits', a1: 'Gold Storm', a2: 'Sure Gold Rain', b: 'Guarding Gold Rain | Shield loop', b1: 'Gold Curtain', b2: 'Reviving Gold Rain' },
+  // ⏳ time (sim v21)
+  tick: { _: 'Alarm Clock', a: 'Loud Alarm | Big hits', a1: 'Earthshaking Alarm', a2: 'Piercing Alarm', b: 'Ringing Alarm | Many hits', b1: 'Endless Alarm', b2: 'Draining Alarm' },
+  patience: { _: 'Calm Mind', a: 'Steady Mind | Wall', a1: 'Mind of Stone', a2: 'Pure Mind', b: 'Healing Calm | Recover', b1: 'Long Breath', b2: 'Gathering Calm' },
+  pendulum: { _: 'Pendulum', a: 'Heavy Pendulum | Big hits', a1: 'Wrecking Pendulum', a2: 'Piercing Pendulum', b: 'Fast Pendulum | Speeds up fast', b1: 'Storm Pendulum', b2: 'Rushing Pendulum' },
+  ageless: { _: 'Ageless Power', a: 'Heavy Ages | Big hits', a1: 'Ten Thousand Years', a2: 'Growing Ages', b: 'Ageless Shell | Shield loop', b1: 'Eternal Shell', b2: 'Ages Renewed' },
 };
 
 export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
@@ -88,6 +98,9 @@ export const KEYWORDS_EN: Record<string, { name: string; desc: string }> = {
   haste: { name: 'Haste', desc: 'All your cooldowns run X% faster for N seconds' },
   wound: { name: 'Wound', desc: 'The enemy heals X% less for N seconds' },
   sure: { name: 'Sure hit', desc: 'This hit can’t be dodged (it ignores the enemy’s dodge charges)' },
+  time: { name: 'Grows with time', desc: 'This number grows every second the fight goes on (counted up to 24s)' },
+  worth: { name: 'Build worth', desc: 'This number grows with the gold you put into all your skills (Lv1 = 3 · Lv2 = 6 · Lv3 = 10 · +3 per star): the more you upgrade, the harder it hits' },
+  accel: { name: 'Speeds up', desc: 'Every time this skill works, its own cooldown gets X% shorter (down to the stated minimum) until the fight ends' },
   steadfast: {
     name: 'Iron Will',
     desc: 'Freeze, slow and delay on you are 60% weaker until the fight ends · a skill with 🗿 fires right away when you are controlled (once per cooldown)',
@@ -201,6 +214,26 @@ export const HEROES_EN: Record<string, HeroEn> = {
       get effect() { return both((lv) => `freeze ${r1(ultPow('witch', lv))}s + next hit ×${lv >= 2 ? 2.4 : 2}`); },
     },
   },
+  luckycat: {
+    name: 'Lucky Cat',
+    get passive() { return `${hpPlus('luckycat')}+${T['luckycat.income']} gold every day (from day 2) · your build worth 💰 counts ${pc(T['luckycat.worth'] - 1)}% more`; },
+    style: 'Money is power: the more gold you put into skills, the harder every gold skill hits. Light early, brutal once upgraded',
+    ult: {
+      name: 'Beckoning Fortune',
+      get trigger() { return both((lv) => `${ultTrig('luckycat', lv)} gold skill casts`); },
+      get effect() { return both((lv) => `an instant hit of your build worth ×${r1(ultPow('luckycat', lv))} (max ${pc(T['ult.cap'] * (lv >= 2 ? ULT_LV2_POW : 1))}% of enemy HP), and half of it back as shield`); },
+    },
+  },
+  sage: {
+    name: 'Sage Turtle',
+    get passive() { return `${hpPlus('sage')}+1 power every ${T['sage.grow']}s (no limit)`; },
+    style: 'Ageless: start slow, hold on, and every second that passes makes your time skills stronger',
+    ult: {
+      name: 'Time Stands Still',
+      get trigger() { return both((lv) => `the fight reaches ${ultTrig('sage', lv)}s`); },
+      get effect() { return both((lv) => `clears every burn / poison on you, then every skill you have works at once, at ${pc(ultPow('sage', lv))}% power`); },
+    },
+  },
   chrono: {
     name: 'Wind Mage',
     get passive() {
@@ -216,7 +249,7 @@ export const HEROES_EN: Record<string, HeroEn> = {
 };
 
 export const LINE_EN: Record<string, string> = {
-  hit: 'Hit', dodge: 'Dodge', shield: 'Shield', heal: 'Heal', burn: 'Burn', poison: 'Poison', ice: 'Ice', wind: 'Wind', none: 'General',
+  hit: 'Hit', dodge: 'Dodge', shield: 'Shield', heal: 'Heal', burn: 'Burn', poison: 'Poison', ice: 'Ice', wind: 'Wind', gold: 'Gold', time: 'Time', none: 'General',
 };
 export const ROLE_EN: Record<string, string> = { core: 'Core', payoff: 'Payoff', tech: 'Counter' };
 
@@ -361,6 +394,7 @@ export const RUN_ERRORS_EN: Record<string, string> = {
 export const CHIP_EN: [string, string][] = [
   [' +กันแช่แข็ง 1 ครั้ง', ' +blocks 1 freeze'],
   [' (ถนัดสาย: ล้างได้ 4)', ' (your line: cleanses 4)'],
+  ['/ครั้ง (สุด ', '/cast (min '],
   [' คูลดาวน์ไม่เริ่มใหม่', ' no cooldown reset'],
   ['↕ สลับบน/ล่าง', '↕ above/below in turn'],
   ['↕ บน+ล่าง', '↕ above+below'],
@@ -373,6 +407,7 @@ export const CHIP_EN: [string, string][] = [
   [' ครั้ง)', ' hits)'],
   ['/ครั้ง', '/hit'],
   ['/อย่าง', '/each'],
+  ['/⏳วิ', '/⏳s'],
   [' ถาวร', ' permanent'],
   [' โล่', ' shield '],
 ];

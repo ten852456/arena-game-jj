@@ -305,3 +305,22 @@ body.skill-dragging .sell-jar { border-color: var(--gold); color: var(--cream, #
 }
 @media (max-aspect-ratio: 1/1) { .pick-go { display: inline-flex; } }
 @media (prefers-reduced-motion: reduce) { .pick-go { animation: none; } }
+
+/* ---------- the last lost fight's tip, carried into the shop (ui.ts tipIds) ---------- */
+.shopv .card.offer.tip-pick { box-shadow: 0 0 0 3px #ffd56b, 0 0 18px rgba(255, 213, 107, 0.55); }
+.tip-badge {
+  position: absolute; top: -11px; left: 50%; transform: translateX(-50%); z-index: 3; white-space: nowrap;
+  padding: 1px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #3a2400;
+  background: linear-gradient(180deg, #fff0c2, #ffcf6b); border: 1.5px solid #6b4a10;
+}
+.tip-line { margin: 2px 0 6px; padding: 5px 10px; border-radius: 12px; font-size: 13px; color: #ffe9b8; background: rgba(255, 207, 107, 0.12); border: 1px dashed rgba(255, 207, 107, 0.5); }
+/* "you can still buy something" nudge before a fight (simple mode, once a day) */
+.shopv .card.offer.nudge { animation: nudge-glow 0.5s ease-in-out 3 alternate; }
+@keyframes nudge-glow { from { box-shadow: 0 0 0 0 rgba(255, 213, 107, 0); } to { box-shadow: 0 0 0 4px #ffd56b, 0 0 22px rgba(255, 213, 107, 0.8); } }
+@media (prefers-reduced-motion: reduce) { .shopv .card.offer.nudge { animation: none; box-shadow: 0 0 0 4px #ffd56b; } }
+/* "▼ more cards" chip in the shop header while the shop panel can scroll further (ui.ts watchMoreBelow) */
+.more-below {
+  display: none; flex: none; padding: 2px 10px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #2a1f4a;
+  background: #ffcf6b; border: 1.5px solid #6b4a10; cursor: pointer;
+}
+.more-below.on { display: inline-block; }

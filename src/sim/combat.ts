@@ -2,7 +2,7 @@ import { HEROES_BY_ID, ULT_LV2_POW, inLine, lineAffinity, ultLevel, ultPow, ultT
 import { activeBonuses, bonusTotals } from './links';
 import { Rng } from './rng';
 import { T } from './tuning';
-import { SKILLS, execNode, lvOf, nodeOf, rarityOf, reacts, type Ctx, type FighterView } from './skills';
+import { SKILLS, TIME_CAP_S, execNode, lvOf, nodeOf, rarityOf, reacts, worthOf, type Ctx, type FighterView } from './skills';
 import type {
   BlockStat, Build, CombatEvent, CombatResult, CooldownTrace, EventBody, Fx, Mark, Side, SideStat, SkillInstance, Snap, StatusKind,
 } from './types';
@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 20;
+export const SIM_VERSION = 21;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -110,6 +110,8 @@ export const THORNS_HEAL = 0.5;
 
 interface Block {
   inst: SkillInstance;
+  /** cooldown at the start of the fight (⏫ accel cuts `cd` from this) */
+  cd0: number;
   /** index into build.skills (for events, replay highlighting and stats) */
   idx: number;
   cd: number;
@@ -144,6 +146,8 @@ interface Stack {
 interface Fighter {
   side: Side;
   hero: string;
+  /** 💰 build worth (worthOf × the hero's worth hook) */
+  worth: number;
   /** the build's run relics (relics.ts) */
   relics: Set<string>;
   hooks: CombatHooks;
@@ -282,12 +286,12 @@ function makeBlocks(b: Build): Block[] {
     if (!SKILLS[inst.id]) return;
     const t = bonusTotals(skills, out.length, act);
     out.push({
-      inst: { ...inst }, idx, cd: Math.round(cdTicks(inst, t.haste) * ((b.relics ?? []).includes('permafrost') ? 1 + T['relic.permafrostCd'] : 1)), prog: 0,
+      inst: { ...inst }, idx, cd0: 0, cd: Math.round(cdTicks(inst, t.haste) * ((b.relics ?? []).includes('permafrost') ? 1 + T['relic.permafrostCd'] : 1)), prog: 0,
       power: t.power * affinityOf(b.hero, inst.id, inst.v) * (lvOf(inst.v) >= 3 ? starPower(inst.star) : 1) * relicPower(b, inst) * (inst.mark === 'steadfast' ? 1.25 : 1), dmg: t.dmg, shieldOnFire: t.shield, triggers: t.triggers, // indexes into `skills` = into blocks
       adj: [], rr: 0, trigAt: 0, reacts: reacts(nodeOf(inst)), reactAt: 0,
     });
   });
-  out.forEach((blk, i) => { blk.adj = [i - 1, i + 1].filter((j) => j >= 0 && j < out.length); });
+  out.forEach((blk, i) => { blk.adj = [i - 1, i + 1].filter((j) => j >= 0 && j < out.length); blk.cd0 = blk.cd; });
   return out;
 }
 
@@ -299,7 +303,8 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   let maxHp = hooks.maxHp ? hooks.maxHp(hpFor(day)) : hpFor(day);
   if (relics.has('ironhide')) maxHp = Math.round(maxHp * (1 + T['relic.ironhide']));
   if (relics.has('glasscannon')) maxHp = Math.max(1, Math.round(maxHp * T['relic.glassHp']));
-  const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0);
+  const start = (hooks.startShield ? hooks.startShield(0, maxHp) : 0) + (relics.has('bastion') ? Math.round(maxHp * T['relic.bastion']) : 0)
+    + (relics.has('luckycoin') ? Math.round(worthOf(b.skills.filter((k) => SKILLS[k.id])) * (hooks.worth ? hooks.worth() : 1) * T['relic.luckycoin']) : 0);
   const blocks = makeBlocks(b);
   // early days only: a slow line's first cast comes by FIRST_CAST (fights on days 1–FIRST_CAST_DAYS are short)
   // sim v19: staggered by list order (3.5 s, 4 s, 4.5 s, 5 s …) so the line's first casts don't land as one volley with the ult
@@ -311,7 +316,7 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   // a head start (sim v16, thornguard): the top skill of the list starts this share of its cooldown in
   if (hooks.headStart && blocks[0]) blocks[0].prog = Math.round(blocks[0].cd * hooks.headStart());
   return {
-    side, hero: b.hero, hooks, blocks, relics,
+    side, hero: b.hero, hooks, blocks, relics, worth: Math.round(worthOf(b.skills.filter((k) => SKILLS[k.id])) * (hooks.worth ? hooks.worth() : 1) * (relics.has('piggybank') ? 1 + T['relic.piggybank'] : 1)),
     hp: maxHp, maxHp, shield: start,
     frozen: 0, frozenTotal: 0, delayN: 0, slowPct: 0, slowT: 0, slowTotal: 0, growth: [], charge: 1, chargeIdx: -1, thorns: [],
     burns: [], poisons: [], dodge: 0, dodges: 0, hasteP: 0, hasteT: 0, woundP: 0, woundT: 0,
@@ -586,6 +591,25 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
         emit({ type: 'status', side: f.side, status: 'charge', value: m });
         break;
       }
+      case 'luckycat': {
+        // sim v21: a hit worth the build (capped), half of it back as a shield
+        const n = Math.max(1, Math.round(Math.min(pow * f.worth, ultCap(f, foe))));
+        deal(foe, n, true, 'ult');
+        const sh = meltShield(f, Math.round(n / 2));
+        if (sh > 0) {
+          f.shield += sh;
+          f.shieldGot += sh;
+          emit({ type: 'shield', side: f.side, amount: sh });
+        }
+        break;
+      }
+      case 'sage': {
+        // sim v21: time rewinds the wounds (every burn / poison on you goes), then every skill fires once at pow power
+        const n = removeDots(f, 99);
+        if (n) emit({ type: 'status', side: f.side, status: 'cleanse', value: n });
+        for (let bi = 0; bi < f.blocks.length && foe.hp > 0 && f.hp > 0; bi++) fireOne(f, { bi, depth: MAX_CHAIN, mult: pow });
+        break;
+      }
       case 'chrono': {
         // sim v15: every cooldown jumps forward by pow of its length (was: all ready at once), then cleanse all
         for (const b of f.blocks) b.prog = Math.min(b.cd, b.prog + Math.round(b.cd * pow));
@@ -613,6 +637,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       case 'thornguard': return f.hitsTaken >= need;
       case 'witch': return f.lineCasts >= need;
       case 'chrono': return f.ctlLanded >= need;
+      case 'luckycat': return f.lineCasts >= need;
+      case 'sage': return t >= need * TPS;
       default: return false;
     }
   }
@@ -651,6 +677,11 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     const ctx: Ctx = {
       inLine: inLine(f.hero, inst.id),
       power,
+      secs: Math.min(TIME_CAP_S, (t / TPS) * (f.relics.has('sundial') ? 1 + T['relic.sundial'] : 1)),
+      worth: f.worth,
+      accel(pct, min) {
+        blk.cd = Math.max(Math.round(blk.cd0 * min), Math.round(blk.cd - blk.cd0 * pct));
+      },
       v: (n) => Math.max(1, Math.round(n * power)),
       get me() { return view(f); },
       get foe() { return view(foe); },
@@ -1058,6 +1089,8 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
 
     if (t % TPS === 0) {
       for (const f of F) if (f.hp > 0) f.hooks.onSecond?.(hookApi(f), t / TPS);
+      // รากไม้ร้อยปี (sim v21): +1 power every N seconds
+      for (const f of F) if (f.hp > 0 && f.relics.has('oldroots') && t / TPS > 0 && (t / TPS) % T['relic.oldroots'] === 0) hookApi(f).grow(1);
       for (const f of F) {
         // credit each burn / poison stack's owner, then tick them down
         const foeStats = F[1 - f.side].stats;

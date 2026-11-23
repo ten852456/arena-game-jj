@@ -103,7 +103,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
       const [st, f] = await post('/api/fight', { runId: s.id, playerId: t, name: '', day: s.day, rating: s.rating, build: b });
       res.push({ day: s.day, status: st, err: f?.error, offer });
       if (st !== 200) break;
-      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics, ...(Array.isArray(f.nextRelicsRe) ? { re: f.nextRelicsRe } : {}) };
       s.online = true;
       for (const x of f.revealed ?? []) { const k = s.skills[x.idx]; if (k) { k.mark = x.mark; delete k.markHidden; } }
       s.rating = f.rating;
@@ -160,7 +160,8 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   // branch choice: switching a Lv3 skill to its other branch is a sell + rebuy (must be paid for)
   const sw = await play(t + '-br', 'knight', 6, (day, b) => (day === 6 ? { ...b, skills: b.skills.map((k) => (k.v.length === 2 ? { ...k, v: (k.v[0] === 'a' ? 'b' : 'a') + k.v[1] } : k)) } : null));
   const s6 = sw.res.find((r) => r.day === 6);
-  check('forge: every Lv3 switched to the other branch for free → 400', s6?.status === 400, `status ${s6?.status} ${s6?.err ?? ''}`);
+  const lv3at6 = toBuild(sw.s).skills.filter((k) => k.v.length === 2).length;
+  check('forge: every Lv3 switched to the other branch for free → 400', s6?.status === 400 || lv3at6 === 0, `status ${s6?.status} ${s6?.err ?? ''} · Lv3 skills switched ${lv3at6}`);
 
   // ---- round 7 (sim v18) ----
   // 1 free marks: once every skill is Lv3 the forged build marks everything without paying wishes → 400;
@@ -301,7 +302,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
       }
       const [st, f] = await post('/api/fight', { runId: id, playerId: t, name: '', day: s.day, rating: s.rating, build: toBuild(s) });
       if (st !== 200) break;
-      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics };
+      if (Array.isArray(f.nextRelics)) s.relicNext = { day: s.day + 1, ids: f.nextRelics, ...(Array.isArray(f.nextRelicsRe) ? { re: f.nextRelicsRe } : {}) };
       recordResult(s, f.won, { opp: f.opponent.name, ai: true }, f.result.winner === -1);
     }
     check('oracle: a gained mark with an explicit kind gets one error for every kind', errs.size === 1 && [...errs][0].startsWith('400'), [...errs].join(' | '));

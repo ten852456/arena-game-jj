@@ -1,7 +1,7 @@
 import { Rng, hashSeed } from './rng';
 import { HEROES, HEROES_BY_ID, ULT_PIECES, inLine, ultPieces } from './heroes';
 import { rollBonuses } from './links';
-import { MAX_RELICS, RELIC_DAYS, isRelic, rollRelicOffer } from './relics';
+import { MAX_RELICS, RELIC_DAYS, isRelic, relicRerolls, rollRelicOffer } from './relics';
 import { T } from './tuning';
 import { SKILLS, SKILL_LIST, lvOf, nextVariants, type Variant } from './skills';
 import type { Bonus, Build, Mark, SkillInstance } from './types';
@@ -142,7 +142,11 @@ export interface RunState {
   /** relic days already offered (picked or skipped) */
   relicDays?: number[];
   /** the server's relic offer for a coming day (fight response nextRelics): used instead of the local roll */
-  relicNext?: { day: number; ids: string[] };
+  relicNext?: { day: number; ids: string[]; re?: string[][] };
+  /** rerolls of today's relic offer used (relicRerolls() per relic day) */
+  relicRolls?: number;
+  /** the server's rerolled offers for today (from relicNext.re), used in order */
+  relicRe?: string[][];
 }
 
 /** Skill slots on a day: 3 on days 1–3, 4 on 4–6, 5 on 7–9, 6 from day 10, plus bonus slots (max MAX_SLOTS). */
@@ -176,8 +180,9 @@ export const LOSS_CAP = 3;
 export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / T['run.lossEvery']));
 
 /** Win streak bonus is clearly bigger than the loss-streak comeback money. */
-export function incomeFor(day: number, streak: number) {
-  const base = day <= 1 ? DAY1_GOLD : 5 + Math.min(Math.floor(day / 2), 3);
+export function incomeFor(day: number, streak: number, hero?: string) {
+  // แมวกวัก (sim v21): + gold every day from day 2
+  const base = (day <= 1 ? DAY1_GOLD : 5 + Math.min(Math.floor(day / 2), 3)) + (hero === 'luckycat' && day >= 2 ? T['luckycat.income'] : 0);
   const bonus = streak >= 5 ? 3 : streak >= 3 ? 2 : streak >= 2 ? 1 : streak <= -2 ? 1 : 0;
   return { base, bonus };
 }
@@ -193,7 +198,7 @@ export function newRun(hero: string, seed: number, id: string): RunState {
 }
 
 export function beginDay(s: RunState) {
-  const inc = incomeFor(s.day, s.streak);
+  const inc = incomeFor(s.day, s.streak, s.hero);
   s.lastIncome = inc;
   s.gold += inc.base + inc.bonus;
   s.rolls = 0;
@@ -206,9 +211,27 @@ export function beginDay(s: RunState) {
     // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
     const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
     s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
+    s.relicRolls = 0;
+    if (srv?.length) s.relicRe = (s.relicNext?.re ?? []).map((o) => o.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)));
+    else delete s.relicRe;
     delete s.relicNext;
     if (s.relicOffer.length) s.phase = 'relic';
   }
+}
+
+/** rerolls of today's relic offer still free */
+export const relicRerollsLeft = (s: RunState) => (s.phase === 'relic' ? Math.max(0, relicRerolls() - (s.relicRolls ?? 0)) : 0);
+/** Swap today's relic offer for 3 new relics (free, relicRerolls() times per relic day; the old 3 are gone). */
+export function rerollRelic(s: RunState): string | null {
+  if (s.phase !== 'relic') return 'ไม่มีของวิเศษให้เลือก';
+  if (!relicRerollsLeft(s)) return 'สุ่มใหม่ครบแล้ว';
+  const n = (s.relicRolls ?? 0) + 1;
+  // a ranked run uses the server's reroll (sent with the offer); an offline run rolls its own
+  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n);
+  if (!next.length) return 'ไม่มีของวิเศษให้สุ่มเพิ่ม';
+  s.relicRolls = n;
+  s.relicOffer = next;
+  return null;
 }
 
 /** Take relic i of today's offer (-1 = skip). Then the shop opens. */

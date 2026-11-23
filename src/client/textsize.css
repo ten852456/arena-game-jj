@@ -1,0 +1,16 @@
+/* Large text (textSize.ts): the small print gets bigger; headings and buttons are already large enough. */
+html.big-text .sk-simple { font-size: 16px; }
+html.big-text .offer-desc .sk-simple { font-size: 15px; }
+html.big-text .sk-simple .sp i { font-size: 15px; }
+html.big-text .mark, html.big-text .tag, html.big-text .pchip, html.big-text .kw { font-size: 14px; }
+html.big-text .sv-note, html.big-text .sv-sub, html.big-text .pairs-s, html.big-text .tip-line, html.big-text .ceq-empty { font-size: 15px; }
+html.big-text .offer-desc, html.big-text .offer-meta { font-size: 14px; }
+html.big-text .hero-style, html.big-text .hero-passive, html.big-text .hero-ult { font-size: 15px; }
+html.big-text .tooltip, html.big-text .tooltip .desc, html.big-text .tt-simple { font-size: 16px; }
+html.big-text .xv, html.big-text .xv-cl-body, html.big-text .xv-tipbox, html.big-text .xv-line { font-size: 16px; }
+html.big-text .rv-hearts small, html.big-text .fv-watch { font-size: 15px; }
+html.big-text .log li, html.big-text .glossary { font-size: 15px; }
+html.big-text .gd-text { font-size: 17px; }
+html.big-text .bp-diff, html.big-text .bp-ba { font-size: 16px; }
+html.big-text .relic-card, html.big-text .rv-lead { font-size: 15px; }
+html.big-text small, html.big-text .small, html.big-text .muted.small { font-size: max(13px, 0.92em); }

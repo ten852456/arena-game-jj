@@ -6,7 +6,7 @@
 import type { CombatEvent, Side } from '../sim/types';
 import {
   type AudioExt, type Lang, type MusicTrack, type SfxName, type VoiceKey,
-  SFX_NAMES, musicUrl, sfxUrl, voiceUrl,
+  SFX_NAMES, heroVoiceUrl, musicUrl, sfxUrl, voiceUrl, type HeroVoiceKind,
 } from './assets';
 
 export type { Lang, MusicTrack, SfxName, VoiceKey } from './assets';
@@ -17,10 +17,15 @@ export interface AudioSettings {
   sfx: number;
   voice: number;
   muted: boolean;
+  /** how chatty the announcer is (playtest: a line on every shop, fight and result got tiring) */
+  talk: VoiceTalk;
 }
+/** all = every line · some = big moments always, routine lines now and then · key = only the big moments */
+export type VoiceTalk = 'all' | 'some' | 'key';
+export const VOICE_TALKS: VoiceTalk[] = ['all', 'some', 'key'];
 
 const STORE_KEY = 'mochi.audio';
-const DEFAULTS: AudioSettings = { master: 0.8, music: 0.5, sfx: 0.8, voice: 0.9, muted: false };
+const DEFAULTS: AudioSettings = { master: 0.8, music: 0.5, sfx: 0.8, voice: 0.9, muted: false, talk: 'some' };
 const MUSIC_FADE = 1.2;
 
 let settings: AudioSettings = loadSettings();
@@ -41,6 +46,7 @@ function loadSettings(): AudioSettings {
         if (Number.isFinite(v)) out[k] = Math.min(1, Math.max(0, v));
       }
       out.muted = s.muted === true;
+      if (VOICE_TALKS.includes(s.talk as VoiceTalk)) out.talk = s.talk as VoiceTalk;
       return out;
     }
   } catch {
@@ -374,11 +380,74 @@ export function fightSfx(kind: FightSound, opts: { pitch?: number; vol?: number 
 
 // ---------- voice ----------
 let currentVoice: AudioBufferSourceNode | null = null;
-/** Announcer line in the current language; a new line cuts the previous one. */
-export function voice(key: VoiceKey) {
+/**
+ * How often a routine line is spoken in 'some' mode: at most once per `gap` seconds and then with `chance`.
+ * Lines not listed are big moments (welcome, last chance, champion …) and always play.
+ */
+const ROUTINE: Partial<Record<VoiceKey | `hero_${HeroVoiceKind}`, { gap: number; chance: number }>> = {
+  shop_open: { gap: 0, chance: 1 },
+  new_day: { gap: 150, chance: 0.5 },
+  fight: { gap: 120, chance: 0.5 },
+  victory: { gap: 60, chance: 0.6 },
+  defeat: { gap: 90, chance: 0.5 },
+  close_fight: { gap: 60, chance: 1 },
+  combo: { gap: 90, chance: 0.4 },
+  critical: { gap: 90, chance: 0.4 },
+  frozen: { gap: 90, chance: 0.4 },
+  ko: { gap: 90, chance: 0.4 },
+  stardust: { gap: 30, chance: 1 },
+  choose_hero: { gap: 600, chance: 1 },
+  // the hero's own voice (sim v21): the ult shout most of the time, a win line now and then
+  hero_ult: { gap: 20, chance: 0.85 },
+  hero_win: { gap: 60, chance: 1 },
+};
+/** lines 'key' mode still speaks */
+const KEY_LINES = new Set<string>(['welcome', 'last_chance', 'champion', 'perfect', 'shop_open', 'hero_pick', 'hero_ult']);
+const lastSaid: Record<string, number> = {};
+let lastAny = -1e9;
+/** should this line be spoken now? (also records it) */
+function wantVoice(key: string, force: boolean) {
+  const now = performance.now() / 1000;
+  if (!force && settings.talk !== 'all') {
+    const rule = ROUTINE[key as VoiceKey | `hero_${HeroVoiceKind}`];
+    if (settings.talk === 'key' && !KEY_LINES.has(key)) return false;
+    if (rule && settings.talk === 'some') {
+      if (now - (lastSaid[key] ?? -1e9) < rule.gap) return false;
+      // never two routine lines within 8 s of each other
+      if (now - lastAny < 8) return false;
+      if (Math.random() > rule.chance) {
+        lastSaid[key] = now - rule.gap / 2; // try again a bit sooner
+        return false;
+      }
+    }
+  }
+  lastSaid[key] = now;
+  lastAny = now;
+  return true;
+}
+export const voiceTalk = () => settings.talk;
+export function setVoiceTalk(t: VoiceTalk) {
+  settings.talk = t;
+  saveSettings();
+}
+/** Announcer line in the current language; a new line cuts the previous one. force = ignore the chattiness setting. */
+export function voice(key: VoiceKey, force = false) {
   if (!unlocked || !ctx || !gains || settings.muted) return;
+  if (!wantVoice(key, force)) return;
+  playVoice(voiceUrl(lang, key, ext));
+}
+/** the hero whose voice says the win line (set when a fight starts) */
+let voiceHero = '';
+export const setVoiceHero = (hero: string) => (voiceHero = hero);
+/** The hero's own line (sim v21): pick, ult or win, in its own voice. */
+export function heroVoice(hero: string, kind: HeroVoiceKind, force = false) {
+  if (!unlocked || !ctx || !gains || settings.muted || !hero) return;
+  if (!wantVoice(`hero_${kind}`, force)) return;
+  playVoice(heroVoiceUrl(lang, hero, kind, ext));
+}
+function playVoice(url: string) {
   const asked = performance.now();
-  void load(voiceUrl(lang, key, ext)).then((buf) => {
+  void load(url).then((buf) => {
     if (!buf || !ctx || !gains || performance.now() - asked > 1500) return;
     try {
       currentVoice?.stop();
@@ -467,12 +536,17 @@ export function combatSfx(e: CombatEvent, me: Side = 0, juice = false) {
     case 'status':
       if (e.status === 'freeze' && e.value > 0) sfx('freeze');
       break;
+    case 'ult':
+      if (e.side === me) heroVoice(e.hero, 'ult');
+      break;
     case 'end':
       if (e.winner !== -1) sfx('ko', { force: true });
       setTimeout(() => {
         if (e.winner === me) {
           sfx('win', { force: true });
-          voice('victory');
+          // half the wins: the hero's own line instead of the announcer
+          if (voiceHero && Math.random() < 0.5) heroVoice(voiceHero, 'win');
+          else voice('victory');
         } else if (e.winner !== -1) {
           sfx('lose', { force: true });
           voice('defeat');

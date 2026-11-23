@@ -99,10 +99,12 @@ async function playGuide(label, ctxOpts, lang = 'th-TH') {
   await shot('3-hero');
   ok(`${label}: hero spotlight clear of the bubble`, await bubbleClear(p));
   {
-    await p.locator('[data-a="start"]').first().scrollIntoViewIfNeeded();
+    // tap the card's "start with this hero" button: on a portrait phone the sticky arena strip can cover the card's top
+    const go = p.locator('[data-a="start"]').first().locator('.hero-go');
+    await go.scrollIntoViewIfNeeded();
     await p.waitForTimeout(300);
-    const b = await p.locator('[data-a="start"]').first().boundingBox();
-    await tapAt(p, touch, b.x + b.width / 2, b.y + Math.min(b.height / 2, 60));
+    const b = await go.boundingBox();
+    await tapAt(p, touch, b.x + b.width / 2, b.y + b.height / 2);
   }
   ok(`${label}: step buy1 (shop)`, await waitStep(p, 'buy1'));
   await shot('4-buy1');
