@@ -55,7 +55,8 @@ function renderBadge() {
     badge.title = L('เข้าสู่ระบบด้วย Phantom เพื่อเล่นบน chain', 'Log in with Phantom to play on chain');
     return;
   }
-  badge.innerHTML = `<span class="dot ${st.state}"></span><span>◎ <span class="net">${net}</span></span>${wallet ? `<span>${esc(wallet)}</span>` : ''}${solCache !== null ? `<span class="net">${solCache.toFixed(3)} SOL</span>` : ''}${state ? `<span class="net">${state}</span>` : ''}${fight ? `<span class="fight">${esc(fight)}</span>` : ''}`;
+  const stepMsg = (st.state === 'connecting' || st.state === 'approve' || st.state === 'error') && st.msg ? st.msg : '';
+  badge.innerHTML = `<span class="dot ${st.state}"></span><span>◎ <span class="net">${net}</span></span>${wallet ? `<span>${esc(wallet)}</span>` : ''}${solCache !== null ? `<span class="net">${solCache.toFixed(3)} SOL</span>` : ''}${stepMsg ? `<span class="net">${esc(stepMsg.length > 70 ? stepMsg.slice(0, 70) + '…' : stepMsg)}</span>` : state ? `<span class="net">${state}</span>` : ''}${fight ? `<span class="fight">${esc(fight)}</span>` : ''}`;
   badge.title = st.msg || L('ข้อมูลบน blockchain ของคุณ', 'Your on-chain profile');
 }
 

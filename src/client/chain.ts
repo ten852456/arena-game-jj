@@ -221,7 +221,7 @@ async function sendOwner(c: Connection, ixs: TransactionInstruction[]): Promise<
   tx.feePayer = owner;
   tx.recentBlockhash = (await c.getLatestBlockhash('confirmed')).blockhash;
   if (phantom) {
-    const signed = await phantom.signTransaction(tx);
+    const signed = await within(phantom.signTransaction(tx), 180_000, 'Phantom approval');
     return confirm(c, await c.sendRawTransaction(signed.serialize(), { skipPreflight: true }));
   }
   tx.sign(session);
@@ -250,6 +250,10 @@ async function player(c = game): Promise<Uint8Array | null> {
   return a ? new Uint8Array(a.data) : null;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** reject with a clear message if a step takes too long (instead of hanging on "connecting") */
+function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what}: no answer after ${Math.round(ms / 1000)} s`)), ms))]);
+}
 
 // ---------------- public API for the UI ----------------
 export const chainInfo = () => (cfg ? { mode: cfg.mode ?? 'local', owner: owner.toBase58(), session: session.publicKey.toBase58(), phantom: !!phantom, player: playerPda().toBase58(), season: cfg.season } : null);
@@ -275,13 +279,13 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
   const ph = w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : undefined);
   const burner = new URLSearchParams(location.search).get('wallet') === 'burner';
-  const say = (state: ChainStatus, msg: string) => { setChainStatus(state, msg); onStatus(msg); };
+  const say = (state: ChainStatus, msg: string) => { console.info('[chain] step:', msg || state); setChainStatus(state, msg); onStatus(msg); };
   if (ph && !burner) {
     say('connecting', 'connecting Phantom…');
     phantom = ph;
     try {
       // silent: reconnect only if this site is already trusted (no popup)
-      owner = (await ph.connect(silent ? { onlyIfTrusted: true } : undefined)).publicKey;
+      owner = (await within(ph.connect(silent ? { onlyIfTrusted: true } : undefined), silent ? 15_000 : 120_000, 'Phantom connect (open / unlock Phantom)')).publicKey;
     } catch (e) {
       phantom = null;
       setChainStatus('loggedout');
@@ -295,7 +299,8 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   }
   if (tee()) {
     const url = cfg!.tee!.startsWith('/') ? `${location.origin}${cfg!.tee}` : cfg!.tee!;
-    game = new Connection(`${url}?token=${await teeToken(url)}`, 'confirmed');
+    say('connecting', 'logging in to the MagicBlock TEE…');
+    game = new Connection(`${url}?token=${await within(teeToken(url), 30_000, 'TEE login')}`, 'confirmed');
   } else {
     game = base;
     // local validator: free airdrops
@@ -303,7 +308,9 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
       if ((await base.getBalance(pk)) < 50_000_000) await base.confirmTransaction(await base.requestAirdrop(pk, 1_000_000_000), 'confirmed');
     }
   }
-  if (tee() && (await base.getBalance(owner)) < 20_000_000) throw new Error(`wallet ${owner.toBase58()} needs devnet SOL (≥ 0.02)`);
+  say('connecting', 'checking your devnet SOL…');
+  if (tee() && (await within(base.getBalance(owner), 30_000, 'devnet RPC (balance)')) < 20_000_000) throw new Error(`wallet ${owner.toBase58()} needs devnet SOL (≥ 0.02): turn on Testnet Mode in Phantom → Solana Devnet and get SOL from faucet.solana.com`);
+  say('connecting', 'looking for your season account…');
   // owner signature 1 (first time): season account (+ fund the session key, + delegate to the TEE)
   if (!(await base.getAccountInfo(playerPda(), 'confirmed'))) {
     say('approve', 'approve 1/2 in your wallet: create your season account');
@@ -316,6 +323,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   }
   // wait until the game RPC (TEE) sees the account
   let p: Uint8Array | null = null;
+  say('connecting', tee() ? 'waiting for your account on the TEE…' : 'reading your account…');
   for (let i = 0; i < 60 && !(p = await player()); i++) await sleep(1500);
   if (!p) throw new Error('season account not visible on the game RPC');
   // owner signature 2 (first time / after expiry): approve this browser's session key (+ privacy on the TEE)
