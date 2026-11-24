@@ -136,7 +136,7 @@ you rank below 50 your row comes back as `me`.
 24 characters at most, empty = the default `Mochi-1234`) and is written to the player, their finished runs and their
 saved builds, so the leaderboard and rivals see it at once (`stored: true`). A player id the server has never seen
 (no profile, run or saved build) only gets the cleaned name back (`stored: false`) and nothing is written; the browser
-keeps the name and sends it with its next fight. 5 renames per player and 20 per IP per hour (429 after).
+keeps the name and sends it with its next fight. 20 renames per IP per hour, checked first, and 5 per known player per hour (429 after).
 
 ## GET /api/stats
 

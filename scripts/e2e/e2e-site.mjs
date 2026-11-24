@@ -142,8 +142,8 @@ ok('API rename: the server cleans the name and keeps it', r.status === 200 && ty
 const prof = await api('/api/profile?playerId=' + pid);
 ok('API rename: an unknown player id gets the name back but creates no record', r.json?.stored === false && prof.json?.known === false, JSON.stringify({ stored: r.json?.stored, known: prof.json?.known }));
 let codes = [];
-for (let i = 0; i < 5; i++) codes.push((await api('/api/profile/name', { playerId: pid, name: 'Name ' + i })).status);
-ok('API rename: 5 per player per hour, then 429', codes.slice(0, 4).every((c) => c === 200) && codes[4] === 429, codes.join(','));
+for (let i = 0; i < 20; i++) codes.push((await api('/api/profile/name', { playerId: pid + i, name: 'Name ' + i })).status);
+ok('API rename: 20 per IP per hour, then 429', codes.slice(0, 19).every((c) => c === 200) && codes[19] === 429, codes.join(','));
 r = await api('/api/leaderboard?period=season');
 const ids = (r.json?.rows ?? []).map((x) => x.name + '|' + x.runId);
 ok('API leaderboard answers with one row per player and a player count', r.status === 200 && Array.isArray(r.json?.rows) && typeof r.json?.players === 'number', `players ${r.json?.players} · rows ${ids.length}`);

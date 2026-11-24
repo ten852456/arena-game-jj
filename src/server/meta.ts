@@ -151,13 +151,16 @@ export function handleLeaderboard(q: URLSearchParams): Res {
 export function handleRename(body: any, ip: string): Res {
   const playerId = cleanId(body?.playerId);
   if (!playerId) return bad('bad request');
-  if (!allow('rn:' + playerId, 5, 3_600_000) || !allow('rnip:' + ip, 20, 3_600_000)) return bad('too many name changes, try again later', 429);
+  // the IP limit first: random ids from one IP stop here before they can add any per-player key
+  if (!allow('rnip:' + ip, 20, 3_600_000)) return bad('too many name changes, try again later', 429);
   const name = cleanName(body?.name, playerId);
   const known =
     Object.hasOwn(db.players, playerId) ||
     db.snapshots.some((sn) => sn.playerId === playerId) ||
     Object.values(db.tracks).some((t) => t.playerId === playerId);
   if (!known) return { status: 200, json: { name, stored: false } };
+  // per-player limit only for players the server knows (their ids are not free to invent)
+  if (!allow('rn:' + playerId, 5, 3_600_000)) return bad('too many name changes, try again later', 429);
   const p = (db.players[playerId] ??= newPlayer(playerId, name));
   p.name = name;
   p.updatedAt = Date.now();
