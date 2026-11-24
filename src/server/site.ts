@@ -115,6 +115,8 @@ function prune(now: number) {
 // wrong admin tokens: kept apart from the public limits (nothing a visitor does can flush them), per IP and in total
 const admFails = new Map<string, number[]>();
 const ADM_WINDOW = 600_000;
+/** wrong tokens from everyone: its own variable, so no eviction of the per-IP map can ever drop it */
+let globalFails: number[] = [];
 function admFailCount(key: string, now: number): number {
   const list = admFails.get(key)?.filter((t) => now - t < ADM_WINDOW) ?? [];
   if (list.length) admFails.set(key, list);
@@ -264,16 +266,19 @@ const TOKEN = process.env.ADMIN_TOKEN ?? '';
 const tokenHash = createHash('sha256').update(TOKEN).digest();
 /** null = allowed; otherwise the response to send */
 export function adminGate(auth: string | undefined, ip: string): Res | null {
-  if (TOKEN.length < 16) return bad('admin is off: set ADMIN_TOKEN (16+ characters) on the server', 503);
+  if (TOKEN.length < 32) return bad('admin is off: set ADMIN_TOKEN (32+ random characters) on the server', 503);
   if (!allow('adm:' + ip, 120, 60_000)) return bad('slow down', 429);
   const now = Date.now();
   const given = (auth ?? '').replace(/^Bearer\s+/i, '');
-  // the right token always gets in (constant-time compare), so nobody can lock the owner out by spamming guesses
+  // The right token always gets in (constant-time compare), so spamming guesses cannot lock the owner out. That is safe
+  // only because the token must be 32+ random characters (we suggest 48 hex = 192 bits): guessing it is hopeless even
+  // with the 429s below acting as a hint, and they still slow any guessing to a crawl.
   if (timingSafeEqual(createHash('sha256').update(given).digest(), tokenHash)) return null;
   // wrong tokens: 10 per IP, or 50 in total (a faked IP header cannot get around that one), per 10 minutes
-  if (admFailCount('ip:' + ip, now) >= 10 || admFailCount('all', now) >= 50) return bad('too many wrong tokens, try later', 429);
+  globalFails = globalFails.filter((t) => now - t < ADM_WINDOW);
+  if (admFailCount('ip:' + ip, now) >= 10 || globalFails.length >= 50) return bad('too many wrong tokens, try later', 429);
   admFail('ip:' + ip, now);
-  admFail('all', now);
+  globalFails.push(now);
   return bad('wrong token', 401);
 }
 
