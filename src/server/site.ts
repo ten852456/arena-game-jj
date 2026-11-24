@@ -85,7 +85,7 @@ function saveSite() {
 // ---------- rate limits (memory only) ----------
 const hits = new Map<string, number[]>();
 /** true when `key` made fewer than `max` calls in the last `ms` (and counts this one) */
-function allow(key: string, max: number, ms: number): boolean {
+export function allow(key: string, max: number, ms: number): boolean {
   const now = Date.now();
   const list = (hits.get(key) ?? []).filter((t) => now - t < ms);
   if (list.length >= max) {

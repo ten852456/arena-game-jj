@@ -140,7 +140,7 @@ const pid = 'e2e-rename-' + uniq;
 r = await api('/api/profile/name', { playerId: pid, name: '  Moon <b>Rabbit</b>  ' });
 ok('API rename: the server cleans the name and keeps it', r.status === 200 && typeof r.json?.name === 'string' && !/[<>]/.test(r.json.name) && r.json.name.length <= 24, JSON.stringify(r.json));
 const prof = await api('/api/profile?playerId=' + pid);
-ok('API rename: the profile shows the new name', prof.json?.player?.name === r.json?.name, prof.json?.player?.name);
+ok('API rename: an unknown player id gets the name back but creates no record', r.json?.stored === false && prof.json?.known === false, JSON.stringify({ stored: r.json?.stored, known: prof.json?.known }));
 let codes = [];
 for (let i = 0; i < 5; i++) codes.push((await api('/api/profile/name', { playerId: pid, name: 'Name ' + i })).status);
 ok('API rename: 5 per player per hour, then 429', codes.slice(0, 4).every((c) => c === 200) && codes[4] === 429, codes.join(','));

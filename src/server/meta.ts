@@ -7,6 +7,7 @@ import { SEASON, db, save, type FinishedRun, type Player } from './store';
 import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, spendCheck, validateBuild } from './validate';
 import { recordOf } from './fight';
 import type { Res } from './fight';
+import { allow } from './site';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
@@ -141,26 +142,27 @@ export function handleLeaderboard(q: URLSearchParams): Res {
 }
 
 // ---------- rename (profile page) ----------
-const renames = new Map<string, number[]>();
 /**
  * POST /api/profile/name {playerId, name}: the player's new name, also on their finished runs and saved builds, so the
- * leaderboard and fights show it at once. 5 renames per player per hour.
+ * leaderboard and fights show it at once. Only a player the server already knows (a profile, a run being played or a
+ * saved build) is written; for anyone else the cleaned name just comes back (the browser keeps it and sends it with the
+ * next fight), so random ids can never create records. Limits: 5 per player and 20 per IP per hour.
  */
-export function handleRename(body: any): Res {
+export function handleRename(body: any, ip: string): Res {
   const playerId = cleanId(body?.playerId);
   if (!playerId) return bad('bad request');
-  const now = Date.now();
-  const list = (renames.get(playerId) ?? []).filter((t) => now - t < 3_600_000);
-  if (list.length >= 5) return bad('too many name changes, try again later', 429);
+  if (!allow('rn:' + playerId, 5, 3_600_000) || !allow('rnip:' + ip, 20, 3_600_000)) return bad('too many name changes, try again later', 429);
   const name = cleanName(body?.name, playerId);
-  list.push(now);
-  renames.set(playerId, list);
-  if (renames.size > 20_000) for (const [k, l] of renames) if (!l.some((t) => now - t < 3_600_000)) renames.delete(k);
+  const known =
+    Object.hasOwn(db.players, playerId) ||
+    db.snapshots.some((sn) => sn.playerId === playerId) ||
+    Object.values(db.tracks).some((t) => t.playerId === playerId);
+  if (!known) return { status: 200, json: { name, stored: false } };
   const p = (db.players[playerId] ??= newPlayer(playerId, name));
   p.name = name;
-  p.updatedAt = now;
+  p.updatedAt = Date.now();
   for (const r of db.runs) if (r.playerId === playerId) r.name = name;
   for (const sn of db.snapshots) if (sn.playerId === playerId) sn.name = name;
-  save();
-  return { status: 200, json: { name, player: publicPlayer(p) } };
+  save(); // debounced: many renames in a burst write the file once
+  return { status: 200, json: { name, stored: true, player: publicPlayer(p) } };
 }

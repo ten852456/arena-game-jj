@@ -95,7 +95,7 @@ const routes: Record<string, Route> = {
   'GET /api/announce': () => handleAnnounce(),
   'GET /api/scout': (_req, q) => handleScout(q),
   'GET /api/profile': (_req, q) => handleProfile(q),
-  'POST /api/profile/name': async (req) => handleRename(await readBody(req)),
+  'POST /api/profile/name': async (req) => handleRename(await readBody(req), ipOf(req)),
   'GET /api/leaderboard': (_req, q) => handleLeaderboard(q),
   'GET /api/stats': () => ({
     status: 200,
