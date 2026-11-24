@@ -89,7 +89,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
 {
   const t = 'sec-r6-' + Date.now();
   /** play a run on the server with the normal bot (it picks branches and relics), up to `upto` days; returns the run */
-  const play = async (id: string, hero: string, upto: number, tweak?: (day: number, b: ReturnType<typeof toBuild>, offer: string[]) => ReturnType<typeof toBuild> | null, act?: (s: ReturnType<typeof newRun>) => boolean | void) => {
+  const play = async (id: string, hero: string, upto: number, tweak?: (day: number, b: ReturnType<typeof toBuild>, offer: string[], s: ReturnType<typeof newRun>) => ReturnType<typeof toBuild> | null, act?: (s: ReturnType<typeof newRun>) => boolean | void) => {
     const s = newRun(hero, 4242, id);
     const res: { day: number; status: number; err?: string; offer?: string[] }[] = [];
     while (s.phase !== 'won' && s.phase !== 'dead' && s.day <= upto) {
@@ -99,7 +99,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
       // act: an honest player's own moves (true = instead of the bot's shopping today)
       if (!act?.(s)) botDay(s, botRules([HEROES_BY_ID[hero].line], 'hard'));
       const honest = toBuild(s);
-      const b = tweak?.(s.day, honest, offer ?? []) ?? honest;
+      const b = tweak?.(s.day, honest, offer ?? [], s) ?? honest;
       const [st, f] = await post('/api/fight', { runId: s.id, playerId: t, name: '', day: s.day, rating: s.rating, build: b });
       res.push({ day: s.day, status: st, err: f?.error, offer });
       if (st !== 200) break;
@@ -118,9 +118,11 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   check('honest run with relics, branch choice and stars: every day accepted', h.res.every((r) => r.status === 200), `days ${h.res.length} · relics ${relicsOwned.join(',') || '-'} · ★${stars} · ${h.res.find((r) => r.status !== 200)?.err ?? ''}`);
   check('the server sent the relic offers (picked relics came from them)', relicsOwned.length > 0 && h.res.filter((r) => [4, 7, 10].includes(r.day)).every((r) => !r.offer || r.offer.length === 3), relicsOwned.join(','));
   // off-offer: on day 4 take a relic the server did not offer
-  const off = await play(t + '-o', 'pyro', 4, (day, b, offer) => {
+  const off = await play(t + '-o', 'pyro', 4, (day, b, offer, st) => {
     if (day !== 4) return null;
-    const pick = RELICS.map((r) => r.id).find((id) => !offer.includes(id))!;
+    // not in the offer and not in its reroll either (sim v21: a reroll's relics are legal too)
+    const re = (st.relicNext?.re ?? []).flat();
+    const pick = RELICS.map((r) => r.id).find((id) => !offer.includes(id) && !re.includes(id))!;
     return { ...b, relics: [pick] };
   });
   const offDay4 = off.res.find((r) => r.day === 4);
