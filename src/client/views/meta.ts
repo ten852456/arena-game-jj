@@ -194,10 +194,15 @@ export interface LbEntry {
   score: number;
   wins?: number;
   hero?: string;
+  losses?: number;
+  /** days the run lasted */
+  day?: number;
   me?: boolean;
 }
 export interface Leaderboard {
   entries: LbEntry[];
+  /** ranked players in this period (one row per player) */
+  players?: number;
   /** what the score means, if the server says */
   scoreLabel?: string;
   me?: LbEntry;
@@ -208,20 +213,38 @@ export async function getLeaderboard(period: Period): Promise<Leaderboard | null
   const rows = (Array.isArray(j) ? j : j.entries ?? j.rows ?? j.top ?? j.leaderboard ?? []) as J[];
   if (!Array.isArray(rows)) return null;
   const pid = playerId();
-  const entries = rows.map((x, i) => ({
+  const entry = (x: J, i: number): LbEntry => ({
     rank: num(x.rank) ?? i + 1,
     name: String(x.name ?? x.playerName ?? '???'),
     score: num(x.score, x.wins, x.stardust, x.points, x.rating) ?? 0, // server ranks by wins
     wins: num(x.wins, x.bestWins),
     hero: str(x.hero),
+    losses: num(x.losses),
+    day: num(x.day),
     me: x.you === true || x.playerId === pid || x.me === true,
-  }));
+  });
+  const entries = rows.map(entry);
   const meRow = (Array.isArray(j) ? null : j.me) as J | null;
   return {
     entries,
+    players: Array.isArray(j) ? undefined : num(j.players),
     scoreLabel: Array.isArray(j) ? undefined : str(j.scoreLabel, j.metric),
-    me: meRow ? { rank: num(meRow.rank) ?? 0, name: String(meRow.name ?? ''), score: num(meRow.score, meRow.stardust, meRow.points) ?? 0, me: true } : undefined,
+    me: meRow ? { ...entry(meRow, 0), me: true } : undefined,
   };
+}
+
+/** Change the player's name on the server (profile page). Returns the name the server kept, or an error message. */
+export async function renameMe(name: string): Promise<{ name?: string; error?: string }> {
+  try {
+    const r = await fetch('/api/profile/name', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ playerId: playerId(), name }) });
+    const j = (await r.json().catch(() => ({}))) as J;
+    if (!r.ok) return { error: String(j.error ?? r.status) };
+    const nm = String(j.name ?? name);
+    set(SNAME_KEY, nm);
+    return { name: nm };
+  } catch {
+    return { error: 'offline' };
+  }
 }
 
 // ---------- scouting ----------

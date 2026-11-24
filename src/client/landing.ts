@@ -32,6 +32,12 @@ const LINKS = {
   telegram: 'https://t.me/ten852456',
 };
 const SHORT = { en: 'Xw72OiZNcM4', th: 'Mz-VDsYAC4U' };
+const ICONS = {
+  hero: '<svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="4.2"/><path d="M4.5 20.5c1.2-4 4.2-6 7.5-6s6.3 2 7.5 6"/></svg>',
+  skill: '<svg viewBox="0 0 24 24"><path d="M13 2.8 5.5 13.2h5.2L9.8 21.2l8.7-11.1h-5.4z"/></svg>',
+  relic: '<svg viewBox="0 0 24 24"><path d="M12 2.8 19.5 7v10L12 21.2 4.5 17V7z"/><path d="M12 7.5v9M8 9.8l8 4.4M16 9.8l-8 4.4"/></svg>',
+  crown: '<svg viewBox="0 0 24 24"><path d="M3.5 8.5 8 12l4-6.5 4 6.5 4.5-3.5-1.8 10H5.3z"/></svg>',
+};
 
 const nHeroes = HEROES.length;
 const nSkills = Object.keys(SKILLS).length;
@@ -83,7 +89,9 @@ function render() {
 
   <header class="hero">
     <div class="hero-art" style="background-image:url(${IMG}key-arena.webp)"></div>
+    <div class="sparkles" aria-hidden="true">${'<i></i>'.repeat(14)}</div>
     <div class="hero-in">
+      <img class="hero-logo" src="/assets/img/logo.webp" alt="Mochi Moon" width="300" height="140">
       <p class="kicker">${t('A cozy auto-battler', 'เกม auto-battler สุดน่ารัก')}</p>
       <h1>${t('Draft the build.', 'จัดบิลด์ให้เทพ')}<br><span>${t('It fights for you.', 'แล้วปล่อยให้มันสู้แทนคุณ')}</span></h1>
       <p class="lead">${t(
@@ -91,27 +99,47 @@ function render() {
         'เลือกฮีโร่ สะสมสกิลที่คอมโบกัน แล้วส่งบิลด์ไปสู้กับบิลด์ของผู้เล่นคนอื่น ทุกไฟต์เป็นแบบ deterministic ใครก็เปิดดูซ้ำและตรวจสอบได้',
       )}</p>
       <div class="cta">
-        <a class="btn btn-gold" href="/play" data-play="hero">▶ ${t('Play free now', 'เล่นฟรีเลย')}</a>
+        <a class="btn btn-gold btn-lg" href="/play" data-play="hero">▶ ${t('Play free now', 'เล่นฟรีเลย')}</a>
         <a class="btn btn-ghost" href="#join">${t('Join the waitlist', 'ลงชื่อรอข่าว')}</a>
       </div>
-      <p class="fine">${t('Free prototype · web and phone · no login, no wallet needed', 'prototype ฟรี · เว็บและมือถือ · ไม่ต้องล็อกอิน ไม่ต้องมี wallet')}</p>
+      <ul class="chips">
+        <li>${t('Free', 'ฟรี')}</li><li>${t('Web + phone', 'เว็บ + มือถือ')}</li><li>${t('No login', 'ไม่ต้องล็อกอิน')}</li><li>${t('No wallet needed', 'ไม่ต้องมี wallet')}</li>
+      </ul>
     </div>
+    <a class="scroll-hint" href="#how" aria-label="${t('See how it works', 'ดูวิธีเล่น')}"><i></i></a>
   </header>
 
   <section class="stats" aria-label="${t('In the game today', 'ในเกมตอนนี้')}">
-    <div><b>${nHeroes}</b><span>${t('heroes', 'ฮีโร่')}</span></div>
-    <div><b>${nSkills}</b><span>${t('skills', 'สกิล')}</span></div>
-    <div><b>${nRelics}</b><span>${t('relics', 'เรลิก')}</span></div>
-    <div><b>${WIN_TARGET}</b><span>${t('wins to clear a run', 'ชนะเพื่อผ่าน run')}</span></div>
+    ${(
+      [
+        [nHeroes, t('heroes', 'ฮีโร่'), ICONS.hero],
+        [nSkills, t('skills', 'สกิล'), ICONS.skill],
+        [nRelics, t('relics', 'เรลิก'), ICONS.relic],
+        [WIN_TARGET, t('wins to clear a run', 'ชนะเพื่อผ่าน run'), ICONS.crown],
+      ] as const
+    )
+      .map(([n, label, svg]) => `<div><span class="st-ico" aria-hidden="true">${svg}</span><b>${n}</b><span>${label}</span></div>`)
+      .join('')}
   </section>
 
-  <section id="how" class="sec">
-    <h2>${t('How it works', 'เล่นยังไง')}</h2>
-    <div class="steps">
-      <article><img src="${IMG}shot-shop.webp" alt="" loading="lazy" width="800" height="450"><h3><i>1</i>${t('Draft', 'จัดบิลด์')}</h3><p>${t(`Pick 1 of 3 heroes, then buy and upgrade skills from ${nSkills} that chain and combo.`, `เลือกฮีโร่ 1 จาก 3 ตัว แล้วซื้อและอัปสกิลจาก ${nSkills} แบบที่ต่อคอมโบกันได้`)}</p></article>
-      <article><img src="${IMG}shot-fight.webp" alt="" loading="lazy" width="800" height="450"><h3><i>2</i>${t('It fights for you', 'มันสู้แทนคุณ')}</h3><p>${t('Your build battles another player’s build on its own. Watch the combos land, then tweak.', 'บิลด์ของคุณสู้กับบิลด์ของผู้เล่นอื่นเอง ดูคอมโบออก แล้วปรับต่อ')}</p></article>
-      <article><img src="${IMG}shot-win.webp" alt="" loading="lazy" width="800" height="450"><h3><i>3</i>${t(`Climb to ${WIN_TARGET} wins`, `ไต่ให้ถึง ${WIN_TARGET} ชนะ`)}</h3><p>${t('Short runs, phone or desktop. Share a replay of your best fight with a link.', 'run สั้น เล่นได้ทั้งมือถือและคอม แชร์ replay ไฟต์ที่ดีที่สุดได้ด้วยลิงก์')}</p></article>
-    </div>
+  <section id="how" class="sec how">
+    <p class="kicker center">${t('How it works', 'เล่นยังไง')}</p>
+    <h2 class="center">${t('Four steps. Two minutes to learn.', 'สี่ขั้น เรียนรู้ได้ในสองนาที')}</h2>
+    ${(
+      [
+        ['game-pick.webp', t('Pick a hero', 'เลือกฮีโร่'), t(`Each run offers 3 of ${nHeroes} heroes, each with its own style and ultimate.`, `ทุก run สุ่มให้เลือก 3 จาก ${nHeroes} ฮีโร่ แต่ละตัวมีสไตล์และท่าไม้ตายของตัวเอง`)],
+        ['game-shop.webp', t('Draft skills that combo', 'จัดสกิลที่คอมโบกัน'), t(`Buy and upgrade from ${nSkills} skills. Put partners side by side and they chain into bigger hits.`, `ซื้อและอัปสกิลจาก ${nSkills} แบบ วางคู่ที่เข้ากันไว้ติดกัน แล้วมันจะต่อคอมโบแรงขึ้น`)],
+        ['game-fight.webp', t('It fights for you', 'มันสู้แทนคุณ'), t('Hit fight and your build battles another player’s build on its own. Watch the combos land, learn, tweak.', 'กดสู้ แล้วบิลด์ของคุณจะสู้กับบิลด์ของผู้เล่นอื่นเอง ดูคอมโบออก เรียนรู้ แล้วปรับ')],
+        ['game-win.webp', t(`Climb to ${WIN_TARGET} wins`, `ไต่ให้ถึง ${WIN_TARGET} ชนะ`), t('Every loss costs HP. Reach the crown before you run out, then share a replay of your best fight.', 'แพ้แต่ละครั้งเสียเลือด ไปให้ถึงมงกุฎก่อนเลือดหมด แล้วแชร์ replay ไฟต์ที่ดีที่สุด')],
+      ] as const
+    )
+      .map(
+        ([img, h, p], i) => `<article class="feat${i % 2 ? ' flip' : ''}">
+        <div class="feat-img"><img src="${IMG}${img}" alt="" loading="lazy"></div>
+        <div class="feat-txt"><span class="feat-n">${i + 1}</span><h3>${h}</h3><p>${p}</p></div>
+      </article>`,
+      )
+      .join('')}
   </section>
 
   <section class="sec watch">
@@ -135,11 +163,17 @@ function render() {
         'Combat is deterministic, so a fight is just builds + a seed. Our onchain version runs the whole run on Solana inside a MagicBlock private ephemeral rollup: rivals cannot peek at your build, and season results land on Solana. It is a devnet prototype today; it is not on this public server yet.',
         'การต่อสู้เป็น deterministic ไฟต์หนึ่งจึงเท่ากับบิลด์ + seed เวอร์ชัน onchain ของเรารันทั้ง run บน Solana ใน MagicBlock private ephemeral rollup คู่แข่งแอบดูบิลด์คุณไม่ได้ และผลประจำ season ลงบน Solana ตอนนี้ยังเป็น prototype บน devnet และยังไม่ได้ขึ้นเซิร์ฟเวอร์สาธารณะนี้',
       )}</p>
+      <ul class="badges">
+        <li>${t('Deterministic fights', 'ไฟต์แบบ deterministic')}</li>
+        <li>${t('Hidden builds (private rollup)', 'บิลด์เป็นความลับ (private rollup)')}</li>
+        <li>${t('Season results on Solana', 'ผล season บน Solana')}</li>
+      </ul>
     </div>
   </section>
 
   <section id="roadmap" class="sec">
-    <h2>${t('Roadmap', 'แผนงาน')}</h2>
+    <p class="kicker center">${t('Roadmap', 'แผนงาน')}</p>
+    <h2 class="center">${t('Built in public, week by week', 'สร้างแบบเปิดเผย ทีละสัปดาห์')}</h2>
     <div class="road">
       <article class="done"><h3><em>${t('Built', 'ทำแล้ว')}</em>${t('Week 1', 'สัปดาห์ที่ 1')}</h3>${list(DONE)}</article>
       <article class="now"><h3><em>${t('In progress', 'กำลังทำ')}</em>${t('Week 2', 'สัปดาห์ที่ 2')}</h3>${list(NOW)}</article>
@@ -183,6 +217,8 @@ function render() {
     <h2>${t('Ready to draft?', 'พร้อมจัดบิลด์หรือยัง?')}</h2>
     <a class="btn btn-gold" href="/play" data-play="final">▶ ${t('Play free now', 'เล่นฟรีเลย')}</a>
   </section>
+
+  <div class="mbar"><a class="btn btn-gold" href="/play" data-play="mbar">▶ ${t('Play free now', 'เล่นฟรีเลย')}</a></div>
 
   <footer class="foot">
     <img src="/assets/img/logo.webp" alt="" width="110" height="52">

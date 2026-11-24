@@ -120,10 +120,47 @@ export function handleLeaderboard(q: URLSearchParams): Res {
   if (period !== 'season' && period !== 'day') return bad('period must be season or day');
   const me = cleanId(q.get('playerId'));
   const today = bangkokDate(Date.now());
-  const rows = db.runs
-    .filter((r) => r.season === SEASON && (period === 'season' || bangkokDate(r.finishedAt) === today))
-    .sort((a, b) => better(a, b) || a.finishedAt - b.finishedAt)
-    .slice(0, LB_SIZE)
-    .map((r, i) => ({ rank: i + 1, ...runRow(r), ...(me && r.playerId === me ? { you: true } : {}) }));
-  return { status: 200, json: { period, season: SEASON, ...(period === 'day' ? { date: today } : {}), rows } };
+  // one row per player: their best run in the period (a player's other runs would only push others down)
+  const best = new Map<string, FinishedRun>();
+  for (const r of db.runs) {
+    if (r.season !== SEASON || (period === 'day' && bangkokDate(r.finishedAt) !== today)) continue;
+    const cur = best.get(r.playerId);
+    if (!cur || better(r, cur) < 0 || (better(r, cur) === 0 && r.finishedAt < cur.finishedAt)) best.set(r.playerId, r);
+  }
+  const ranked = [...best.values()].sort((a, b) => better(a, b) || a.finishedAt - b.finishedAt);
+  const row = (r: FinishedRun, i: number) => ({
+    rank: i + 1, ...runRow(r), runs: db.players[r.playerId]?.runs ?? 1, ...(me && r.playerId === me ? { you: true } : {}),
+  });
+  const rows = ranked.slice(0, LB_SIZE).map(row);
+  const myIdx = me ? ranked.findIndex((r) => r.playerId === me) : -1;
+  const mine = myIdx >= LB_SIZE ? row(ranked[myIdx], myIdx) : undefined;
+  return {
+    status: 200,
+    json: { period, season: SEASON, ...(period === 'day' ? { date: today } : {}), players: ranked.length, rows, ...(mine ? { me: mine } : {}) },
+  };
+}
+
+// ---------- rename (profile page) ----------
+const renames = new Map<string, number[]>();
+/**
+ * POST /api/profile/name {playerId, name}: the player's new name, also on their finished runs and saved builds, so the
+ * leaderboard and fights show it at once. 5 renames per player per hour.
+ */
+export function handleRename(body: any): Res {
+  const playerId = cleanId(body?.playerId);
+  if (!playerId) return bad('bad request');
+  const now = Date.now();
+  const list = (renames.get(playerId) ?? []).filter((t) => now - t < 3_600_000);
+  if (list.length >= 5) return bad('too many name changes, try again later', 429);
+  const name = cleanName(body?.name, playerId);
+  list.push(now);
+  renames.set(playerId, list);
+  if (renames.size > 20_000) for (const [k, l] of renames) if (!l.some((t) => now - t < 3_600_000)) renames.delete(k);
+  const p = (db.players[playerId] ??= newPlayer(playerId, name));
+  p.name = name;
+  p.updatedAt = now;
+  for (const r of db.runs) if (r.playerId === playerId) r.name = name;
+  for (const sn of db.snapshots) if (sn.playerId === playerId) sn.name = name;
+  save();
+  return { status: 200, json: { name, player: publicPlayer(p) } };
 }

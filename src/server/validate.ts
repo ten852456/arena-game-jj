@@ -320,8 +320,8 @@ export function defaultName(key: string) {
   return `Mochi-${1000 + (h % 9000)}`;
 }
 
-/** control characters, zero-width and bidi overrides */
-const BAD_CHARS = new RegExp('[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e]', 'g');
+/** control characters, zero-width and bidi overrides, and < > (no markup in a name, even though every view escapes it) */
+const BAD_CHARS = new RegExp('[\u0000-\u001f\u007f\u200b-\u200f\u2028-\u202e<>]', 'g');
 
 /** Trimmed, no control characters, max 24 chars; empty / "ผู้เล่น" becomes a unique default. */
 export function cleanName(x: unknown, key: string) {

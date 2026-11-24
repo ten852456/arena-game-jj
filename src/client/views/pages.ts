@@ -276,7 +276,14 @@ export function profilePage(p: Profile | null, name: string, loading: boolean) {
   return `<div class="page page-profile"><div class="page-side">${head}
   <section class="mm-card mm-profile">
     ${sky()}
-    <h2>${esc(displayName(p.name ?? name))}</h2>
+    <p class="pf-label">${L('ชื่อของคุณ', 'Your name')}</p>
+    <h2 class="pf-name">${esc(displayName(p.name ?? name))}</h2>
+    <div class="pf-rename">
+      <label class="sr-only" for="pname">${L('ตั้งชื่อใหม่', 'New name')}</label>
+      <input id="pname" maxlength="24" autocomplete="nickname" value="${esc(displayName(p.name ?? name))}" placeholder="${L('ชื่อใหม่', 'New name')}">
+      <button class="primary small" data-a="rename">${L('บันทึกชื่อ', 'Save name')}</button>
+    </div>
+    <p class="muted small pf-hint">${L('ชื่อนี้แสดงบนกระดานผู้นำและให้คู่ต่อสู้เห็น (ไม่เกิน 24 ตัว)', 'Shown on the leaderboard and to your rivals (up to 24 characters)')}</p>
     ${p.local ? `<p class="muted small">${L('ข้อมูลจากเครื่องนี้ (เซิร์ฟเวอร์ยังไม่มีโปรไฟล์)', 'From this device (the server has no profile yet)')}</p>` : ''}
     <div class="mm-statgrid">
       <div><b>${p.runs}</b><span>${L('รอบที่เล่น', 'Runs')}</span></div>
@@ -299,34 +306,66 @@ export function leaderboardPage(period: Period, lb: Leaderboard | null, loading:
   const tabs = (['season', 'day'] as Period[])
     .map((p) => `<button class="mm-tab ${p === period ? 'on' : ''}" data-a="lbPeriod" data-i="${p}" aria-pressed="${p === period}">${p === 'season' ? L('ทั้งซีซั่น', 'Season') : L('วันนี้', 'Today')}</button>`)
     .join('');
+  const wl = (e: { wins?: number; score: number; losses?: number }) =>
+    `<b>${e.wins ?? e.score}</b><span>${L('ชนะ', 'W')}</span>${e.losses !== undefined ? `<em>${e.losses}</em><span>${L('แพ้', 'L')}</span>` : ''}`;
+  const you = `<span class="lb-you">${L('คุณ', 'You')}</span>`;
   let body: string;
+  let mine = '';
   if (lb && lb.entries.length) {
-    body = `<ol class="mm-lb">${lb.entries
-      .slice(0, 50)
-      .map((e) => `<li class="${e.me ? 'me' : ''} r${e.rank <= 3 ? e.rank : ''}"><span class="mm-rank">${e.rank <= 3 ? ['🥇', '🥈', '🥉'][e.rank - 1] : e.rank}</span>
-        <span class="mm-lbn">${esc(displayName(e.name))}${e.hero ? ` <small class="muted">${esc(heroName(e.hero))}</small>` : ''}</span>
-        <span class="mm-lbs">${e.score} ${L('ชนะ', 'wins')}</span></li>`)
-      .join('')}</ol>${lb.me && !lb.entries.some((e) => e.me) ? `<p class="mm-lbme">${L('อันดับของคุณ', 'Your rank')}: <b>${lb.me.rank}</b> · ${lb.me.score}</p>` : ''}`;
+    const top = lb.entries.slice(0, 3);
+    const podium = `<div class="lb-podium">${[top[1], top[0], top[2]]
+      .map((e) =>
+        e
+          ? `<div class="lb-pod p${e.rank}${e.me ? ' me' : ''}"><span class="lb-medal">${e.rank === 1 ? icon('crown') : e.rank}</span>
+              <span class="lb-pname">${esc(displayName(e.name))}${e.me ? you : ''}</span>
+              <span class="lb-phero">${e.hero ? esc(heroName(e.hero)) : ''}</span>
+              <span class="lb-pwins">${wl(e)}</span><i class="lb-step">${e.rank}</i></div>`
+          : '<div class="lb-pod empty"></div>',
+      )
+      .join('')}</div>`;
+    const rest = lb.entries.slice(3, 50);
+    const table = rest.length
+      ? `<div class="lb-table" role="table" aria-label="${L('อันดับ', 'Rankings')}">
+          <div class="lb-row lb-headrow" role="row"><span role="columnheader">#</span><span role="columnheader">${L('ผู้เล่น', 'Player')}</span><span role="columnheader">${L('ฮีโร่', 'Hero')}</span><span role="columnheader">${L('รอบที่ดีที่สุด', 'Best run')}</span></div>
+          ${rest
+            .map(
+              (e) => `<div class="lb-row${e.me ? ' me' : ''}" role="row"><span class="lb-rank" role="cell">${e.rank}</span>
+                <span class="lb-name" role="cell">${esc(displayName(e.name))}${e.me ? you : ''}</span>
+                <span class="lb-hero" role="cell">${e.hero ? esc(heroName(e.hero)) : '–'}</span>
+                <span class="lb-wl" role="cell">${wl(e)}</span></div>`,
+            )
+            .join('')}</div>`
+      : '';
+    body = podium + table;
+    const me = lb.entries.find((e) => e.me) ?? lb.me;
+    mine = me
+      ? `<div class="lb-mine"><span class="lb-mine-h">${L('อันดับของคุณ', 'Your rank')}</span><b class="lb-mine-r">#${me.rank}</b>
+          <span class="lb-mine-s">${L(`ชนะ ${me.wins ?? me.score}`, `${me.wins ?? me.score} wins`)}${me.losses !== undefined ? L(` · แพ้ ${me.losses}`, ` · ${me.losses} losses`) : ''}${me.hero ? ' · ' + esc(heroName(me.hero)) : ''}</span></div>`
+      : `<div class="lb-mine none"><span class="lb-mine-h">${L('อันดับของคุณ', 'Your rank')}</span><span class="lb-mine-s">${
+          period === 'day' ? L('ยังไม่มีรอบที่จบวันนี้: จบสักรอบเพื่อติดอันดับ', 'No finished run today yet: finish one to get ranked') : L('จบสักรอบเพื่อติดอันดับ', 'Finish a run to get ranked')
+        }</span></div>`;
   } else if (loading) body = `<p class="muted">${L('กำลังโหลด…', 'Loading…')}</p>`;
   else {
-    const mine = [...local].sort((a, b) => b.wins - a.wins).slice(0, 5);
+    const runs = [...local].sort((a, b) => b.wins - a.wins).slice(0, 5);
     body = `<p class="muted">${L('กระดานผู้นำยังไม่เปิด', 'The leaderboard is not open yet')}${lb ? L(' (ยังไม่มีใครติดอันดับ)', ' (nobody is ranked yet)') : ''}</p>${
-      mine.length
-        ? `<h4>${L('สถิติของคุณในเครื่องนี้', 'Your runs on this device')}</h4><ol class="mm-lb">${mine
-            .map((r, i) => `<li><span class="mm-rank">${i + 1}</span><span class="mm-lbn">${esc(heroName(r.hero))}</span><span class="mm-lbs">${L('ชนะ', 'wins')} ${r.wins}</span></li>`)
-            .join('')}</ol>`
+      runs.length
+        ? `<h4>${L('สถิติของคุณในเครื่องนี้', 'Your runs on this device')}</h4><div class="lb-table">${runs
+            .map((r, i) => `<div class="lb-row"><span class="lb-rank">${i + 1}</span><span class="lb-name">${esc(heroName(r.hero))}</span><span class="lb-hero"></span><span class="lb-wl">${wl({ wins: r.wins, score: r.wins, losses: r.losses })}</span></div>`)
+            .join('')}</div>`
         : ''
     }`;
   }
+  const count = lb?.players ? L(`${lb.players} ผู้เล่นติดอันดับ`, `${lb.players} players ranked`) : '';
   return `<div class="page page-lb"><div class="page-side">
-  <div class="actions page-nav"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="profile">${L('โปรไฟล์ของฉัน', 'My profile')}</button></div>
+  <div class="actions page-nav"><button class="ghost" data-a="town">${L('← กลับเมือง', '← Back to town')}</button><button class="ghost" data-a="profile">${L('โปรไฟล์ / ตั้งชื่อ', 'Profile / name')}</button></div>
   <img class="mm-lbhead" src="${IMAGES.headerLeaderboard}" alt="" aria-hidden="true">
-  <section class="mm-card">${sky()}<h2>${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</h2>
-    <p class="muted small">${lb?.scoreLabel ? esc(lb.scoreLabel) : L('จัดอันดับนักสู้โมจิบนดวงจันทร์', 'Ranking the mochi fighters of the moon')}</p>
+  <section class="mm-card">${sky()}<h2>${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</h2>
     <div class="mm-tabs" role="group" aria-label="${L('ช่วงเวลา', 'Period')}">${tabs}</div>
+    <p class="muted small lb-rule">${L('จัดอันดับจากรอบที่ดีที่สุดของแต่ละคน: ชนะมากก่อน แพ้น้อยกว่าชนะเสมอ', 'Ranked by each player’s best run: most wins first, then fewest losses')}${count ? ' · ' + count : ''}</p>
+    ${mine}
   </section>
   </div>
-  <section class="page-main glass">${body}</section></div>`;
+  <section class="page-main glass lb-main">${body}</section></div>`;
 }
 
 // ---------- scouting chip (shop, above the fight button) ----------

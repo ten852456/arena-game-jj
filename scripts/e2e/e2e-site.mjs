@@ -135,6 +135,18 @@ r = await api('/api/feedback', { text: 'x'.repeat(5000), screen: '<script>' });
 ok('API feedback: long text is accepted and cut', r.status === 200);
 r = await api('/api/events', { v: 'visitor-' + uniq, events: [{ e: 'landing_view' }, { e: 'evil_event' }, { e: 'run_end', wins: 10 }] });
 ok('API events: only allowed browser events count', r.status === 200 && r.json?.ok === 1, JSON.stringify(r.json));
+// rename from the profile page
+const pid = 'e2e-rename-' + uniq;
+r = await api('/api/profile/name', { playerId: pid, name: '  Moon <b>Rabbit</b>  ' });
+ok('API rename: the server cleans the name and keeps it', r.status === 200 && typeof r.json?.name === 'string' && !/[<>]/.test(r.json.name) && r.json.name.length <= 24, JSON.stringify(r.json));
+const prof = await api('/api/profile?playerId=' + pid);
+ok('API rename: the profile shows the new name', prof.json?.player?.name === r.json?.name, prof.json?.player?.name);
+let codes = [];
+for (let i = 0; i < 5; i++) codes.push((await api('/api/profile/name', { playerId: pid, name: 'Name ' + i })).status);
+ok('API rename: 5 per player per hour, then 429', codes.slice(0, 4).every((c) => c === 200) && codes[4] === 429, codes.join(','));
+r = await api('/api/leaderboard?period=season');
+const ids = (r.json?.rows ?? []).map((x) => x.name + '|' + x.runId);
+ok('API leaderboard answers with one row per player and a player count', r.status === 200 && Array.isArray(r.json?.rows) && typeof r.json?.players === 'number', `players ${r.json?.players} · rows ${ids.length}`);
 r = await api('/api/announce');
 ok('API announce is public', r.status === 200 && typeof r.json?.on === 'boolean');
 r = await api('/api/admin/overview');

@@ -41,7 +41,9 @@ clickable town map (drag is not a tap, tapping the selected arena enters it). `O
 `e2e-run-end.mjs` (same setup) checks the end-of-run screen: a won run (10–2) and a lost run (7–5, close last fight)
 in Thai and English at 1280x720, 844x390 and 390x844. It covers the staged reveal (mid and final screenshots), tap to
 skip, reduced motion, no page scroll, "play again" on screen, the records, stardust bar, next goal, last-fight tip and
-share card (PNG plus download), Enter / R to the hero pick, and a one-tap quick start. The reward call is stubbed.
+share card (PNG plus download), Enter / R to the hero pick, and a one-tap quick start. The reward call is stubbed. Two `ask` scenarios check the
+rating sheet that pops up after a run (stars centred and lined up, one star + Send posts the rating); every other
+script sets `mochi.fb.asked` so the sheet never covers the screens it checks.
 
 ## Graphics tiers
 

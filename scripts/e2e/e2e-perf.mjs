@@ -10,6 +10,8 @@ const browser = await chromium.launch({ executablePath: exe, headless: true });
 
 async function open(name, ctxOpts, initScript) {
   const ctx = await browser.newContext({ locale: 'th-TH', ...ctxOpts });
+  // the post-run rating sheet (feedback.ts) is tested on its own: keep it from covering the screens checked here
+  await ctx.addInitScript(() => localStorage.setItem('mochi.fb.asked', String(Date.now())));
   if (initScript) await ctx.addInitScript(initScript);
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));

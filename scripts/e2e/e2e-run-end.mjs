@@ -67,6 +67,8 @@ async function scenario(view, lang, won, opts = {}) {
   const label = `${won ? 'win' : 'loss'}-${lang}-${view}${opts.reduced ? '-reduced' : ''}`;
   const browser = await chromium.launch({ executablePath: exe, headless: true });
   const ctx = await browser.newContext({ ...VIEWS[view], locale: 'th-TH', ...(opts.reduced ? { reducedMotion: 'reduce' } : {}) });
+  // the post-run rating sheet would cover the run-end screen: only the `ask` scenario lets it show
+  if (!opts.ask) await ctx.addInitScript(() => localStorage.setItem('mochi.fb.asked', String(Date.now())));
   const p = await ctx.newPage();
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
@@ -77,6 +79,31 @@ async function scenario(view, lang, won, opts = {}) {
   const viaTown = await finishedRun(p, won, lang);
   ok(`${label}: after a reload the town offers the last run's results`, viaTown);
   ok(`${label}: end screen opens for a finished run`, await has('.re-wrap'));
+  if (opts.ask) {
+    // the rating sheet pops up by itself once the reveal has played
+    await p.waitForSelector('.fb-sheet', { timeout: 15000 }).catch(() => {});
+    ok(`${label}: the "how was this run?" sheet pops up after the run`, await has('.fb-sheet .fb-star'));
+    ok(`${label}: it waits for the reveal to finish`, !(await has('.re-wrap.re-on')));
+    await shot('rating');
+    const off = await p.$$eval('.fb-sheet .fb-star', (bs) => bs.map((b) => {
+      const r = b.getBoundingClientRect(), s = b.querySelector('svg').getBoundingClientRect();
+      return Math.max(Math.abs(r.x + r.width / 2 - (s.x + s.width / 2)), Math.abs(r.y + r.height / 2 - (s.y + s.height / 2)));
+    }));
+    ok(`${label}: every star sits in the middle of its button`, off.length === 5 && off.every((d) => d <= 1), off.map((d) => d.toFixed(1)).join(','));
+    const tops = await p.$$eval('.fb-sheet .fb-star', (bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)));
+    ok(`${label}: the five stars line up`, new Set(tops).size === 1, tops.join(','));
+    let sent = null;
+    p.on('request', (r) => { if (r.url().endsWith('/api/feedback')) sent = r.postDataJSON(); });
+    await p.locator('.fb-sheet .fb-star[data-n="4"]').click();
+    await p.locator('.fb-sheet .fb-send').click();
+    await p.waitForTimeout(800);
+    ok(`${label}: one star + Send posts the rating with the run`, sent?.rating === 4 && sent?.screen === 'run_end' && !!sent?.runId, JSON.stringify(sent));
+    await p.waitForTimeout(1200);
+    ok(`${label}: the sheet closes after sending`, !(await has('.fb-sheet')));
+    ok(`${label}: no page/console errors`, errs.length === 0, errs.slice(0, 3).join(' | '));
+    await browser.close();
+    return;
+  }
   if (opts.reduced) {
     ok(`${label}: reduced motion shows everything at once`, !(await has('.re-wrap.re-on')));
   } else if (!opts.skip) {
@@ -149,6 +176,8 @@ await scenario('phoneP', 'th', true);
 await scenario('phoneP', 'en', false);
 await scenario('pc', 'th', false, { skip: true });
 await scenario('pc', 'en', true, { reduced: true });
+await scenario('pc', 'th', false, { ask: true });
+await scenario('phoneP', 'en', true, { ask: true });
 const failed = results.filter((r) => !r.pass);
 fs.writeFileSync(path.join(OUT, 'e2e-re-end.json'), JSON.stringify(results, null, 1));
 console.log(`\n${results.length - failed.length}/${results.length} checks passed`);

@@ -118,15 +118,23 @@ and the default `Mochi-…` name for that id.
 
 ## GET /api/leaderboard?period=season|day[&playerId=]
 
-Top 50 finished runs: most wins, then fewer losses, then earlier day, then earlier finish. `season` = the current
-season (env `SEASON`, default `s1`); `day` = runs finished today (Thailand date, UTC+7). With `playerId`, your rows
-get `"you": true`.
+One row per player: each player's best run in the period (most wins, then fewer losses, then earlier day, then
+earlier finish), top 50. `season` = the current season (env `SEASON`, default `s1`); `day` = runs finished today
+(Thailand date, UTC+7). `players` = how many players are ranked. With `playerId`, your row gets `"you": true`, and if
+you rank below 50 your row comes back as `me`.
 
 ```json
-{ "period": "day", "season": "s1", "date": "2026-11-19",
-  "rows": [ { "rank": 1, "runId": "3f2c…", "name": "Mochi-4401", "hero": "knight", "arch": "tank", "wins": 8,
-              "losses": 2, "day": 10, "stardust": 130, "season": "s1", "finishedAt": 1795082693307, "you": true } ] }
+{ "period": "day", "season": "s1", "date": "2026-11-19", "players": 37,
+  "rows": [ { "rank": 1, "runId": "3f2c…", "name": "Mochi-4401", "hero": "knight", "line": "shield", "wins": 8,
+              "losses": 2, "day": 10, "stardust": 130, "season": "s1", "finishedAt": 1795082693307, "runs": 4, "you": true } ],
+  "me": { "rank": 61, "…": "…" } }
 ```
+
+## POST /api/profile/name
+
+`{ playerId, name }` → `{ name, player }`. The profile page's rename: the name is cleaned like every name (no markup,
+24 characters at most, empty = the default `Mochi-1234`) and is written to the player, their finished runs and their
+saved builds, so the leaderboard and rivals see it at once. 5 renames per player per hour (429 after).
 
 ## GET /api/stats
 

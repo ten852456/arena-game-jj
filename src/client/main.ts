@@ -20,6 +20,7 @@ import './theme.css'; // the Mochi Moon look: loaded last so it wins
 import './reward.css';
 import './runend.css'; // end of run: after theme.css so it wins
 import './depth.css'; // relics, stars, marks, branch picker, build card, codex
+import './pages.css'; // profile name card, leaderboard
 import { initCodex } from './codex';
 import { mountFeedback } from './feedback';
 import { deviceKind, track } from './track';

@@ -5,7 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { handleFight, handleScout, type Res } from './fight';
-import { handleFinish, handleLeaderboard, handleProfile } from './meta';
+import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
 import { ROOT, db } from './store';
 import { WIN_TARGET } from '../sim/run';
 import { cleanName, isDefaultName } from './validate';
@@ -95,6 +95,7 @@ const routes: Record<string, Route> = {
   'GET /api/announce': () => handleAnnounce(),
   'GET /api/scout': (_req, q) => handleScout(q),
   'GET /api/profile': (_req, q) => handleProfile(q),
+  'POST /api/profile/name': async (req) => handleRename(await readBody(req)),
   'GET /api/leaderboard': (_req, q) => handleLeaderboard(q),
   'GET /api/stats': () => ({
     status: 200,

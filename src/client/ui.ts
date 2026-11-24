@@ -38,7 +38,8 @@ import { bonusRows, detailTipHTML, showingDetail, simpleDeltaHTML, simpleSkillHT
 import * as D from './depthUI';
 import { simpleText } from './skillText';
 import { skillBlurb } from './skillBlurb';
-import { rateRunRow } from './feedback';
+import { askAfterRun } from './feedback';
+import { icon } from './icons';
 import { track } from './track';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
 
@@ -546,6 +547,12 @@ function render() {
   }
   if (view === 'over') overAfterRender();
   else RF.stop();
+  if (view === 'profile') {
+    // Enter in the name box saves it
+    $panel.querySelector<HTMLInputElement>('#pname')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') $panel.querySelector<HTMLButtonElement>('[data-a="rename"]')?.click();
+    });
+  }
   // selected skill (tap on mobile) shows the same colour highlight as hover
   if (view === 'title') {
     const input = document.getElementById('name') as HTMLInputElement | null;
@@ -574,11 +581,11 @@ function renderTown() {
       const done = run && (run.phase === 'won' || run.phase === 'dead');
       body += `<div class="actions"><button class="primary" data-a="enterArena">${runActive() ? L('เล่นต่อ', 'Continue') : L('เข้าสนามประลอง', 'Enter the Arena')}</button>${
         done ? `<button data-a="lastResults">${L('ผลรอบล่าสุด', 'Last run results')}</button>` : ''
-      }</div>`;
+      }<button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
     } else if (b.id === 'board') {
       body += `<div class="actions"><button class="primary" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
-      body += `<div class="actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button></div>`;
+      body += `<div class="actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button><button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
       body += `<p class="muted">${L(
         `ฮีโร่ทั้งหมด ${HEROES.length} ตัว · แต่ละรอบสุ่มให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย`,
         `${HEROES.length} heroes · each run offers ${R.HERO_CHOICES} at random, from different styles`,
@@ -1494,7 +1501,7 @@ let overFocused = '';
 function overAfterRender() {
   const r = run;
   if (!r) return;
-  rateRunRow($panel, { runId: r.id, hero: r.hero, wins: r.wins });
+  askAfterRun({ runId: r.id, hero: r.hero, wins: r.wins }, () => RF.revealing());
   RF.countUps($panel, () => {
     if (overFocused === r.id) return;
     overFocused = r.id;
@@ -2107,6 +2114,25 @@ function onClick(ev: Event) {
       lbLoading = false;
       view = 'leaderboard';
       break;
+    case 'rename': {
+      const input = $panel.querySelector<HTMLInputElement>('#pname');
+      const nm = input?.value.trim() ?? '';
+      if (!nm) {
+        toast = L('พิมพ์ชื่อก่อนนะ', 'Type a name first');
+        break;
+      }
+      (el as HTMLButtonElement).disabled = true;
+      void M.renameMe(nm).then((r) => {
+        if (r.name) {
+          store(NAME_KEY, r.name); // the next fights and runs carry it too
+          if (profileData) profileData.name = r.name;
+          lbData = null; // the leaderboard shows the new name on the next visit
+          toast = L(`เปลี่ยนชื่อเป็น ${r.name} แล้ว`, `You are now ${r.name}`);
+        } else toast = r.error === 'offline' ? L('ออฟไลน์อยู่ ลองใหม่อีกครั้ง', 'You are offline, try again') : L('เปลี่ยนชื่อไม่สำเร็จ: ', 'Could not change the name: ') + r.error;
+        if (view === 'profile') render();
+      });
+      return;
+    }
     case 'lbPeriod':
       if (arg !== 'season' && arg !== 'day') return;
       lbPeriod = arg;

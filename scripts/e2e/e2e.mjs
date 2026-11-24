@@ -15,6 +15,8 @@ const ok = (name, pass, info = '') => { results.push({ name, pass, info }); cons
 async function play(label, ctxOpts, runs = 1) {
   const browser = await chromium.launch({ executablePath: exe, headless: true });
   const ctx = await browser.newContext({ ...ctxOpts, locale: 'th-TH' });
+  // the post-run rating sheet (feedback.ts) is tested on its own: keep it from covering the screens checked here
+  await ctx.addInitScript(() => localStorage.setItem('mochi.fb.asked', String(Date.now())));
   const p = await ctx.newPage();
   const errs = [], bad = [];
   p.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
@@ -263,6 +265,8 @@ async function api() {
 async function layout(label, ctxOpts, portrait = false) {
   const browser = await chromium.launch({ executablePath: exe, headless: true });
   const ctx = await browser.newContext({ ...ctxOpts, locale: 'th-TH' });
+  // the post-run rating sheet (feedback.ts) is tested on its own: keep it from covering the screens checked here
+  await ctx.addInitScript(() => localStorage.setItem('mochi.fb.asked', String(Date.now())));
   const p = await ctx.newPage();
   const tap = async (sel, wait = 500) => {
     const l = p.locator(sel).first();

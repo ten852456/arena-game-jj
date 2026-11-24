@@ -1,49 +1,62 @@
-/* Feedback sheet, run-end rating row, announcement banner (feedback.ts). */
+/* Feedback sheet, post-run rating, announcement banner (feedback.ts). Its buttons reset the game's global button
+   styles (all: unset) so the stars and buttons look the same in the game, on the landing page and anywhere else. */
 header .fb-open { min-width: 2.4em; }
-/* phones and small windows: the header is full already; feedback lives on the run-end page there */
+/* phones and small windows: the header is full already; feedback comes as the post-run rating there */
 @media (max-width: 899px) { header .fb-open { display: none; } }
 
 .fb-sheet {
   position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; padding: 16px;
-  background: rgba(20, 14, 40, 0.62);
+  background: rgba(20, 14, 40, 0.62); animation: fb-fade 0.18s ease-out;
 }
+@keyframes fb-fade { from { opacity: 0; } }
+@keyframes fb-pop { from { transform: translateY(12px) scale(0.97); opacity: 0; } }
 .fb-card {
-  position: relative; width: min(440px, 100%); padding: 22px 22px 18px; border-radius: 22px;
-  background: #2b2455; color: #fff4e4; border: 3px solid #4a3f86; box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
-  font-family: Kanit, sans-serif;
+  position: relative; width: min(420px, 100%); padding: 22px 22px 18px; border-radius: 24px; box-sizing: border-box;
+  background: #2b2455; color: #fff4e4; border: 3px solid #4a3f86; box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  font-family: Kanit, sans-serif; text-align: center; animation: fb-pop 0.22s ease-out;
 }
-.fb-card h3 { margin: 0 0 4px; font-size: 1.3rem; color: #ffd572; }
-.fb-sub { margin: 0 0 12px; color: #c9bfe8; font-size: 0.95rem; }
+.fb-card h3 { margin: 0 0 4px; padding: 0 36px; text-align: center; font-size: 1.35rem; color: #ffd572; }
+.fb-sub { margin: 0 0 16px; text-align: center; color: #c9bfe8; font-size: 0.95rem; }
+.fb-sheet button { all: unset; box-sizing: border-box; cursor: pointer; font-family: Kanit, sans-serif; -webkit-tap-highlight-color: transparent; }
+.fb-sheet button:focus-visible { outline: 3px solid #ffd572; outline-offset: 2px; }
+
+.fb-sheet .fb-x {
+  position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; color: #c9bfe8;
+}
+.fb-x svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; fill: none; }
+.fb-sheet .fb-x:hover { background: rgba(255, 255, 255, 0.08); color: #fff4e4; }
+
+/* stars: equal square buttons, the SVG star centred inside */
+.fb-stars { display: flex; justify-content: center; gap: 8px; }
+.fb-sheet .fb-star {
+  width: 52px; height: 52px; border-radius: 14px; display: grid; place-items: center;
+  background: #1f1942; border: 2.5px solid #4a3f86; transition: transform 0.12s, border-color 0.12s, background 0.12s;
+}
+.fb-star svg { display: block; width: 30px; height: 30px; fill: #4a3f86; transition: fill 0.12s, transform 0.12s; }
+.fb-sheet .fb-star:hover { transform: translateY(-2px); }
+.fb-sheet .fb-star.hover svg { fill: #ffe7a6; }
+.fb-sheet .fb-star.on { border-color: #ffd572; background: #3a2f6e; }
+.fb-sheet .fb-star.on svg { fill: #ffd572; transform: scale(1.08); }
+@media (max-width: 380px) { .fb-sheet .fb-star { width: 46px; height: 46px; } .fb-star svg { width: 26px; height: 26px; } }
+
 .fb-card textarea {
-  width: 100%; box-sizing: border-box; margin-top: 10px; padding: 10px 12px; border-radius: 14px; resize: vertical;
-  background: #1f1942; color: #fff4e4; border: 2px solid #4a3f86; font: inherit;
+  display: block; width: 100%; box-sizing: border-box; margin-top: 14px; padding: 10px 12px; border-radius: 14px; resize: vertical;
+  background: #1f1942; color: #fff4e4; border: 2px solid #4a3f86; font: 400 0.98rem/1.45 Kanit, sans-serif; text-align: left;
 }
+.fb-card textarea::placeholder { color: #8f84bd; }
 .fb-card textarea:focus { outline: 3px solid #ffd572; outline-offset: 1px; }
-.fb-x { position: absolute; top: 10px; right: 12px; background: none; border: none; color: #c9bfe8; font-size: 1.2rem; cursor: pointer; }
-.fb-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
-.fb-msg { color: #ffb4a8; font-size: 0.9rem; }
-.fb-send {
-  padding: 8px 22px; border-radius: 999px; border: 3px solid #3a2b33; background: #ffd572; color: #3a2b33;
-  font: 700 1rem Kanit, sans-serif; cursor: pointer;
+.fb-msg { margin: 8px 0 0; min-height: 1.2em; color: #ffb4a8; font-size: 0.9rem; }
+.fb-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
+.fb-sheet .fb-send {
+  padding: 9px 26px; border-radius: 999px; border: 3px solid #3a2b33; background: #ffd572; color: #3a2b33;
+  font-weight: 700; font-size: 1rem; box-shadow: 0 4px 0 #3a2b33;
 }
-.fb-send:disabled { opacity: 0.6; }
+.fb-sheet .fb-send:hover { transform: translateY(-1px); }
+.fb-sheet .fb-send:disabled { opacity: 0.6; cursor: default; }
+.fb-sheet .fb-later { padding: 9px 14px; border-radius: 999px; color: #c9bfe8; font-weight: 600; }
+.fb-sheet .fb-later:hover { color: #fff4e4; background: rgba(255, 255, 255, 0.06); }
 .fb-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-
-.fb-stars { display: flex; gap: 6px; }
-.fb-star {
-  width: 44px; height: 44px; border-radius: 12px; border: 2px solid #4a3f86; background: #1f1942; color: #6b5fa6;
-  font-size: 1.5rem; line-height: 1; cursor: pointer; transition: transform 0.12s, color 0.12s;
-}
-.fb-star:hover:not(:disabled) { transform: translateY(-2px); color: #ffd572; }
-.fb-star.on { color: #ffd572; border-color: #ffd572; }
-
-.fb-run {
-  margin: 18px auto 8px; padding: 14px 16px; max-width: 520px; border-radius: 18px; text-align: center;
-  background: rgba(43, 36, 85, 0.85); border: 2px dashed #4a3f86; color: #fff4e4;
-}
-.fb-run p { margin: 0 0 10px; font-weight: 600; }
-.fb-run .fb-stars { justify-content: center; }
-.fb-run .fb-more { margin-top: 10px; }
 
 .announce {
   position: fixed; left: 50%; top: 8px; transform: translateX(-50%); z-index: 8000; max-width: calc(100% - 32px);
@@ -51,4 +64,4 @@ header .fb-open { min-width: 2.4em; }
   background: #ffd572; color: #3a2b33; border: 3px solid #3a2b33; font: 600 0.95rem Kanit, sans-serif;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
-.announce button { background: none; border: none; color: #3a2b33; font-size: 1rem; cursor: pointer; padding: 2px 6px; }
+.announce button { all: unset; cursor: pointer; padding: 2px 8px; color: #3a2b33; font-weight: 700; }
