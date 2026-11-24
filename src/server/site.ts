@@ -94,8 +94,24 @@ function allow(key: string, max: number, ms: number): boolean {
   }
   list.push(now);
   hits.set(key, list);
-  if (hits.size > 50_000) hits.clear(); // never grows without bound
+  if (hits.size > 50_000) prune(now);
   return true;
+}
+/** Drop keys whose calls are all older than an hour (the longest window); never a bulk clear. */
+function prune(now: number) {
+  for (const [k, list] of hits) if (!list.length || now - list[list.length - 1] > 3_600_000) hits.delete(k);
+}
+// wrong admin tokens: kept apart from the public limits (nothing a visitor does can flush them), per IP and in total
+const admFails = new Map<string, number[]>();
+const ADM_WINDOW = 600_000;
+function admFailCount(key: string, now: number): number {
+  const list = (admFails.get(key) ?? []).filter((t) => now - t < ADM_WINDOW);
+  admFails.set(key, list);
+  return list.length;
+}
+function admFail(key: string, now: number) {
+  admFails.get(key)!.push(now);
+  if (admFails.size > 10_000) for (const [k, l] of admFails) if (!l.length || now - l[l.length - 1] > ADM_WINDOW) admFails.delete(k);
 }
 
 // ---------- helpers ----------
@@ -176,7 +192,8 @@ export function handleWaitlist(body: any, ip: string): Res {
   const known = site.waitlist.find((w) =>
     keys.some((k) => k === 'tg:' + norm(w.telegram ?? '') || k === 'x:' + norm(w.x ?? '') || k === 'em:' + (w.email ?? '').toLowerCase()),
   );
-  if (known) return { status: 200, json: { ok: true, already: true, position: site.waitlist.indexOf(known) + 1 } };
+  // the same answer whether or not the contact was already on the list: the form must not tell who signed up
+  if (known) return { status: 200, json: { ok: true } };
   const entry: WaitEntry = {
     id: randomUUID(),
     ...(telegram ? { telegram: '@' + telegram.replace(/^@/, '') } : {}),
@@ -190,7 +207,7 @@ export function handleWaitlist(body: any, ip: string): Res {
   site.waitlist.push(entry);
   saveSite();
   logEvent({ e: 'waitlist', t: entry.at, v: ID.test(String(body?.v)) ? body.v : undefined, src: entry.src });
-  return { status: 200, json: { ok: true, position: site.waitlist.length } };
+  return { status: 200, json: { ok: true } };
 }
 
 // ---------- feedback ----------
@@ -234,12 +251,14 @@ const tokenHash = createHash('sha256').update(TOKEN).digest();
 export function adminGate(auth: string | undefined, ip: string): Res | null {
   if (TOKEN.length < 16) return bad('admin is off: set ADMIN_TOKEN (16+ characters) on the server', 503);
   if (!allow('adm:' + ip, 120, 60_000)) return bad('slow down', 429);
-  if ((hits.get('admfail:' + ip)?.filter((t) => Date.now() - t < 600_000).length ?? 0) >= 10) return bad('too many wrong tokens, try later', 429);
+  const now = Date.now();
+  // 10 wrong tokens per IP, or 50 in total (a faked IP header cannot get around that one), per 10 minutes
+  if (admFailCount('ip:' + ip, now) >= 10 || admFailCount('all', now) >= 50) return bad('too many wrong tokens, try later', 429);
   const given = (auth ?? '').replace(/^Bearer\s+/i, '');
   const ok = timingSafeEqual(createHash('sha256').update(given).digest(), tokenHash);
   if (ok) return null;
-  // wrong tokens: a few per 10 minutes per IP, then locked out for a while (no brute force)
-  if (!allow('admfail:' + ip, 10, 600_000)) return bad('too many wrong tokens, try later', 429);
+  admFail('ip:' + ip, now);
+  admFail('all', now);
   return bad('wrong token', 401);
 }
 

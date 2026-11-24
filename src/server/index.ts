@@ -64,7 +64,8 @@ function serveStatic(url: string, res: ServerResponse) {
 
 /**
  * The caller's IP, for rate limits only (never written to disk). Behind Railway's proxy: x-real-ip, else the LAST
- * x-forwarded-for entry (the one the proxy added; earlier entries come from the client and can be faked).
+ * x-forwarded-for entry (the one the proxy added; earlier entries come from the client and can be faked). If a header
+ * is faked anyway, the limits that matter also have a global cap (admin tokens: site.ts).
  */
 function ipOf(req: IncomingMessage): string {
   const real = String(req.headers['x-real-ip'] ?? '').trim();

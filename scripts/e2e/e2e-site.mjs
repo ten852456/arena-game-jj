@@ -66,7 +66,7 @@ for (const [label, opts] of [['desktop', { viewport: { width: 1280, height: 800 
   await p.check('form.wait input[name=consent]');
   await p.click('form.wait button[type=submit]');
   await p.waitForSelector('.joined', { timeout: 8000 }).catch(() => {});
-  ok('waitlist: signs up and shows the place in line', /You are in/.test((await p.textContent('.joined').catch(() => '')) ?? ''));
+  ok('waitlist: signs up', /You are on the list/.test((await p.textContent('.joined').catch(() => '')) ?? ''));
   await p.screenshot({ path: path.join(OUT, 'landing-joined.png') });
 
   // feedback sheet
@@ -125,7 +125,8 @@ r = await api('/api/waitlist', { wallet: 'not-a-wallet', email: 'x' + uniq + '@m
 ok('API waitlist: bad Solana address → 400', r.status === 400, r.json?.error);
 r = await api('/api/waitlist', { email: 'Mixed' + uniq + '@Mail.com', consent: true });
 const r2 = await api('/api/waitlist', { email: 'mixed' + uniq + '@mail.com', consent: true });
-ok('API waitlist: the same email twice is one entry', r.status === 200 && r2.json?.already === true, JSON.stringify(r2.json));
+ok('API waitlist: a repeat sign-up gets the same answer as a new one (no membership oracle)', r.status === 200 && JSON.stringify(r.json) === JSON.stringify(r2.json), JSON.stringify(r2.json));
+const mixedTag = 'mixed' + uniq;
 r = await api('/api/waitlist', { telegram: '@honey_pot_' + uniq, consent: true, hp: 'http://spam' });
 ok('API waitlist: honeypot answers ok', r.status === 200);
 r = await api('/api/feedback', { rating: 6 });
@@ -146,6 +147,7 @@ if (TOKEN) {
   ok('API admin overview with token', r.status === 200 && r.json?.totals?.waitlist >= 2, JSON.stringify(r.json?.totals));
   ok('API admin funnel counts the landing visit and the Play click', (r.json?.funnel?.[0]?.n ?? 0) >= 1 && (r.json?.funnel?.[1]?.n ?? 0) >= 1, JSON.stringify(r.json?.funnel));
   r = await api('/api/admin/waitlist.csv', undefined, auth);
+  ok('API admin: the same email twice is one entry', (r.text.toLowerCase().match(new RegExp(mixedTag, 'g')) ?? []).length === 1);
   ok('API admin CSV download', r.status === 200 && r.text.includes('telegram') && r.text.includes('mochi_e2e_' + uniq));
   ok('API admin CSV leaves out the honeypot', !r.text.includes('honey_pot_' + uniq));
   r = await api('/api/admin/announce', { on: true, th: 'ทดสอบ', en: 'e2e banner' }, auth);

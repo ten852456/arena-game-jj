@@ -242,11 +242,8 @@ function bind(root: HTMLElement) {
           consent: true, lang, src: 'landing', v: visitorId(),
         }),
       });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'error');
-      form.innerHTML = `<div class="joined"><b>${j.already ? t('You are already on the list 💜', 'คุณลงชื่อไว้แล้ว 💜') : t('You are in! 🌙', 'ลงชื่อเรียบร้อย! 🌙')}</b>${
-        j.position ? `<span>${t(`Number ${j.position} on the waitlist`, `ลำดับที่ ${j.position} ในรายชื่อ`)}</span>` : ''
-      }<a class="btn btn-gold btn-sm" href="/play" data-play="joined">▶ ${t('Play while you wait', 'เล่นระหว่างรอ')}</a></div>`;
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error || 'error');
+      form.innerHTML = `<div class="joined"><b>${t('You are on the list! 🌙', 'ลงชื่อเรียบร้อย! 🌙')}</b><span>${t('We will message you at each milestone.', 'เราจะแจ้งเมื่อมีความคืบหน้าสำคัญ')}</span><a class="btn btn-gold btn-sm" href="/play" data-play="joined">▶ ${t('Play while you wait', 'เล่นระหว่างรอ')}</a></div>`;
     } catch (err) {
       btn.disabled = false;
       msg.textContent = t('Could not sign you up: ', 'ลงชื่อไม่สำเร็จ: ') + (err as Error).message;

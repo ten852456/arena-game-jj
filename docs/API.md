@@ -158,7 +158,7 @@ Stored apart from the game: `data/site.json` (waitlist, feedback, banner) and `d
 
 | Route | Body / answer | Rules |
 |---|---|---|
-| `POST /api/waitlist` | `{ telegram?, x?, email?, wallet?, consent: true, lang, src, hp }` → `{ ok, position, already? }` | at least one of Telegram, X, email; each must match its format (Solana address is base58); one entry per handle or email (case-insensitive); 6 per IP per hour; `hp` is a honeypot |
+| `POST /api/waitlist` | `{ telegram?, x?, email?, wallet?, consent: true, lang, src, hp }` → `{ ok }` (the same answer for a new and a repeat sign-up, so the form never tells who is on the list) | at least one of Telegram, X, email; each must match its format (Solana address is base58); one entry per handle or email (case-insensitive); 6 well-formed sign-ups per IP per hour; `hp` is a honeypot |
 | `POST /api/feedback` | `{ rating?: 1–5, text?, screen, runId?, hero?, wins?, lang, device, ver }` → `{ ok }` | rating or text required; text cut at 1000 characters; 20 per IP per hour |
 | `POST /api/events` | `{ v: visitorId, p?: playerId, events: [{ e, screen?, hero?, src?, lang?, device?, day?, wins? }] }` → `{ ok: counted }` | browser events allowed: `landing_view`, `play_click`, `game_open`, `tutorial_start`, `tutorial_done`, `run_start`, `feedback_open`, `docs_view`; at most 30 per batch, 240 per IP per minute |
 | `GET /api/announce` | `{ on, th, en, at }` | the banner set in /admin |
@@ -169,7 +169,7 @@ newly finished run: hero, counted wins, cleared), `waitlist` and `feedback`. The
 ## Admin API
 
 Every `/api/admin/*` call needs `Authorization: Bearer <ADMIN_TOKEN>` (a server env var, 16+ characters; without it
-admin answers 503). Ten wrong tokens from one IP in 10 minutes lock that IP out for the rest of the window (429).
+admin answers 503). Ten wrong tokens from one IP, or 50 in total, within 10 minutes lock admin out for the rest of the window (429). These counters are kept apart from the public rate limits, which only ever drop expired entries.
 
 | Route | Answer |
 |---|---|
