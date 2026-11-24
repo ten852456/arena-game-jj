@@ -169,7 +169,7 @@ newly finished run: hero, counted wins, cleared), `waitlist` and `feedback`. The
 ## Admin API
 
 Every `/api/admin/*` call needs `Authorization: Bearer <ADMIN_TOKEN>` (a server env var, 16+ characters; without it
-admin answers 503). Ten wrong tokens from one IP, or 50 in total, within 10 minutes lock admin out for the rest of the window (429). These counters are kept apart from the public rate limits, which only ever drop expired entries.
+admin answers 503). Ten wrong tokens from one IP, or 50 in total, within 10 minutes get every further wrong token a 429 for the rest of the window; the right token always gets in. These counters are kept apart from the public rate limits, which only ever drop expired entries.
 
 | Route | Answer |
 |---|---|

@@ -340,6 +340,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
     // earlier wrong tokens from this IP (e.g. e2e-site) count too: some 401s, then only 429s, never more than 10 401s
     const first429 = codes.indexOf(429);
     check('site: admin locks out after 10 wrong tokens', first429 >= 0 && first429 <= 10 && codes.slice(first429).every((c) => c === 429), codes.join(','));
+    if (process.env.ADMIN_TOKEN) check('site: the right token still gets in during a lockout', (await adm(process.env.ADMIN_TOKEN)) === 200);
   }
   // waitlist sign-ups are rate limited per IP
   const codes: number[] = [];

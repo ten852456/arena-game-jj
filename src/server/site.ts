@@ -97,21 +97,36 @@ function allow(key: string, max: number, ms: number): boolean {
   if (hits.size > 50_000) prune(now);
   return true;
 }
-/** Drop keys whose calls are all older than an hour (the longest window); never a bulk clear. */
+/**
+ * Keep a map under `max` keys: drop keys idle longer than `idle` ms first, then the oldest-inserted ones (Map order)
+ * if a flood of fresh keys is still over the cap. Never a bulk clear of live entries.
+ */
+function bound(map: Map<string, number[]>, max: number, idle: number, now: number) {
+  if (map.size <= max) return;
+  for (const [k, list] of map) if (!list.length || now - list[list.length - 1] > idle) map.delete(k);
+  for (const k of map.keys()) {
+    if (map.size <= max * 0.8) break;
+    map.delete(k);
+  }
+}
 function prune(now: number) {
-  for (const [k, list] of hits) if (!list.length || now - list[list.length - 1] > 3_600_000) hits.delete(k);
+  bound(hits, 50_000, 3_600_000, now);
 }
 // wrong admin tokens: kept apart from the public limits (nothing a visitor does can flush them), per IP and in total
 const admFails = new Map<string, number[]>();
 const ADM_WINDOW = 600_000;
 function admFailCount(key: string, now: number): number {
-  const list = (admFails.get(key) ?? []).filter((t) => now - t < ADM_WINDOW);
-  admFails.set(key, list);
+  const list = admFails.get(key)?.filter((t) => now - t < ADM_WINDOW) ?? [];
+  if (list.length) admFails.set(key, list);
+  else admFails.delete(key); // no empty entries: lookups never grow the map
   return list.length;
 }
 function admFail(key: string, now: number) {
-  admFails.get(key)!.push(now);
-  if (admFails.size > 10_000) for (const [k, l] of admFails) if (!l.length || now - l[l.length - 1] > ADM_WINDOW) admFails.delete(k);
+  const list = admFails.get(key) ?? [];
+  list.push(now);
+  if (list.length > 100) list.splice(0, list.length - 100);
+  admFails.set(key, list);
+  bound(admFails, 10_000, ADM_WINDOW, now);
 }
 
 // ---------- helpers ----------
@@ -252,11 +267,11 @@ export function adminGate(auth: string | undefined, ip: string): Res | null {
   if (TOKEN.length < 16) return bad('admin is off: set ADMIN_TOKEN (16+ characters) on the server', 503);
   if (!allow('adm:' + ip, 120, 60_000)) return bad('slow down', 429);
   const now = Date.now();
-  // 10 wrong tokens per IP, or 50 in total (a faked IP header cannot get around that one), per 10 minutes
-  if (admFailCount('ip:' + ip, now) >= 10 || admFailCount('all', now) >= 50) return bad('too many wrong tokens, try later', 429);
   const given = (auth ?? '').replace(/^Bearer\s+/i, '');
-  const ok = timingSafeEqual(createHash('sha256').update(given).digest(), tokenHash);
-  if (ok) return null;
+  // the right token always gets in (constant-time compare), so nobody can lock the owner out by spamming guesses
+  if (timingSafeEqual(createHash('sha256').update(given).digest(), tokenHash)) return null;
+  // wrong tokens: 10 per IP, or 50 in total (a faked IP header cannot get around that one), per 10 minutes
+  if (admFailCount('ip:' + ip, now) >= 10 || admFailCount('all', now) >= 50) return bad('too many wrong tokens, try later', 429);
   admFail('ip:' + ip, now);
   admFail('all', now);
   return bad('wrong token', 401);
