@@ -34,7 +34,7 @@ async function play(label, ctxOpts, runs = 1) {
   const noHScroll = async () => p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
   const shot = (n) => p.screenshot({ path: path.join(OUT, `${label}-${n}.png`) });
 
-  await p.goto(BASE, { waitUntil: 'load' });
+  await p.goto(BASE + '/play', { waitUntil: 'load' });
   await p.waitForTimeout(1500);
   ok(`${label}: title is Mochi Moon`, (await p.title()) === 'Mochi Moon');
   // tutorial: the guided tutorial offers itself on the first visit (skip it here; e2e-guide.mjs plays it)
@@ -223,7 +223,7 @@ async function play(label, ctxOpts, runs = 1) {
       ok(`${label} run${run}: replay link opens a fight`, (await has('[data-a="skip"]')) || (await has('[data-a="replayAgain"]')) || (await has('[data-a="leaveReplay"]')));
       await tap('[data-a="skip"]', 900); await tap('[data-a="leaveReplay"]', 700);
     }
-    await p.goto(BASE, { waitUntil: 'load' }); await p.waitForTimeout(1200);
+    await p.goto(BASE + '/play', { waitUntil: 'load' }); await p.waitForTimeout(1200);
   }
   // profile now has data
   await tap('[data-a="goto"][data-i="hall"]'); await tap('[data-a="profile"]', 1200);
@@ -278,7 +278,7 @@ async function layout(label, ctxOpts, portrait = false) {
     ok(`layout ${label}: ${screen} fits one screen (no page scroll)`, pass, `${on ? '' : 'screen not shown · '}${m.sh}/${m.ih} tall, ${m.sw}/${m.iw} wide`);
     await p.screenshot({ path: path.join(OUT, `layout-${label}-${screen}.png`) });
   };
-  await p.goto(BASE, { waitUntil: 'load' });
+  await p.goto(BASE + '/play', { waitUntil: 'load' });
   await p.waitForTimeout(1500);
   await tap('.gd-skip');
   await fits('town', '.town-card');

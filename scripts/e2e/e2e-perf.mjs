@@ -13,7 +13,7 @@ async function open(name, ctxOpts, initScript) {
   if (initScript) await ctx.addInitScript(initScript);
   const p = await ctx.newPage();
   const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
-  await p.goto(BASE, { waitUntil: 'load' }); await p.waitForTimeout(1800);
+  await p.goto(BASE + '/play', { waitUntil: 'load' }); await p.waitForTimeout(1800);
   await p.locator('.gd-skip').first().click({ timeout: 2000 }).catch(() => {});
   await p.waitForTimeout(400);
   const info = await p.evaluate(() => ({ ...window.__perf(), attr: document.documentElement.dataset.perf, canvas: document.querySelector('#stage canvas')?.width, limit: window.Phaser ? null : undefined }));

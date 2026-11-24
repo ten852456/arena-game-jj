@@ -314,3 +314,35 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   early.skills = [{ id: 'bulwark', v: 'a' }, { id: 'shield', v: 'b' }];
   check('client: a wish on an all-Lv2 build before day 4 gives no mark (the server would refuse it)', wishKind(early) === null, String(wishKind(early)));
 }
+
+// ---- the public site: waitlist, feedback, events, admin (site.ts) ----
+{
+  const tag = Date.now().toString(36);
+  // a body over 64 KB is refused before it is parsed
+  const big = await fetch(BASE + '/api/feedback', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: 'x'.repeat(70_000) }) }).then((r) => r.status).catch(() => 0);
+  check('site: a 70 KB body is refused', big === 400 || big === 0, String(big));
+  // contact fields must look like what they claim to be (no markup or formulas reach the CSV)
+  const [s1] = await post('/api/waitlist', { telegram: '=HYPERLINK("x")', consent: true });
+  const [s2] = await post('/api/waitlist', { x: '<script>', consent: true });
+  check('site: waitlist refuses markup and formulas in handles', s1 === 400 && s2 === 400, `${s1} ${s2}`);
+  // events: a batch is capped and unknown names are dropped
+  const [s3, e3] = await post('/api/events', { v: 'sec-' + tag, events: Array.from({ length: 100 }, () => ({ e: 'landing_view' })) });
+  check('site: an events batch counts at most 30', s3 === 200 && e3.ok === 30, JSON.stringify(e3));
+  const [, e4] = await post('/api/events', { v: 'sec-' + tag, events: [{ e: 'fight' }, { e: 'run_end' }, { e: 'waitlist' }] });
+  check('site: the browser cannot fake server-side events (fight, run_end, waitlist)', e4.ok === 0, JSON.stringify(e4));
+  // admin: no token, wrong token, then lockout after repeated wrong tokens
+  const adm = (tok?: string) => fetch(BASE + '/api/admin/overview', { headers: tok ? { authorization: 'Bearer ' + tok } : {} }).then((r) => r.status);
+  const a0 = await adm();
+  check('site: admin API without a token is refused', a0 === 401 || a0 === 503, String(a0));
+  if (a0 === 401) {
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) codes.push(await adm('guess-' + tag + i));
+    // earlier wrong tokens from this IP (e.g. e2e-site) count too: some 401s, then only 429s, never more than 10 401s
+    const first429 = codes.indexOf(429);
+    check('site: admin locks out after 10 wrong tokens', first429 >= 0 && first429 <= 10 && codes.slice(first429).every((c) => c === 429), codes.join(','));
+  }
+  // waitlist sign-ups are rate limited per IP
+  const codes: number[] = [];
+  for (let i = 0; i < 8; i++) codes.push((await post('/api/waitlist', { telegram: `@sec_${tag}_${i}`, consent: true }))[0]);
+  check('site: waitlist allows a few sign-ups per IP per hour, then 429', codes.includes(429) && codes.filter((c) => c === 200).length <= 6, codes.join(','));
+}

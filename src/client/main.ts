@@ -21,6 +21,9 @@ import './reward.css';
 import './runend.css'; // end of run: after theme.css so it wins
 import './depth.css'; // relics, stars, marks, branch picker, build card, codex
 import { initCodex } from './codex';
+import { mountFeedback } from './feedback';
+import { deviceKind, track } from './track';
+import { playerId } from './views/meta';
 import { initDepthArt } from './depthArt';
 import { attachPerf, bootProfile, loopLimit } from './perf';
 import './perf.css'; // graphics tiers: after every other sheet so it wins
@@ -105,6 +108,9 @@ async function boot() {
   mountLangSwitch();
   initInfoMode(); // simple / detailed skill info: ⓘ in the header, Alt to peek
   mountMute();
+  mountFeedback(); // 💬 in the header (wide screens) + the announcement banner
+  playerId(); // make sure the anonymous player id exists, so the open is counted per player
+  track('game_open', { lang: getLang(), device: deviceKind() });
   paintTagline();
   onLang(() => {
     town.refreshLabels();

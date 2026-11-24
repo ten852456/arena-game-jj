@@ -144,3 +144,37 @@ get `"you": true`.
 | `tracks` (per-run opponents met + daily results) | 5000 runs |
 | `runs` (finished runs) | 5000 |
 | `players` | 20000 (least recently updated dropped) |
+
+## Pages
+
+The server serves three pages from `dist/`: the landing page `/` (`src/client/index.html`, `landing.ts`), the game
+`/play` (`src/client/play/index.html`) and the back office `/admin` (`src/client/admin/`). An old share link
+`/?replay=…` (any `/` with a query) is forwarded to `/play` with the same query.
+
+## Public site (src/server/site.ts)
+
+Stored apart from the game: `data/site.json` (waitlist, feedback, banner) and `data/events/YYYY-MM-DD.ndjson`
+(one usage event per line). No raw IPs are written; IPs are kept in memory for rate limits only.
+
+| Route | Body / answer | Rules |
+|---|---|---|
+| `POST /api/waitlist` | `{ telegram?, x?, email?, wallet?, consent: true, lang, src, hp }` → `{ ok, position, already? }` | at least one of Telegram, X, email; each must match its format (Solana address is base58); one entry per handle or email (case-insensitive); 6 per IP per hour; `hp` is a honeypot |
+| `POST /api/feedback` | `{ rating?: 1–5, text?, screen, runId?, hero?, wins?, lang, device, ver }` → `{ ok }` | rating or text required; text cut at 1000 characters; 20 per IP per hour |
+| `POST /api/events` | `{ v: visitorId, p?: playerId, events: [{ e, screen?, hero?, src?, lang?, device?, day?, wins? }] }` → `{ ok: counted }` | browser events allowed: `landing_view`, `play_click`, `game_open`, `tutorial_start`, `tutorial_done`, `run_start`, `feedback_open`, `docs_view`; at most 30 per batch, 240 per IP per minute |
+| `GET /api/announce` | `{ on, th, en, at }` | the banner set in /admin |
+
+The server adds its own events: `fight` (after every fight it ran: player, day, won, AI, tutorial), `run_end` (a
+newly finished run: hero, counted wins, cleared), `waitlist` and `feedback`. The browser cannot send these names.
+
+## Admin API
+
+Every `/api/admin/*` call needs `Authorization: Bearer <ADMIN_TOKEN>` (a server env var, 16+ characters; without it
+admin answers 503). Ten wrong tokens from one IP in 10 minutes lock that IP out for the rest of the window (429).
+
+| Route | Answer |
+|---|---|
+| `GET /api/admin/overview?days=14` | totals, per-day players / visitors / fights / runs / waitlist / feedback, funnel (landing → play click → game open → first fight → run end → waitlist), day-1 retention, heroes from real finished runs, language and device split |
+| `GET /api/admin/feedback` · `POST /api/admin/feedback/done {id, done}` | newest 500 feedback rows; mark done / reopen |
+| `GET /api/admin/waitlist` · `GET /api/admin/waitlist.csv` | the list, newest first; CSV with formula-safe cells |
+| `GET /api/admin/runs` | newest 100 finished runs and 50 fights (with replay ids) |
+| `POST /api/admin/announce {on, th, en}` | set or clear the banner |

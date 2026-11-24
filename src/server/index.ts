@@ -7,7 +7,12 @@ import { extname, join, normalize } from 'node:path';
 import { handleFight, handleScout, type Res } from './fight';
 import { handleFinish, handleLeaderboard, handleProfile } from './meta';
 import { ROOT, db } from './store';
+import { WIN_TARGET } from '../sim/run';
 import { cleanName, isDefaultName } from './validate';
+import {
+  adminAnnounce, adminFeedback, adminFeedbackDone, adminGate, adminOverview, adminRuns, adminWaitlist, handleAnnounce,
+  handleEvents, handleFeedback, handleWaitlist, logEvent, waitlistCsv,
+} from './site';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DIST = join(ROOT, 'dist');
@@ -50,15 +55,43 @@ function serveStatic(url: string, res: ServerResponse) {
   if (!existsSync(DIST)) return send(res, 404, { error: 'not found (run `npm run build` or use `npm run dev`)' });
   let p = normalize(join(DIST, decodeURIComponent(url.split('?')[0])));
   if (!p.startsWith(DIST)) return send(res, 403, { error: 'forbidden' });
-  if (!existsSync(p) || statSync(p).isDirectory()) p = join(DIST, 'index.html');
+  // /play and /admin are their own pages (dist/play/index.html …); anything else unknown gets the landing page
+  if (existsSync(p) && statSync(p).isDirectory() && existsSync(join(p, 'index.html'))) p = join(p, 'index.html');
+  else if (!existsSync(p) || statSync(p).isDirectory()) p = join(DIST, 'index.html');
   res.writeHead(200, { 'content-type': MIME[extname(p)] ?? 'application/octet-stream' });
   createReadStream(p).pipe(res);
 }
 
+/**
+ * The caller's IP, for rate limits only (never written to disk). Behind Railway's proxy: x-real-ip, else the LAST
+ * x-forwarded-for entry (the one the proxy added; earlier entries come from the client and can be faked).
+ */
+function ipOf(req: IncomingMessage): string {
+  const real = String(req.headers['x-real-ip'] ?? '').trim();
+  const fwd = String(req.headers['x-forwarded-for'] ?? '').split(',').map((s) => s.trim()).filter(Boolean).at(-1);
+  return real || fwd || req.socket.remoteAddress || '?';
+}
+
 type Route = (req: IncomingMessage, q: URLSearchParams) => Res | Promise<Res>;
 const routes: Record<string, Route> = {
-  'POST /api/fight': async (req) => handleFight(await readBody(req)),
-  'POST /api/run/finish': async (req) => handleFinish(await readBody(req)),
+  'POST /api/fight': async (req) => {
+    const body: any = await readBody(req);
+    const r = handleFight(body);
+    const j: any = r.status === 200 ? r.json : null;
+    if (j) logEvent({ e: 'fight', t: Date.now(), p: typeof body?.playerId === 'string' ? body.playerId.slice(0, 64) : undefined, day: j.day, won: !!j.won, ai: !!j.opponent?.ai, tut: !!j.tutorial });
+    return r;
+  },
+  'POST /api/run/finish': async (req) => {
+    const body: any = await readBody(req);
+    const r = handleFinish(body);
+    const j: any = r.status === 200 ? r.json : null;
+    if (j && !j.already) logEvent({ e: 'run_end', t: Date.now(), p: String(body.playerId).slice(0, 64), hero: j.run?.hero, wins: j.run?.wins, won: (Number(j.run?.wins) || 0) >= WIN_TARGET });
+    return r;
+  },
+  'POST /api/waitlist': async (req) => handleWaitlist(await readBody(req), ipOf(req)),
+  'POST /api/feedback': async (req) => handleFeedback(await readBody(req), ipOf(req)),
+  'POST /api/events': async (req) => handleEvents(await readBody(req), ipOf(req)),
+  'GET /api/announce': () => handleAnnounce(),
   'GET /api/scout': (_req, q) => handleScout(q),
   'GET /api/profile': (_req, q) => handleProfile(q),
   'GET /api/leaderboard': (_req, q) => handleLeaderboard(q),
@@ -68,10 +101,33 @@ const routes: Record<string, Route> = {
   }),
 };
 
+/** Admin API: every route needs the ADMIN_TOKEN as a Bearer header. */
+const adminRoutes: Record<string, Route> = {
+  'GET /api/admin/overview': (_req, q) => adminOverview(q),
+  'GET /api/admin/feedback': () => adminFeedback(),
+  'POST /api/admin/feedback/done': async (req) => adminFeedbackDone(await readBody(req)),
+  'GET /api/admin/waitlist': () => adminWaitlist(),
+  'GET /api/admin/runs': () => adminRuns(),
+  'POST /api/admin/announce': async (req) => adminAnnounce(await readBody(req)),
+};
+
 createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x');
   try {
-    const route = routes[`${req.method} ${url.pathname}`];
+    const key = `${req.method} ${url.pathname}`;
+    if (url.pathname.startsWith('/api/admin/')) {
+      const denied = adminGate(req.headers.authorization, ipOf(req));
+      if (denied) return send(res, denied.status, denied.json);
+      if (key === 'GET /api/admin/waitlist.csv') {
+        res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="mochi-waitlist.csv"', 'cache-control': 'no-store' });
+        return res.end('﻿' + waitlistCsv());
+      }
+      const ar = adminRoutes[key];
+      if (!ar) return send(res, 404, { error: 'not found' });
+      const r = await ar(req, url.searchParams);
+      return send(res, r.status, r.json);
+    }
+    const route = routes[key];
     if (route) {
       const r = await route(req, url.searchParams);
       return send(res, r.status, r.json);

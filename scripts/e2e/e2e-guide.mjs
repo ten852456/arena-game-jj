@@ -22,7 +22,7 @@ async function open(ctxOpts, lang = 'th-TH') {
   const errs = [];
   p.on('pageerror', (e) => errs.push(String(e).slice(0, 200)));
   p.on('console', (m) => { if (m.type() === 'error' && !/favicon/.test(m.text())) errs.push(m.text().slice(0, 200)); });
-  await p.goto(BASE, { waitUntil: 'load' });
+  await p.goto(BASE + '/play', { waitUntil: 'load' });
   await p.waitForTimeout(1500);
   return { browser, p, errs };
 }

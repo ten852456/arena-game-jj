@@ -38,6 +38,8 @@ import { bonusRows, detailTipHTML, showingDetail, simpleDeltaHTML, simpleSkillHT
 import * as D from './depthUI';
 import { simpleText } from './skillText';
 import { skillBlurb } from './skillBlurb';
+import { rateRunRow } from './feedback';
+import { track } from './track';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
 
 export interface Stage {
@@ -1492,6 +1494,7 @@ let overFocused = '';
 function overAfterRender() {
   const r = run;
   if (!r) return;
+  rateRunRow($panel, { runId: r.id, hero: r.hero, wins: r.wins });
   RF.countUps($panel, () => {
     if (overFocused === r.id) return;
     overFocused = r.id;
@@ -1934,6 +1937,7 @@ function onClick(ev: Event) {
         if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
         nextSeed = null;
         run = R.newRun(arg, seed, uid());
+        track('run_start', { hero: arg });
         heroVoice(arg, 'pick', true); // the hero greets you in its own voice (sim v21)
       }
       view = 'shop';

@@ -23,7 +23,7 @@ const VIEWS = {
 /** Start a run through the UI, then rewrite it as finished (won 10–2, or lost 7–5 with a close last fight). */
 async function finishedRun(p, won, lang) {
   const tap = async (sel, wait = 600) => { const l = p.locator(sel).first(); if (await l.count()) { await l.click({ timeout: 4000 }).catch(() => {}); await p.waitForTimeout(wait); return true; } return false; };
-  await p.goto(BASE, { waitUntil: 'load' });
+  await p.goto(BASE + '/play', { waitUntil: 'load' });
   await p.waitForTimeout(1300);
   await tap('.gd-skip');
   if (lang === 'en') await tap('[data-lang="en"]', 400);

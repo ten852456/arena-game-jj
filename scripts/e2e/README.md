@@ -22,6 +22,14 @@ Exit code 0 = all checks passed; screenshots and `e2e.json` go to the output fol
 shop, fight, result and run-over screens must not scroll the page (`scrollHeight <= innerHeight + 2`); upright
 390×844 is checked for every screen except the shop (the shop may scroll there). Screenshots: `layout-*.png`.
 
+## Public site
+
+The game is at `/play`; every game script opens `BASE + '/play'`. `e2e-site.mjs` (same setup,
+`ADMIN_TOKEN=… node e2e-site.mjs <baseUrl> <outDir>`) checks the landing page on desktop and phone (headline, numbers
+from the code, no sideways scroll, no errors), old `/?replay=` links, the TH/EN switch, the waitlist form, feedback,
+Play → `/play`, the `/admin` page and the waitlist / feedback / events / admin API rules. It signs up a few test
+entries, so run it on a local server, and before `npm run security` (that one trips the admin and waitlist limits).
+
 ## Guided tutorial
 
 `e2e-guide.mjs` (same setup, `node e2e-guide.mjs <baseUrl> <outDir>`) plays the guided tutorial end to end at 1280x720,

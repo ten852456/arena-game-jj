@@ -1,4 +1,7 @@
 import { defineConfig } from 'vite';
+import { resolve } from 'node:path';
+
+const page = (p: string) => resolve(import.meta.dirname, 'src/client', p);
 
 export default defineConfig({
   root: 'src/client',
@@ -10,5 +13,7 @@ export default defineConfig({
   build: {
     outDir: '../../dist',
     emptyOutDir: true,
+    // three pages: the landing page (/), the game (/play) and the back office (/admin)
+    rollupOptions: { input: { main: page('index.html'), play: page('play/index.html'), admin: page('admin/index.html') } },
   },
 });

@@ -1,33 +1,23 @@
 <!doctype html>
-<html lang="th">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mochi Moon</title>
-    <meta name="description" content="Mochi Moon: a cute strategy auto-battler on the moon. / ศึกโมจิใต้แสงจันทร์" />
-    <meta name="theme-color" content="#231c48" />
+    <title>Mochi Moon: draft the build, it fights for you</title>
+    <meta name="description" content="Mochi Moon is a cozy auto-battler. Pick a hero, stack skills that combo, and your build battles other players' builds. Free prototype on web and phone." />
+    <meta name="theme-color" content="#211b44" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="Mochi Moon" />
+    <meta property="og:title" content="Mochi Moon: draft the build, it fights for you" />
+    <meta property="og:description" content="A cozy auto-battler. Free prototype on web and phone." />
     <meta property="og:image" content="/assets/img/og.jpg" />
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="icon" href="/assets/img/stardust.webp" type="image/webp" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Mitr:wght@500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800&family=Mitr:wght@500&display=swap" rel="stylesheet" />
   </head>
   <body>
-    <header><b class="logo" role="link" tabindex="0"><span class="logo-moon" aria-hidden="true">🌕</span> Mochi Moon</b> <small>ศึกโมจิใต้แสงจันทร์ · prototype</small></header>
-    <div id="stage-clip" class="off"><div id="stage"></div></div>
-    <main id="panel"><p class="muted">กำลังโหลด…</p></main>
-    <script type="module" src="./main.ts"></script>
-    <script>
-      // If the game code fails to load (bad module, network), say so instead of "loading" forever.
-      setTimeout(function () {
-        var p = document.getElementById('panel');
-        if (p && p.textContent.indexOf('กำลังโหลด') !== -1 && !document.querySelector('canvas')) {
-          p.innerHTML = '<p style="color:#ff6b6b">โหลดเกมไม่สำเร็จ ลองรีเฟรช หรือเปิด DevTools (F12) ดู Console</p>';
-        }
-      }, 10000);
-    </script>
+    <div id="site"></div>
+    <script type="module" src="./landing.ts"></script>
   </body>
 </html>

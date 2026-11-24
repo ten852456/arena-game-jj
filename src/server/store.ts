@@ -7,7 +7,7 @@ import type { Build, Line } from '../sim/types';
 import type { LastChoice } from './validate';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
-const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
+export const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
 const DB_FILE = join(DATA_DIR, 'db.json');
 
 /** Caps (oldest entries go first). */
