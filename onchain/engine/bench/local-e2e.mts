@@ -74,7 +74,7 @@ const L = (() => {
   const f: [string, number][] = [['vrf_slot', 8], ['pend_slot', 8], ['seen', 8], ['best_slot', 8], ['session_expiry', 8], ['owner', 32], ['session_key', 32], ['secret_commit', 32], ['revealed_secret', 32], ['revealed_vrf', 32],
     ['magic', 4], ['season', 4], ['run_no', 4], ['resets', 4], ['best_score', 4], ['look_seed', 4], ['last_seed', 4], ['claim_reward', 4], ['revealed_run', 4], ['pend_req', 4], ['rand_n', 4],
     ['layout', 2], ['sim', 2], ['shard', 2], ['journal_len', 2], ['seat', 1], ['status', 1], ['fought', 1], ['last_day', 1], ['last_result', 1], ['last_kind', 1], ['claim_ready', 1], ['claim_rank', 1],
-    ['pend_code', 1], ['pend_a', 1], ['pend_b', 1], ['pend_state', 1], ['choices', 4], ['run', 184], ['prev', 93], ['last_opp', 93], ['journal', 1323], ['claim_proof', 128], ['rand_log', 4096]];
+    ['pend_code', 1], ['pend_a', 1], ['pend_b', 1], ['pend_state', 1], ['choices', 4], ['run', 184], ['prev', 93], ['last_opp', 93], ['journal', 1323], ['claim_proof', 128], ['preview', 165], ['rand_log', 4096]];
   const o: Record<string, number> = {};
   let p = 8;
   for (const [n, s] of f) { o[n] = p; p += s; }
@@ -205,6 +205,15 @@ async function playRun(w: Who, rng: () => number, label: string) {
   const rs = u32h(revSecret, 'run');
   const heroes = heroChoices(u32h(revSecret, 'heroes')).map((h) => HEROES.findIndex((x) => x.id === h));
   check(`${label}: hero choices = heroChoices(H(secret, "heroes"))`, heroes.join() === choices.join());
+  // the day-1 shops shown before the pick = TS newRun of each offered hero with the run's roll seed
+  const pv = d.subarray(L.preview, L.preview + 165);
+  const pvOk = choices.every((h, i) => {
+    const t = newRun(HEROES[h].id, u32h(revSecret, 'look'), 'pv', rs);
+    const want = encodeState(t).slice(20 + 5 + 3 + 3 + 2 + 88, 20 + 5 + 3 + 3 + 2 + 88 + 55);
+    const got = [...pv.subarray(i * 55, (i + 1) * 55)].map((x, k) => (pv[i * 55 + Math.floor(k / 11) * 11] ? x : 0));
+    return want.join() === got.join();
+  });
+  check(`${label}: the day-1 shops shown before the pick = TS newRun(hero, look, rs) for all 3 heroes`, pvOk);
   const s: RunState = newRun(HEROES[pick].id, u32h(revSecret, 'look'), 'verify', rs);
   const randN = d.readUInt32LE(L.rand_n);
   let j = 0, fightsOk = 0, fights = 0;

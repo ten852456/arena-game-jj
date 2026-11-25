@@ -88,6 +88,8 @@ let nextSeed: number | null = null;
 /** on-chain mode (?chain=1): connection state; the hero choices of a run being started (from the chain's VRF) */
 let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
 let chainChoices: string[] | null = null;
+/** their day-1 shops (published by the program with the choices) */
+let chainPreview: Record<string, (R.Offer | null)[]> | null = null;
 let chainStarting = false;
 let last: FightResponse | null = null;
 let lastDay = 0;
@@ -625,11 +627,25 @@ function heroOffer(): string[] {
   if (!chainChoices && chainConn === 'ready' && !chainStarting && !runActive()) {
     chainStarting = true;
     void C.chainBeginRun().then(
-      (c) => { chainChoices = c; chainStarting = false; render(); },
+      (c) => { chainChoices = c.choices; chainPreview = c.preview; chainStarting = false; render(); },
       (e) => { chainStarting = false; toast = (e as Error).message; render(); },
     );
   }
   return chainChoices ?? [];
+}
+/**
+ * The day-1 shop of an offered hero, card bonuses included: shown before the pick (intended gameplay information).
+ * Offline it is rolled from the next run's seed; on chain the program publishes it with the hero choices.
+ */
+function day1Shop(id: string): (R.Offer | null)[] {
+  if (C.chainOn()) return chainPreview?.[id] ?? [];
+  return R.newRun(id, (nextSeed ??= randSeed()), 'preview').shop;
+}
+function day1HTML(id: string) {
+  const shop = day1Shop(id).filter((o): o is R.Offer => !!o);
+  if (!shop.length) return '';
+  const row = (o: R.Offer) => `<span class="d1-card"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><b>${esc(nodeOf({ id: o.id, v: o.v }).name)}</b>${o.bonus?.length ? bonusChips(o.bonus, 1, null) : ''}</span>`;
+  return `<span class="hero-day1"><small class="muted">${L('ร้านวันแรก (โบนัสต่อสาย)', 'Day-1 shop (connect bonuses)')}</small>${shop.map(row).join('')}</span>`;
 }
 /** cosmetic look of an offered hero (on chain the run's cosmetic seed is known once the run starts) */
 const offerLook = (id: string) => (C.chainOn() ? 0 : R.lookFor(nextSeed!, id));
@@ -666,13 +682,14 @@ function renderTitle() {
     )}</p>`}
     <div class="heroes pick3">${offered.map(
       (h) => `<button class="hero line-${h.line}${h.id === previewHero ? ' previewing' : ''}" data-a="start" data-i="${h.id}">
-        ${heroArt(h.id, '', R.lookFor(nextSeed!, h.id))}
+        ${heroArt(h.id, '', offerLook(h.id))}
         <b class="hero-nm">${h.name}</b><span class="tag">${lineLabel(h.line)}</span>
         <span class="hero-style">${h.style}</span>
         <span class="hero-ult-how info-simp">★ ${esc(h.ult.name)}: ${L(`ซื้อ skill ${LINE_ICON[h.line]} สาย${LINE_NAME[h.line]} 3 ใบ เพื่อปลดท่าไม้ตาย`, `buy 3 ${LINE_ICON[h.line]} ${LINE_NAME[h.line]} skills to unlock the ultimate`)}</span>
         <span class="hero-passive info-det">${h.passive}</span>
         <span class="hero-ult small info-det">${ultHTML(h)}</span>
         <span class="muted hero-uniq info-det">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
+        ${day1HTML(h.id)}
         <span class="hero-go">${L('เริ่มด้วยตัวนี้ ▶', 'Start with this hero ▶')}</span>
       </button>`,
     ).join('')}</div>
@@ -2486,6 +2503,7 @@ async function chainBoot(interactive = false, take = false) {
     const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } }, !interactive, take);
     if (st.run) adoptChain(st.run);
     chainChoices = st.choices;
+    chainPreview = st.preview;
     chainConn = 'ready';
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
   } catch (e) {
@@ -2514,6 +2532,7 @@ async function chainStart(hero: string) {
   try {
     const bytes = await C.chainPickHero(chainChoices.indexOf(hero));
     chainChoices = null;
+    chainPreview = null;
     run = null;
     adoptChain(bytes);
     track('run_start', { hero });
@@ -2532,6 +2551,7 @@ async function chainResync() {
     if (st?.run) adoptChain(st.run);
     else if (run && run.phase !== 'won' && run.phase !== 'dead') run = null;
     chainChoices = st?.choices ?? null;
+    chainPreview = st?.preview ?? null;
   } catch (e) {
     console.error('[chain] resync', e);
   }

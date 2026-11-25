@@ -21,7 +21,16 @@ const PROGRAM = new PublicKey(cfg.program);
 const SEASON = cfg.season, SHARD = cfg.shard;
 const ADMIN_KEY = process.env.ADMIN_KEY ?? '\\\\wsl.localhost\\Ubuntu-26.04\\home\\user\\.config\\solana\\id.json';
 const admin = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(ADMIN_KEY))));
-const owner = Keypair.generate(), session = Keypair.generate(), stranger = Keypair.generate();
+// throwaway keys are SAVED (PROBE_KEYS, outside the repo) so a rerun reuses the same funded test player
+const KEYS = process.env.PROBE_KEYS;
+if (!KEYS) throw new Error('set PROBE_KEYS=<file> (throwaway test keys are kept there)');
+const saved = fs.existsSync(KEYS) ? JSON.parse(fs.readFileSync(KEYS, 'utf8')) : null;
+const kp = (x) => (x ? Keypair.fromSecretKey(Uint8Array.from(x)) : Keypair.generate());
+const owner = kp(saved?.owner), session = kp(saved?.session), stranger = kp(saved?.stranger);
+fs.writeFileSync(KEYS, JSON.stringify({ owner: [...owner.secretKey], session: [...session.secretKey], stranger: [...stranger.secretKey] }));
+const DRY = process.argv.includes('--dry');
+/** devnet SOL this run may move from the admin to the test owner (top-up only) */
+const BUDGET = Number(process.env.PROBE_BUDGET_SOL ?? 0.03) * LAMPORTS_PER_SOL;
 const out = { at: new Date().toISOString(), program: PROGRAM.toBase58(), season: SEASON, owner: owner.publicKey.toBase58(), session: session.publicKey.toBase58(), stranger: stranger.publicKey.toBase58(), probes: [] };
 const log = (x) => { out.probes.push(x); console.error(JSON.stringify(x).slice(0, 400)); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -35,7 +44,7 @@ const pda = (seeds, prog = PROGRAM) => PublicKey.findProgramAddressSync(seeds, p
 function ix(name, args, accs) {
   const def = idl.instructions.find((i) => i.name === name);
   const keys = [];
-  const known = { ...accs };
+  const known = { player: accs.player ?? pda([Buffer.from('player'), accs['arg:season'] ?? u32(SEASON), accs.owner.toBuffer()]), ...accs };
   for (const a of def.accounts) {
     let k = known[a.name];
     if (!k && a.address) k = new PublicKey(a.address);
@@ -91,11 +100,25 @@ const seasonAcc = await base.getAccountInfo(seasonPda);
 const end = Number(seasonAcc.data.readBigInt64LE(8 + 32 + 4 + 8));
 out.seasonEnd = new Date(end * 1000).toISOString();
 if (end * 1000 < Date.now()) throw new Error('season over: ' + out.seasonEnd);
-await send(base, [admin], [SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: owner.publicKey, lamports: 0.05 * LAMPORTS_PER_SOL })], 'fund');
-await send(base, [owner], [
+// build every instruction BEFORE any SOL moves (a bad instruction must fail here, for free)
+const P0 = { owner: owner.publicKey, player: playerPda, season: seasonPda, pool: poolPda, ranking: rankPda, 'arg:season': u32(SEASON) };
+const setupIxs = [
   ix('init_player', [u32(SEASON), u16(SHARD)], { owner: owner.publicKey, 'arg:season': u32(SEASON) }),
   ix('delegate_player', [u32(SEASON)], { owner: owner.publicKey, validator: VALIDATOR, 'arg:season': u32(SEASON) }),
-], 'init + delegate');
+];
+for (const [n, a] of [['set_session', [session.publicKey.toBuffer(), i64(0)]], ['player_permission', [u32(SEASON)]], ['set_salt', [Buffer.alloc(8)]], ['join_pool', []], ['begin_run', []], ['pick_hero', [Buffer.from([0])]], ['act', [Buffer.from([3, 0, 0])]], ['fight', []]]) ix(n, a, P0);
+ix('fight', [], { ...P0, owner: session.publicKey });
+out.dry = 'all instructions built';
+if (DRY) { console.log(JSON.stringify({ dry: 'ok', owner: owner.publicKey.toBase58(), player: playerPda.toBase58(), ownerBalance: await base.getBalance(owner.publicKey) })); process.exit(0); }
+const have = await base.getBalance(owner.publicKey);
+const need = 0.03 * LAMPORTS_PER_SOL;
+const existing = await base.getAccountInfo(playerPda);
+if (have < need && !existing) {
+  const top = Math.min(BUDGET, need - have);
+  out.funded = top / LAMPORTS_PER_SOL;
+  await send(base, [admin], [SystemProgram.transfer({ fromPubkey: admin.publicKey, toPubkey: owner.publicKey, lamports: top })], 'fund');
+}
+if (!existing) await send(base, [owner], setupIxs, 'init + delegate');
 const tok = { owner: await token(owner), session: await token(session), stranger: await token(stranger) };
 const tee = { owner: conn(`${TEE}?token=${tok.owner}`), session: conn(`${TEE}?token=${tok.session}`), stranger: conn(`${TEE}?token=${tok.stranger}`), anon: conn(TEE) };
 for (let i = 0; i < 40 && !(await tee.owner.getAccountInfo(playerPda)); i++) await sleep(1500);

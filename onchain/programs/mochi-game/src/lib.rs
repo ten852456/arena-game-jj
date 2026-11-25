@@ -805,6 +805,10 @@ fn fulfill(pl: &mut Player, sx: &mut RunSecret, ss: &SeasonSecret, randomness: &
     pl.look_seed = u32_of(&hashv(&[&secret[..], &b"look"[..]]).to_bytes());
     let c = hero_choices(u32_of(&hashv(&[&secret[..], &b"heroes"[..]]).to_bytes()));
     pl.choices = [c[0], c[1], c[2], 0];
+    for (i, &h) in c.iter().enumerate() {
+        let day1 = RunState::new(h, pl.look_seed, Some(sx.rs)).to_bytes();
+        pl.preview[i * 55..(i + 1) * 55].copy_from_slice(&day1[129..184]);
+    }
     pl.status = ST_PICK;
     Ok(())
 }
@@ -1117,7 +1121,9 @@ pub struct Season {
 }
 
 const PLAYER_HEAD: usize = 5 * 8 + 5 * 32 + 11 * 4 + 4 * 2 + 12 + 4;
-const PLAYER_BODY: usize = PLAYER_HEAD + RUN_STATE_SIZE + 2 * BUILD_BYTES + JOURNAL_MAX + 32 * LB_DEPTH + 16 * RAND_LOG;
+/// the day-1 shop (5 offers × 11 B) of each of the 3 offered heroes: shown openly before the pick (owner decision)
+pub const PREVIEW_BYTES: usize = 3 * 5 * 11;
+const PLAYER_BODY: usize = PLAYER_HEAD + RUN_STATE_SIZE + 2 * BUILD_BYTES + JOURNAL_MAX + 32 * LB_DEPTH + PREVIEW_BYTES + 16 * RAND_LOG;
 pub const PLAYER_PAD: usize = (8 - PLAYER_BODY % 8) % 8;
 
 /// One per player per season. Zero-copy; `run` is a mochi_engine RunState, `prev` / `last_opp` are Builds.
@@ -1177,6 +1183,9 @@ pub struct Player {
     pub last_opp: [u8; BUILD_BYTES],
     pub journal: [u8; JOURNAL_MAX],
     pub claim_proof: [u8; 32 * LB_DEPTH],
+    /// day-1 shop of each offered hero (choices order), RunState shop bytes: public gameplay information. It comes
+    /// from the run's roll seed `rs`, which nothing after day 1 rolls from (every later roll has its own VRF output).
+    pub preview: [u8; PREVIEW_BYTES],
     /// first 16 bytes of the VRF output of each random action of this run, in order (public once applied; with the
     /// revealed secret anyone recomputes every roll: act seed = H(secret ‖ r16 ‖ req))
     pub rand_log: [u8; 16 * RAND_LOG],

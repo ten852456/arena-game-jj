@@ -41,10 +41,13 @@ try {
   const st = await C.chainConnect();
   check('connect: account + secret account + pool seat (burner, local)', st.status === 0 || st.status === 1, `status ${st.status}`);
   const t0 = Date.now();
-  const choices = await C.chainBeginRun();
+  const begun = await C.chainBeginRun();
+  const choices = begun.choices;
   check('run start waits for the VRF answer; hero choices come from the chain', choices.length === 3, `${choices.join(', ')} in ${Date.now() - t0} ms`);
+  check('the day-1 shop (card bonuses) of every offered hero is shown before the pick', choices.every((h) => (begun.preview[h] ?? []).filter(Boolean).length === 5 && begun.preview[h].some((o) => (o?.bonus ?? []).length > 0)));
   adopt(await C.chainPickHero(0));
   check('hero pick: the run starts on chain with the first offered hero', run!.hero === choices[0] && run!.day === 1 && run!.phase === 'shop');
+  check('the shop the run starts with = the previewed day-1 shop of that hero', JSON.stringify(run!.shop) === JSON.stringify(begun.preview[choices[0]]));
   let fights = 0, fightsOk = 0, rolls = 0, detSynced = 0, detChecks = 0;
   for (let step = 0; step < 60 && run && run.phase !== 'won' && run.phase !== 'dead'; step++) {
     const r = run as RS;

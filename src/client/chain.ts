@@ -153,6 +153,15 @@ const skillOf = (b: Uint8Array): SkillInstance => {
 };
 const relicsOf = (b: Uint8Array) => [...b].filter((r) => r !== 255).map((r) => RELICS[r].id);
 
+/** 11 bytes: present, id, v, star, nb, 3 × (target, kind) */
+function offerOf(x: Uint8Array): Offer | null {
+  if (!x[0]) return null;
+  const of: Offer = { id: SKILL_LIST[x[1]].id, v: VARIANTS[x[2]] };
+  if (x[3]) of.star = x[3];
+  if (x[2] === 0) of.bonus = bonusOf(x.subarray(5, 11), x[4]);
+  return of;
+}
+
 /** the chain's 184 raw bytes → a TS RunState (log and rating are UI-only; the secret stays on chain) */
 export function runOf(b: Uint8Array, id: string): RunState {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
@@ -163,14 +172,7 @@ export function runOf(b: Uint8Array, id: string): RunState {
     v: RUN_VERSION, id, seed: dv.getUint32(0, true), hero: HEROES[b[10]].id, day: b[11], hp: dv.getInt16(4, true), wins: b[12], losses: b[13],
     gold: dv.getUint16(6, true), streak: (b[14] << 24) >> 24, lastIncome: { base: b[15], bonus: b[16] }, bonusSlots: b[17], slotBuys: b[18],
     skills: Array.from({ length: n }, (_, i) => skillOf(b.subarray(41 + 11 * i, 52 + 11 * i))),
-    shop: Array.from({ length: 5 }, (_, i) => {
-      const x = b.subarray(129 + 11 * i, 140 + 11 * i);
-      if (!x[0]) return null;
-      const of: Offer = { id: SKILL_LIST[x[1]].id, v: VARIANTS[x[2]] };
-      if (x[3]) of.star = x[3];
-      if (x[2] === 0) of.bonus = bonusOf(x.subarray(5, 11), x[4]);
-      return of;
-    }),
+    shop: Array.from({ length: 5 }, (_, i) => offerOf(b.subarray(129 + 11 * i, 140 + 11 * i))),
     rolls: dv.getUint16(8, true), ghost: !!b[19],
     // the last chance's mark: its kind is rolled on chain when it is placed (shown as a hidden mark until then)
     pendingMark: b[20] === PENDING_SECRET ? MARKS[0] : b[20] ? MARKS[b[20] - 1] : null,
@@ -293,6 +295,8 @@ const OFF = {
   vrfSlot: 8, pendSlot: 8 + 8, sessionExpiry: 8 + 32, sessionKey: 8 + 72, runNo: 8 + 208, bestScore: 8 + 216, lastSeed: 8 + 224,
   revealedRun: 8 + 232, pendReq: 8 + 236, seat: 8 + 252, status: 8 + 253, lastDay: 8 + 255, lastResult: 8 + 256, lastKind: 8 + 257,
   pendState: 8 + 263, choices: 8 + 264, run: 8 + 268, lastOpp: 8 + 268 + 184 + 93,
+  /** after run, prev, last_opp, journal (1323), claim_proof (128): the day-1 shop of each offered hero */
+  preview: 8 + 268 + 184 + 93 + 93 + 1323 + 128,
 };
 const ST = { IDLE: 0, PICK: 1, RUN: 2, ENDED: 3, FINAL: 4, WAIT_VRF: 5 } as const;
 async function player(c = game): Promise<Uint8Array | null> {
@@ -332,11 +336,16 @@ export interface ChainStart {
   run: Uint8Array | null;
   /** hero choices of the run being started (status PICK) */
   choices: string[] | null;
+  /** their day-1 shops (card bonuses), shown before the pick */
+  preview: Record<string, (Offer | null)[]> | null;
 }
+/** the day-1 shop of each offered hero, published by the program with the hero choices */
+const previewOf = (p: Uint8Array): Record<string, (Offer | null)[]> =>
+  Object.fromEntries(choicesOf(p).map((h, i) => [h, Array.from({ length: 5 }, (_, k) => offerOf(p.subarray(OFF.preview + 55 * i + 11 * k, OFF.preview + 55 * i + 11 * (k + 1))))]));
 const choicesOf = (p: Uint8Array) => [...p.subarray(OFF.choices, OFF.choices + 3)].map((h) => HEROES[h].id);
 const startOf = (p: Uint8Array): ChainStart => {
   const st = p[OFF.status];
-  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null };
+  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null, preview: st === ST.PICK ? previewOf(p) : null };
 };
 
 /**
@@ -437,8 +446,8 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   return startOf(p!);
 }
 
-/** Start a run: one VRF request; returns the hero choices once the program's callback answered. */
-export async function chainBeginRun(): Promise<string[]> {
+/** Start a run: one VRF request; returns the hero choices (+ their day-1 shops) once the program's callback answered. */
+export async function chainBeginRun(): Promise<{ choices: string[]; preview: Record<string, (Offer | null)[]> }> {
   let p = (await player())!;
   if (p[OFF.status] === ST.IDLE) {
     setChainStatus('sending', 'rolling your run on chain…');
@@ -446,7 +455,7 @@ export async function chainBeginRun(): Promise<string[]> {
   }
   p = await waitRandom((q) => q[OFF.status] === ST.PICK, () => ix('retry_vrf', [], keysBegin()), 'run start');
   setChainStatus('ready');
-  return choicesOf(p);
+  return { choices: choicesOf(p), preview: previewOf(p) };
 }
 
 /** Pick offered hero `choice` (index); returns the new run's state. */

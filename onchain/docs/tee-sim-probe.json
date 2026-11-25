@@ -1,0 +1,130 @@
+{
+ "at": "2026-11-25T09:43:12.580Z",
+ "program": "Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh",
+ "season": 939903114,
+ "owner": "HbpJCtTr4VFeN76AqMfTY9wKVNr51Ente1Ss6peWCoRw",
+ "session": "7tzNozXkHpsJoLzqf8U7RJ9oy4Adv9vbwWs8sqKQsDqb",
+ "stranger": "7eHUnW3SZJpyuzUc8MRYviZo1eUAdap84rSkJmAqErF1",
+ "probes": [
+  {
+   "probe": "getAccountInfo",
+   "as": "owner",
+   "player": "visible (1688 B)",
+   "pool": "null",
+   "ranking": "null"
+  },
+  {
+   "probe": "getAccountInfo",
+   "as": "session",
+   "player": "visible (1688 B)",
+   "pool": "null",
+   "ranking": "null"
+  },
+  {
+   "probe": "getAccountInfo",
+   "as": "stranger",
+   "player": "null",
+   "pool": "null",
+   "ranking": "null"
+  },
+  {
+   "probe": "getAccountInfo",
+   "as": "anon",
+   "player": "null",
+   "pool": "null",
+   "ranking": "null"
+  },
+  {
+   "probe": "simulate",
+   "what": "act reroll (member-only accounts)",
+   "as": "owner",
+   "err": {
+    "InstructionError": [
+     1,
+     {
+      "Custom": 6002
+     }
+    ]
+   },
+   "logs": [
+    "Program ComputeBudget111111111111111111111111111111 success",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh invoke [1]",
+    "Program log: Instruction: Act",
+    "Program log: AnchorError thrown in programs/mochi-game/src/lib.rs:289. Error Code: Rejected. Error Number: 6002. Error Message: action rejected by the game rules.",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh consumed 3533 of 1399850 compute units",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh failed: custom program error: 0x1772"
+   ],
+   "returnData": null,
+   "units": 3683,
+   "accounts": [
+    "player: null",
+    "pool: null",
+    "ranking: null"
+   ]
+  },
+  {
+   "probe": "simulate",
+   "what": "fight, signed by owner",
+   "as": "owner",
+   "err": null,
+   "logs": [],
+   "returnData": null,
+   "units": 0,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight, signed by session key",
+   "as": "session",
+   "err": null,
+   "logs": [],
+   "returnData": null,
+   "units": 0,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight, unsigned (sigVerify false)",
+   "as": "stranger",
+   "err": null,
+   "logs": [],
+   "returnData": null,
+   "units": 0,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight, unsigned, no token",
+   "as": "anon",
+   "err": null,
+   "logs": [],
+   "returnData": null,
+   "units": 0,
+   "accounts": []
+  },
+  {
+   "probe": "getTransaction(fight)",
+   "as": "owner",
+   "result": "visible, 0 log lines"
+  },
+  {
+   "probe": "getTransaction(fight)",
+   "as": "session",
+   "result": "visible, 0 log lines"
+  },
+  {
+   "probe": "getTransaction(fight)",
+   "as": "stranger",
+   "result": "visible, 0 log lines"
+  },
+  {
+   "probe": "getTransaction(fight)",
+   "as": "anon",
+   "result": "visible, 0 log lines"
+  }
+ ],
+ "seasonEnd": "2026-11-30T08:08:23.000Z",
+ "dry": "all instructions built",
+ "funded": 0.03,
+ "setup": "player created, delegated, session + permission (owner + session), run started"
+}
