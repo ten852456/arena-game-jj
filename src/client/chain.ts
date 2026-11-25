@@ -1,32 +1,35 @@
-// @ts-nocheck -- written for sim v13 on engine-v12; rewired to sim v22 in the UI stage (mochi-list-v2-onchain)
 /**
- * On-chain mode (`?chain=1`): the authoritative run lives in the `mochi-game` program (spikes/per-spike/programs/
- * mochi-game), whose rules are the Rust port of src/sim (bit-exact, sim v13).
+ * On-chain mode (`?chain=1`): the authoritative run lives in the `mochi-game` program (onchain/programs/mochi-game),
+ * whose rules are the Rust port of src/sim (bit-exact, sim v22). Randomness: onchain/docs/RANDOMNESS.md.
  *
  * Wallets: the owner is Phantom (or a burner key with `&wallet=burner`). The owner signs twice, once:
- *   1. Solana: create the season account + fund the session key (+ delegate it to the TEE in `tee` mode)
- *   2. game RPC: approve the session key for ≤ 7 days (+ make the account private to owner + session on the TEE)
+ *   1. Solana: create the season account + its secret account, fund the session key (+ delegate both to the TEE)
+ *   2. game RPC: approve the session key for ≤ 7 days (+ make the player account private to owner + session, and
+ *      the secret account private to nobody)
  * After that a browser session key signs every action (no wallet popups) until it expires.
  *
- * How it plugs into the UI without rewriting it:
- * - the UI keeps playing on its local TS RunState (instant feedback; same rules as the chain);
- * - every accepted shop / last-chance / mark action is queued as its chain action code (runChain.ts);
- * - a fight sends the queue (act or act_batch) + fight in ONE transaction; the chain picks the opponent
- *   (pool ghost or bot) and stores the fight (opponent build, seed, day); the UI replays it with the TS sim;
- * - after every fight the local state is compared byte for byte with the chain's; on any difference the UI
- *   takes the chain's (the chain wins).
- * Config: /chain.json (written by the chain setup script): mode 'local' (local validator) or 'tee' (devnet +
- * MagicBlock TEE, reached through the dev server's /tee proxy).
+ * How it plugs into the UI (sim v22, request + apply):
+ * - DETERMINISTIC actions (buy, sell, move, lock, slot, pick relic, concede) play at once on the local TS RunState
+ *   and are queued (runChain.ts); the queue goes out with the next chain transaction (act / act_batch);
+ * - actions with a RANDOM outcome (fight, shop reroll, wish, last chance, place mark, relic reroll) can't be played
+ *   locally: the browser does not know the run's secret. They are sent as the queue + `request_action` in one
+ *   transaction; the program's VRF callback applies them; the UI then takes the chain's run state (`chainRoll`);
+ * - a fight comes back with its opponent build, seed and day; the UI replays it with the TS sim;
+ * - the run start waits for the run's VRF answer: the hero choices come from the chain.
+ * Config: /chain.json (devnet + TEE) or /chain-local.json (`&net=local`, local validator; run
+ * onchain/scripts/local-vrf.mjs there: it answers the randomness requests in place of the VRF oracle).
  */
 import './chainPolyfill';
-import { ComputeBudgetProgram, Connection, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction } from '@solana/web3.js';
+import { ComputeBudgetProgram, Connection, Keypair, PublicKey, SystemProgram, SYSVAR_SLOT_HASHES_PUBKEY, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { ed25519 } from '@noble/curves/ed25519';
+import { sha256 } from '@noble/hashes/sha256';
 import bs58 from 'bs58';
 import { HEROES } from '../sim/heroes';
-import { MARKS, type Offer, type RunState } from '../sim/run';
+import { MARKS, RUN_VERSION, type Offer, type RunState } from '../sim/run';
 import { SKILL_LIST, VARIANTS } from '../sim/skills';
-import { ARCHES, type Bonus, type Build, type SkillInstance } from '../sim/types';
+import { LINES, type Bonus, type Build, type SkillInstance } from '../sim/types';
 import { BONUS_KINDS } from '../sim/links';
+import { RELICS, RELIC_DAYS } from '../sim/relics';
 
 export interface ChainConfig {
   mode?: 'local' | 'tee';
@@ -39,8 +42,6 @@ export interface ChainConfig {
   program: string;
   season: number;
   shard: number;
-  /** anchor discriminators (hex) by instruction name */
-  disc: Record<string, string>;
 }
 
 interface Phantom {
@@ -51,6 +52,7 @@ interface Phantom {
   signTransaction(tx: Transaction): Promise<Transaction>;
   on?(ev: 'accountChanged' | 'disconnect', cb: (pk?: PublicKey | null) => void): void;
 }
+
 const LOGIN_KEY = 'arena.chain.login';
 /** this browser logged in before (reconnect without a popup on load) */
 export const chainRemembered = () => { try { return localStorage.getItem(LOGIN_KEY) === '1'; } catch { return false; } };
@@ -129,83 +131,63 @@ const DLP = new PublicKey('DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh');
 const PERMISSION_PROGRAM = new PublicKey('ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1');
 const MAGIC_VAULT = new PublicKey('MagicVau1t999999999999999999999999999999999');
 const MAGIC_PROGRAM = new PublicKey('Magic11111111111111111111111111111111111111');
+const VRF_PROGRAM = new PublicKey('Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz');
+const VRF_QUEUE = new PublicKey('5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc');
+/** run.ts codes the program applies through request + VRF callback (10 = fight) */
+export const RANDOM_CODES = new Set([3, 6, 7, 8, 10, 12]);
 
-// ---------------- encoding (same layouts as mochi-engine: RunState 164 B, Build 82 B) ----------------
-const PHASES = ['shop', 'lastchance', 'mark', 'won', 'dead'] as const;
-const sIdx = (id: string) => SKILL_LIST.findIndex((d) => d.id === id);
-const bonusBytes = (b: Bonus[] | undefined, out: number[]) => {
-  for (let j = 0; j < 3; j++) {
-    const x = b?.[j];
-    if (!x) out.push(0, 0);
-    else out.push(x.t.startsWith('arch:') ? 200 + ARCHES.indexOf(x.t.slice(5) as never) : sIdx(x.t), BONUS_KINDS.indexOf(x.e));
-  }
-};
-const skillBytes = (k: SkillInstance | undefined, out: number[]) => {
-  if (!k) { out.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0); return; }
-  out.push(sIdx(k.id), VARIANTS.indexOf(k.v as never), k.mark ? MARKS.indexOf(k.mark) + 1 : 0, k.bonus?.length ?? 0);
-  bonusBytes(k.bonus, out);
-};
+// ---------------- decoding (mochi-engine layouts: RunState 184 B, Build 93 B, skill 11 B) ----------------
+const PHASES = ['shop', 'relic', 'lastchance', 'mark', 'won', 'dead'] as const;
+const PENDING_SECRET = 255;
 const bonusOf = (b: Uint8Array, nb: number): Bonus[] =>
   Array.from({ length: nb }, (_, j) => {
     const t = b[2 * j], e = b[2 * j + 1];
-    return { t: t >= 200 ? 'arch:' + ARCHES[t - 200] : SKILL_LIST[t].id, e: BONUS_KINDS[e] };
+    return { t: t >= 200 ? 'line:' + LINES[t - 200] : SKILL_LIST[t].id, e: BONUS_KINDS[e] };
   });
+/** 11 bytes: id, v, mark, star, nb, 3 × (target, kind) */
 const skillOf = (b: Uint8Array): SkillInstance => {
-  const k: SkillInstance = { id: SKILL_LIST[b[0]].id, v: VARIANTS[b[1]], bonus: bonusOf(b.subarray(4, 10), b[3]) };
+  const k: SkillInstance = { id: SKILL_LIST[b[0]].id, v: VARIANTS[b[1]], bonus: bonusOf(b.subarray(5, 11), b[4]) };
   if (b[2]) k.mark = MARKS[b[2] - 1];
+  if (b[3]) k.star = b[3];
   return k;
 };
+const relicsOf = (b: Uint8Array) => [...b].filter((r) => r !== 255).map((r) => RELICS[r].id);
 
-/** TS RunState → the chain's 164 raw bytes */
-export function runBytes(s: RunState): Uint8Array {
-  const o = new Uint8Array(164);
-  const dv = new DataView(o.buffer);
-  dv.setUint32(0, s.seed >>> 0, true);
-  dv.setInt16(4, s.hp, true);
-  dv.setUint16(6, s.gold, true);
-  dv.setUint16(8, s.rolls, true);
-  const bytes = [HEROES.findIndex((h) => h.id === s.hero), s.day, s.wins, s.losses, s.streak & 0xff, s.lastIncome.base, s.lastIncome.bonus,
-    s.bonusSlots, s.slotBuys, s.ghost ? 1 : 0, s.pendingMark ? MARKS.indexOf(s.pendingMark) + 1 : 0, PHASES.indexOf(s.phase), s.conceded ? 1 : 0,
-    s.wishes ?? 0, s.skills.length];
-  o.set(bytes, 10);
-  for (let i = 0; i < 5; i++) o[25 + i] = s.locks?.[i] ? 1 : 0;
-  const sk: number[] = [];
-  for (let i = 0; i < 8; i++) skillBytes(s.skills[i], sk);
-  o.set(sk, 34);
-  const sh: number[] = [];
-  for (let i = 0; i < 5; i++) {
-    const of = s.shop[i];
-    if (!of) sh.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
-    else { sh.push(1, sIdx(of.id), VARIANTS.indexOf(of.v as never), of.bonus?.length ?? 0); bonusBytes(of.bonus, sh); }
-  }
-  o.set(sh, 114);
-  return o;
-}
-
-/** the chain's raw bytes → a TS RunState (used to resume / resync; log and rating are UI-only) */
+/** the chain's 184 raw bytes → a TS RunState (log and rating are UI-only; the secret stays on chain) */
 export function runOf(b: Uint8Array, id: string): RunState {
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
-  const n = b[24];
-  return {
-    v: 7, id, seed: dv.getUint32(0, true), hero: HEROES[b[10]].id, day: b[11], hp: dv.getInt16(4, true), wins: b[12], losses: b[13],
+  const n = b[25];
+  const relics = relicsOf(b.subarray(31, 34));
+  const offer = relicsOf(b.subarray(34, 37));
+  const s: RunState = {
+    v: RUN_VERSION, id, seed: dv.getUint32(0, true), hero: HEROES[b[10]].id, day: b[11], hp: dv.getInt16(4, true), wins: b[12], losses: b[13],
     gold: dv.getUint16(6, true), streak: (b[14] << 24) >> 24, lastIncome: { base: b[15], bonus: b[16] }, bonusSlots: b[17], slotBuys: b[18],
-    skills: Array.from({ length: n }, (_, i) => skillOf(b.subarray(34 + 10 * i, 44 + 10 * i))),
+    skills: Array.from({ length: n }, (_, i) => skillOf(b.subarray(41 + 11 * i, 52 + 11 * i))),
     shop: Array.from({ length: 5 }, (_, i) => {
-      const x = b.subarray(114 + 10 * i, 124 + 10 * i);
+      const x = b.subarray(129 + 11 * i, 140 + 11 * i);
       if (!x[0]) return null;
       const of: Offer = { id: SKILL_LIST[x[1]].id, v: VARIANTS[x[2]] };
-      if (x[2] === 0) of.bonus = bonusOf(x.subarray(4, 10), x[3]);
+      if (x[3]) of.star = x[3];
+      if (x[2] === 0) of.bonus = bonusOf(x.subarray(5, 11), x[4]);
       return of;
     }),
-    rolls: dv.getUint16(8, true), ghost: !!b[19], pendingMark: b[20] ? MARKS[b[20] - 1] : null, phase: PHASES[b[21]], rating: 1000, log: [],
+    rolls: dv.getUint16(8, true), ghost: !!b[19],
+    // the last chance's mark: its kind is rolled on chain when it is placed (shown as a hidden mark until then)
+    pendingMark: b[20] === PENDING_SECRET ? MARKS[0] : b[20] ? MARKS[b[20] - 1] : null,
+    ...(b[20] === PENDING_SECRET ? { pendingHidden: true } : {}),
+    phase: PHASES[b[21]], rating: 1000, log: [],
     ...(b[22] ? { conceded: true } : {}),
-    locks: Array.from({ length: 5 }, (_, i) => !!b[25 + i]), wishes: b[23],
+    locks: Array.from({ length: 5 }, (_, i) => !!b[26 + i]), wishes: b[23], wishMarks: b[24],
+    ...(relics.length ? { relics } : {}),
+    relicOffer: offer, relicDays: RELIC_DAYS.filter((_, i) => b[37] & (1 << i)), relicRolls: b[38],
   };
+  return s;
 }
+/** 93 bytes: hero, n, relics[3], 8 × 11-byte skills */
 export function buildOf(b: Uint8Array): Build {
-  return { hero: HEROES[b[0]].id, skills: Array.from({ length: b[1] }, (_, i) => skillOf(b.subarray(2 + 10 * i, 12 + 10 * i))) };
+  const relics = relicsOf(b.subarray(2, 5));
+  return { hero: HEROES[b[0]].id, skills: Array.from({ length: b[1] }, (_, i) => skillOf(b.subarray(5 + 11 * i, 16 + 11 * i))), ...(relics.length ? { relics } : {}) };
 }
-const eq = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 // ---------------- accounts + instructions ----------------
 const u32 = (n: number) => { const b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n >>> 0, true); return b; };
@@ -215,40 +197,45 @@ const prog = () => new PublicKey(cfg!.program);
 const pda = (seeds: Uint8Array[], p = prog()) => PublicKey.findProgramAddressSync(seeds, p)[0];
 const enc = (s: string) => new TextEncoder().encode(s);
 const seasonPda = () => pda([enc('season'), u32(cfg!.season)]);
+const seasonSecretPda = () => pda([enc('season_secret'), u32(cfg!.season)]);
 const poolPda = () => pda([enc('pool'), u32(cfg!.season), u16(cfg!.shard)]);
 const rankPda = () => pda([enc('ranking'), u32(cfg!.season)]);
 const playerPda = () => pda([enc('player'), u32(cfg!.season), owner.toBytes()]);
-const hex = (h: string) => Uint8Array.from(h.match(/../g)!.map((x) => parseInt(x, 16)));
+const secretPda = () => pda([enc('secret'), u32(cfg!.season), owner.toBytes()]);
+/** anchor discriminator: sha256("global:<name>")[..8] */
+const disc = (name: string) => sha256(enc(`global:${name}`)).subarray(0, 8);
 function ix(name: string, data: number[] | Uint8Array, keys: { pubkey: PublicKey; isSigner: boolean; isWritable: boolean }[]) {
   const d = new Uint8Array(8 + data.length);
-  d.set(hex(cfg!.disc[name]));
+  d.set(disc(name));
   d.set(data, 8);
   return new TransactionInstruction({ programId: prog(), keys, data: Buffer.from(d) });
 }
 const W = (pubkey: PublicKey, isSigner = false) => ({ pubkey, isSigner, isWritable: true });
 const Rd = (pubkey: PublicKey, isSigner = false) => ({ pubkey, isSigner, isWritable: false });
-const keysP = () => [Rd(session.publicKey, true), W(playerPda()), Rd(seasonPda())];
-const keysF = () => [Rd(session.publicKey, true), W(playerPda()), W(poolPda()), W(rankPda()), Rd(seasonPda())];
+/** the VRF request accounts after the program's own (`#[vrf]`: queue, identity, VRF program, slot hashes, system) */
+const vrfTail = () => [W(VRF_QUEUE), Rd(pda([enc('identity')])), Rd(VRF_PROGRAM), Rd(SYSVAR_SLOT_HASHES_PUBKEY), Rd(SystemProgram.programId)];
+const keysP = () => [Rd(session.publicKey, true), W(playerPda()), W(secretPda()), Rd(seasonPda())];
+const keysBegin = () => [W(session.publicKey, true), W(playerPda()), W(secretPda()), Rd(seasonSecretPda()), Rd(seasonPda()), ...vrfTail()];
+const keysReq = () => [W(session.publicKey, true), W(playerPda()), Rd(secretPda()), Rd(poolPda()), Rd(rankPda()), Rd(seasonPda()), ...vrfTail()];
+const keysFinish = () => [Rd(session.publicKey, true), W(playerPda()), W(secretPda()), W(poolPda()), W(rankPda()), Rd(seasonPda())];
 const tee = () => cfg!.mode === 'tee';
 
-function delegatePlayerIx(): TransactionInstruction {
-  const pl = playerPda();
-  return ix('delegate_player', u32(cfg!.season), [
+function delegateIx(name: 'delegate_player' | 'delegate_secret', acc: PublicKey): TransactionInstruction {
+  return ix(name, u32(cfg!.season), [
     Rd(owner, true),
-    W(pda([enc('buffer'), pl.toBytes()])),
-    W(pda([enc('delegation'), pl.toBytes()], DLP)),
-    W(pda([enc('delegation-metadata'), pl.toBytes()], DLP)),
-    W(pl),
+    W(pda([enc('buffer'), acc.toBytes()])),
+    W(pda([enc('delegation'), acc.toBytes()], DLP)),
+    W(pda([enc('delegation-metadata'), acc.toBytes()], DLP)),
+    W(acc),
     Rd(new PublicKey(cfg!.validator!)),
     Rd(prog()),
     Rd(DLP),
     Rd(SystemProgram.programId),
   ]);
 }
-function playerPermissionIx(): TransactionInstruction {
-  const pl = playerPda();
-  return ix('player_permission', u32(cfg!.season), [
-    W(owner, true), W(pl), W(pda([enc('permission:'), pl.toBytes()], PERMISSION_PROGRAM)),
+function permissionIx(name: 'player_permission' | 'secret_permission', acc: PublicKey): TransactionInstruction {
+  return ix(name, u32(cfg!.season), [
+    W(owner, true), W(acc), W(pda([enc('permission:'), acc.toBytes()], PERMISSION_PROGRAM)),
     Rd(PERMISSION_PROGRAM), W(MAGIC_VAULT), Rd(MAGIC_PROGRAM),
   ]);
 }
@@ -301,31 +288,66 @@ async function teeToken(url: string): Promise<string> {
   return r.token;
 }
 
-// Player account offsets (8-byte discriminator + mochi-game Player layout v3)
-const OFF = { seat: 8 + 88, status: 8 + 89, salt: 8, seed: 8 + 76, run: 8 + 96, lastOpp: 8 + 1413, lastDay: 8 + 1495, lastResult: 8 + 1496, lastKind: 8 + 1497, lastSeed: 8 + 1500, sessionExpiry: 8 + 1640, sessionKey: 8 + 1648 };
+/** Player account offsets (8-byte discriminator + mochi-game Player, layout 4) */
+const OFF = {
+  vrfSlot: 8, pendSlot: 8 + 8, sessionExpiry: 8 + 32, sessionKey: 8 + 72, runNo: 8 + 208, bestScore: 8 + 216, lastSeed: 8 + 224,
+  revealedRun: 8 + 232, pendReq: 8 + 236, seat: 8 + 252, status: 8 + 253, lastDay: 8 + 255, lastResult: 8 + 256, lastKind: 8 + 257,
+  pendState: 8 + 263, choices: 8 + 264, run: 8 + 268, lastOpp: 8 + 268 + 184 + 93,
+};
+const ST = { IDLE: 0, PICK: 1, RUN: 2, ENDED: 3, FINAL: 4, WAIT_VRF: 5 } as const;
 async function player(c = game): Promise<Uint8Array | null> {
   const a = await c.getAccountInfo(playerPda(), 'confirmed');
   return a ? new Uint8Array(a.data) : null;
 }
+const dvOf = (p: Uint8Array) => new DataView(p.buffer, p.byteOffset, p.byteLength);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** reject with a clear message if a step takes too long (instead of hanging on "connecting") */
 function within<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
   return Promise.race([p, new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`${what}: no answer after ${Math.round(ms / 1000)} s`)), ms))]);
 }
+/**
+ * Wait for the program's VRF callback: poll the player until `done`. After a while without an answer, ask the
+ * program to re-send the SAME request (`retry`, refused by the program until its timeout); give up after `ms`.
+ */
+async function waitRandom(done: (p: Uint8Array) => boolean, retry: () => TransactionInstruction, what: string, ms = 120_000): Promise<Uint8Array> {
+  const t0 = Date.now();
+  let nextRetry = t0 + 20_000;
+  for (;;) {
+    const p = await player();
+    if (p && done(p)) return p;
+    if (Date.now() > t0 + ms) throw new Error(`${what}: no randomness answer after ${Math.round(ms / 1000)} s`);
+    if (Date.now() > nextRetry) {
+      nextRetry = Date.now() + 20_000;
+      await sendSession([retry()]).catch(() => { /* not timed out yet */ });
+    }
+    await sleep(250);
+  }
+}
 
 // ---------------- public API for the UI ----------------
 export const chainInfo = () => (cfg && owner && session ? { mode: cfg.mode ?? 'local', owner: owner.toBase58(), session: session.publicKey.toBase58(), phantom: !!phantom, player: playerPda().toBase58(), season: cfg.season } : null);
+export interface ChainStart {
+  status: number;
+  /** the run in progress (status RUN / ENDED) */
+  run: Uint8Array | null;
+  /** hero choices of the run being started (status PICK) */
+  choices: string[] | null;
+}
+const choicesOf = (p: Uint8Array) => [...p.subarray(OFF.choices, OFF.choices + 3)].map((h) => HEROES[h].id);
+const startOf = (p: Uint8Array): ChainStart => {
+  const st = p[OFF.status];
+  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null };
+};
 
 /**
- * Connect the owner wallet, set up the season account and the session key if needed (≤ 2 owner signatures,
- * first time only), and return the chain's current run (if any).
+ * Connect the owner wallet, set up the season account, its secret account and the session key if needed (≤ 2
+ * owner signatures, first time only), and return the chain's current run (if any).
  */
-export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false, take = false): Promise<{ status: number; run: Uint8Array | null; seed: number | null }> {
+export async function chainConnect(onStatus: (s: string) => void = () => {}, silent = false, take = false): Promise<ChainStart> {
   // &net=local: the local validator config; default: /chain.json (devnet + TEE)
   cfg = await (await fetch(new URLSearchParams(location.search).get('net') === 'local' ? '/chain-local.json' : '/chain.json', { cache: 'no-store' })).json();
   resetIfNewSeason(cfg!.season);
   base = new Connection(cfg!.rpc, 'confirmed');
-  // a new attempt: nothing from a previous wallet / key until this one is known
   owner = undefined as unknown as PublicKey;
   session = undefined as unknown as Keypair;
   const w = window as unknown as { phantom?: { solana?: Phantom }; solana?: Phantom };
@@ -336,22 +358,13 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     say('connecting', 'connecting Phantom…');
     phantom = ph;
     try {
-      // silent: reconnect only if this site is already trusted (no popup)
       owner = (await within(ph.connect(silent ? { onlyIfTrusted: true } : undefined), silent ? 15_000 : 120_000, 'Phantom connect (open / unlock Phantom)')).publicKey;
     } catch (e) {
       phantom = null;
       setChainStatus('loggedout');
       throw silent ? new NotLoggedIn('not logged in') : e;
     }
-    // switching account in Phantom: start over with the new wallet
     ph.on?.('accountChanged', () => location.reload());
-    // migrate the old shared key (one per browser) to this wallet's own slot
-    if (!loadKey(sessionStore(owner), false)) {
-      try {
-        const old = localStorage.getItem('arena.chain.key');
-        if (old) { localStorage.setItem(sessionStore(owner), old); localStorage.removeItem('arena.chain.key'); }
-      } catch { /* private mode */ }
-    }
     session = loadKey(sessionStore(owner), true)!;
   } else {
     phantom = null;
@@ -368,7 +381,6 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     game = new Connection(`${url}?token=${await within(teeToken(url), 30_000, 'TEE login')}`, 'confirmed');
   } else {
     game = base;
-    // local validator: free airdrops
     for (const pk of [owner, session.publicKey]) {
       if ((await base.getBalance(pk)) < 50_000_000) await base.confirmTransaction(await base.requestAirdrop(pk, 1_000_000_000), 'confirmed');
     }
@@ -376,19 +388,17 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   say('connecting', 'checking your devnet SOL…');
   if (tee() && (await within(base.getBalance(owner), 30_000, 'devnet RPC (balance)')) < 20_000_000) throw new Error(`wallet ${owner.toBase58()} needs devnet SOL (≥ 0.02): turn on Testnet Mode in Phantom → Solana Devnet and get SOL from faucet.solana.com`);
   say('connecting', 'looking for your season account…');
-  // owner signature 1 (first time): season account (+ fund the session key, + delegate to the TEE)
   const fresh = !(await base.getAccountInfo(playerPda(), 'confirmed'));
-  // existing account, new browser key (other browser, or after logging out): the key needs SOL for its fees
   if (!fresh && tee() && !owner.equals(session.publicKey) && (await base.getBalance(session.publicKey)) < 3_000_000) {
     say('approve', 'approve in your wallet: 0.01 SOL for this browser\'s game key (pays its fees)');
     await sendOwner(base, [SystemProgram.transfer({ fromPubkey: owner, toPubkey: session.publicKey, lamports: 10_000_000 })]);
   }
   if (fresh) {
     say('approve', 'approve 1/2 in your wallet: create your season account');
-    const ixs = [ix('init_player', [...u32(cfg!.season), ...u16(cfg!.shard)], [W(owner, true), W(playerPda()), Rd(SystemProgram.programId)])];
+    const ixs = [ix('init_player', [...u32(cfg!.season), ...u16(cfg!.shard)], [W(owner, true), W(playerPda()), W(secretPda()), Rd(SystemProgram.programId)])];
     if (tee()) {
       if (!owner.equals(session.publicKey)) ixs.push(SystemProgram.transfer({ fromPubkey: owner, toPubkey: session.publicKey, lamports: 10_000_000 }));
-      ixs.push(delegatePlayerIx());
+      ixs.push(delegateIx('delegate_player', playerPda()), delegateIx('delegate_secret', secretPda()));
     }
     await sendOwner(base, ixs);
   }
@@ -400,63 +410,57 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     return q;
   };
   const burnerOwner = owner.equals(session.publicKey);
-  // a just-created account: wait until the game RPC (TEE) sees it. An existing account is private on the TEE:
-  // a browser key that is not its member yet (new browser, after logging out) cannot read it until step 2.
   let p: Uint8Array | null = null;
   if (fresh || burnerOwner) p = await waitPlayer(tee() ? 'waiting for your account on the TEE…' : 'reading your account…');
   else {
     say('connecting', 'reading your account…');
     for (let i = 0; i < 3 && !(p = await player()); i++) await sleep(1000);
   }
-  // owner signature 2 (first time / new browser key / after expiry): approve this browser's key (+ privacy on the TEE)
-  const live = !!p && new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey) && Number(new DataView(p.buffer).getBigInt64(OFF.sessionExpiry, true)) > Date.now() / 1000 + 600;
+  // owner signature 2 (first time / new browser key / after expiry): approve this browser's key (+ privacy on the TEE:
+  // player = owner + session; secret = nobody)
+  const live = !!p && new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey) && Number(dvOf(p).getBigInt64(OFF.sessionExpiry, true)) > Date.now() / 1000 + 600;
   if (!live && !burnerOwner) {
     say('approve', 'approve 2/2 in your wallet: let this browser play for 7 days');
     const ixs = [ix('set_session', [...session.publicKey.toBytes(), ...i64(Math.floor(Date.now() / 1000) + 7 * 86400 - 120)], [Rd(owner, true), W(playerPda())])];
-    if (tee()) ixs.push(playerPermissionIx());
+    if (tee()) ixs.push(permissionIx('player_permission', playerPda()), permissionIx('secret_permission', secretPda()));
     await sendOwner(game, ixs);
     p = await waitPlayer('reading your account…');
   } else if (!live && tee()) {
-    // burner owner on the TEE: privacy still needed
-    await sendOwner(game, [playerPermissionIx()]);
+    await sendOwner(game, [permissionIx('player_permission', playerPda()), permissionIx('secret_permission', secretPda())]);
   }
-  // session key (no popup): secret salt + a seat in the pool shard (the shard lives on the TEE)
-  const setup: TransactionInstruction[] = [];
-  if (p!.subarray(OFF.salt, OFF.salt + 8).every((x) => x === 0)) setup.push(ix('set_salt', crypto.getRandomValues(new Uint8Array(8)), keysP()));
-  if (p![OFF.seat] === 255) setup.push(ix('join_pool', [], [Rd(session.publicKey, true), W(playerPda()), W(poolPda())]));
-  if (setup.length) {
-    await sendSession(setup);
+  if (p![OFF.seat] === 255) {
+    await sendSession([ix('join_pool', [], [Rd(session.publicKey, true), W(playerPda()), W(poolPda())])]);
     p = await player();
   }
-  const status = p![OFF.status];
   try { localStorage.setItem(LOGIN_KEY, '1'); } catch { /* private mode */ }
   say('ready', '');
-  return {
-    status,
-    run: status === 2 ? p!.slice(OFF.run, OFF.run + 164) : null,
-    seed: status === 1 ? new DataView(p!.buffer).getUint32(OFF.seed, true) : null,
-  };
+  return startOf(p!);
 }
 
-/** Roll the run seed on chain (hero choices = heroChoices(seed), exactly as in TS). */
-export async function chainBeginRun(): Promise<number> {
-  let p = await player();
-  if (p![OFF.status] !== 1) {
-    await sendSession([ix('begin_run', [], keysP())]);
-    p = await player();
+/** Start a run: one VRF request; returns the hero choices once the program's callback answered. */
+export async function chainBeginRun(): Promise<string[]> {
+  let p = (await player())!;
+  if (p[OFF.status] === ST.IDLE) {
+    setChainStatus('sending', 'rolling your run on chain…');
+    await sendSession([ix('begin_run', [], keysBegin())]);
   }
-  return new DataView(p!.buffer).getUint32(OFF.seed, true);
+  p = await waitRandom((q) => q[OFF.status] === ST.PICK, () => ix('retry_vrf', [], keysBegin()), 'run start');
+  setChainStatus('ready');
+  return choicesOf(p);
 }
 
-export async function chainPickHero(choice: number): Promise<void> {
+/** Pick offered hero `choice` (index); returns the new run's state. */
+export async function chainPickHero(choice: number): Promise<Uint8Array> {
   queue.length = 0;
   await sendSession([ix('pick_hero', [choice], keysP())]);
+  return (await player())!.slice(OFF.run, OFF.run + 184);
 }
 
-/** An action the local TS rules accepted (runChain.ts calls this). */
+/** A deterministic action the local TS rules accepted (runChain.ts calls this); sent with the next transaction. */
 export function chainQueue(code: number, a = 0, b = 0) {
-  if (chainOn()) queue.push([code, a, b]);
+  if (chainOn() && !RANDOM_CODES.has(code)) queue.push([code, a, b]);
 }
+export const chainQueued = () => queue.length;
 
 function queueIxs(): TransactionInstruction[] {
   const out: TransactionInstruction[] = [];
@@ -472,6 +476,12 @@ function queueIxs(): TransactionInstruction[] {
   return out;
 }
 
+/** Send the queued deterministic actions now (e.g. before leaving the shop for a while). */
+export async function chainFlush(): Promise<void> {
+  const ixs = queueIxs();
+  if (ixs.length) await sendSession(ixs);
+}
+
 export interface ChainFight {
   seed: number;
   day: number;
@@ -484,35 +494,54 @@ export interface ChainFight {
   sig: string;
 }
 
-/** Send the queued actions + the fight in one transaction; returns the fight as the chain resolved it. */
-export async function chainFight(): Promise<ChainFight> {
-  setChainStatus('sending', 'fight on chain…');
+/**
+ * An action with a random outcome (RANDOM_CODES): the queue + request_action in ONE transaction, then wait for the
+ * program's VRF callback to apply it. Returns the chain's run state after it (the UI takes it as is).
+ */
+export async function chainRoll(code: number, a = 0, b = 0, what = 'rolling on chain…'): Promise<{ run: Uint8Array; player: Uint8Array; sig: string }> {
+  if (!RANDOM_CODES.has(code)) throw new Error(`code ${code} is not a random action`);
+  setChainStatus('sending', what);
   let sig: string;
+  const before = (await player())!;
+  const req0 = dvOf(before).getUint32(OFF.pendReq, true);
   try {
-    sig = await sendSession([...queueIxs(), ix('fight', [], keysF())]);
+    if (before[OFF.pendState] === 1) {
+      // a request already waits (e.g. the page was reloaded): wait for it instead of sending another
+      sig = '';
+    } else sig = await sendSession([...queueIxs(), ix('request_action', [code, a & 0xff, b & 0xff], keysReq())]);
+    const p = await waitRandom((q) => q[OFF.pendState] === 0 && dvOf(q).getUint32(OFF.pendReq, true) >= req0 + (sig ? 1 : 0), () => ix('retry_request', [], keysReq()), what);
+    setChainStatus('ready');
+    return { run: p.slice(OFF.run, OFF.run + 184), player: p, sig };
   } catch (e) {
     setChainStatus('error', (e as Error).message);
     throw e;
   }
-  setChainStatus('ready');
-  const p = (await player())!;
-  const dv = new DataView(p.buffer);
+}
+
+/** The fight (request + VRF callback); returns it as the chain resolved it. */
+export async function chainFight(): Promise<ChainFight> {
+  const r = await chainRoll(10, 0, 0, 'fight on chain…');
+  const p = r.player;
+  const dv = dvOf(p);
   const res = p[OFF.lastResult];
   const f: ChainFight = {
-    seed: dv.getUint32(OFF.lastSeed, true), day: p[OFF.lastDay], opp: buildOf(p.subarray(OFF.lastOpp, OFF.lastOpp + 82)),
-    ghost: p[OFF.lastKind] === 1, won: res === 2, draw: res === 1, run: p.slice(OFF.run, OFF.run + 164), sig,
+    seed: dv.getUint32(OFF.lastSeed, true), day: p[OFF.lastDay], opp: buildOf(p.subarray(OFF.lastOpp, OFF.lastOpp + 93)),
+    ghost: p[OFF.lastKind] === 1, won: res === 2, draw: res === 1, run: r.run, sig: r.sig,
   };
   noteChainFight(f);
   return f;
 }
 
-/** After a concede: send the queue + finish_run (archives the ghost, updates the ranking). */
+/** After a concede: send the queue (with the concede) + finish_run (archives the ghost, updates the ranking). */
 export async function chainFinish(): Promise<void> {
-  await sendSession([...queueIxs(), ix('finish_run', [], keysF())]);
+  await sendSession([...queueIxs(), ix('finish_run', [], keysFinish())]);
 }
 
-/** Byte-for-byte check of the local state against the chain's. */
-export const sameAsChain = (local: RunState, chain: Uint8Array) => eq(runBytes(local), chain);
+/** The chain's current run (resync after an error). */
+export async function chainState(): Promise<ChainStart | null> {
+  const p = await player();
+  return p ? startOf(p) : null;
+}
 
 // ---------------- what the chain UI shows (chainUi.ts) ----------------
 export type ChainStatus = 'off' | 'loggedout' | 'othertab' | 'connecting' | 'approve' | 'ready' | 'sending' | 'error';
@@ -549,7 +578,7 @@ export interface ChainProfile {
   status: string;
   run: { hero: string; day: number; wins: number; losses: number; hp: number; gold: number; phase: string } | null;
 }
-const STATUS_NAMES = ['idle', 'picking a hero', 'in a run', 'run ended', 'season finalized'];
+const STATUS_NAMES = ['idle', 'picking a hero', 'in a run', 'run ended', 'season finalized', 'waiting for randomness'];
 
 /** Everything the profile window shows, read from the chain (the session key can read the private account). */
 export async function chainProfile(): Promise<ChainProfile | null> {
@@ -557,7 +586,7 @@ export async function chainProfile(): Promise<ChainProfile | null> {
   const p = await player().catch(() => null);
   const [ownerSol, sessionSol] = await Promise.all([base.getBalance(owner).catch(() => 0), base.getBalance(session.publicKey).catch(() => 0)]);
   const dv = p ? new DataView(p.buffer) : null;
-  const run = p && p[OFF.status] === 2 ? runOf(p.slice(OFF.run, OFF.run + 164), 'x') : null;
+  const run = p && p[OFF.status] === 2 ? runOf(p.slice(OFF.run, OFF.run + 184), 'x') : null;
   const sessionLive = p && new PublicKey(p.subarray(OFF.sessionKey, OFF.sessionKey + 32)).equals(session.publicKey);
   return {
     mode: cfg.mode ?? 'local',
@@ -566,7 +595,7 @@ export async function chainProfile(): Promise<ChainProfile | null> {
     sessionExpiresAt: sessionLive && dv ? Number(dv.getBigInt64(OFF.sessionExpiry, true)) * 1000 : null,
     player: playerPda().toBase58(), program: cfg.program, season: cfg.season,
     ownerSol: ownerSol / 1e9, sessionSol: sessionSol / 1e9,
-    runsStarted: dv ? dv.getUint32(8 + 64, true) : 0, bestScore: dv ? dv.getUint32(8 + 72, true) : 0,
+    runsStarted: dv ? dv.getUint32(OFF.runNo, true) : 0, bestScore: dv ? dv.getUint32(OFF.bestScore, true) : 0,
     status: p ? STATUS_NAMES[p[OFF.status]] ?? '?' : 'no account yet',
     run: run ? { hero: run.hero, day: run.day, wins: run.wins, losses: run.losses, hp: run.hp, gold: run.gold, phase: run.phase } : null,
   };

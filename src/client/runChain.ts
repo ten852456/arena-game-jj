@@ -1,19 +1,23 @@
-// @ts-nocheck -- written for sim v13 on engine-v12; rewired to sim v22 in the UI stage (mochi-list-v2-onchain)
 /**
- * run.ts for the UI: everything re-exported, and in chain mode (`?chain=1`) every player action the local rules
- * accept is also queued as its on-chain action code (sent with the next fight, see chain.ts). Actions that do
- * nothing (selling an empty slot, moving off the end) are not queued: the chain rejects no-ops.
+ * run.ts for the UI: everything re-exported. In chain mode (`?chain=1`) every DETERMINISTIC action the local rules
+ * accept (buy, sell, move, lock, slot, pick relic, concede) is also queued as its on-chain action code and sent with
+ * the next chain transaction (chain.ts). Actions with a random outcome (reroll, wish, last chance, mark, relic
+ * reroll, fight) are not played locally in chain mode: ui.ts sends them with chain.chainRoll and takes the chain's
+ * state. Actions that do nothing (selling an empty slot, moving off the end) are not queued: the chain rejects no-ops.
  */
 import * as Run from '../sim/run';
+import { nextVariants } from '../sim/skills';
 import { chainQueue } from './chain';
 
 export * from '../sim/run';
 
-const LC: Run.LastChanceOption[] = ['awaken', 'mark', 'supply'];
-
-export function buy(s: Run.RunState, i: number) {
-  const err = Run.buy(s, i);
-  if (!err) chainQueue(0, i);
+/** buy offer i; `pick` = the upgrade branch (variant), sent as its index among the two next branches (-1 = the card's) */
+export function buy(s: Run.RunState, i: number, pick?: string) {
+  const o = s.shop[i];
+  const owned = o ? s.skills.find((k) => k.id === o.id) : undefined;
+  const b = pick === undefined || !owned ? -1 : nextVariants(owned.v).indexOf(pick as never);
+  const err = Run.buy(s, i, pick);
+  if (!err) chainQueue(0, i, b);
   return err;
 }
 export function sell(s: Run.RunState, i: number) {
@@ -26,11 +30,6 @@ export function moveSkill(s: Run.RunState, i: number, dir: -1 | 1) {
   Run.moveSkill(s, i, dir);
   chainQueue(2, i, dir);
 }
-export function reroll(s: Run.RunState) {
-  const err = Run.reroll(s);
-  if (!err) chainQueue(3);
-  return err;
-}
 export function toggleLock(s: Run.RunState, i: number) {
   const err = Run.toggleLock(s, i);
   if (!err) chainQueue(4, i);
@@ -41,21 +40,10 @@ export function buySlot(s: Run.RunState) {
   if (!err) chainQueue(5);
   return err;
 }
-export function wish(s: Run.RunState) {
-  const r = Run.wish(s);
-  if (!('err' in r)) chainQueue(6);
-  return r;
-}
-export function chooseLastChance(s: Run.RunState, opt: Run.LastChanceOption) {
-  if (s.phase !== 'lastchance' || !LC.includes(opt)) return;
-  Run.chooseLastChance(s, opt);
-  chainQueue(7, LC.indexOf(opt));
-}
-export function applyMark(s: Run.RunState, idx: number) {
-  if (s.phase !== 'mark' || !s.pendingMark) return;
-  const at = idx >= 0 && idx < s.skills.length ? idx : -1;
-  Run.applyMark(s, at);
-  chainQueue(8, at);
+export function pickRelic(s: Run.RunState, i: number) {
+  const err = Run.pickRelic(s, i);
+  if (!err) chainQueue(11, i);
+  return err;
 }
 export function concede(s: Run.RunState) {
   if (s.phase === 'won' || s.phase === 'dead') return;

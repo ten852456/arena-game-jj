@@ -54,6 +54,25 @@ Steps:
 - **VRF timeout**: one outstanding request per `run_no`. After `VRF_TIMEOUT` slots the player may call `retry_vrf` for the same `run_no`. That's safe because they never saw an output. A late callback for an old request is rejected (request id / `run_no` mismatch).
 - **Concede and restart** to fish for a good start: each new run is a new VRF, and the ended run is recorded (ghost + ranking). This is "best of N runs", the same as the current game, not RNG manipulation. Limiting runs per day is a game-design question (open, §5).
 
+## 2a. Request + apply (owner decision 25 Nov 2026: protection A + B)
+
+Every action with a random outcome takes two transactions. Deterministic actions stay one.
+
+| Action | Path |
+|---|---|
+| buy, sell, move, lock, buy slot, pick relic, concede | `act` / `act_batch` (one transaction, refused while a request is pending) |
+| fight (10), shop reroll (3), wish (6), last chance (7), place mark (8), relic reroll (12) | `request_action` → VRF → `apply_random` |
+| run start | `begin_run` → VRF → `vrf_callback` (hero choices) |
+
+1. **Request** (player / session key): checks the action is legal now. Legality never depends on the roll, so a dry run decides it. The action is then **committed** in Player (`pend_req` id, code, args, slot) and one VRF request is sent, with the request id as callback argument. Nothing random is computed, so simulating this transaction shows only "pending".
+2. **Apply** (VRF program's scoped identity): requires the pending id. It clears the pending state **first** (processed once), then rolls with `act seed = H(secret ‖ r16 ‖ req)`; a fight's seed and opponent use `H(secret ‖ r16 ‖ req ‖ "fight")`. It appends `r16` (first 16 bytes of the VRF output) to the public per-run randomness log.
+3. **While pending**: no other action, no second request, no cancel instruction. `retry_request` (after the timeout) re-sends the VRF request for the **same** action. Duplicate, late or old-id callbacks are refused (`StaleCallback`).
+4. **Verification**: after the run, the revealed secret plus the randomness log plus the request ids reproduce every roll (TS: set `s.secret = act seed` before each random action).
+
+Why it holds even if the TEE lets players simulate: a request carries no outcome, and an apply's outcome needs the VRF output, which doesn't exist when the player sends the request. Test S2 shows the player CAN simulate a forged callback (sigVerify off) on a plain validator. That only gives the outcome for a guessed randomness, never the real one.
+
+Known residual: `pick_hero` rolls the day-1 card bonuses from the run secret, so simulating `pick_hero` for each offered hero reveals those bonuses before picking. This is minor and could be shown openly. The fix, if wanted, is to make pick_hero a request too.
+
 ## 3. Confidentiality inside the TEE
 
 What enforces it:
@@ -74,7 +93,9 @@ Open risk (blocking, needs MagicBlock's answer):
   - **(a)** Ask MagicBlock whether the TEE RPC refuses simulation / preflight for transactions that load accounts the caller isn't a member of, or for a given program.
   - **(b)** If it doesn't, use two-step actions for every roll with a hidden outcome (fight, shop reroll, relic reroll, wish, last chance). The request transaction commits the choice and the payment and asks for VRF; the callback applies the roll with randomness that didn't exist when the request was sent. Simulating the request reveals nothing. Cost: one VRF + callback per such action (VRF is free on the ER; latency to be measured).
   - **(c)** Mixing in the landing slot is weaker (a simulation for slot s+k is still a usable preview), so it isn't recommended.
-  - Proposal: build (b) for **fights** in any case (the most valuable preview), and for rerolls / wishes unless MagicBlock confirms (a).
+  - Owner decision: **both**. (b) is built (§2a) and tested locally (engine/bench/local-e2e.mts, 45/45). (a), the practical
+  check on the TEE, is scripted (`scripts/tee-sim-probe.mjs`) but NOT run: it sends devnet transactions (a throwaway test
+  player on the existing devnet program), which needs the owner's approval.
 
 ## 4. Owner questions (25 Nov 2026), answered
 

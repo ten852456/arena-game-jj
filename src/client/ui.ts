@@ -10,7 +10,9 @@ import * as RC from './views/records';
 import * as RF from './runEndFx';
 import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
-import * as R from '../sim/run';
+import * as R from './runChain';
+import * as C from './chain';
+import { mountChainUi, setChainHandlers } from './chainUi';
 import { GROUP_ICON, RELICS_BY_ID, relicFitsBuild, relicHint, relicText } from '../sim/relics';
 import { T } from '../sim/tuning';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
@@ -83,6 +85,10 @@ let run: R.RunState | null = null;
 let view: View = 'title';
 /** seed of the next run: it also decides which heroes are offered. Kept until a run starts, so leaving the screen does not re-roll. */
 let nextSeed: number | null = null;
+/** on-chain mode (?chain=1): connection state; the hero choices of a run being started (from the chain's VRF) */
+let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
+let chainChoices: string[] | null = null;
+let chainStarting = false;
 let last: FightResponse | null = null;
 let lastDay = 0;
 let lastDamage = 0;
@@ -613,10 +619,25 @@ function renderTown() {
   </section>`;
 }
 
+/** the heroes offered for the next run: from the seed offline, from the chain's randomness on chain (null = not yet) */
+function heroOffer(): string[] {
+  if (!C.chainOn()) return R.heroChoices((nextSeed ??= randSeed()));
+  if (!chainChoices && chainConn === 'ready' && !chainStarting && !runActive()) {
+    chainStarting = true;
+    void C.chainBeginRun().then(
+      (c) => { chainChoices = c; chainStarting = false; render(); },
+      (e) => { chainStarting = false; toast = (e as Error).message; render(); },
+    );
+  }
+  return chainChoices ?? [];
+}
+/** cosmetic look of an offered hero (on chain the run's cosmetic seed is known once the run starts) */
+const offerLook = (id: string) => (C.chainOn() ? 0 : R.lookFor(nextSeed!, id));
+
 function renderTitle() {
-  const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
+  const offered = runActive() ? [] : heroOffer().map((id) => HEROES_BY_ID[id]);
   if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
-  if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : R.lookFor(nextSeed!, previewHero));
+  if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : offerLook(previewHero));
   const resume = runActive()
     ? `<button class="primary" data-a="resume">${L(
         `เล่นต่อ: ${HEROES_BY_ID[run!.hero].name} วันที่ ${run!.day} (ชนะ ${run!.wins})`,
@@ -1433,9 +1454,9 @@ function renderOver() {
     ? { day: lastLog.day, close: !!lastNote?.close, why: (en ? lastNote?.whyEn : undefined) ?? lastNote?.why, tip: (en ? lastNote?.tipEn : undefined) ?? lastNote?.tip }
     : null;
   // the next run's heroes (the same offer the hero-pick screen shows): one tap starts it
-  const offered = R.heroChoices((nextSeed ??= randSeed()));
+  const offered = C.chainOn() ? chainChoices ?? [] : R.heroChoices((nextSeed ??= randSeed()));
   const quick: P.QuickHero[] = offered
-    .map((id) => ({ id, name: HEROES_BY_ID[id].name, art: heroArt(id, 'tiny', R.lookFor(nextSeed!, id)), tag: (id === r.hero ? 'again' : recap.cur.heroes.includes(id) ? '' : 'new') as P.QuickHero['tag'] }))
+    .map((id) => ({ id, name: HEROES_BY_ID[id].name, art: heroArt(id, 'tiny', offerLook(id)), tag: (id === r.hero ? 'again' : recap.cur.heroes.includes(id) ? '' : 'new') as P.QuickHero['tag'] }))
     .sort((a, b) => Number(b.tag === 'again') - Number(a.tag === 'again'));
   return stageSlot(true, 'over-slot bleed') + P.runOverPage({
     won, conceded: !!r.conceded, hero: r.hero, heroArt: heroArt(r.hero, '', R.lookOf(r)), wins: r.wins, losses: r.losses,
@@ -1764,6 +1785,10 @@ async function doFight() {
   lastDay = r.day;
   lastDamage = R.damageFor(r.day);
   let res: FightResponse;
+  if (C.chainOn()) {
+    await chainFightUi(r, build);
+    return;
+  }
   try {
     // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
     const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}) };
@@ -1937,8 +1962,18 @@ function onClick(ev: Event) {
   const arg = el.dataset.i ?? '';
   const n = Number(arg);
   let err: string | null = null;
+  // on chain, actions with a random outcome are rolled by the program (request + VRF callback)
+  if (C.chainOn() && run && CHAIN_ROLL[a]) {
+    const [code, aa] = CHAIN_ROLL[a](n, arg);
+    void chainRollUi(code, aa, a);
+    return;
+  }
   switch (a) {
     case 'start':
+      if (C.chainOn()) {
+        void chainStart(arg);
+        return;
+      }
       {
         const seed = nextSeed ?? randSeed();
         if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
@@ -2048,6 +2083,7 @@ function onClick(ev: Event) {
     case 'concedeYes':
       confirmConcede = false;
       R.concede(run!);
+      if (C.chainOn()) void C.chainFinish().catch((e) => { toast = (e as Error).message; render(); });
       if (view === 'fighting') {
         scene.idle(null); // stop the replay
         busy = false;
@@ -2351,7 +2387,8 @@ export function startUI(st: Stage) {
     if (view === 'fighting' || view === 'replay') logHist.slice(-80).forEach(writeLog);
   });
   window.addEventListener('keydown', overKey);
-  run = loadRun();
+  run = C.chainOn() ? null : loadRun();
+  if (C.chainOn()) void chainBoot();
   const rid = new URLSearchParams(location.search).get('replay');
   if (rid) {
     stage.show('combat');
@@ -2362,7 +2399,148 @@ export function startUI(st: Stage) {
   render();
 }
 
+// ---------- on-chain mode (?chain=1) ----------
+/** UI actions with a random outcome → their chain code and argument */
+const CHAIN_ROLL: Record<string, (n: number, arg: string) => [number, number]> = {
+  reroll: () => [3, 0],
+  wish: () => [6, 0],
+  lc: (_n, arg) => [7, ['awaken', 'mark', 'supply'].indexOf(arg)],
+  mark: (n) => [8, n >= 0 && run && n < run.skills.length ? n : -1],
+  relicReroll: () => [12, 0],
+};
+/** take the chain's run state (the chain decides; the UI keeps its own log, rating and id) */
+function adoptChain(bytes: Uint8Array) {
+  const keep = run ? { id: run.id, log: run.log, rating: run.rating } : { id: uid(), log: [], rating: 1000 };
+  run = Object.assign(C.runOf(bytes, keep.id), keep);
+  saveRun();
+}
+async function chainRollUi(code: number, a: number, what: string) {
+  if (busy || !run) return;
+  busy = true;
+  const before = run;
+  try {
+    const r = await C.chainRoll(code, a, 0, L('กำลังสุ่มบน chain…', 'rolling on chain…'));
+    adoptChain(r.run);
+    if (what === 'reroll' || what === 'relicReroll') sfx('reroll');
+    if (what === 'wish') toast = L('🌙 พรจันทร์บน chain แล้ว', '🌙 Moon Wish rolled on chain');
+    view = phaseView(run!);
+  } catch (e) {
+    run = before;
+    toast = L('ทำบน chain ไม่ได้: ', 'Could not do it on chain: ') + (e as Error).message;
+    await chainResync();
+  }
+  busy = false;
+  render();
+}
+/** the fight on chain: request + VRF callback; replay it with the TS sim; then take the chain's state */
+async function chainFightUi(r: R.RunState, build: Build) {
+  let f: C.ChainFight;
+  try {
+    f = await C.chainFight();
+  } catch (err) {
+    busy = false;
+    toast = L('ส่งไฟต์ขึ้น chain ไม่ได้: ', 'Could not send the fight: ') + (err as Error).message;
+    await chainResync();
+    return;
+  }
+  const result = simulate(build, f.opp, f.seed, r.day);
+  if ((result.winner === 0) !== f.won) console.error('[chain] TS replay winner differs from the chain');
+  const res: FightResponse = {
+    seed: f.seed, day: f.day, result, won: f.won, rating: r.rating,
+    opponent: { name: `${f.ghost ? 'Ghost' : 'AI'} · ${withLang('th', () => HEROES_BY_ID[f.opp.hero].name)}`, ai: !f.ghost, build: f.opp, rating: r.rating },
+  };
+  last = res;
+  r.log.push({ day: r.day, won: f.won, opp: res.opponent.name, ai: !f.ghost, ...(f.draw && !f.won ? { draw: true } : {}) });
+  adoptChain(f.run);
+  const oppInfo = res.opponent;
+  namesFn = () => [youName(), oppLabel(oppInfo)];
+  names = namesFn();
+  seedNames = ['คุณ', oppInfo.name];
+  noteFight(run!, res, build, lastDay);
+  view = 'fighting';
+  sfx('fight_start');
+  render();
+  playLast();
+}
+/** on load: reconnect silently if this browser logged in before; otherwise wait for "Connect Phantom" */
+async function chainBoot(interactive = false, take = false) {
+  mountChainUi();
+  setChainHandlers({ login: () => void chainBoot(true), logout: chainLogout, take: () => void chainBoot(true, true) });
+  C.setOnTabLost(() => {
+    chainConn = 'off';
+    run = null;
+    view = 'town';
+    C.setChainStatus('othertab');
+    toast = L('ย้ายไปเล่นในแท็บอื่นแล้ว', 'The game moved to another tab');
+    render();
+  });
+  if (!interactive && !C.chainRemembered() && new URLSearchParams(location.search).get('wallet') !== 'burner') {
+    chainConn = 'off';
+    C.setChainStatus('loggedout');
+    toast = L('เชื่อมต่อ Phantom (ปุ่มมุมขวาบน) เพื่อเล่นบน chain', 'Connect Phantom (top right) to play on chain');
+    render();
+    return;
+  }
+  chainConn = 'connecting';
+  try {
+    const st = await C.chainConnect((msg) => { if (msg) { toast = msg; render(); } }, !interactive, take);
+    if (st.run) adoptChain(st.run);
+    chainChoices = st.choices;
+    chainConn = 'ready';
+    toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
+  } catch (e) {
+    chainConn = e instanceof C.OtherTab || e instanceof C.NotLoggedIn ? 'off' : 'error';
+    if (chainConn === 'error') C.setChainStatus('error', (e as Error).message);
+    toast = e instanceof C.OtherTab
+      ? L('กระเป๋านี้เล่นอยู่ในแท็บอื่น กดปุ่มมุมขวาบนเพื่อย้ายมาเล่นที่นี่', 'This wallet is playing in another tab: use the top-right button to play here')
+      : e instanceof C.NotLoggedIn
+        ? L('เชื่อมต่อ Phantom (ปุ่มมุมขวาบน) เพื่อเล่นบน chain', 'Connect Phantom (top right) to play on chain')
+        : L('เชื่อมต่อ chain ไม่ได้: ', 'Chain connection failed: ') + (e as Error).message;
+  }
+  render();
+}
+async function chainLogout() {
+  await C.chainLogout();
+  chainConn = 'off';
+  run = null;
+  chainChoices = null;
+  view = 'town';
+  toast = L('ออกจากระบบแล้ว', 'Logged out');
+  render();
+}
+async function chainStart(hero: string) {
+  if (busy || !chainChoices?.includes(hero)) return;
+  busy = true;
+  try {
+    const bytes = await C.chainPickHero(chainChoices.indexOf(hero));
+    chainChoices = null;
+    run = null;
+    adoptChain(bytes);
+    track('run_start', { hero });
+    heroVoice(hero, 'pick', true);
+    view = 'shop';
+  } catch (e) {
+    toast = (e as Error).message;
+  }
+  busy = false;
+  render();
+}
+/** after a failed transaction: reload the run from the chain (the chain wins) */
+async function chainResync() {
+  try {
+    const st = await C.chainState();
+    if (st?.run) adoptChain(st.run);
+    else if (run && run.phase !== 'won' && run.phase !== 'dead') run = null;
+    chainChoices = st?.choices ?? null;
+  } catch (e) {
+    console.error('[chain] resync', e);
+  }
+  view = run ? phaseView(run) : 'title';
+  render();
+}
+
 // ---------- hooks for the guided tutorial (src/client/guide.ts) ----------
+
 /** the next fight asks the server for the tutorial's training opponent (day 1 of a new run only; the server decides) */
 let tutorialFight = false;
 export const guideHooks = {

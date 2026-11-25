@@ -1,4 +1,3 @@
-// @ts-nocheck -- written for sim v13 on engine-v12; rewired to sim v22 in the UI stage (mochi-list-v2-onchain)
 /**
  * On-chain mode overlay (?chain=1): a badge in the top-right corner on every screen (network, wallet, SOL,
  * connection state, last on-chain fight) and a profile window with what the chain holds for this player.
