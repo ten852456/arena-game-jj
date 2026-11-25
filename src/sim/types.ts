@@ -52,6 +52,12 @@ export interface Build {
 
 export type Side = 0 | 1;
 
+/**
+ * What dealt the damage (sim v22, as in the on-chain v13 fix). Kept separate from `src`, which is the attacking skill's id
+ * for hits: the skill เกราะหนาม has the id 'thorns', so `src` alone cannot tell its hits from a thorns reflection.
+ */
+export type DamageKind = 'hit' | 'thorns' | 'burn' | 'poison' | 'fatigue' | 'ult';
+
 export type StatusKind =
   | 'burn' // side = target
   | 'freeze' // side = target, value = ticks (0 = resisted)
@@ -135,7 +141,7 @@ export type EventBody =
       /** fired early as a reaction to control (skills with ✨ ชำระ or 🗿 ใจเหล็ก) */
       react?: boolean;
     }
-  | { type: 'damage'; side: Side; amount: number; blocked: number; src: string }
+  | { type: 'damage'; side: Side; amount: number; blocked: number; src: string; kind: DamageKind }
   | { type: 'shield'; side: Side; amount: number }
   | { type: 'heal'; side: Side; amount: number }
   | { type: 'status'; side: Side; status: StatusKind; value: number }

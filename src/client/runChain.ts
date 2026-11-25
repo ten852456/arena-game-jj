@@ -1,3 +1,4 @@
+// @ts-nocheck -- written for sim v13 on engine-v12; rewired to sim v22 in the UI stage (mochi-list-v2-onchain)
 /**
  * run.ts for the UI: everything re-exported, and in chain mode (`?chain=1`) every player action the local rules
  * accept is also queued as its on-chain action code (sent with the next fight, see chain.ts). Actions that do

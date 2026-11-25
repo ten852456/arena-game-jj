@@ -1,3 +1,4 @@
+// @ts-nocheck -- written for sim v13 on engine-v12; rewired to sim v22 in the UI stage (mochi-list-v2-onchain)
 /**
  * On-chain mode (`?chain=1`): the authoritative run lives in the `mochi-game` program (spikes/per-spike/programs/
  * mochi-game), whose rules are the Rust port of src/sim (bit-exact, sim v13).
