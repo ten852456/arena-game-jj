@@ -97,6 +97,54 @@ Open risk (blocking, needs MagicBlock's answer):
   check on the TEE, is scripted (`scripts/tee-sim-probe.mjs`) but NOT run: it sends devnet transactions (a throwaway test
   player on the existing devnet program), which needs the owner's approval.
 
+## 3a. MagicBlock TEE: practical results (devnet, 25 Nov 2026)
+
+Run on the EXISTING devnet program (layout 3, nothing deployed) with one throwaway test player
+(`scripts/tee-sim-probe.mjs`, `tee-sim-probe2.mjs`; raw results `docs/tee-sim-probe.json`, `tee-sim-probe2.json`).
+Callers: owner token, session-key token (member of the player's permission), stranger token, no token. Devnet SOL: 0.08
+(0.05 lost to a script bug in the first attempt, then 0.03; 0.0176 left on the test key).
+
+| What | owner | session key | stranger | anon |
+|---|---|---|---|---|
+| getAccountInfo(player: owner + session members) | data | data | null | null |
+| getAccountInfo(pool, ranking: zero members) | null | null | null | null |
+| simulate member-only tx (act), signed / sigVerify off | full: logs, CU, post-state | full | **empty** | **empty** |
+| simulate tx reading zero-member accounts (fight) | **empty** | **empty** | **empty** | **empty** |
+| getSignaturesForAddress(player) | 6 | 0 | 0 | 0 |
+| getTransaction of a member-only tx | full (accounts, ix data, logs, CU) | full | empty | empty |
+| getTransaction of a tx touching zero-member accounts | **empty** | **empty** | empty | empty |
+
+"Empty" = the RPC answers success with no logs, 0 CU, no return data and no account data: it reveals nothing, and it
+can't be told apart from a successful no-op. The fight sent for real DID execute (the player account shows day 1 → 2,
+last fight vs a ghost), so the TEE executes and only redacts.
+
+What it means for v22:
+- Every v22 transaction with a random outcome reads `RunSecret` (zero members), so its simulation comes back empty for
+  EVERYONE, owner and session key included. Protection (a) holds in practice on today's devnet TEE, on top of (b).
+- Even the owner can't read the logs or details of their own transactions that touch `RunSecret`, which is all
+  gameplay in v22. The client must not rely on getTransaction / simulation for error messages; it reads the account
+  state instead (that is what chain.ts does).
+- Residual: the redaction is TEE RPC behavior, not something the program enforces. If MagicBlock changes it,
+  (b) still holds: requests carry no outcome. To re-check on every TEE upgrade, run the probe again.
+
+## 3b. Browser test (real Chrome, local validator, 25 Nov 2026)
+
+UI rendering, as opposed to the Node client-logic test (`engine/bench/client-e2e.mts`, 10/10). Real Chrome on the dev
+server, `?chain=1&net=local`, the local VRF responder in place of the oracle:
+- burner wallet: connect, hero pick from the chain (3 heroes + their day-1 shops), buy, Fight (request → pending
+  "sending…" → callback → replay), reroll, relic day (pick + reroll), last chance, run over screen. The full run is
+  archived on chain with its secret revealed (17 random actions); no console errors.
+- duplicate prevention: three Reroll clicks at once cost 1 gold (one request); Fight while a request is pending is
+  ignored.
+- recovery: VRF responder down → request pending → back up → applied once; page reload while pending → "waiting for
+  your last action" → applied when it lands (client retry_request sent meanwhile).
+- outside action (another device) while the UI had queued actions: the UI now waits for it, takes the chain's state,
+  drops the stale queue and asks the player to retry (bug found and fixed in this test); fight replays use the chain's
+  own record of the build it fought with (bug found and fixed).
+- Phantom (owner, user approved the 2 setup prompts): season account + secret account + session key; then hero pick, a
+  fight (vs a pool ghost) and a reroll with no further prompts.
+- Day-1 bonuses were invisible in Simple mode (empty row): fixed, shown as text in both modes.
+
 ## 4. Owner questions (25 Nov 2026), answered
 
 **Q1. How are existing v21 runs handled, given the rare rounding differences in v22?**

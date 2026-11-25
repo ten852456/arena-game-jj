@@ -26,7 +26,7 @@ import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
 import { resetHints, showHints } from './shop/hints';
 import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
-import { bindChainResize, chainDirs, chainPanelHTML, defaultSlot, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, type Dir } from './shop/chains';
+import { bindChainResize, bonusShort, chainDirs, chainPanelHTML, defaultSlot, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, targetWords, type Dir } from './shop/chains';
 import { COIN as COIN_I, coinFly, coinHTML, goldPillHTML, hudAfterRender, hudHTML, popRow } from './shop/hud';
 import { initShopDrag, shopDragging } from './shop/shopdrag';
 import { clearPick, goToPick, picked, setPick } from './shop/pick';
@@ -644,7 +644,9 @@ function day1Shop(id: string): (R.Offer | null)[] {
 function day1HTML(id: string) {
   const shop = day1Shop(id).filter((o): o is R.Offer => !!o);
   if (!shop.length) return '';
-  const row = (o: R.Offer) => `<span class="d1-card"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><b>${esc(nodeOf({ id: o.id, v: o.v }).name)}</b>${o.bonus?.length ? bonusChips(o.bonus, 1, null) : ''}</span>`;
+  // always visible (Simple and Detail mode): effect + what it connects to, e.g. "+1⚔ next to Gust"
+  const bon = (b: Bonus) => `<span class="d1-bonus">${esc(bonusShort(b, 1))} ${L('ติดกับ', 'next to')} ${esc(targetWords(b.t))}</span>`;
+  const row = (o: R.Offer) => `<span class="d1-card"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><b>${esc(nodeOf({ id: o.id, v: o.v }).name)}</b>${(o.bonus ?? []).map(bon).join('')}</span>`;
   return `<span class="hero-day1"><small class="muted">${L('ร้านวันแรก (โบนัสต่อสาย)', 'Day-1 shop (connect bonuses)')}</small>${shop.map(row).join('')}</span>`;
 }
 /** cosmetic look of an offered hero (on chain the run's cosmetic seed is known once the run starts) */
@@ -2460,7 +2462,11 @@ async function chainFightUi(r: R.RunState, build: Build) {
     await chainResync();
     return;
   }
-  const result = simulate(build, f.opp, f.seed, r.day);
+  // replay what the chain fought: its build of the day (the local one can be stale, e.g. another device acted)
+  if (JSON.stringify(f.build.skills) !== JSON.stringify(build.skills)) console.warn('[chain] the chain fought with another build than shown here (state changed elsewhere): replaying the chain build');
+  build = f.build;
+  lastBuild = build;
+  const result = simulate(build, f.opp, f.seed, f.day);
   if ((result.winner === 0) !== f.won) console.error('[chain] TS replay winner differs from the chain');
   const res: FightResponse = {
     seed: f.seed, day: f.day, result, won: f.won, rating: r.rating,
@@ -2478,6 +2484,21 @@ async function chainFightUi(r: R.RunState, build: Build) {
   sfx('fight_start');
   render();
   playLast();
+}
+/** a request from before a reload still waits: block actions, show it, take the chain's state when it lands */
+async function chainPendingUi() {
+  busy = true;
+  toast = L('รอผลการกระทำล่าสุดบน chain…', 'Waiting for your last action on chain…');
+  render();
+  try {
+    adoptChain(await C.chainWaitPending());
+    toast = L('ได้ผลจาก chain แล้ว', 'Your last action landed on chain');
+  } catch (e) {
+    toast = (e as Error).message;
+  }
+  busy = false;
+  if (run && view !== 'town' && view !== 'title') view = phaseView(run);
+  render();
 }
 /** on load: reconnect silently if this browser logged in before; otherwise wait for "Connect Phantom" */
 async function chainBoot(interactive = false, take = false) {
@@ -2506,6 +2527,7 @@ async function chainBoot(interactive = false, take = false) {
     chainPreview = st.preview;
     chainConn = 'ready';
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
+    if (st.pending) void chainPendingUi();
   } catch (e) {
     chainConn = e instanceof C.OtherTab || e instanceof C.NotLoggedIn ? 'off' : 'error';
     if (chainConn === 'error') C.setChainStatus('error', (e as Error).message);
@@ -2544,14 +2566,20 @@ async function chainStart(hero: string) {
   busy = false;
   render();
 }
-/** after a failed transaction: reload the run from the chain (the chain wins) */
+/** after a failed transaction: reload the run from the chain (the chain wins; queued local actions are dropped) */
 async function chainResync() {
+  C.chainDropQueue();
   try {
     const st = await C.chainState();
     if (st?.run) adoptChain(st.run);
     else if (run && run.phase !== 'won' && run.phase !== 'dead') run = null;
     chainChoices = st?.choices ?? null;
     chainPreview = st?.preview ?? null;
+    if (st?.pending) {
+      view = run ? phaseView(run) : 'title';
+      void chainPendingUi();
+      return;
+    }
   } catch (e) {
     console.error('[chain] resync', e);
   }

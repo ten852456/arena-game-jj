@@ -114,6 +114,10 @@ async function lockTab(o: PublicKey, take: boolean): Promise<boolean> {
   });
 }
 export class OtherTab extends Error {}
+/** the chain changed under the UI (an earlier / outside action landed): resync, then retry */
+export class StaleState extends Error {}
+/** forget queued local actions (after a resync the local state they were built on is gone) */
+export const chainDropQueue = () => { queue.length = 0; };
 
 export const chainOn = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('chain') === '1';
 
@@ -294,7 +298,7 @@ async function teeToken(url: string): Promise<string> {
 const OFF = {
   vrfSlot: 8, pendSlot: 8 + 8, sessionExpiry: 8 + 32, sessionKey: 8 + 72, runNo: 8 + 208, bestScore: 8 + 216, lastSeed: 8 + 224,
   revealedRun: 8 + 232, pendReq: 8 + 236, seat: 8 + 252, status: 8 + 253, lastDay: 8 + 255, lastResult: 8 + 256, lastKind: 8 + 257,
-  pendState: 8 + 263, choices: 8 + 264, run: 8 + 268, lastOpp: 8 + 268 + 184 + 93,
+  pendState: 8 + 263, choices: 8 + 264, run: 8 + 268, prev: 8 + 268 + 184, lastOpp: 8 + 268 + 184 + 93,
   /** after run, prev, last_opp, journal (1323), claim_proof (128): the day-1 shop of each offered hero */
   preview: 8 + 268 + 184 + 93 + 93 + 1323 + 128,
 };
@@ -338,6 +342,8 @@ export interface ChainStart {
   choices: string[] | null;
   /** their day-1 shops (card bonuses), shown before the pick */
   preview: Record<string, (Offer | null)[]> | null;
+  /** a random action was requested and waits for its VRF answer (e.g. the page was reloaded meanwhile) */
+  pending: boolean;
 }
 /** the day-1 shop of each offered hero, published by the program with the hero choices */
 const previewOf = (p: Uint8Array): Record<string, (Offer | null)[]> =>
@@ -345,7 +351,7 @@ const previewOf = (p: Uint8Array): Record<string, (Offer | null)[]> =>
 const choicesOf = (p: Uint8Array) => [...p.subarray(OFF.choices, OFF.choices + 3)].map((h) => HEROES[h].id);
 const startOf = (p: Uint8Array): ChainStart => {
   const st = p[OFF.status];
-  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null, preview: st === ST.PICK ? previewOf(p) : null };
+  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null, preview: st === ST.PICK ? previewOf(p) : null, pending: p[OFF.pendState] === 1 };
 };
 
 /**
@@ -494,6 +500,8 @@ export async function chainFlush(): Promise<void> {
 export interface ChainFight {
   seed: number;
   day: number;
+  /** the build the chain fought with (its journal's day entry): the replay uses it, not the local build */
+  build: Build;
   opp: Build;
   ghost: boolean;
   won: boolean;
@@ -515,16 +523,28 @@ export async function chainRoll(code: number, a = 0, b = 0, what = 'rolling on c
   const req0 = dvOf(before).getUint32(OFF.pendReq, true);
   try {
     if (before[OFF.pendState] === 1) {
-      // a request already waits (e.g. the page was reloaded): wait for it instead of sending another
-      sig = '';
-    } else sig = await sendSession([...queueIxs(), ix('request_action', [code, a & 0xff, b & 0xff], keysReq())]);
-    const p = await waitRandom((q) => q[OFF.pendState] === 0 && dvOf(q).getUint32(OFF.pendReq, true) >= req0 + (sig ? 1 : 0), () => ix('retry_request', [], keysReq()), what);
+      // an earlier request (reload, another device) still waits: let it land first, never pass its result off as this
+      // action's. The local queue was built on a state that is gone: drop it. The UI resyncs and the player retries.
+      queue.length = 0;
+      await waitRandom((q) => q[OFF.pendState] === 0, () => ix('retry_request', [], keysReq()), 'earlier action');
+      throw new StaleState('an earlier action was still waiting on chain and has now been applied: check the new state, then try again');
+    }
+    sig = await sendSession([...queueIxs(), ix('request_action', [code, a & 0xff, b & 0xff], keysReq())]);
+    const p = await waitRandom((q) => q[OFF.pendState] === 0 && dvOf(q).getUint32(OFF.pendReq, true) >= req0 + 1, () => ix('retry_request', [], keysReq()), what);
     setChainStatus('ready');
     return { run: p.slice(OFF.run, OFF.run + 184), player: p, sig };
   } catch (e) {
     setChainStatus('error', (e as Error).message);
     throw e;
   }
+}
+
+/** A request sent before (e.g. before a reload) still waits: wait for its answer, return the run after it. */
+export async function chainWaitPending(): Promise<Uint8Array> {
+  setChainStatus('sending', 'waiting for your last action on chain…');
+  const p = await waitRandom((q) => q[OFF.pendState] === 0, () => ix('retry_request', [], keysReq()), 'last action');
+  setChainStatus('ready');
+  return p.slice(OFF.run, OFF.run + 184);
 }
 
 /** The fight (request + VRF callback); returns it as the chain resolved it. */
@@ -534,7 +554,7 @@ export async function chainFight(): Promise<ChainFight> {
   const dv = dvOf(p);
   const res = p[OFF.lastResult];
   const f: ChainFight = {
-    seed: dv.getUint32(OFF.lastSeed, true), day: p[OFF.lastDay], opp: buildOf(p.subarray(OFF.lastOpp, OFF.lastOpp + 93)),
+    seed: dv.getUint32(OFF.lastSeed, true), day: p[OFF.lastDay], build: buildOf(p.subarray(OFF.prev, OFF.prev + 93)), opp: buildOf(p.subarray(OFF.lastOpp, OFF.lastOpp + 93)),
     ghost: p[OFF.lastKind] === 1, won: res === 2, draw: res === 1, run: r.run, sig: r.sig,
   };
   noteChainFight(f);
