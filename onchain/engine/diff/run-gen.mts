@@ -2,7 +2,7 @@
 // action log with the accept/reject result and a hash of the WHOLE run state after every action.
 //   gen <N> <out.txt>   half "player" runs (sensible play to the end), half "adversarial" (random actions,
 //                       out-of-range indices, any phase, after the end). Every other case is an on-chain run
-//                       (RunState.secret set: relic offers + mark kinds from the secret seed).
+//                       (RunState.secret set, a new secret per action: every roll from it).
 //   dump <case>         print the decoded actions and states of one case (debugging)
 import fs from 'node:fs';
 import { randomAiBuild } from '../../../src/sim/bot';
@@ -63,8 +63,16 @@ const hashOf = (xs: number[]) => {
 };
 
 type Act = { code: number; args: number[]; opp?: Build };
+/**
+ * On-chain runs: every action gets its own secret, like every request gets its own VRF output on chain
+ * (secret_k = hashSeed(base secret, 'act', k), k = the action's index in the run). Rust: run_diff.rs act_secret.
+ */
+const base = new WeakMap<RunState, { secret: number; k: number }>();
+const actSecret = (secret: number, k: number) => hashSeed(secret, 'act', k);
 /** apply one action the TS way; returns accepted (void functions count as accepted) */
 function apply(s: RunState, a: Act): boolean {
+  const b = base.get(s);
+  if (b) s.secret = actSecret(b.secret, b.k++);
   const [x, y] = a.args;
   switch (a.code) {
     case 0: {
@@ -146,7 +154,9 @@ function caseOf(i: number) {
   return { seed, secret, choices, hero, acts };
 }
 function start(hero: string, seed: number, secret?: number) {
-  return newRun(hero, seed, 'x', secret);
+  const s = newRun(hero, seed, 'x', secret);
+  if (secret !== undefined) base.set(s, { secret, k: 0 });
+  return s;
 }
 
 const [mode, ...args] = process.argv.slice(2);

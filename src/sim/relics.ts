@@ -181,9 +181,11 @@ export const GROUP_ICON: Record<RelicGroup, string> = {
  * line while the run owns none of its line's relics (then line relics are only weighted ×1.3), the rest from everything
  * else (other lines, generic and cheese relics).
  */
-export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = [], roll = 0): string[] {
-  // roll 1 = the reroll (RELIC_REROLLS): 3 new relics, none of the first offer's
-  const first = roll > 0 ? rollRelicOffer(seed, hero, day, owned, skills, roll - 1) : [];
+export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = [], roll = 0, prev?: string[]): string[] {
+  // roll 1 = the reroll (RELIC_REROLLS): 3 new relics, none of the offer before it. `prev` = that offer as shown
+  // (on chain each reroll has its own seed, so the offer before can't be re-derived from this one); without it, the
+  // offer before is re-rolled from the same seed (offline and the server: the same relics)
+  const first = roll > 0 ? prev ?? rollRelicOffer(seed, hero, day, owned, skills, roll - 1) : [];
   const rng = new Rng(roll > 0 ? hashSeed(seed, 'relic', day, 're', roll) : hashSeed(seed, 'relic', day));
   const line = HEROES_BY_ID[hero]?.line;
   // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line

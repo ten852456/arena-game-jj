@@ -305,8 +305,18 @@ fn relic_fits_line(r: u8, line: u8) -> bool {
     RELIC_LINES[r as usize] & (1 << line) != 0
 }
 /// relics.ts rollRelicOffer(seed, hero, day, owned, skills, roll) → offer (NO_RELIC padded), count
-pub fn roll_relic_offer(seed: u32, hero: u8, day: i64, owned: &[u8], skills: &[SkillInst], roll: i64) -> ([u8; RELIC_OFFER], usize) {
-    let (first, nfirst) = if roll > 0 { roll_relic_offer(seed, hero, day, owned, skills, roll - 1) } else { ([NO_RELIC; RELIC_OFFER], 0) };
+/// `prev`: the offer before this reroll as shown (on-chain: each reroll has its own seed); None = re-roll it from `seed`
+pub fn roll_relic_offer(seed: u32, hero: u8, day: i64, owned: &[u8], skills: &[SkillInst], roll: i64, prev: Option<&[u8]>) -> ([u8; RELIC_OFFER], usize) {
+    let (first, nfirst) = match prev {
+        _ if roll <= 0 => ([NO_RELIC; RELIC_OFFER], 0),
+        Some(p) => {
+            let mut f = [NO_RELIC; RELIC_OFFER];
+            let n = p.iter().filter(|&&r| r != NO_RELIC).count();
+            f[..n].copy_from_slice(&p[..n]);
+            (f, n)
+        }
+        None => roll_relic_offer(seed, hero, day, owned, skills, roll - 1, None),
+    };
     let h = SeedHash::new().num(seed as u64).str(b"relic").num(day as u64);
     let mut rng = Rng::new(if roll > 0 { h.str(b"re").num(roll as u64).done() } else { h.done() });
     let line = HERO_LINE[hero as usize];
@@ -439,7 +449,7 @@ impl RunState {
                 self.relic_days |= 1 << di;
                 let owned = self.relics;
                 let n = min(self.n as i64, self.slots()) as usize;
-                let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], 0);
+                let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], 0, None);
                 self.relic_offer = offer;
                 self.relic_rolls = 0;
                 if no > 0 {
@@ -457,7 +467,9 @@ impl RunState {
         let r = self.relic_rolls as i64 + 1;
         let owned = self.relics;
         let n = min(self.n as i64, self.slots()) as usize;
-        let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], r);
+        let cur = self.relic_offer;
+        let prev = if secret.is_some() { Some(&cur[..]) } else { None };
+        let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], r, prev);
         if no == 0 {
             return false;
         }

@@ -243,7 +243,7 @@ export function rerollRelic(s: RunState): string | null {
   if (!relicRerollsLeft(s)) return 'สุ่มใหม่ครบแล้ว';
   const n = (s.relicRolls ?? 0) + 1;
   // a ranked run uses the server's reroll (sent with the offer); an offline run rolls its own
-  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(rollSeed(s), s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n);
+  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(rollSeed(s), s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n, s.secret !== undefined ? s.relicOffer ?? [] : undefined);
   if (!next.length) return 'ไม่มีของวิเศษให้สุ่มเพิ่ม';
   s.relicRolls = n;
   s.relicOffer = next;
@@ -609,7 +609,8 @@ export function applyMark(s: RunState, idx: number): string | null {
     k.markHidden = 'last';
   } else if (k) {
     delete k.markHidden;
-    k.mark = s.pendingMark;
+    // on chain the kind is rolled now, with this action's seed (it stays unknown until the mark is placed)
+    k.mark = s.secret !== undefined ? markKindFor(s.secret, 'last') : s.pendingMark;
   }
   s.pendingHidden = false;
   s.pendingMark = null;

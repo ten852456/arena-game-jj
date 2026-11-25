@@ -47,11 +47,21 @@ pub const SSECRET_MAGIC: u32 = 0x4D53_5331; // "MSS1"
 pub const LAYOUT: u16 = 4;
 pub const BUILD_BYTES: usize = core::mem::size_of::<Build>();
 /// a VRF request that got no callback for this many slots may be re-sent (same run, output never seen)
-pub const VRF_TIMEOUT_SLOTS: u64 = 3_000;
+pub const VRF_TIMEOUT_SLOTS: u64 = if cfg!(feature = "local") { 20 } else { 3_000 }; // local: short, for the timeout tests
 /// RunSecret.status
 pub const SEC_NONE: u32 = 0;
 pub const SEC_WAITING: u32 = 1;
 pub const SEC_SET: u32 = 2;
+/// Player.pend_state
+pub const PEND_NONE: u8 = 0;
+pub const PEND_WAIT: u8 = 1;
+/// request_action codes (run-gen.mts codes; 10 = fight)
+pub const CODE_FIGHT: u8 = 10;
+pub const RANDOM_CODES: [u8; 5] = [3, 6, 7, 8, 12];
+/// random actions logged per run (16 B each); the last RAND_FIGHT_RESERVE are kept for fights
+pub const RAND_LOG: usize = 256;
+pub const RAND_FIGHT_RESERVE: usize = 24;
+
 /// a session key is valid for at most this long (the owner re-approves after)
 pub const MAX_SESSION: i64 = 7 * 86_400;
 pub const SEATS: usize = 6;
@@ -366,20 +376,23 @@ pub mod mochi_game {
 
     /// VRF callback (signed by the VRF program's scoped identity for this program): derive the run secret, commit to
     /// it, offer the heroes (RANDOMNESS.md §2 step 2).
-    pub fn vrf_callback(ctx: Context<VrfCallback>, randomness: [u8; 32]) -> Result<()> {
+    /// `run_no` comes back as the request's callback argument: a late callback of an older run is refused.
+    pub fn vrf_callback(ctx: Context<VrfCallback>, randomness: [u8; 32], run_no: u32) -> Result<()> {
         let mut pl = ctx.accounts.player.load_mut()?;
         let mut sx = ctx.accounts.run_secret.load_mut()?;
         let ss = ctx.accounts.season_secret.load()?;
+        require!(run_no == pl.run_no, GameError::StaleCallback);
         fulfill(&mut pl, &mut sx, &ss, &randomness)
     }
 
     /// LOCAL VALIDATOR ONLY (feature "local", never deployed): the admin stands in for the VRF oracle.
     #[cfg(feature = "local")]
-    pub fn local_vrf(ctx: Context<LocalVrf>, randomness: [u8; 32]) -> Result<()> {
+    pub fn local_vrf(ctx: Context<LocalVrf>, randomness: [u8; 32], run_no: u32) -> Result<()> {
         require_keys_eq!(ctx.accounts.season.admin, ctx.accounts.admin.key(), GameError::NotOwner);
         let mut pl = ctx.accounts.player.load_mut()?;
         let mut sx = ctx.accounts.run_secret.load_mut()?;
         let ss = ctx.accounts.season_secret.load()?;
+        require!(run_no == pl.run_no, GameError::StaleCallback);
         fulfill(&mut pl, &mut sx, &ss, &randomness)
     }
 
@@ -396,7 +409,8 @@ pub mod mochi_game {
         Ok(())
     }
 
-    /// One player action (shop, relic day, last chance, mark, concede), phase-guarded.
+    /// One DETERMINISTIC action (buy, sell, move, lock, slot, pick relic, concede), phase-guarded, one transaction.
+    /// Actions with a random outcome go through `request_action` + the VRF callback `apply_random`.
     pub fn act(ctx: Context<PlayerSeason>, code: u8, a: i8, b: i8) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
@@ -404,6 +418,8 @@ pub mod mochi_game {
         require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
         check_secret(&sx, &pl)?;
         require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
+        require!(pl.pend_state == PEND_NONE, GameError::Pending);
+        require!(is_deterministic(code), GameError::NeedsRequest);
         require!(apply(run_mut(&mut pl), code, a as i64, b as i64, sx.rs), GameError::Rejected);
         after_actions(&mut pl);
         Ok(())
@@ -419,10 +435,11 @@ pub mod mochi_game {
         require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
         check_secret(&sx, &pl)?;
         require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
+        require!(pl.pend_state == PEND_NONE, GameError::Pending);
         let mut s = *run_mut(&mut pl);
         let n = actions.len() / 3;
         for (i, x) in actions.chunks_exact(3).enumerate() {
-            if !apply(&mut s, x[0], x[1] as i8 as i64, x[2] as i8 as i64, sx.rs) {
+            if !is_deterministic(x[0]) || !apply(&mut s, x[0], x[1] as i8 as i64, x[2] as i8 as i64, sx.rs) {
                 msg!("batch: action {} rejected", i);
                 return err!(GameError::Rejected);
             }
@@ -435,26 +452,72 @@ pub mod mochi_game {
         Ok(())
     }
 
-    /// Fight today's opponent (pool ghost, else bot template). Records the fight for the client's replay and
-    /// archives the ghost + updates the ranking when the fight ends the run.
-    pub fn fight(ctx: Context<Fight>) -> Result<()> {
+    /// REQUEST (step 1 of 2) of an action with a random outcome: fight (code 10), shop reroll (3), wish (6), last
+    /// chance (7), place the last chance's mark (8), relic reroll (12). The action is checked against the current
+    /// state and COMMITTED (pending): no other action, no second request, no cancel until it is applied. Nothing random
+    /// is computed here, so simulating this transaction reveals nothing (RANDOMNESS.md §3).
+    pub fn request_action(ctx: Context<RequestAction>, code: u8, a: i8, b: i8) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let slot = Clock::get()?.slot;
-        let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
-        let mut sx = ctx.accounts.run_secret.load_mut()?;
-        let mut pool = ctx.accounts.pool.load_mut()?;
-        let mut rk = ctx.accounts.ranking.load_mut()?;
-        bind(&ctx.accounts.season, &pl, &pool, &rk)?;
-        check_secret(&sx, &pl)?;
-        require!(pl.status == ST_RUN && sx.status == SEC_SET && run_mut(&mut pl).phase == PHASE_SHOP, GameError::BadPhase);
-        let day = run_mut(&mut pl).day;
-        // fight seed + opponent pick from the secret and the day only: a failed / retried transaction gets the same
-        let h = hashv(&[&sx.secret[..], &b"fight"[..], &[day][..]]).to_bytes();
-        let seed = u32::from_le_bytes(h[..4].try_into().unwrap());
-        let mut r = u64::from_le_bytes(h[8..16].try_into().unwrap()) | 1;
-        let (opp, kind) = pick_opponent(&mut pl, &pool, day, &mut r);
-        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, kind, seed, slot);
-        Ok(())
+        let (owner, req) = {
+            let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+            let sx = ctx.accounts.run_secret.load()?;
+            require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
+            check_secret(&sx, &pl)?;
+            {
+                let pool = ctx.accounts.pool.load()?;
+                let rk = ctx.accounts.ranking.load()?;
+                bind(&ctx.accounts.season, &pl, &pool, &rk)?;
+            }
+            require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
+            require!(pl.pend_state == PEND_NONE, GameError::Pending);
+            require!(!is_deterministic(code) && (code == CODE_FIGHT || RANDOM_CODES.contains(&code)), GameError::BadAction);
+            // the action must be legal now; legality never depends on the roll, so a dry run with any seed decides it
+            let mut dry = *run_mut(&mut pl);
+            let ok = if code == CODE_FIGHT { dry.phase == PHASE_SHOP } else { apply(&mut dry, code, a as i64, b as i64, 0) };
+            require!(ok, GameError::Rejected);
+            // keep room in the randomness log for the fights of the run
+            let room = if code == CODE_FIGHT { RAND_LOG } else { RAND_LOG - RAND_FIGHT_RESERVE };
+            require!((pl.rand_n as usize) < room, GameError::LogFull);
+            pl.pend_req += 1;
+            pl.pend_code = code;
+            pl.pend_a = a as u8;
+            pl.pend_b = b as u8;
+            pl.pend_state = PEND_WAIT;
+            pl.pend_slot = slot;
+            (pl.owner, pl.pend_req)
+        };
+        request_act_vrf(&ctx, owner, req)
+    }
+
+    /// The pending request's VRF answer never came (after VRF_TIMEOUT_SLOTS): ask again for the SAME action. The
+    /// action can't be changed or cancelled, and the first answer was never seen, so this can't pick an outcome.
+    pub fn retry_request(ctx: Context<RequestAction>) -> Result<()> {
+        let slot = Clock::get()?.slot;
+        let (owner, req) = {
+            let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+            let sx = ctx.accounts.run_secret.load()?;
+            check_secret(&sx, &pl)?;
+            require!(pl.pend_state == PEND_WAIT, GameError::BadStatus);
+            require!(slot >= pl.pend_slot + VRF_TIMEOUT_SLOTS, GameError::BadTime);
+            pl.pend_slot = slot;
+            (pl.owner, pl.pend_req)
+        };
+        request_act_vrf(&ctx, owner, req)
+    }
+
+    /// APPLY (step 2 of 2), the VRF callback: the roll uses randomness that did not exist when the request was sent.
+    /// Processed once: the pending request is cleared before the action runs; a duplicate or late callback (another
+    /// `req`) is refused.
+    pub fn apply_random(ctx: Context<ApplyRandom>, randomness: [u8; 32], req: u32) -> Result<()> {
+        do_apply(&ctx.accounts.player, &ctx.accounts.run_secret, &ctx.accounts.pool, &ctx.accounts.ranking, &randomness, req)
+    }
+
+    /// LOCAL VALIDATOR ONLY (feature "local"): the admin stands in for the VRF oracle.
+    #[cfg(feature = "local")]
+    pub fn local_apply(ctx: Context<LocalApply>, randomness: [u8; 32], req: u32) -> Result<()> {
+        require_keys_eq!(ctx.accounts.season.admin, ctx.accounts.admin.key(), GameError::NotOwner);
+        do_apply(&ctx.accounts.player, &ctx.accounts.run_secret, &ctx.accounts.pool, &ctx.accounts.ranking, &randomness, req)
     }
 
     /// After a concede: archive the run's ghost (final build included) and update the ranking.
@@ -466,7 +529,7 @@ pub mod mochi_game {
         let mut rk = ctx.accounts.ranking.load_mut()?;
         bind(&ctx.accounts.season, &pl, &pool, &rk)?;
         check_secret(&sx, &pl)?;
-        require!(pl.status == ST_ENDED, GameError::BadStatus);
+        require!(pl.status == ST_ENDED && pl.pend_state == PEND_NONE, GameError::BadStatus);
         archive(&mut pl, &mut sx, &mut pool, &mut rk, slot);
         Ok(())
     }
@@ -605,7 +668,8 @@ pub mod mochi_game {
         bind(&ctx.accounts.season, &pl, &pool, &rk)?;
         require!(pl.status == ST_RUN && run_mut(&mut pl).phase == PHASE_SHOP, GameError::BadPhase);
         let opp: Build = read_build(&opp);
-        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, OPP_BOT, seed, slot);
+        let rs = sx.rs;
+        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, OPP_BOT, seed, rs, slot);
         Ok(())
     }
 }
@@ -657,6 +721,74 @@ fn apply(s: &mut RunState, code: u8, a: i64, b: i64, rs: u32) -> bool {
     }
 }
 
+/// codes without a random outcome: one transaction (`act`, `act_batch`)
+fn is_deterministic(code: u8) -> bool {
+    matches!(code, 0 | 1 | 2 | 4 | 5 | 9 | 11)
+}
+
+/// apply_random / local_apply: the one place a request's outcome is rolled (RANDOMNESS.md §2a)
+fn do_apply<'info>(
+    player: &AccountLoader<'info, Player>, run_secret: &AccountLoader<'info, RunSecret>, pool: &AccountLoader<'info, Pool>,
+    ranking: &AccountLoader<'info, Ranking>, randomness: &[u8; 32], req: u32,
+) -> Result<()> {
+    let slot = Clock::get()?.slot;
+    let mut pl = player.load_mut()?;
+    let mut sx = run_secret.load_mut()?;
+    let mut pool = pool.load_mut()?;
+    let mut rk = ranking.load_mut()?;
+    require!(pl.magic == PLAYER_MAGIC && pl.layout == LAYOUT, GameError::BadLayout);
+    check_secret(&sx, &pl)?;
+    check_pool(&pool, pl.season)?;
+    require!(pool.shard == pl.shard && rk.magic == RANK_MAGIC && rk.season == pl.season, GameError::BadAccount);
+    require!(pl.pend_state == PEND_WAIT && req == pl.pend_req, GameError::StaleCallback);
+    require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
+    // once: the request is consumed before anything else happens
+    pl.pend_state = PEND_NONE;
+    let r16: [u8; 16] = randomness[..16].try_into().unwrap();
+    let n = pl.rand_n as usize;
+    pl.rand_log[n * 16..(n + 1) * 16].copy_from_slice(&r16);
+    pl.rand_n += 1;
+    let reqb = req.to_le_bytes();
+    let act_seed = u32_of(&hashv(&[&sx.secret[..], &r16[..], &reqb[..]]).to_bytes());
+    let (code, a, b) = (pl.pend_code, pl.pend_a as i8 as i64, pl.pend_b as i8 as i64);
+    if code == CODE_FIGHT {
+        let day = run_mut(&mut pl).day;
+        let h = hashv(&[&sx.secret[..], &r16[..], &reqb[..], &b"fight"[..]]).to_bytes();
+        let seed = u32::from_le_bytes(h[..4].try_into().unwrap());
+        let mut r = u64::from_le_bytes(h[8..16].try_into().unwrap()) | 1;
+        let (opp, kind) = pick_opponent(&mut pl, &pool, day, &mut r);
+        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, kind, seed, act_seed, slot);
+    } else {
+        // legal at request time and the state is locked since, so this is accepted; if not, the request is spent anyway
+        let ok = apply(run_mut(&mut pl), code, a, b, act_seed);
+        if !ok {
+            msg!("request {} no longer applies", req);
+        }
+        after_actions(&mut pl);
+    }
+    Ok(())
+}
+
+/// the VRF request of request_action / retry_request; the callback gets Player, RunSecret, Pool, Ranking + `req`
+fn request_act_vrf(ctx: &Context<RequestAction>, owner: Pubkey, req: u32) -> Result<()> {
+    let caller_seed = hashv(&[&b"mochi-act"[..], &ctx.accounts.season.id.to_le_bytes()[..], owner.as_ref(), &req.to_le_bytes()[..]]).to_bytes();
+    let meta = |k: Pubkey, w: bool| SerializableAccountMeta { pubkey: k.to_bytes().into(), is_signer: false, is_writable: w };
+    let ix = create_request_randomness_ix(RequestRandomnessParams {
+        payer: ctx.accounts.owner.key().to_bytes().into(),
+        oracle_queue: ctx.accounts.oracle_queue.key().to_bytes().into(),
+        callback_program_id: crate::ID.to_bytes().into(),
+        callback_discriminator: instruction::ApplyRandom::DISCRIMINATOR.to_vec(),
+        caller_seed,
+        accounts_metas: Some(vec![meta(ctx.accounts.player.key(), true), meta(ctx.accounts.run_secret.key(), true), meta(ctx.accounts.pool.key(), true), meta(ctx.accounts.ranking.key(), true)]),
+        callback_args: Some(req.to_le_bytes().to_vec()),
+    });
+    if cfg!(feature = "local") {
+        return Ok(()); // local validator: the admin answers with `local_apply`
+    }
+    ctx.accounts.invoke_signed_vrf(&ctx.accounts.owner.to_account_info(), &ix)?;
+    Ok(())
+}
+
 /// RANDOMNESS.md §2 step 2: run secret = H(vrf ‖ season secret ‖ owner ‖ run), public commitment, hero choices.
 fn fulfill(pl: &mut Player, sx: &mut RunSecret, ss: &SeasonSecret, randomness: &[u8; 32]) -> Result<()> {
     require!(pl.magic == PLAYER_MAGIC && pl.layout == LAYOUT, GameError::BadLayout);
@@ -690,7 +822,7 @@ fn request_vrf(ctx: &Context<BeginRun>, owner: Pubkey, run_no: u32) -> Result<()
         callback_discriminator: instruction::VrfCallback::DISCRIMINATOR.to_vec(),
         caller_seed,
         accounts_metas: Some(vec![meta(ctx.accounts.player.key(), true), meta(ctx.accounts.run_secret.key(), true), meta(ctx.accounts.season_secret.key(), false)]),
-        ..Default::default()
+        callback_args: Some(run_no.to_le_bytes().to_vec()),
     });
     if cfg!(feature = "local") {
         return Ok(()); // no VRF oracle on a local validator: the admin answers with `local_vrf`
@@ -706,6 +838,9 @@ fn check_secret(sx: &RunSecret, pl: &Player) -> Result<()> {
 fn start_run(pl: &mut Player, hero: u8, rs: u32) {
     let s = RunState::new(hero, pl.look_seed, Some(rs));
     *run_mut(pl) = s;
+    pl.rand_n = 0;
+    pl.rand_log = [0; 16 * RAND_LOG];
+    pl.pend_state = PEND_NONE;
     pl.journal_len = 0;
     pl.fought = 0;
     pl.prev = build_bytes(&Build { hero, ..Default::default() });
@@ -759,7 +894,9 @@ fn pick_opponent(pl: &mut Player, pool: &Pool, day: u8, r: &mut u64) -> (Build, 
     (ghost_set(pool, bit / MAX_GHOSTS).build(bit % MAX_GHOSTS, day), OPP_GHOST)
 }
 
-fn do_fight(pl: &mut Player, sx: &mut RunSecret, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kind: u8, seed: u32, slot: u64) {
+/// `act_seed` = the engine's roll seed for this fight (the next day's shop, relic offer)
+#[allow(clippy::too_many_arguments)]
+fn do_fight(pl: &mut Player, sx: &mut RunSecret, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kind: u8, seed: u32, act_seed: u32, slot: u64) {
     let (day, cur) = {
         let run = run_mut(pl);
         (run.day, run.to_build())
@@ -770,7 +907,7 @@ fn do_fight(pl: &mut Player, sx: &mut RunSecret, pool: &mut Pool, rk: &mut Ranki
     pl.journal_len += w as u16;
     pl.prev = build_bytes(&cur);
     pl.fought = day;
-    let o = run_mut(pl).fight(opp, seed, Some(sx.rs));
+    let o = run_mut(pl).fight(opp, seed, Some(act_seed));
     // the last fight, for the client's replay: simulate(build of `day`, last_opp, last_seed, day)
     pl.last_opp = build_bytes(opp);
     pl.last_seed = seed;
@@ -979,8 +1116,8 @@ pub struct Season {
     pub secret_commit: [u8; 32],
 }
 
-const PLAYER_HEAD: usize = 4 * 8 + 5 * 32 + 9 * 4 + 4 * 2 + 8 + 4;
-const PLAYER_BODY: usize = PLAYER_HEAD + RUN_STATE_SIZE + 2 * BUILD_BYTES + JOURNAL_MAX + 32 * LB_DEPTH;
+const PLAYER_HEAD: usize = 5 * 8 + 5 * 32 + 11 * 4 + 4 * 2 + 12 + 4;
+const PLAYER_BODY: usize = PLAYER_HEAD + RUN_STATE_SIZE + 2 * BUILD_BYTES + JOURNAL_MAX + 32 * LB_DEPTH + 16 * RAND_LOG;
 pub const PLAYER_PAD: usize = (8 - PLAYER_BODY % 8) % 8;
 
 /// One per player per season. Zero-copy; `run` is a mochi_engine RunState, `prev` / `last_opp` are Builds.
@@ -990,6 +1127,8 @@ pub const PLAYER_PAD: usize = (8 - PLAYER_BODY % 8) % 8;
 pub struct Player {
     /// slot of the pending VRF request (retry_vrf after VRF_TIMEOUT_SLOTS)
     pub vrf_slot: u64,
+    /// slot of the pending action request (retry_request after VRF_TIMEOUT_SLOTS)
+    pub pend_slot: u64,
     pub seen: u64,
     pub best_slot: u64,
     /// session key the owner approved (wallet signs once); valid while now < session_expiry (unix ts)
@@ -1011,6 +1150,9 @@ pub struct Player {
     pub last_seed: u32,
     pub claim_reward: u32,
     pub revealed_run: u32,
+    /// the pending / last action request id (monotonic per player) and how many random actions this run applied
+    pub pend_req: u32,
+    pub rand_n: u32,
     pub layout: u16,
     pub sim: u16,
     pub shard: u16,
@@ -1024,12 +1166,20 @@ pub struct Player {
     pub last_kind: u8,
     pub claim_ready: u8,
     pub claim_rank: u8,
+    /// the pending request: code, args (i8 as u8), PEND_NONE / PEND_WAIT
+    pub pend_code: u8,
+    pub pend_a: u8,
+    pub pend_b: u8,
+    pub pend_state: u8,
     pub choices: [u8; 4],
     pub run: [u8; RUN_STATE_SIZE],
     pub prev: [u8; BUILD_BYTES],
     pub last_opp: [u8; BUILD_BYTES],
     pub journal: [u8; JOURNAL_MAX],
     pub claim_proof: [u8; 32 * LB_DEPTH],
+    /// first 16 bytes of the VRF output of each random action of this run, in order (public once applied; with the
+    /// revealed secret anyone recomputes every roll: act seed = H(secret ‖ r16 ‖ req))
+    pub rand_log: [u8; 16 * RAND_LOG],
     pub _pad: [u8; PLAYER_PAD],
 }
 const _: () = assert!(core::mem::offset_of!(Player, run) == PLAYER_HEAD && core::mem::size_of::<Player>() == PLAYER_BODY + PLAYER_PAD);
@@ -1286,6 +1436,52 @@ pub struct VrfCallback<'info> {
     #[account(mut)]
     pub run_secret: AccountLoader<'info, RunSecret>,
     pub season_secret: AccountLoader<'info, SeasonSecret>,
+}
+
+/// request_action / retry_request: the player's accounts, the pool shard + ranking (the fight's callback needs them),
+/// and the VRF request accounts
+#[vrf]
+#[derive(Accounts)]
+pub struct RequestAction<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    pub pool: AccountLoader<'info, Pool>,
+    pub ranking: AccountLoader<'info, Ranking>,
+    pub season: Account<'info, Season>,
+    /// CHECK: the ephemeral VRF queue
+    #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE.to_bytes().into())]
+    pub oracle_queue: UncheckedAccount<'info>,
+}
+
+#[vrf_callback]
+#[derive(Accounts)]
+pub struct ApplyRandom<'info> {
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    #[account(mut)]
+    pub pool: AccountLoader<'info, Pool>,
+    #[account(mut)]
+    pub ranking: AccountLoader<'info, Ranking>,
+}
+
+#[cfg(feature = "local")]
+#[derive(Accounts)]
+pub struct LocalApply<'info> {
+    pub admin: Signer<'info>,
+    pub season: Account<'info, Season>,
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    #[account(mut)]
+    pub pool: AccountLoader<'info, Pool>,
+    #[account(mut)]
+    pub ranking: AccountLoader<'info, Ranking>,
 }
 
 #[cfg(feature = "local")]
@@ -1546,5 +1742,15 @@ pub enum GameError {
     NotPrivate,
     #[msg("value does not match its commitment")]
     BadCommit,
+    #[msg("a random action is pending: wait for it to be applied")]
+    Pending,
+    #[msg("this action has a random outcome: use request_action")]
+    NeedsRequest,
+    #[msg("not a request action")]
+    BadAction,
+    #[msg("callback for another request / run (duplicate or late): ignored")]
+    StaleCallback,
+    #[msg("randomness log full for this run")]
+    LogFull,
 }
 

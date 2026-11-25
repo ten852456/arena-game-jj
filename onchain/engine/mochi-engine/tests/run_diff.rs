@@ -4,7 +4,7 @@
 //! Half of the runs are on-chain runs (secret seed). Also checks heroChoices.
 //! MOCHI_RUNS=<file> (default ../diff/runs-2k.txt)
 use mochi_engine::data::{MAX_BONUS, MAX_RELICS, RELIC_OFFER, SHOP_SIZE};
-use mochi_engine::run::{hero_choices, RunState};
+use mochi_engine::run::{hero_choices, RunState, SeedHash};
 use mochi_engine::types::{Bonus, Build, SkillInst, MAX_SKILLS, NO_RELIC};
 
 fn skill_enc(k: &SkillInst, out: &mut Vec<i64>) {
@@ -82,6 +82,11 @@ fn idx(x: i64) -> usize {
     if x < 0 { usize::MAX } else { x as usize }
 }
 
+/// run-gen.mts actSecret: the secret of the run's k-th action (on chain: from that request's VRF output)
+pub fn act_secret(secret: Option<u32>, k: usize) -> Option<u32> {
+    secret.map(|s| SeedHash::new().num(s as u64).str(b"act").num(k as u64).done())
+}
+
 /// Apply one encoded action (run-gen.mts apply); returns (accepted, new position)
 pub fn step(s: &mut RunState, t: &[i64], mut p: usize, secret: Option<u32>) -> (bool, usize) {
     let code = t[p];
@@ -141,7 +146,7 @@ fn run_matches_ts_after_every_action() {
         let mut k = 0;
         while p < t.len() && bad_at.is_none() {
             let code = t[p];
-            let (ok, np) = step(&mut s, &t, p, secret);
+            let (ok, np) = step(&mut s, &t, p, act_secret(secret, k));
             p = np;
             let (want_ok, want_h) = (t[p] == 1, t[p + 1] as u32);
             p += 2;
@@ -197,9 +202,11 @@ fn secret_runs_ignore_the_public_seed() {
         let strip = |s: &RunState| { let mut e = encode(s); e[1] = 0; e };
         assert_eq!(strip(&a), strip(&b));
         let mut p = 1;
+        let mut k = 0;
         while p < t.len() {
-            let (oka, np) = step(&mut a, &t, p, secret);
-            let (okb, _) = step(&mut b, &t, p, secret);
+            let (oka, np) = step(&mut a, &t, p, act_secret(secret, k));
+            let (okb, _) = step(&mut b, &t, p, act_secret(secret, k));
+            k += 1;
             assert_eq!(oka, okb);
             assert_eq!(strip(&a), strip(&b), "public seed changed an on-chain run");
             p = np + 2;

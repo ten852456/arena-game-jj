@@ -1,0 +1,68 @@
+OK   season secret that does not match the published commitment is refused
+OK   E2E player A run 1: during the run Player holds only the commitment
+OK   E2E player A run 1: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player A run 1: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player A run 1: every fight seed = H(secret, r16, req, "fight") · 8 fights, 16 random actions logged
+OK   E2E player A run 1: TS replay from the revealed secret + randomness log = program state (29 actions, day 8, 0 wins)
+OK   E2E player B run 1: during the run Player holds only the commitment
+OK   E2E player B run 1: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player B run 1: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player B run 1: every fight seed = H(secret, r16, req, "fight") · 10 fights, 20 random actions logged
+OK   E2E player B run 1: TS replay from the revealed secret + randomness log = program state (40 actions, day 10, 3 wins)
+OK   E2E player A run 2: during the run Player holds only the commitment
+OK   E2E player A run 2: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player A run 2: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player A run 2: every fight seed = H(secret, r16, req, "fight") · 14 fights, 27 random actions logged
+OK   E2E player A run 2: TS replay from the revealed secret + randomness log = program state (54 actions, day 14, 10 wins)
+OK   E2E player B run 2: during the run Player holds only the commitment
+OK   E2E player B run 2: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player B run 2: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player B run 2: every fight seed = H(secret, r16, req, "fight") · 13 fights, 21 random actions logged
+OK   E2E player B run 2: TS replay from the revealed secret + randomness log = program state (51 actions, day 13, 10 wins)
+OK   S8 a random action on `act` is refused (needs request_action)
+OK   S8 a random action inside act_batch is refused
+OK   S8 deterministic actions are one transaction (lock = act)
+OK   S1 simulate request fight: succeeds, commits nothing, post-state = same run + "pending" only (no outcome) · logs 6 (no roll in them), return data none
+OK   S1 simulate request reroll: succeeds, commits nothing, post-state = same run + "pending" only (no outcome) · logs 6 (no roll in them), return data none
+OK   S2 forged-callback simulations run (the preview path exists) but each guessed randomness gives another fight; none is the real one · 6 simulated, 6 different outcomes, real one not among them
+OK   S2 a real (non-simulated) callback can not be signed by the player as the VRF identity
+OK   (setup) back in the shop for S3–S5
+OK   S3 a second request while one is pending is refused
+OK   S3 a deterministic action while a request is pending is refused
+OK   S3 act_batch while a request is pending is refused
+OK   S5 duplicate callback of an applied request is refused and changes nothing
+OK   S4 replaying an OLD request id (applied earlier) is refused
+OK   (setup) back in the shop for S6
+OK   S6 retry before the timeout is refused
+OK   S6 after the timeout the SAME action is re-requested (same id, code, args; state otherwise unchanged)
+OK   S6 no instruction cancels or changes a pending request (re-request with another action refused)
+OK   S6 the late answer applies once; a second answer (e.g. the first request's) is refused
+OK   S7 a stranger cannot request on another player's account
+OK   S7 a stranger cannot play deterministic actions on it
+OK   S7 the player cannot answer randomness (local_apply is admin-only, stands in for the VRF identity)
+OK   (setup) back in the shop for the session-key test
+OK   S7 the session key can request + play
+OK   S7 after revoke_session the session key is refused
+
+CU per transaction (local validator, includes the compute-budget instruction):
+  act 0                  n  57  mean    3016  max    3141
+  act 11                 n  11  mean    2883  max    2884
+  act 2                  n  18  mean    2889  max    2889
+  act 5                  n   4  mean    2990  max    3030
+  apply 12               n   1  mean   10402  max   10402
+  apply 3                n  21  mean   10225  max   13315
+  apply 6                n  14  mean    4652  max    4748
+  apply 7                n   2  mean    9569  max   15010
+  apply 8                n   1  mean   13775  max   13775
+  apply fight            n  48  mean   77760  max  181888
+  begin_run (request)    n   5  mean   16966  max   16966
+  pick_hero              n   5  mean    5897  max    6106
+  request 12             n   1  mean   22211  max   22211
+  request 3              n  21  mean   21556  max   23411
+  request 6              n  14  mean   16401  max   16495
+  request 7              n   2  mean   21836  max   27656
+  request 8              n   1  mean   22336  max   22336
+  request fight          n  48  mean   15968  max   16135
+  vrf callback (run)     n   5  mean    5714  max    5773
+
+45/45 checks passed

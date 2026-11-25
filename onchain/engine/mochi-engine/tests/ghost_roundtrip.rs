@@ -4,7 +4,7 @@
 //! MOCHI_RUNS=<file> (default ../diff/runs-2k.txt)
 use mochi_engine::data::{MAX_BONUS, MAX_RELICS};
 use mochi_engine::ghost::{build_at, journal_day, pack, unpack, GhostSet, JOURNAL_MAX, MAX_GHOSTS};
-use mochi_engine::run::RunState;
+use mochi_engine::run::{RunState, SeedHash};
 use mochi_engine::types::{Bonus, Build, SkillInst, MAX_SKILLS};
 
 const BUILD_LEN: usize = 3 + MAX_RELICS + MAX_SKILLS * (5 + 2 * MAX_BONUS);
@@ -58,16 +58,20 @@ fn journals_and_arena_are_exact() {
         let h: Vec<i64> = head.split(' ').map(|x| x.parse().unwrap()).collect();
         let t: Vec<i64> = rest.split(' ').map(|x| x.parse().unwrap()).collect();
         let (seed, hero) = (h[0] as u32, h[5] as u8);
-        let secret = if h[1] < 0 { None } else { Some(h[1] as u32) };
-        let mut s = RunState::new(hero, seed, secret);
+        let base_secret = if h[1] < 0 { None } else { Some(h[1] as u32) };
+        let mut s = RunState::new(hero, seed, base_secret);
         let mut builds: Vec<Build> = vec![];
         let mut journal = vec![0u8; JOURNAL_MAX];
         let mut jlen = 0;
         let mut prev = Build { hero, ..Default::default() };
         let mut p = 1;
+        let mut k = 0usize;
         while p < t.len() {
             let code = t[p];
             p += 1;
+            // the k-th action's secret (run-gen.mts actSecret)
+            let secret = base_secret.map(|x| SeedHash::new().num(x as u64).str(b"act").num(k as u64).done());
+            k += 1;
             match code {
                 0 => { s.buy(idx(t[p]), if t[p + 1] < 0 { None } else { Some(t[p + 1] as usize) }); p += 2; }
                 1 => { s.sell(idx(t[p])); p += 1; }
