@@ -20,7 +20,8 @@
     "explain": "tsx scripts/explain-check.ts",
 "tune": "tsx scripts/tune.ts",
     "i18n": "tsx scripts/i18n-check.ts",
-    "facts": "tsx scripts/facts.ts"
+    "facts": "tsx scripts/facts.ts",
+    "ts-to-rust": "tsx scripts/ts-to-rust.ts"
   },
   "dependencies": {
     "phaser": "^3.90.0"

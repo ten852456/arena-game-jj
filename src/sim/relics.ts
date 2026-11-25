@@ -31,8 +31,12 @@ export const relicRerolls = () => T['relic.rerolls'];
 /** every relic a relic day can show: the offer and each reroll after it (what the server accepts) */
 export const relicOffersAll = (seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []) =>
   Array.from({ length: 1 + relicRerolls() }, (_, r) => rollRelicOffer(seed, hero, day, owned, skills, r));
-/** a relic of the hero's line is this many times as likely as any other in the offer (after the first one is owned) */
-const LINE_W = 1.3;
+/**
+ * A relic of the hero's line is LINE_W / OTHER_W (1.3×) as likely as any other in the offer (after the first one is
+ * owned). Integer weights (sim v22): the weighted pick is exact in the on-chain Rust engine too.
+ */
+export const LINE_W = 13;
+export const OTHER_W = 10;
 
 export const RELICS: RelicDef[] = [
   // ⚔ hit
@@ -194,7 +198,8 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
     // the hero's line weighted ×LINE_W; risky relics ×1.5 (sim v19: lone wolf showed in 26% of runs, sigil never)
-    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : 1));
+    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : OTHER_W));
+
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;

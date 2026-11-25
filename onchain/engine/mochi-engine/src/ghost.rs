@@ -10,33 +10,49 @@
 //! Per player, ghosts live in a ring arena of `ARENA` bytes (up to 5 ghosts, oldest evicted first). With 1,536 B
 //! no window of 5 consecutive real ghosts failed to fit (0 / 9,891). If a set ever does not fit, older ghosts are
 //! evicted early (fewer than 5 kept); every ghost that is kept stays exact.
-use crate::data::MAX_BONUS;
-use crate::types::{Bonus, Build, SkillInst, MAX_SKILLS};
+//! Sim v22: a skill packs into 7 bytes (43 skills need a 6-bit id, plus the ★), and a day entry carries the build's
+//! relics when they changed: entry = [day u8][n u8][slot mask u8][relics byte][relic ids][7 B per changed slot],
+//! relics byte = 0xFF unchanged, else the relic count (0–3) followed by that many relic ids.
+use crate::data::{MAX_BONUS, MAX_RELICS};
+use crate::types::{Bonus, Build, SkillInst, MAX_SKILLS, NO_RELIC};
 
-pub const PACKED: usize = 6;
+pub const PACKED: usize = 7;
 pub const MAX_GHOSTS: usize = 5;
 pub const ARENA: usize = 1536;
-/// worst-case journal: a day entry with every slot changed, for every day a run can last (MAX_DAY 20)
-pub const JOURNAL_MAX: usize = 20 * (3 + PACKED * MAX_SKILLS) + 3 + PACKED * MAX_SKILLS;
+const RELICS_SAME: u8 = 0xFF;
+const HEADER: usize = 4;
+/// worst-case journal: a day entry with every slot and the relics changed, for every day a run can last (MAX_DAY 20)
+pub const JOURNAL_MAX: usize = 21 * (HEADER + MAX_RELICS + PACKED * MAX_SKILLS);
 
-/// id 5 bits · v 3 · mark 3 · nb 2 · 3 × (t 8 + e 3) = 46 bits → 6 bytes
+/// id 6 bits · v 3 · mark 3 · star 2 · nb 2 · 3 × (t 8 + e 3) = 49 bits → 7 bytes
 pub fn pack(k: &SkillInst) -> [u8; PACKED] {
-    debug_assert!(k.id < 32 && k.v < 8 && k.mark < 8 && k.nb < 4);
-    let mut x: u64 = k.id as u64 | (k.v as u64) << 5 | (k.mark as u64) << 8 | (k.nb as u64) << 11;
+    debug_assert!(k.id < 64 && k.v < 8 && k.mark < 8 && k.star < 4 && k.nb < 4);
+    let mut x: u64 = k.id as u64 | (k.v as u64) << 6 | (k.mark as u64) << 9 | (k.star as u64) << 12 | (k.nb as u64) << 14;
     for j in 0..MAX_BONUS {
         debug_assert!(k.bonus[j].e < 8);
-        x |= (k.bonus[j].t as u64) << (13 + 11 * j) | (k.bonus[j].e as u64) << (21 + 11 * j);
+        x |= (k.bonus[j].t as u64) << (16 + 11 * j) | (k.bonus[j].e as u64) << (24 + 11 * j);
     }
     let b = x.to_le_bytes();
-    [b[0], b[1], b[2], b[3], b[4], b[5]]
+    [b[0], b[1], b[2], b[3], b[4], b[5], b[6]]
 }
 pub fn unpack(b: &[u8]) -> SkillInst {
-    let x = u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], 0, 0]);
+    let x = u64::from_le_bytes([b[0], b[1], b[2], b[3], b[4], b[5], b[6], 0]);
     let mut bonus = [Bonus::default(); MAX_BONUS];
     for j in 0..MAX_BONUS {
-        bonus[j] = Bonus { t: (x >> (13 + 11 * j)) as u8, e: ((x >> (21 + 11 * j)) & 7) as u8 };
+        bonus[j] = Bonus { t: (x >> (16 + 11 * j)) as u8, e: ((x >> (24 + 11 * j)) & 7) as u8 };
     }
-    SkillInst { id: (x & 31) as u8, v: ((x >> 5) & 7) as u8, mark: ((x >> 8) & 7) as u8, nb: ((x >> 11) & 3) as u8, bonus }
+    SkillInst {
+        id: (x & 63) as u8,
+        v: ((x >> 6) & 7) as u8,
+        mark: ((x >> 9) & 7) as u8,
+        star: ((x >> 12) & 3) as u8,
+        nb: ((x >> 14) & 3) as u8,
+        bonus,
+    }
+}
+
+fn n_relics(b: &Build) -> usize {
+    b.relics.iter().filter(|&&r| r != NO_RELIC).count()
 }
 
 /// Append the day entry for `cur` (vs the previous day's build `prev`) to `out`; returns bytes written
@@ -48,13 +64,22 @@ pub fn journal_day(day: u8, prev: &Build, cur: &Build, out: &mut [u8]) -> usize 
             mask |= 1 << j;
         }
     }
-    if mask == 0 && cur.n == prev.n && day != 1 {
+    let relics_changed = prev.relics != cur.relics || day == 1;
+    if mask == 0 && cur.n == prev.n && !relics_changed && day != 1 {
         return 0;
     }
     out[0] = day;
     out[1] = cur.n;
     out[2] = mask;
-    let mut w = 3;
+    let mut w = HEADER;
+    if relics_changed {
+        let nr = n_relics(cur);
+        out[3] = nr as u8;
+        out[w..w + nr].copy_from_slice(&cur.relics[..nr]);
+        w += nr;
+    } else {
+        out[3] = RELICS_SAME;
+    }
     for j in 0..cur.n as usize {
         if mask & (1 << j) != 0 {
             out[w..w + PACKED].copy_from_slice(&pack(&cur.skills[j]));
@@ -68,7 +93,7 @@ pub fn journal_day(day: u8, prev: &Build, cur: &Build, out: &mut [u8]) -> usize 
 pub fn build_at(hero: u8, len: usize, day: u8, at: impl Fn(usize) -> u8) -> Build {
     let mut b = Build { hero, ..Default::default() };
     let mut p = 0;
-    let mut six = [0u8; PACKED];
+    let mut seven = [0u8; PACKED];
     while p < len {
         let d = at(p);
         if d > day {
@@ -76,13 +101,21 @@ pub fn build_at(hero: u8, len: usize, day: u8, at: impl Fn(usize) -> u8) -> Buil
         }
         b.n = at(p + 1);
         let mask = at(p + 2);
-        p += 3;
+        let rc = at(p + 3);
+        p += HEADER;
+        if rc != RELICS_SAME {
+            b.relics = [NO_RELIC; MAX_RELICS];
+            for i in 0..rc as usize {
+                b.relics[i] = at(p + i);
+            }
+            p += rc as usize;
+        }
         for j in 0..MAX_SKILLS {
             if mask & (1 << j) != 0 {
-                for (k, x) in six.iter_mut().enumerate() {
+                for (k, x) in seven.iter_mut().enumerate() {
                     *x = at(p + k);
                 }
-                b.skills[j] = unpack(&six);
+                b.skills[j] = unpack(&seven);
                 p += PACKED;
             }
         }

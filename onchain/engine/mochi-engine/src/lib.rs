@@ -6,10 +6,10 @@ extern crate alloc;
 pub mod combat;
 pub mod data;
 pub mod fixed;
-// ghost.rs and run.rs: sim v13 code, ported to sim v22 in the run stage (they don't build against v22 data yet)
-// pub mod ghost;
+
+pub mod ghost;
 pub mod rng;
-// pub mod run;
+pub mod run;
 pub mod types;
 
 pub use combat::{simulate, Fighter, NoProbe, Outcome, Probe};

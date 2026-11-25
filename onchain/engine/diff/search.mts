@@ -9,7 +9,7 @@ import { SKILL_LIST, VARIANTS } from '../../../src/sim/skills';
 import { HEROES } from '../../../src/sim/heroes';
 import { LINES, type Build } from '../../../src/sim/types';
 import { RELICS, MAX_RELICS } from '../../../src/sim/relics';
-import { enc } from './gen.mts';
+import { enc } from './enc.mts';
 import { BONUS_KINDS, MAX_BONUS } from '../../../src/sim/links';
 import { MARKS } from '../../../src/sim/run';
 import { randomAiBuild } from '../../../src/sim/bot';

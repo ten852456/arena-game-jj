@@ -147,6 +147,12 @@ export interface RunState {
   relicRolls?: number;
   /** the server's rerolled offers for today (from relicNext.re), used in order */
   relicRe?: string[][];
+  /**
+   * On-chain run (sim v22): the program's secret seed (from VRF, never readable by the player). It does what the
+   * server's seed does for a ranked run: relic offers and their rerolls, and the kind of every mark (wish marks and
+   * the last chance's mark), rolled when the mark is carved/placed, so the player never sees a kind before it is final.
+   */
+  secret?: number;
 }
 
 /** Skill slots on a day: 3 on days 1–3, 4 on 4–6, 5 on 7–9, 6 from day 10, plus bonus slots (max MAX_SLOTS). */
@@ -209,8 +215,8 @@ export function beginDay(s: RunState) {
   if (RELIC_DAYS.includes(s.day) && !(s.relicDays ?? []).includes(s.day) && (s.relics ?? []).length < MAX_RELICS) {
     s.relicDays = [...(s.relicDays ?? []), s.day];
     // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
-    const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
-    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
+    const srv = s.secret === undefined && s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
+    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.secret ?? s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
     s.relicRolls = 0;
     if (srv?.length) s.relicRe = (s.relicNext?.re ?? []).map((o) => o.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)));
     else delete s.relicRe;
@@ -227,7 +233,7 @@ export function rerollRelic(s: RunState): string | null {
   if (!relicRerollsLeft(s)) return 'สุ่มใหม่ครบแล้ว';
   const n = (s.relicRolls ?? 0) + 1;
   // a ranked run uses the server's reroll (sent with the offer); an offline run rolls its own
-  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n);
+  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(s.secret ?? s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n);
   if (!next.length) return 'ไม่มีของวิเศษให้สุ่มเพิ่ม';
   s.relicRolls = n;
   s.relicOffer = next;
@@ -436,7 +442,8 @@ export function wish(s: RunState): WishResult {
     return { idx: i, from, v: k.v };
   }
   // a ranked run's mark kind is the server's roll, revealed in the next fight's response (sim v20); offline: rolled here
-  if (s.online) k.markHidden = 'wish';
+  if (s.secret !== undefined) k.mark = markKindFor(s.secret, s.wishMarks ?? 0);
+  else if (s.online) k.markHidden = 'wish';
   else k.mark = rng.pick(MARKS);
   s.wishMarks = (s.wishMarks ?? 0) + 1;
   return { idx: i, from, mark: k.mark };
@@ -564,7 +571,9 @@ export function chooseLastChance(s: RunState, opt: LastChanceOption) {
     }
   }
   if (opt === 'mark') {
-    s.pendingMark = new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+    // on chain the kind comes from the secret seed (the program keeps it hidden until the mark is placed)
+    s.pendingMark = s.secret !== undefined ? markKindFor(s.secret, 'last') : new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+
     s.pendingHidden = !!s.online;
     s.phase = 'mark';
     return;

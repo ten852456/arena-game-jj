@@ -1,6 +1,6 @@
 // TS → Rust: regenerate the on-chain engine's game data from the TypeScript sim and prove the two still agree.
 //
-//   npm run ts-to-rust                 codegen + parity test (2,000 fights; + 2,000 runs once run.rs is on sim v22)
+//   npm run ts-to-rust                 codegen + parity test (2,000 fights + 2,000 runs)
 //   npm run ts-to-rust -- --cases 20000   bigger parity run
 //   npm run ts-to-rust -- --no-test    codegen only
 //
@@ -43,8 +43,8 @@ if (noTest) process.exit(0);
 const k = nCases >= 1000 ? `${Math.round(nCases / 1000)}k` : String(nCases);
 const casesFile = path.join(engine, 'diff', `cases-${k}.txt`);
 const runsFile = path.join(engine, 'diff', `runs-${k}.txt`);
-// sim v22 stage: run.rs / ghost.rs are not ported yet, so only fights are compared (RUNS=1 brings the runs back)
-const withRuns = process.env.RUNS === '1';
+// RUNS=0 skips the run + ghost parity (fights only)
+const withRuns = process.env.RUNS !== '0';
 step(`parity cases from TS: ${nCases} fights${withRuns ? ` + ${nCases} runs` : ''}`);
 tsx(path.join(engine, 'diff', 'gen.mts'), 'gen', String(nCases), casesFile);
 if (withRuns) tsx(path.join(engine, 'diff', 'run-gen.mts'), 'gen', String(nCases), runsFile);

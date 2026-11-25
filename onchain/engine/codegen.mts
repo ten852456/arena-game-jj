@@ -3,7 +3,6 @@
 // Writes engine/mochi-engine/src/data.rs. Re-run after any change to skills.ts / heroes.ts / tuning.ts / relics.ts /
 // combat.ts tables. Sim v22: ppm values are P() of the same data the TS fight passes through P().
 //
-// Stage note (sim v22): the fight data is complete; the run (run.ts) section comes back with the run.rs port.
 import fs from 'node:fs';
 import { SKILL_LIST, VARIANTS, WORTH_BY_LV, TIME_CAP_S, DODGE_MIN_POWER, type Effect } from '../../src/sim/skills';
 import { HEROES, ULT_LV2_POW, ULT_LV2_LV3, ULT_PIECES, lineAffinity, ultPow, ultTrig } from '../../src/sim/heroes';
@@ -12,11 +11,16 @@ import { P, rdiv } from '../../src/sim/fixed';
 import * as C from '../../src/sim/combat';
 import { LINES } from '../../src/sim/types';
 import { MAX_BONUS, BONUS_KINDS, POWER_BONUS, HASTE_BONUS } from '../../src/sim/links';
-import { RELICS, MAX_RELICS } from '../../src/sim/relics';
+import { RELICS, MAX_RELICS, RELIC_DAYS, RELIC_OFFER, LINE_W, OTHER_W, NEEDS, buildEffects } from '../../src/sim/relics';
+import * as RUN from '../../src/sim/run';
+import { hits } from '../../src/sim/skills';
+import { randomAiBuild } from '../../src/sim/bot';
+import { hashSeed } from '../../src/sim/rng';
 
 const DAYS = 40; // tables for days 1..=DAYS (the game caps a run at day 20)
 const lineIdx = (l: string) => (l === 'none' ? LINES.length : LINES.indexOf(l as never));
 const heroIdx = (h?: string) => (h ? HEROES.findIndex((x) => x.id === h) : 255);
+const skillIdx = (id: string) => SKILL_LIST.findIndex((d) => d.id === id);
 const NL = String.fromCharCode(10);
 
 function eff(e: Effect): string {
@@ -162,6 +166,64 @@ for (const d of SKILL_LIST) {
   out.push(`  // ${d.id}${NL}  SkillDef { line: ${lineIdx(d.line)}, hero: ${heroIdx(d.hero)}, tree: [${NL}${nodes.join(`,${NL}`)},${NL}  ] },`);
 }
 out.push('];');
+
+// ---------------- run (run.ts, relics.ts offer, links.ts bonus roll) ----------------
+/** rng.next() < p  ⇔  next_u32() < ceil(p · 2^32)  (next() = v / 2^32 exactly) */
+const th = (p: number) => Math.ceil(p * 2 ** 32);
+out.push(`${NL}// run.ts`);
+const ri = (name: string, v: number, ty = 'i64') => { if (!Number.isInteger(v)) throw new Error(`${name} = ${v} must be whole`); c(name, v, undefined, ty); };
+ri('START_HP', RUN.START_HP); ri('WIN_TARGET', RUN.WIN_TARGET); ri('SHOP_SIZE', RUN.SHOP_SIZE, 'usize'); ri('REROLL', RUN.REROLL);
+ri('MAX_LV', RUN.MAX_LV); ri('DAY1_GOLD', RUN.DAY1_GOLD); ri('MAX_SLOTS', RUN.MAX_SLOTS); ri('LV3_DAY', RUN.LV3_DAY);
+ri('SUPPLY_GOLD_FULL', RUN.SUPPLY_GOLD_FULL); ri('LINE_WEIGHT', RUN.LINE_WEIGHT, 'u64'); ri('UNIQUE_BACK_DAY', RUN.UNIQUE_BACK_DAY);
+ri('STAR_MAX', RUN.STAR_MAX); ri('STAR_DAY', RUN.STAR_DAY); ri('STAR_PER_ROLL', RUN.STAR_PER_ROLL); ri('LATE_DAY', RUN.LATE_DAY);
+ri('LOSS_CAP', RUN.LOSS_CAP); ri('LOSS_EVERY', T['run.lossEvery']); ri('HERO_CHOICES', RUN.HERO_CHOICES, 'usize'); ri('WISH_BASE', RUN.WISH_BASE);
+ri('MARK_WISH_EXTRA', RUN.MARK_WISH_EXTRA); ri('WISH_MARKS_MAX', RUN.WISH_MARKS_MAX); ri('LUCKYCAT_INCOME', T['luckycat.income']);
+ri('RELIC_OFFER', RELIC_OFFER, 'usize'); ri('RELIC_REROLLS', T['relic.rerolls']); ri('RELIC_LINE_W', LINE_W, 'u64'); ri('RELIC_OTHER_W', OTHER_W, 'u64');
+ri('LONEWOLF_DAY', 7);
+out.push(`pub const PRICES: [i64; 3] = [${RUN.PRICES.join(', ')}];`);
+out.push(`pub const STAR_PRICES: [i64; 3] = [${RUN.STAR_PRICES.join(', ')}];`);
+out.push(`pub const RELIC_DAYS: [i64; ${RELIC_DAYS.length}] = [${RELIC_DAYS.join(', ')}];`);
+out.push(`pub const N_MARKS: u32 = ${RUN.MARKS.length};`);
+out.push(`pub const N_LINES: u32 = ${LINES.length};`);
+out.push(`pub const N_HEROES: u32 = ${HEROES.length};`);
+out.push(`/// day-1 shop of each hero (skill indices), and its unique`);
+out.push(`pub const HERO_DAY1: [[u8; ${RUN.SHOP_SIZE}]; ${HEROES.length}] = [${HEROES.map((h) => `[${h.day1.slice(0, RUN.SHOP_SIZE).map(skillIdx).join(', ')}]`).join(', ')}];`);
+out.push(`pub const HERO_UNIQUE: [u8; ${HEROES.length}] = [${HEROES.map((h) => skillIdx(h.unique)).join(', ')}];`);
+out.push(`/// some variant of the skill hits (a +damage bonus would do nothing otherwise)`);
+out.push(`pub const CAN_HIT: [bool; ${SKILL_LIST.length}] = [${SKILL_LIST.map((d) => Object.values(d.tree).some(hits)).join(', ')}];`);
+const tl = HEROES.map((h) => SKILL_LIST.map((d, k) => [d, k] as const).filter(([d]) => !d.hero || d.hero === h.id).map(([, k]) => k));
+const tmax = Math.max(...tl.map((l) => l.length));
+out.push(`/// bonus targets per hero (shared skills + own unique, SKILL_LIST order); padded with 255`);
+out.push(`pub const HERO_TARGETS: [[u8; ${tmax}]; ${HEROES.length}] = [${tl.map((l) => `[${[...l, ...Array(tmax - l.length).fill(255)].join(', ')}]`).join(', ')}];`);
+out.push(`pub const HERO_TARGETS_LEN: [u8; ${HEROES.length}] = [${tl.map((l) => l.length).join(', ')}];`);
+out.push(`/// rng.next() < p thresholds (exact)`);
+const ths: [string, number][] = [['TH_DMG', 0.3], ['TH_SHIELD', 0.45], ['TH_HASTE', 0.6], ['TH_POWER', 0.75], ['TH_TARGET_SKILL', 0.6], ['TH_TWO_BONUS', 0.35],
+  ['TH_STARS_LATE', 0.9], ['TH_STARS_UPS', 0.5], ['TH_STARS', 0.8], ['TH_STAR_PICK', 0.35], ['TH_UP_LATE', 0.75], ['TH_UP', 0.5]];
+for (const [n, v] of ths) out.push(`pub const ${n}: u32 = ${th(v)};`);
+// relic offer: lines each relic suits (bitmask), what it needs the build to do (tag bitmask), per skill-variant tags
+const tags = [...new Set(SKILL_LIST.flatMap((d) => VARIANTS.flatMap((v) => [...buildEffects([{ id: d.id, v }])])).concat(Object.values(NEEDS).flat()))].sort();
+if (tags.length > 64) throw new Error('too many effect tags for a u64 mask');
+const tagMask = (xs: Iterable<string>) => { let m = 0n; for (const x of xs) m |= 1n << BigInt(tags.indexOf(x)); return m; };
+out.push(`/// effect tags (relics.ts buildEffects): ${tags.join(' ')}`);
+out.push(`pub const SKILL_TAGS: [[u64; 7]; ${SKILL_LIST.length}] = [${SKILL_LIST.map((d) => `[${VARIANTS.map((v) => tagMask(buildEffects([{ id: d.id, v }])).toString()).join(', ')}]`).join(`,${NL}  `)}];`);
+out.push(`pub const RELIC_NEED: [u64; ${RELICS.length}] = [${RELICS.map((r) => tagMask(NEEDS[r.id] ?? []).toString()).join(', ')}];`);
+out.push(`pub const RELIC_LINES: [u16; ${RELICS.length}] = [${RELICS.map((r) => [r.group, ...(r.also ?? [])].filter((l) => LINES.includes(l as never)).reduce((m, l) => m | (1 << LINES.indexOf(l as never)), 0)).join(', ')}];`);
+
+// bot templates (bots fill in when no ghost fits; they persist across seasons): real bot builds
+const BOT_K = 4, BOT_DAYS = 20;
+const lit = (b: ReturnType<typeof randomAiBuild>) => {
+  const sk = Array.from({ length: 8 }, (_, i) => {
+    const k = b.skills[i];
+    if (!k) return 'SkillInst { id: 0, v: 0, mark: 0, star: 0, nb: 0, bonus: [Bonus { t: 0, e: 0 }; 3] }';
+    const bo = Array.from({ length: MAX_BONUS }, (_, j) => { const x = k.bonus?.[j]; return x ? `Bonus { t: ${x.t.startsWith('line:') ? 200 + LINES.indexOf(x.t.slice(5) as never) : skillIdx(x.t)}, e: ${BONUS_KINDS.indexOf(x.e)} }` : 'Bonus { t: 0, e: 0 }'; });
+    return `SkillInst { id: ${skillIdx(k.id)}, v: ${VARIANTS.indexOf(k.v as never)}, mark: ${k.mark ? RUN.MARKS.indexOf(k.mark) + 1 : 0}, star: ${k.star ?? 0}, nb: ${k.bonus?.length ?? 0}, bonus: [${bo.join(', ')}] }`;
+  });
+  const rs = (b.relics ?? []).map((r) => RELICS.findIndex((x) => x.id === r));
+  return `Build { hero: ${heroIdx(b.hero)}, n: ${b.skills.length}, relics: [${Array.from({ length: MAX_RELICS }, (_, i) => rs[i] ?? 255).join(', ')}], skills: [${sk.join(', ')}] }`;
+};
+out.push(`/// bot templates: BOT_BUILDS[day - 1][k] = randomAiBuild(day, hashSeed('bot', day, k))`);
+out.push(`pub const BOT_K: usize = ${BOT_K};${NL}pub const BOT_DAYS: usize = ${BOT_DAYS};`);
+out.push(`pub const BOT_BUILDS: [[Build; ${BOT_K}]; ${BOT_DAYS}] = [${Array.from({ length: BOT_DAYS }, (_, d) => `[${Array.from({ length: BOT_K }, (_, k) => lit(randomAiBuild(d + 1, hashSeed('bot', d + 1, k)))).join(',' + NL + '  ')}]`).join(',' + NL)}];`);
 
 const file = new URL('./mochi-engine/src/data.rs', import.meta.url);
 fs.mkdirSync(new URL('./mochi-engine/src/', import.meta.url), { recursive: true });
