@@ -72,7 +72,7 @@ fn journals_and_arena_are_exact() {
                 0 => { s.buy(idx(t[p]), if t[p + 1] < 0 { None } else { Some(t[p + 1] as usize) }); p += 2; }
                 1 => { s.sell(idx(t[p])); p += 1; }
                 2 => { s.move_skill(t[p], t[p + 1]); p += 2; }
-                3 => { s.reroll(); }
+                3 => { s.reroll(secret); }
                 4 => { s.toggle_lock(idx(t[p])); p += 1; }
                 5 => { s.buy_slot(); }
                 6 => { s.wish(secret); }

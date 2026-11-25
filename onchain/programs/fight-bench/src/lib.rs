@@ -43,7 +43,7 @@ pub mod fight_bench {
             0 => s.buy(ix(a), if b < 0 { None } else { Some(b as usize) }),
             1 => { s.sell(ix(a)); true }
             2 => { s.move_skill(a as i64, b as i64); true }
-            3 => s.reroll(),
+            3 => s.reroll(sec),
             4 => s.toggle_lock(ix(a)),
             5 => s.buy_slot(),
             6 => s.wish(sec),

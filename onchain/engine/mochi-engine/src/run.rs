@@ -3,7 +3,8 @@
 //! are the reference; phase guards that only the UI enforces in TS belong to the on-chain program, not here).
 //!
 //! `secret`: the on-chain run's hidden seed (VRF, kept by the program where the player can't read it; TS
-//! `RunState.secret`). It rolls the relic offers and every mark kind. `None` = an offline run (TS without secret).
+//! `RunState.secret`). EVERY run roll comes from it (shop, rerolls, card bonuses, star cards, wishes, awaken, relic
+//! offers, mark kinds); `seed` is then only the cosmetic look. `None` = an offline run (TS without secret).
 //! The kind of the last chance's mark is rolled when the mark is placed (`pending_mark == PENDING_SECRET` until then).
 //!
 //! `RunState` is `#[repr(C)]` with integer fields only, so any byte pattern is a valid value: the program can use
@@ -392,17 +393,19 @@ impl RunState {
     fn n_relics(&self) -> usize {
         self.relics.iter().filter(|&&r| r != NO_RELIC).count()
     }
-    fn offer_seed(&self, secret: Option<u32>) -> u32 {
+    /// run.ts rollSeed: every run roll comes from the secret on chain, else from the public run seed
+    #[inline(always)]
+    fn roll_seed(&self, secret: Option<u32>) -> u32 {
         secret.unwrap_or(self.seed)
     }
     /// run.ts bonusOf: the connect bonuses of a skill's card in this run
-    fn bonus_of(&self, id: u8, out: &mut [Bonus; MAX_BONUS]) -> u8 {
-        let mut rng = Rng::new(SeedHash::new().num(self.seed as u64).str(b"bonus").str(SKILL_IDS[id as usize].as_bytes()).done());
+    fn bonus_of(&self, id: u8, rs: u32, out: &mut [Bonus; MAX_BONUS]) -> u8 {
+        let mut rng = Rng::new(SeedHash::new().num(rs as u64).str(b"bonus").str(SKILL_IDS[id as usize].as_bytes()).done());
         roll_bonuses(&mut rng, id, self.hero, out)
     }
-    fn new_offer(&self, id: u8) -> Offer {
+    fn new_offer(&self, id: u8, rs: u32) -> Offer {
         let mut o = Offer { present: 1, id, ..Default::default() };
-        o.nb = self.bonus_of(id, &mut o.bonus);
+        o.nb = self.bonus_of(id, rs, &mut o.bonus);
         o
     }
     /// run.ts upOffer: an upgrade card for owned skill k (its first next branch), or its next star
@@ -428,7 +431,7 @@ impl RunState {
         self.gold += (base + bonus) as u16;
         self.rolls = 0;
         self.wishes = 0;
-        self.roll_shop();
+        self.roll_shop(secret);
         self.phase = PHASE_SHOP;
         // relic days: pick 1 of 3 relics (or skip) before the shop opens
         if let Some(di) = RELIC_DAYS.iter().position(|&d| d == self.day as i64) {
@@ -436,7 +439,7 @@ impl RunState {
                 self.relic_days |= 1 << di;
                 let owned = self.relics;
                 let n = min(self.n as i64, self.slots()) as usize;
-                let (offer, no) = roll_relic_offer(self.offer_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], 0);
+                let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], 0);
                 self.relic_offer = offer;
                 self.relic_rolls = 0;
                 if no > 0 {
@@ -454,7 +457,7 @@ impl RunState {
         let r = self.relic_rolls as i64 + 1;
         let owned = self.relics;
         let n = min(self.n as i64, self.slots()) as usize;
-        let (offer, no) = roll_relic_offer(self.offer_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], r);
+        let (offer, no) = roll_relic_offer(self.roll_seed(secret), self.hero, self.day as i64, &owned[..self.n_relics()], &self.skills[..n], r);
         if no == 0 {
             return false;
         }
@@ -497,11 +500,12 @@ impl RunState {
     }
 
     /// run.ts rollShop
-    fn roll_shop(&mut self) {
+    fn roll_shop(&mut self, secret: Option<u32>) {
+        let rs = self.roll_seed(secret);
         let day = self.day as i64;
         if day <= 1 {
             for i in 0..SHOP_SIZE {
-                self.shop[i] = self.new_offer(HERO_DAY1[self.hero as usize][i]);
+                self.shop[i] = self.new_offer(HERO_DAY1[self.hero as usize][i], rs);
             }
             self.locks = [0; SHOP_SIZE];
             return;
@@ -516,7 +520,7 @@ impl RunState {
             }
         }
         let nkept = kept_ids.count_ones() as usize;
-        let mut rng = Rng::new(SeedHash::new().num(self.seed as u64).num(day as u64).num(self.rolls as u64).done());
+        let mut rng = Rng::new(SeedHash::new().num(rs as u64).num(day as u64).num(self.rolls as u64).done());
         let mut owned: u64 = 0;
         for k in self.skills() {
             owned |= 1 << k.id;
@@ -559,7 +563,7 @@ impl RunState {
         if day >= UNIQUE_BACK_DAY && need > 0 {
             if let Some(j) = fresh[..nf].iter().position(|&x| x == uniq) {
                 remove_at(&mut fresh, &mut nf, j);
-                picks[np] = self.new_offer(uniq);
+                picks[np] = self.new_offer(uniq, rs);
                 np += 1;
             }
         }
@@ -577,7 +581,7 @@ impl RunState {
                 let id = ids[rng.int(ni as u32) as usize];
                 let j = fresh[..nf].iter().position(|&x| x == id).unwrap();
                 remove_at(&mut fresh, &mut nf, j);
-                picks[np] = self.new_offer(id);
+                picks[np] = self.new_offer(id, rs);
                 np += 1;
             }
         }
@@ -635,7 +639,7 @@ impl RunState {
                     i += 1;
                 }
                 let id = remove_at(&mut fresh, &mut nf, i);
-                picks[np] = self.new_offer(id);
+                picks[np] = self.new_offer(id, rs);
             }
             np += 1;
         }
@@ -708,7 +712,7 @@ impl RunState {
         if (self.gold as i64) < price {
             return false;
         }
-        let mut rng = Rng::new(SeedHash::new().num(self.seed as u64).str(b"wish").num(day as u64).num(self.wishes as u64).done());
+        let mut rng = Rng::new(SeedHash::new().num(self.roll_seed(secret) as u64).str(b"wish").num(day as u64).num(self.wishes as u64).done());
         let mut pool = [0u8; MAX_SKILLS];
         let mut np = 0;
         for (i, k) in self.skills().iter().enumerate() {
@@ -745,13 +749,13 @@ impl RunState {
     }
 
     /// run.ts reroll
-    pub fn reroll(&mut self) -> bool {
+    pub fn reroll(&mut self, secret: Option<u32>) -> bool {
         if self.day <= 1 || self.phase == PHASE_RELIC || (self.gold as i64) < REROLL {
             return false;
         }
         self.gold -= REROLL as u16;
         self.rolls += 1;
-        self.roll_shop();
+        self.roll_shop(secret);
         true
     }
 
@@ -876,7 +880,7 @@ impl RunState {
         }
         match opt {
             LC_AWAKEN => {
-                let mut rng = Rng::new(SeedHash::new().num(self.seed as u64).str(b"awaken").num(self.day as u64).done());
+                let mut rng = Rng::new(SeedHash::new().num(self.roll_seed(secret) as u64).str(b"awaken").num(self.day as u64).done());
                 let n = self.n as usize;
                 for k in self.skills[..n].iter_mut() {
                     if k.v == 0 {

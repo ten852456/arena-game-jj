@@ -146,9 +146,7 @@ function caseOf(i: number) {
   return { seed, secret, choices, hero, acts };
 }
 function start(hero: string, seed: number, secret?: number) {
-  const s = newRun(hero, seed, 'x');
-  if (secret !== undefined) s.secret = secret; // day 1 has no relic offer, so setting it after newRun is the same
-  return s;
+  return newRun(hero, seed, 'x', secret);
 }
 
 const [mode, ...args] = process.argv.slice(2);

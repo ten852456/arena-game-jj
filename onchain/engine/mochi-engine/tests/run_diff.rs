@@ -95,7 +95,7 @@ pub fn step(s: &mut RunState, t: &[i64], mut p: usize, secret: Option<u32>) -> (
         }
         1 => { s.sell(idx(t[p])); p += 1; true }
         2 => { s.move_skill(t[p], t[p + 1]); p += 2; true }
-        3 => s.reroll(),
+        3 => s.reroll(secret),
         4 => { let r = s.toggle_lock(idx(t[p])); p += 1; r }
         5 => s.buy_slot(),
         6 => s.wish(secret),
@@ -176,4 +176,36 @@ fn run_state_is_flat() {
     assert_eq!(core::mem::size_of::<RunState>(), 184);
     let s = RunState::default();
     assert!(s.relics.iter().all(|&r| r == NO_RELIC));
+}
+
+#[test]
+fn secret_runs_ignore_the_public_seed() {
+    // on chain every roll comes from the secret: the same actions with ANY public seed give the same run (seed aside)
+    let path = std::env::var("MOCHI_RUNS").unwrap_or_else(|_| "../diff/runs-2k.txt".into());
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"));
+    let (mut runs, mut actions) = (0, 0);
+    for line in text.lines() {
+        let (head, rest) = line.split_once(" | ").unwrap();
+        let h: Vec<i64> = head.split(' ').map(|x| x.parse().unwrap()).collect();
+        if h[1] < 0 {
+            continue;
+        }
+        let (seed, secret, hero) = (h[0] as u32, Some(h[1] as u32), h[5] as u8);
+        let t: Vec<i64> = rest.split(' ').map(|x| x.parse().unwrap()).collect();
+        let mut a = RunState::new(hero, seed, secret);
+        let mut b = RunState::new(hero, seed ^ 0x9e37_79b9, secret);
+        let strip = |s: &RunState| { let mut e = encode(s); e[1] = 0; e };
+        assert_eq!(strip(&a), strip(&b));
+        let mut p = 1;
+        while p < t.len() {
+            let (oka, np) = step(&mut a, &t, p, secret);
+            let (okb, _) = step(&mut b, &t, p, secret);
+            assert_eq!(oka, okb);
+            assert_eq!(strip(&a), strip(&b), "public seed changed an on-chain run");
+            p = np + 2;
+            actions += 1;
+        }
+        runs += 1;
+    }
+    println!("on-chain runs replayed with another public seed: {runs} runs, {actions} actions, all identical");
 }
