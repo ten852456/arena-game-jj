@@ -3,7 +3,7 @@
 //! and reports the largest stack sizes seen (to size the fixed capacities).
 //! MOCHI_DIFF=<cases file> (default ../diff/cases-2k.txt)
 use mochi_engine::combat::{Fighter, Probe};
-use mochi_engine::data::MAX_BONUS;
+use mochi_engine::data::{MAX_BONUS, MAX_RELICS};
 use mochi_engine::types::{Bonus, Build, SkillInst, MAX_SKILLS};
 use mochi_engine::simulate;
 
@@ -17,15 +17,20 @@ struct Hasher {
 }
 
 fn row_of(t: i64, f: &[Fighter; 2]) -> Vec<i64> {
+    // same layout as combat.ts digestOf (sim v22): 44 fields per fighter, then 6 per block
     let mut row = vec![t];
     for x in f {
         row.extend_from_slice(&[
             x.hp, x.shield, x.frozen, x.frozen_total, x.slow_t, x.slow_p, x.slow_total, x.charge, x.charge_hits,
-            x.growth.sum(), x.thorns.sum(), x.thorns.len as i64, x.burns.sum(), x.burns.len as i64, x.ctl_keep,
-            x.ignore_freeze as i64, x.immune_until, x.last_fire, x.freeze_n, x.delay_n, x.leech_next, x.thorns_heal,
+            x.growth.sum(), x.growth.len as i64, x.thorns.sum(), x.thorns.len as i64,
+            x.burns.sum(), x.burns.len as i64, x.burns.left(), x.poisons.sum(), x.poisons.len as i64, x.poisons.left(),
+            x.dodge, x.dodges, x.dealt_total, x.haste_p, x.haste_t, x.wound_p, x.wound_t, x.ult_done as i64,
+            x.shield_got, x.hits_taken, x.line_casts, x.ctl_landed, x.big_hit, x.ult_until, x.freeze_n, x.delay_n, x.ctl_keep,
+            x.ignore_freeze as i64, x.leech_next, x.thorns_heal, x.immune_until, x.last_fire,
+            x.f_hits, x.f_counter, x.f_hits_taken, x.f_raged,
         ]);
         for b in &x.blocks[..x.nb] {
-            row.extend_from_slice(&[b.prog, b.trig_at, b.react_at, b.rr]);
+            row.extend_from_slice(&[b.prog, b.cd, b.trig_at, b.react_at, b.rr, b.fired]);
         }
     }
     row
@@ -42,7 +47,7 @@ impl Probe for Hasher {
         for x in f {
             self.max_growth = self.max_growth.max(x.growth.len);
             self.max_thorns = self.max_thorns.max(x.thorns.len);
-            self.max_burns = self.max_burns.max(x.burns.len);
+            self.max_burns = self.max_burns.max(x.burns.len).max(x.poisons.len);
         }
         if let Some(r) = self.rows.as_mut() {
             r.push(row);
@@ -50,16 +55,21 @@ impl Probe for Hasher {
     }
 }
 
+/// gen.mts enc (sim v22): hero, n, relic count, MAX_RELICS relics, then per slot id, v, mark, star, nb, bonuses
 fn build_of(v: &[i64]) -> Build {
-    let mut b = Build { hero: v[0] as u8, n: v[1] as u8, skills: [SkillInst::default(); MAX_SKILLS] };
-    let per = 4 + 2 * MAX_BONUS;
+    let mut b = Build { hero: v[0] as u8, n: v[1] as u8, ..Build::default() };
+    for i in 0..MAX_RELICS {
+        b.relics[i] = v[3 + i] as u8;
+    }
+    let base = 3 + MAX_RELICS;
+    let per = 5 + 2 * MAX_BONUS;
     for i in 0..MAX_SKILLS {
-        let s = &v[2 + i * per..2 + (i + 1) * per];
+        let s = &v[base + i * per..base + (i + 1) * per];
         let mut bonus = [Bonus::default(); MAX_BONUS];
         for j in 0..MAX_BONUS {
-            bonus[j] = Bonus { t: s[4 + 2 * j] as u8, e: s[5 + 2 * j] as u8 };
+            bonus[j] = Bonus { t: s[5 + 2 * j] as u8, e: s[6 + 2 * j] as u8 };
         }
-        b.skills[i] = SkillInst { id: s[0] as u8, v: s[1] as u8, mark: s[2] as u8, nb: s[3] as u8, bonus };
+        b.skills[i] = SkillInst { id: s[0] as u8, v: s[1] as u8, mark: s[2] as u8, star: s[3] as u8, nb: s[4] as u8, bonus };
     }
     b
 }

@@ -363,7 +363,14 @@ function makeFighter(b: Build, side: Side, day: number): Fighter {
   };
 }
 
-export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trace?: boolean; /** simulator only: these sides fight with their ultimate locked */ noUlt?: [boolean, boolean] } = {}): CombatResult {
+/**
+ * opts.digest (tests only): called at the end of every tick with the full decision state as integers, so the Rust
+ * engine can be compared tick by tick (layout: digestOf at the end of this file).
+ */
+export function simulate(
+  a: Build, b: Build, seed: number, day = 1,
+  opts: { trace?: boolean; /** simulator only: these sides fight with their ultimate locked */ noUlt?: [boolean, boolean]; digest?: (row: number[]) => void } = {},
+): CombatResult {
   const rng = new Rng(seed);
   const F: [Fighter, Fighter] = [makeFighter(a, 0, day), makeFighter(b, 1, day)];
   for (const f of F) if (opts.noUlt?.[f.side]) f.ultLv = f.side_.ultLv = 0;
@@ -1173,6 +1180,7 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
       for (const f of F) deal(f, n, false, 'fatigue', 'fatigue');
     }
 
+    if (opts.digest) opts.digest(digestOf(t, F));
     if (F[0].hp <= 0 || F[1].hp <= 0) {
       // one side down: the other wins. Both down in the same tick (double KO): the side that dealt more damage in the
       // whole fight wins, then the one less below zero, else a draw (sim v14; before: only "less below zero")
@@ -1206,4 +1214,25 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     stats: [F[0].stats, F[1].stats], sides,
     ...(trace ? { trace } : {}),
   };
+}
+
+/**
+ * Test-only: the full decision state at the end of a tick, as integers (onchain/engine/mochi-engine/tests/diff.rs
+ * row_of has the same layout). Per fighter 44 fields, then 6 per block.
+ */
+function digestOf(t: number, F: [Fighter, Fighter]): number[] {
+  const row = [t];
+  for (const f of F) {
+    row.push(
+      f.hp, f.shield, f.frozen, f.frozenTotal, f.slowT, f.slowP, f.slowTotal, f.charge, f.chargeHits,
+      sum(f.growth), f.growth.length, sum(f.thorns), f.thorns.length,
+      dps(f.burns), f.burns.length, dotLeft(f.burns), dps(f.poisons), f.poisons.length, dotLeft(f.poisons),
+      f.dodge, f.dodges, f.dealtTotal, f.hasteP, f.hasteT, f.woundP, f.woundT, f.ultDone ? 1 : 0,
+      f.shieldGot, f.hitsTaken, f.lineCasts, f.ctlLanded, f.bigHit, f.ultUntil, f.freezeN, f.delayN, f.ctlKeep,
+      f.ignoreFreeze ? 1 : 0, f.leechNext, f.thornsHeal, f.immuneUntil, f.lastFire,
+      f.flags.hits ?? 0, f.flags.counter ?? 0, f.flags.hitsTaken ?? 0, f.flags.raged ?? 0,
+    );
+    for (const b of f.blocks) row.push(b.prog, b.cd, b.trigAt, b.reactAt, b.rr, f.stats[b.idx].c + f.stats[b.idx].tc);
+  }
+  return row;
 }

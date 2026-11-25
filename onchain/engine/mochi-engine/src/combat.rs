@@ -1,32 +1,30 @@
-//! The fight, sim v12. A rule-for-rule port of arena-game-jj/src/sim/combat.ts (same order of operations, same
-//! integer formulas), minus everything that only feeds the UI (events, per-block stats, trace).
-//! State lives in fixed-size arrays: no heap, no allocation, small enough for an SBF stack frame.
+//! The fight, sim v22. A rule-for-rule port of arena-game-jj/src/sim/combat.ts (+ execNode in skills.ts and the
+//! hero hooks in heroes.ts): same order of operations, same integer formulas, minus everything that only feeds the UI
+//! (events, per-block stats, trace). State lives in fixed-size arrays inside one heap block (SBF frames are 4 KB).
 use crate::data::*;
 use crate::fixed::{ceil_div, mul_p, rdiv, ONE};
 use crate::rng::Rng;
 use crate::types::*;
 use alloc::boxed::Box;
 
-/// Capacity of the per-fighter stacks. Measured maximum over 20,000 differential fights (bot + chaos builds):
-/// growth 55, thorns 21, burns 21. Values are stored as u16 (all small; thorns expiry is a tick ≤ 1,030) so a
-/// fighter stays well inside one 4 KB SBF stack frame. Exceeding a capacity or u16 panics (never silently wrong).
-pub const GROW_CAP: usize = 128;
+/// Capacity of the per-fighter stacks (exceeding one panics: never silently wrong). diff.rs reports the maxima seen.
+pub const GROW_CAP: usize = 160;
 pub const THORNS_CAP: usize = 64;
-pub const BURNS_CAP: usize = 64;
+pub const DOTS_CAP: usize = 96;
 /// thorns that never wear off
 const PERM: i64 = u16::MAX as i64;
 const MAX_FREEZE_TICKS: i64 = 15;
 const SLOW_CAP_P: i64 = 500_000;
 const MAX_CHAIN: u8 = 8;
 const REACT_MIN: i64 = 5;
-const THORNS_HEAL_P: i64 = 500_000;
-/// 0.6^n in ppm, same integer recurrence as combat.ts DR_P
+const FREEZE_DR_DECAY: i64 = 6 * 10;
+/// 0.5^n in ppm, same integer recurrence as combat.ts DR_P
 const DR_P: [i64; 24] = {
     let mut t = [0i64; 24];
     t[0] = ONE;
     let mut i = 1;
     while i < 24 {
-        t[i] = ((2 * t[i - 1] * 600_000 + ONE) / (2 * ONE)) as i64;
+        t[i] = (2 * t[i - 1] * 500_000 + ONE) / (2 * ONE);
         i += 1;
     }
     t
@@ -35,17 +33,29 @@ const DR_P: [i64; 24] = {
 fn dr_of(n: i64) -> i64 {
     if (n as usize) < DR_P.len() { DR_P[n as usize] } else { 0 }
 }
+#[inline(always)]
+fn min(a: i64, b: i64) -> i64 {
+    if a < b { a } else { b }
+}
+#[inline(always)]
+fn max(a: i64, b: i64) -> i64 {
+    if a > b { a } else { b }
+}
 
 #[derive(Clone, Copy, Default)]
 pub struct Block {
     pub id: u8,
     pub v: u8,
     pub mark: u8,
+    pub star: u8,
     /// index into build.skills
     pub idx: u8,
+    /// skill of the hero's line (inLine)
+    pub in_line: bool,
+    /// skill line == hero line (counts as a line cast)
+    pub line_cast: bool,
+    pub cd0: i64,
     pub cd: i64,
-    /// cd × ONE, precomputed (the per-tick hot loop compares against it)
-    pub cd_p: i64,
     /// cooldown progress in ppm ticks
     pub prog: i64,
     /// ppm
@@ -60,12 +70,14 @@ pub struct Block {
     pub trig_at: i64,
     pub reacts: bool,
     pub react_at: i64,
+    /// casts so far (own + set off): whetstone and the digest
+    pub fired: i64,
 }
 
-/// A fixed-capacity stack of (value, until), stored as u16.
+/// A fixed-capacity stack of (value, until).
 #[derive(Clone, Copy)]
 pub struct Stack<const N: usize> {
-    pub v: [u16; N],
+    pub v: [u32; N],
     pub until: [u16; N],
     pub len: usize,
 }
@@ -77,21 +89,10 @@ impl<const N: usize> Default for Stack<N> {
 impl<const N: usize> Stack<N> {
     #[inline(always)]
     pub fn push(&mut self, v: i64, until: i64) {
-        assert!(self.len < N && (0..=u16::MAX as i64).contains(&v) && (0..=u16::MAX as i64).contains(&until), "stack overflow");
-        self.v[self.len] = v as u16;
+        assert!(self.len < N && (0..=u32::MAX as i64).contains(&v) && (0..=u16::MAX as i64).contains(&until), "stack overflow");
+        self.v[self.len] = v as u32;
         self.until[self.len] = until as u16;
         self.len += 1;
-    }
-    /// earliest `until` (thorns expiry); PERM (u16::MAX) never expires
-    #[inline(always)]
-    pub fn min_until(&self) -> i64 {
-        let mut m = u16::MAX;
-        for i in 0..self.len {
-            if self.until[i] < m {
-                m = self.until[i];
-            }
-        }
-        if m == u16::MAX { i64::MAX } else { m as i64 }
     }
     #[inline(always)]
     pub fn pop(&mut self) -> (i64, i64) {
@@ -106,6 +107,14 @@ impl<const N: usize> Stack<N> {
         }
         s
     }
+    /// damage still to come (DoT stacks: v = dps, until = ticks left)
+    pub fn left(&self) -> i64 {
+        let mut s = 0i64;
+        for i in 0..self.len {
+            s += self.v[i] as i64 * ceil_div(self.until[i] as i64, 10);
+        }
+        s
+    }
     /// remove item i keeping order
     pub fn remove(&mut self, i: usize) {
         for k in i..self.len - 1 {
@@ -114,13 +123,40 @@ impl<const N: usize> Stack<N> {
         }
         self.len -= 1;
     }
+    /// earliest `until` (thorns expiry); PERM never expires
+    pub fn min_until(&self) -> i64 {
+        let mut m = u16::MAX;
+        for i in 0..self.len {
+            if self.until[i] < m {
+                m = self.until[i];
+            }
+        }
+        if m == u16::MAX { i64::MAX } else { m as i64 }
+    }
+    /// DoT tick: every stack loses one second, spent ones go (order kept)
+    pub fn tick_down(&mut self) {
+        let mut w = 0;
+        for i in 0..self.len {
+            let t = self.until[i] as i64 - 10;
+            if t > 0 {
+                self.v[w] = self.v[i];
+                self.until[w] = t as u16;
+                w += 1;
+            }
+        }
+        self.len = w;
+    }
 }
 
 #[derive(Clone, Copy, Default)]
 pub struct Fighter {
     pub hero: u8,
+    pub line: u8,
+    /// relic bitmask (RELIC_IDS index)
+    pub relics: u32,
     pub blocks: [Block; MAX_SKILLS],
     pub nb: usize,
+    pub worth: i64,
     pub hp: i64,
     pub max_hp: i64,
     pub shield: i64,
@@ -130,15 +166,33 @@ pub struct Fighter {
     pub slow_p: i64,
     pub slow_t: i64,
     pub slow_total: i64,
+    /// พลัง, ppm
     pub growth: Stack<GROW_CAP>,
     /// ppm, ONE = none
     pub charge: i64,
     pub charge_hits: i64,
     pub thorns: Stack<THORNS_CAP>,
-    /// earliest thorns expiry (cache; never later than the true minimum, so no expiry is missed)
+    /// earliest thorns expiry (cache; never later than the true minimum)
     pub thorns_next: i64,
-    /// burns: v = dps, until = ticks left
-    pub burns: Stack<BURNS_CAP>,
+    /// DoTs: v = dps, until = ticks left
+    pub burns: Stack<DOTS_CAP>,
+    pub poisons: Stack<DOTS_CAP>,
+    pub dodge: i64,
+    pub dodge_cap: i64,
+    pub dodges: i64,
+    pub dealt_total: i64,
+    pub haste_p: i64,
+    pub haste_t: i64,
+    pub wound_p: i64,
+    pub wound_t: i64,
+    pub ult_lv: i64,
+    pub ult_done: bool,
+    pub shield_got: i64,
+    pub hits_taken: i64,
+    pub line_casts: i64,
+    pub ctl_landed: i64,
+    pub big_hit: i64,
+    pub ult_until: i64,
     pub freeze_n: i64,
     pub ctl_keep: i64,
     pub ignore_freeze: bool,
@@ -148,10 +202,17 @@ pub struct Fighter {
     pub pending: [u8; MAX_SKILLS],
     pub npending: usize,
     pub last_fire: i64,
-    /// hero hook scratch: hits dealt (assassin, duelist), hits taken (berserker), raged (berserker)
-    pub hits: i64,
-    pub hits_taken: i64,
-    pub raged: bool,
+    /// hero hook scratch (combat.ts flags): hits dealt, counter ready, hits taken, raged
+    pub f_hits: i64,
+    pub f_counter: i64,
+    pub f_hits_taken: i64,
+    pub f_raged: i64,
+}
+impl Fighter {
+    #[inline(always)]
+    pub fn has(&self, r: u8) -> bool {
+        self.relics & (1 << r) != 0
+    }
 }
 
 /// Test hook: sees the full state at the end of every tick. `NoProbe` compiles to nothing.
@@ -172,19 +233,23 @@ pub struct Outcome {
     pub hp: [i64; 2],
 }
 
+/// combat.ts DamageKind
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Src {
+pub enum Kind {
     Hit,
     Thorns,
     Burn,
+    Poison,
     Fatigue,
+    Ult,
 }
 
 #[derive(Clone, Copy, Default)]
 struct Fire {
     bi: u8,
     depth: u8,
-    from: bool,
+    /// block that set this one off (None = own cast)
+    from: Option<u8>,
     mult: i64,
     restart: bool,
 }
@@ -193,41 +258,144 @@ struct Fire {
 fn node(id: u8, v: u8) -> &'static Node {
     &SKILLS[id as usize].tree[v as usize]
 }
-
-/// connect bonus condition: a skill id, or an archetype
+/// connect bonus condition: a skill id, or a line
 #[inline(always)]
 fn matches(t: u8, id: u8) -> bool {
-    t == id || t == ARCH_TARGET + SKILLS[id as usize].arch
+    t == id || t == LINE_TARGET + SKILLS[id as usize].line
 }
-
-/// cooldown in ticks with mark and haste bonuses (combat.ts cdTicks)
-pub fn cd_ticks(k: &SkillInst, haste_count: i64) -> i64 {
-    let q = if k.mark == MARK_QUICK { 600_000 } else { ONE };
-    let h = core::cmp::max(500_000, ONE - haste_count * 200_000);
-    core::cmp::max(5, rdiv(node(k.id, k.v).cd * q * h, ONE * ONE))
-}
-
-/// Fills a zeroed fighter in place (no large value on the stack: SBF frames are 4 KB).
+/// heroes.ts inLine: a shared skill of the hero's line, or its own unique
 #[inline(always)]
-fn push_thorns(f: &mut Fighter, v: i64, until: i64) {
-    f.thorns.push(v, until);
-    if until < PERM && until < f.thorns_next {
-        f.thorns_next = until;
+fn in_line(hero: u8, id: u8) -> bool {
+    let d = &SKILLS[id as usize];
+    d.line == HERO_LINE[hero as usize] && d.line != LINE_NONE && (d.hero == 255 || d.hero == hero)
+}
+#[inline(always)]
+fn mul_all(ps: &[i64]) -> i64 {
+    let mut a = ONE;
+    for &p in ps {
+        a = mul_p(a, p);
     }
+    a
 }
 
+/// cooldown in ticks with mark, haste bonuses and ★★★ (combat.ts cdTicks)
+pub fn cd_ticks(k: &SkillInst, haste_count: i64) -> i64 {
+    let m = mul_all(&[
+        if k.mark == MARK_QUICK { QUICK_MARK_P } else { ONE },
+        max(500_000, ONE - haste_count * HASTE_BONUS_P),
+        if k.star >= 3 { ONE - STAR_CD3_P } else { ONE },
+    ]);
+    max(5, mul_p(node(k.id, k.v).cd, m))
+}
+fn star_power_p(star: u8) -> i64 {
+    let n = min(3, star as i64);
+    ONE + STAR_POW_P * min(2, n) + if n >= 3 { STAR_POW3_P } else { 0 }
+}
+fn affinity_p(hero: u8, k: &SkillInst) -> i64 {
+    if in_line(hero, k.id) { mul_p(HERO_AFF_P[hero as usize], if lv_of(k.v) >= 3 { LINE_LV3_P } else { ONE }) } else { ONE }
+}
+/// combat.ts secondLine: the line (not the hero's, not none) with most skills; ties: the first to reach the count
+fn second_line(b: &Build) -> u8 {
+    let main = HERO_LINE[b.hero as usize];
+    let mut n = [0u8; 16];
+    let mut best = 255u8;
+    for k in &b.skills[..b.n as usize] {
+        let l = SKILLS[k.id as usize].line;
+        if l == LINE_NONE || l == main {
+            continue;
+        }
+        n[l as usize] += 1;
+        if best == 255 || n[l as usize] > n[best as usize] {
+            best = l;
+        }
+    }
+    best
+}
+fn relic_power_p(b: &Build, bits: u32, i: usize) -> i64 {
+    if bits == 0 {
+        return ONE;
+    }
+    let k = &b.skills[i];
+    let has = |r: u8| bits & (1 << r) != 0;
+    let mut m = ONE;
+    let line = SKILLS[k.id as usize].line;
+    if has(RL_WANDERER) && !in_line(b.hero, k.id) {
+        m = mul_p(m, ONE + R_WANDERER_P);
+    }
+    if has(RL_TWINLINE) && line != LINE_NONE && line == second_line(b) {
+        m = mul_p(m, ONE + R_TWINLINE_P);
+    }
+    if has(RL_LONEWOLF) && b.n <= 3 {
+        m = mul_p(m, ONE + R_LONEWOLF_P);
+    }
+    if has(RL_SIGIL) && k.mark != MARK_NONE {
+        // only the first SIGIL_MAX marked skills of the list
+        let mut rank = 0;
+        for j in 0..i {
+            if b.skills[j].mark != MARK_NONE {
+                rank += 1;
+            }
+        }
+        if rank < SIGIL_MAX {
+            m = mul_p(m, ONE + R_SIGIL_P);
+        }
+    }
+    m
+}
+/// heroes.ts ultLevel
+fn ult_level(b: &Build) -> i64 {
+    let (mut p, mut l3) = (0usize, 0usize);
+    for k in &b.skills[..b.n as usize] {
+        if in_line(b.hero, k.id) {
+            p += 1;
+            if lv_of(k.v) >= 3 {
+                l3 += 1;
+            }
+        }
+    }
+    if p >= ULT_PIECES_2 && l3 >= ULT_LV2_LV3 { 2 } else if p >= ULT_PIECES_1 { 1 } else { 0 }
+}
+
+/// Fills a zeroed fighter in place (combat.ts makeBlocks + makeFighter).
 fn init_fighter(f: &mut Fighter, b: &Build, day: usize) {
     let n = b.n as usize;
+    let hero = b.hero;
+    let bits = b.relic_bits();
     f.thorns_next = i64::MAX;
     f.nb = n;
-    f.hero = b.hero;
+    f.hero = hero;
+    f.line = HERO_LINE[hero as usize];
+    f.relics = bits;
+    let has = |r: u8| bits & (1 << r) != 0;
     let d = day.clamp(1, DAYS);
-    f.max_hp = HERO_MAX_HP[b.hero as usize][d];
-    f.hp = f.max_hp;
-    f.shield = HERO_START_SHIELD[b.hero as usize][d];
+    let mut max_hp = HERO_MAX_HP[hero as usize][d];
+    if has(RL_IRONHIDE) {
+        max_hp = mul_p(max_hp, ONE + R_IRONHIDE_P);
+    }
+    if has(RL_GLASSCANNON) {
+        max_hp = max(1, mul_p(max_hp, R_GLASSHP_P));
+    }
+    let worth_mul = if hero == H_LUCKYCAT { LUCKYCAT_WORTH_P } else { ONE };
+    let mut raw_worth = 0;
+    for k in &b.skills[..n] {
+        raw_worth += WORTH_BY_LV[lv_of(k.v) as usize] + 3 * k.star as i64;
+    }
+    let mut start = if hero == H_KNIGHT { mul_p(max_hp, KNIGHT_SHIELD_P) } else { 0 };
+    if has(RL_BASTION) {
+        start += mul_p(max_hp, R_BASTION_P);
+    }
+    if has(RL_LUCKYCOIN) {
+        start += mul_p(mul_p(raw_worth, worth_mul), R_LUCKYCOIN_P);
+    }
+    f.max_hp = max_hp;
+    f.hp = max_hp;
+    f.shield = start;
+    f.worth = mul_p(mul_p(raw_worth, worth_mul), if has(RL_PIGGYBANK) { ONE + R_PIGGYBANK_P } else { ONE });
     f.charge = ONE;
     f.ctl_keep = ONE;
     f.thorns_heal = THORNS_HEAL_P;
+    f.dodge_cap = DODGE_CAP + (HERO_LINE[hero as usize] == LINE_DODGE) as i64 + has(RL_FEATHERSTEP) as i64;
+    f.ult_lv = ult_level(b);
     let sk = &b.skills;
     for i in 0..n {
         let k = &sk[i];
@@ -261,19 +429,31 @@ fn init_fighter(f: &mut Fighter, b: &Build, day: usize) {
             }
         }
         let lv = lv_of(k.v);
+        let cd = mul_p(cd_ticks(k, counts[BK_HASTE as usize]), if has(RL_PERMAFROST) { ONE + R_PERMAFROSTCD_P } else { ONE });
+        let power = mul_all(&[
+            ONE + counts[BK_POWER as usize] * POWER_BONUS_P,
+            affinity_p(hero, k),
+            if lv >= 3 { star_power_p(k.star) } else { ONE },
+            relic_power_p(b, bits, i),
+            if k.mark == MARK_STEADFAST { 1_250_000 } else { ONE },
+        ]);
+        let nd = node(k.id, k.v);
         let blk = &mut f.blocks[i];
         blk.id = k.id;
         blk.v = k.v;
         blk.mark = k.mark;
+        blk.star = k.star;
         blk.idx = i as u8;
-        blk.cd = cd_ticks(k, counts[BK_HASTE as usize]);
-        blk.cd_p = blk.cd * ONE;
-        blk.power = ONE + counts[BK_POWER as usize] * 150_000;
+        blk.in_line = in_line(hero, k.id);
+        blk.line_cast = SKILLS[k.id as usize].line == HERO_LINE[hero as usize];
+        blk.cd = cd;
+        blk.cd0 = cd;
+        blk.power = power;
         blk.dmg = counts[BK_DMG as usize] * lv;
         blk.shield_on_fire = counts[BK_SHIELD as usize] * (1 + lv);
         blk.triggers = trig;
         blk.ntrig = ntrig;
-        blk.reacts = node(k.id, k.v).reacts;
+        blk.reacts = nd.reacts;
         let mut na = 0;
         if i > 0 {
             blk.adj[na] = (i - 1) as u8;
@@ -285,17 +465,43 @@ fn init_fighter(f: &mut Fighter, b: &Build, day: usize) {
         }
         blk.nadj = na as u8;
     }
-    // hero passive at fight start: thornguard begins with 1 permanent thorns
-    if f.hero == H_THORNGUARD {
-        push_thorns(f, 1, PERM);
+    // early days: a line skill's first cast comes by FIRST_CAST, staggered by list order
+    if d <= FIRST_CAST_DAYS {
+        let mut c = 0;
+        for blk in &mut f.blocks[..n] {
+            if blk.in_line {
+                blk.prog = max(blk.prog, (blk.cd - min(FIRST_CAST_MAX, FIRST_CAST + FIRST_CAST_STEP * c)) * ONE);
+                c += 1;
+            }
+        }
+    }
+    if has(RL_QUICKDRAW) {
+        for blk in &mut f.blocks[..n] {
+            blk.prog = max(blk.prog, mul_p(blk.cd, R_QUICKDRAW_P) * ONE);
+        }
+    }
+    if hero == H_THORNGUARD && n > 0 {
+        f.blocks[0].prog = mul_p(f.blocks[0].cd, THORNGUARD_HEAD_P) * ONE;
     }
 }
 
 struct Sim {
     f: [Fighter; 2],
     t: i64,
+    day: i64,
     f_cap: i64,
     s_cap: i64,
+}
+
+/// What one runSkill call can see (combat.ts ctx)
+#[derive(Clone, Copy)]
+struct Ctx {
+    fi: usize,
+    power: i64,
+    ctl: i64,
+    bonus_dmg: i64,
+    secs_p: i64,
+    in_line: bool,
 }
 
 impl Sim {
@@ -305,123 +511,306 @@ impl Sim {
     }
     #[inline(always)]
     fn ctl_room(&self, x: usize) -> i64 {
-        core::cmp::min(self.f_cap, CTL_BASE + (3 * self.t) / 10) - self.f[x].frozen_total
+        min(self.f_cap, max(self.t, CTL_MIN_T) / 4) - self.f[x].frozen_total
     }
-    fn can_control(&self, foe: usize) -> bool {
-        let x = &self.f[foe];
-        !(x.frozen > 0 || self.t < x.immune_until || self.shaking(foe))
+    fn can_control(&mut self, foe: usize) -> bool {
+        let sh = self.shaking(foe);
+        let x = &mut self.f[foe];
+        if x.frozen > 0 || self.t < x.immune_until || sh {
+            return false;
+        }
+        true
     }
     fn thorns_until(&self, fi: usize) -> i64 {
-        self.t + if self.f[fi].hero == H_THORNGUARD { THORNGUARD_THORNS_SECS * 10 } else { THORNS_TICKS }
+        self.t + if self.f[fi].hero == H_THORNGUARD { THORNGUARD_THORNS_SECS * TPS } else { THORNS_TICKS }
     }
-    fn burn_left(&self, x: usize) -> i64 {
-        let b = &self.f[x].burns;
-        let mut s = 0;
-        for i in 0..b.len {
-            s += b.v[i] as i64 * ceil_div(b.until[i] as i64, 10);
+    fn push_thorns(&mut self, fi: usize, v: i64, until: i64) {
+        let f = &mut self.f[fi];
+        f.thorns.push(v, until);
+        if until < PERM && until < f.thorns_next {
+            f.thorns_next = until;
         }
-        s
+    }
+    fn grow(&mut self, fi: usize, v_p: i64) {
+        self.f[fi].growth.push(v_p, 0);
     }
 
+    // ---------------- damage ----------------
     /// share_p: share of the hit shields can block (ppm)
-    fn deal(&mut self, target: usize, amount: i64, share_p: i64, src: Src) {
-        let x = &mut self.f[target];
-        if amount <= 0 || x.hp <= 0 {
+    fn deal(&mut self, target: usize, amount: i64, share_p: i64, kind: Kind) {
+        if amount <= 0 || self.f[target].hp <= 0 {
             return;
         }
+        if kind != Kind::Fatigue {
+            self.f[1 - target].dealt_total += amount;
+        }
+        let x = &mut self.f[target];
         let mut blocked = 0;
         if share_p > 0 && x.shield > 0 {
-            blocked = core::cmp::min(x.shield, mul_p(amount, share_p));
+            blocked = min(x.shield, mul_p(amount, share_p));
             x.shield -= blocked;
         }
         x.hp -= amount - blocked;
-        // berserker passive (heroes.ts onDamaged)
-        if x.hero == H_BERSERKER {
-            if src == Src::Hit && x.hp > 0 {
-                x.hits_taken += 1;
-                if x.hits_taken % BERSERKER_HITS == 0 {
-                    x.growth.push(1, 0);
+        let reflect = !matches!(kind, Kind::Thorns | Kind::Burn | Kind::Poison | Kind::Fatigue | Kind::Ult);
+        if blocked > 0 && x.has(RL_SPIKEDSHIELD) && reflect {
+            let back = mul_p(blocked, R_SPIKEDSHIELD_P);
+            if back > 0 {
+                self.deal(1 - target, back, ONE, Kind::Thorns);
+            }
+        }
+        let x = &mut self.f[target];
+        let undying = x.hp <= 0 && x.hero == H_BERSERKER && x.ult_lv > 0 && !x.ult_done;
+        if undying {
+            x.hp = 1;
+            self.fire_ult(target);
+        }
+        self.on_damaged(target, kind);
+    }
+
+    /// heroes.ts onDamaged hooks
+    fn on_damaged(&mut self, fi: usize, kind: Kind) {
+        let hero = self.f[fi].hero;
+        if hero == H_BERSERKER {
+            let me = &mut self.f[fi];
+            if !matches!(kind, Kind::Burn | Kind::Poison | Kind::Fatigue | Kind::Thorns) && me.hp > 0 {
+                me.f_hits_taken += 1;
+                if me.f_hits_taken % BERSERKER_HITS == 0 {
+                    me.growth.push(ONE, 0);
                 }
             }
-            if !x.raged && x.hp > 0 && 2 * x.hp < x.max_hp {
-                x.raged = true;
-                x.growth.push(2, 0);
+            let me = &mut self.f[fi];
+            if me.f_raged == 0 && me.hp > 0 && me.hp * 2 < me.max_hp {
+                me.f_raged = 1;
+                me.growth.push(2 * ONE, 0);
+            }
+        } else if hero == H_THORNGUARD {
+            let me = &mut self.f[fi];
+            if matches!(kind, Kind::Burn | Kind::Poison | Kind::Fatigue | Kind::Thorns | Kind::Ult) || me.hp <= 0 {
+                return;
+            }
+            me.f_hits_taken += 1;
+            if me.f_hits_taken % 2 == 0 {
+                self.add_poison(1 - fi, 1, THORNGUARD_POISON_SECS_P);
             }
         }
     }
 
-    fn add_burn(&mut self, foe: usize, dps: i64, ticks: i64) {
-        self.f[foe].burns.push(dps, ticks);
+    fn melt_shield(&self, fi: usize, n: i64) -> i64 {
+        let f = &self.f[fi];
+        if (f.burns.len > 0 || f.poisons.len > 0) && n > 0 { max(1, mul_p(n, BURN_SHIELD_P)) } else { n }
     }
-
-    fn heal(&mut self, fi: usize, mut n: i64) {
-        let foe = 1 - fi;
-        if self.f[foe].thorns.len > 0 {
-            n = core::cmp::max(1, mul_p(n, self.f[foe].thorns_heal));
+    fn add_burn(&mut self, foe: usize, d: i64, secs_p: i64) {
+        let t = rdiv(secs_p * TPS, ONE);
+        self.f[foe].burns.push(d, t);
+    }
+    fn add_poison(&mut self, foe: usize, d: i64, secs_p: i64) {
+        if self.f[foe].hp <= 0 {
+            return;
         }
+        let t = rdiv(secs_p * TPS, ONE);
+        self.f[foe].poisons.push(d, t);
+    }
+    fn add_dodge(&mut self, fi: usize, n: i64) {
         let f = &mut self.f[fi];
-        let h = core::cmp::min(n, f.max_hp - f.hp);
-        if h > 0 {
-            f.hp += h;
-        }
+        f.dodge = min(f.dodge_cap, f.dodge + n);
     }
-
-    fn on_hit(&mut self, fi: usize, dmg: i64) -> i64 {
-        let foe = 1 - fi;
-        let (foe_slowed, foe_frozen) = (self.f[foe].slow_t > 0, self.f[foe].frozen > 0);
+    fn add_haste(&mut self, fi: usize, mut pct_p: i64, mut secs_p: i64) {
         let f = &mut self.f[fi];
-        let out = match f.hero {
-            h if h == H_ASSASSIN => {
-                f.hits += 1;
-                if f.hits == 1 { mul_p(dmg, ASSASSIN_FIRST_P) } else { dmg }
+        if f.has(RL_TAILSPIN) {
+            pct_p += 100_000;
+            secs_p += R_TAILSPIN_P;
+        }
+        f.haste_p = min(HASTE_CAP_P, if f.haste_t > 0 { max(f.haste_p, pct_p) } else { pct_p });
+        f.haste_t = max(f.haste_t, rdiv(secs_p * TPS, ONE));
+    }
+    fn add_wound(&mut self, foe: usize, pct_p: i64, secs_p: i64) {
+        let x = &mut self.f[foe];
+        x.wound_p = if x.wound_t > 0 { max(x.wound_p, pct_p) } else { pct_p };
+        x.wound_t = max(x.wound_t, rdiv(secs_p * TPS, ONE));
+    }
+    /// remove up to n burn / poison stacks, strongest first (burn wins ties)
+    fn remove_dots(&mut self, fi: usize, n: i64) -> i64 {
+        let f = &mut self.f[fi];
+        let mut removed = 0;
+        let mut r = 0;
+        while r < n && (f.burns.len > 0 || f.poisons.len > 0) {
+            // first maximum over burns then poisons
+            let (mut best, mut is_burn, mut k) = (-1i64, true, 0usize);
+            for i in 0..f.burns.len {
+                if f.burns.v[i] as i64 > best {
+                    best = f.burns.v[i] as i64;
+                    is_burn = true;
+                    k = i;
+                }
             }
-            h if h == H_DUELIST => {
-                f.hits += 1;
-                if f.hits % 3 == 0 { dmg + core::cmp::max(1, mul_p(dmg, DUELIST_THIRD_P)) } else { dmg }
+            for i in 0..f.poisons.len {
+                if f.poisons.v[i] as i64 > best {
+                    best = f.poisons.v[i] as i64;
+                    is_burn = false;
+                    k = i;
+                }
             }
-            h if h == H_CHRONO => {
-                if foe_slowed || foe_frozen { mul_p(dmg, 1_100_000) } else { dmg }
-            }
-            _ => return dmg,
+            if is_burn { f.burns.remove(k) } else { f.poisons.remove(k) }
+            removed += 1;
+            r += 1;
+        }
+        removed
+    }
+    /// relic damage multiplier of fi's hit (combat.ts relicHit), ppm
+    fn relic_hit(&mut self, fi: usize) -> i64 {
+        let (fhp, fmax, fpois, ffroz) = {
+            let x = &self.f[1 - fi];
+            (x.hp, x.max_hp, x.poisons.len, x.frozen)
         };
-        core::cmp::max(0, out)
+        let f = &mut self.f[fi];
+        let mut m = ONE;
+        if f.has(RL_EXECUTIONER) && fhp * 10 < fmax * 4 {
+            m = mul_p(m, ONE + R_EXECUTIONER_P);
+        }
+        if f.has(RL_ROT) && fpois > 0 {
+            m = mul_p(m, ONE + R_ROT_P);
+        }
+        if f.has(RL_BRITTLE) && ffroz > 0 {
+            m = mul_p(m, ONE + R_BRITTLE_P);
+        }
+        if f.has(RL_COUNTERSTEP) && f.f_counter != 0 {
+            m = mul_p(m, ONE + R_COUNTERSTEP_P);
+            f.f_counter = 0;
+        }
+        m
     }
 
-    /// ctx.hit: returns damage dealt
-    fn hit(&mut self, fi: usize, skill: u8, n: i64, bonus_dmg: i64, pierce_p: i64, leech_p: i64) -> i64 {
+    // ---------------- ultimates ----------------
+    fn ult_cap_p(&self, fi: usize) -> i64 {
+        mul_p(self.f[1 - fi].max_hp * ULT_CAP_P, if self.f[fi].ult_lv >= 2 { ULT_LV2_POW_P } else { ONE })
+    }
+    fn fire_ult(&mut self, fi: usize) {
         let foe = 1 - fi;
-        if self.f[foe].hp <= 0 || self.f[fi].hp <= 0 {
-            return 0;
-        }
-        let mult = self.f[fi].charge;
-        let mut dmg = mul_p(n + self.f[fi].growth.sum() + bonus_dmg, mult);
-        dmg = self.on_hit(fi, dmg);
-        {
+        self.f[fi].ult_done = true;
+        let hero = self.f[fi].hero;
+        let pow = ULT_POW_P[hero as usize][self.f[fi].ult_lv as usize];
+        if hero == H_ASSASSIN {
+            let mut n_p = min(pow * (self.f[foe].max_hp - self.f[foe].hp), self.ult_cap_p(fi));
+            if self.f[foe].dodge > 0 {
+                self.f[foe].dodge -= 1;
+                self.f[foe].dodges += 1;
+                n_p /= 2;
+            }
+            self.deal(foe, max(1, rdiv(n_p, ONE)), 0, Kind::Ult);
+        } else if hero == H_DUELIST {
+            self.add_haste(fi, pow, 3 * ONE);
+            self.add_dodge(fi, 2);
+        } else if hero == H_KNIGHT {
+            let f = &self.f[fi];
+            let raw = pow * (f.shield * ONE + f.max_hp * ULT_KNIGHT_HP_P);
+            let n = max(1, rdiv(min(raw, self.ult_cap_p(fi) * ONE), ONE * ONE));
+            self.deal(foe, n, ONE, Kind::Ult);
+        } else if hero == H_BERSERKER {
             let f = &mut self.f[fi];
-            if f.charge_hits > 1 {
-                f.charge_hits -= 1;
-            } else {
-                f.charge = ONE;
-                f.charge_hits = 0;
+            let h = min(f.max_hp - f.hp, mul_p(f.max_hp, pow));
+            if h > 0 {
+                f.hp += h;
+            }
+            let g = max(2, mul_p(mul_p(f.max_hp, ULT_BERSERKER_GROW_P), if f.ult_lv >= 2 { 1_500_000 } else { ONE }));
+            f.growth.push(g * ONE, 0);
+        } else if hero == H_PYRO {
+            let left = self.f[foe].burns.left();
+            self.deal(foe, max(1, mul_p(left, pow)), 0, Kind::Ult);
+        } else if hero == H_THORNGUARD {
+            self.f[fi].ult_until = self.t + rdiv(pow * TPS, ONE);
+            self.add_wound(foe, ONE, pow);
+            self.add_poison(foe, ULT_THORNGUARD_POISON, pow);
+        } else if hero == H_WITCH {
+            let mut ticks = rdiv(mul_p(pow * TPS, self.f[foe].ctl_keep), ONE);
+            ticks = max(0, min(ticks, self.ctl_room(foe) + self.f[foe].frozen));
+            let x = &mut self.f[foe];
+            if ticks > x.frozen {
+                x.frozen_total += ticks - x.frozen;
+                x.frozen = ticks;
+                if ticks >= REACT_MIN {
+                    self.controlled(foe);
+                }
+            }
+            let f = &mut self.f[fi];
+            let m = if f.ult_lv >= 2 { 2_400_000 } else { 2_000_000 };
+            if m >= f.charge {
+                f.charge = m;
+                f.charge_hits = 1;
+            }
+        } else if hero == H_LUCKYCAT {
+            let n = max(1, rdiv(min(pow * self.f[fi].worth, self.ult_cap_p(fi)), ONE));
+            self.deal(foe, n, ONE, Kind::Ult);
+            let sh = self.melt_shield(fi, rdiv(n, 2));
+            if sh > 0 {
+                self.f[fi].shield += sh;
+                self.f[fi].shield_got += sh;
+            }
+        } else if hero == H_SAGE {
+            self.remove_dots(fi, 99);
+            let mut bi = 0;
+            while bi < self.f[fi].nb && self.f[foe].hp > 0 && self.f[fi].hp > 0 {
+                let mut next = [Fire::default(); 8];
+                self.fire_one(fi, Fire { bi: bi as u8, depth: MAX_CHAIN, from: None, mult: pow, restart: false }, &mut next);
+                bi += 1;
+            }
+        } else if hero == H_CHRONO {
+            let t = self.t;
+            self.remove_dots(fi, 99);
+            let f = &mut self.f[fi];
+            for b in &mut f.blocks[..f.nb] {
+                b.prog = min(b.cd * ONE, b.prog + mul_p(b.cd, pow) * ONE);
+            }
+            if f.slow_t > 0 {
+                f.slow_t = 0;
+                f.slow_p = 0;
+            }
+            if f.frozen > 0 {
+                f.frozen = 0;
+                f.immune_until = t + CTL_IMMUNE;
+            }
+            if f.wound_t > 0 {
+                f.wound_t = 0;
             }
         }
-        let hp_before = self.f[foe].hp;
-        // sim v13: every skill hit is kind Hit (the damage kind no longer comes from the skill id)
-        let _ = skill;
-        self.deal(foe, dmg, ONE - pierce_p, Src::Hit);
-        let dealt = core::cmp::max(0, hp_before - core::cmp::max(0, self.f[foe].hp));
-        let leech = leech_p + self.f[fi].leech_next;
-        self.f[fi].leech_next = 0;
-        if leech > 0 && dealt > 0 {
-            self.heal(fi, core::cmp::max(1, mul_p(dealt, leech)));
+    }
+    fn ult_ready(&self, fi: usize) -> bool {
+        let f = &self.f[fi];
+        if f.ult_lv <= 0 || f.ult_done || f.hp <= 0 {
+            return false;
         }
-        let th = core::cmp::min(self.f[foe].thorns.sum(), ceil_div(dmg * 3, 4));
-        if th > 0 && self.f[fi].hp > 0 {
-            self.deal(fi, th, ONE, Src::Thorns);
+        let foe = &self.f[1 - fi];
+        if foe.hp <= 0 {
+            return false;
         }
-        dealt
+        let h = f.hero as usize;
+        let need = ULT_TRIG[h][f.ult_lv as usize];
+        let need_p = ULT_TRIG_P[h][f.ult_lv as usize];
+        match f.hero {
+            x if x == H_ASSASSIN => f.big_hit > 0 && foe.hp * ONE < foe.max_hp * need_p,
+            x if x == H_DUELIST => f.dodges >= need,
+            x if x == H_KNIGHT => f.shield_got * ONE >= f.max_hp * need_p && f.shield > 0,
+            x if x == H_BERSERKER => f.hp * ONE < f.max_hp * need_p,
+            x if x == H_PYRO => foe.burns.len as i64 >= need,
+            x if x == H_THORNGUARD => f.hits_taken >= need,
+            x if x == H_WITCH => f.line_casts >= need,
+            x if x == H_CHRONO => f.ctl_landed >= need,
+            x if x == H_LUCKYCAT => f.line_casts >= need,
+            x if x == H_SAGE => self.t >= need * TPS,
+            _ => false,
+        }
+    }
+    fn ult_check(&mut self) {
+        if self.t < ULT_MIN_T {
+            return;
+        }
+        for fi in 0..2 {
+            if self.ult_ready(fi) {
+                self.fire_ult(fi);
+            }
+        }
     }
 
+    // ---------------- control ----------------
     fn controlled(&mut self, foe: usize) {
         let t = self.t;
         let x = &mut self.f[foe];
@@ -434,8 +823,181 @@ impl Sim {
         }
     }
 
-    fn freeze(&mut self, fi: usize, secs_p: i64, ctl: i64) {
+    // ---------------- skill effects (combat.ts ctx) ----------------
+    #[inline(always)]
+    fn v(&self, c: &Ctx, n_p: i64) -> i64 {
+        // data number already in ppm: max(1, round(n × power))
+        max(1, rdiv(n_p * c.power, ONE * ONE))
+    }
+
+    /// returns damage dealt, or -1 when dodged
+    fn hit(&mut self, c: &Ctx, n: i64, pierce_p: i64, leech_p: i64, sure: bool) -> i64 {
+        let (fi, foe) = (c.fi, 1 - c.fi);
+        if self.f[foe].hp <= 0 || self.f[fi].hp <= 0 {
+            return 0;
+        }
+        let use_charge = self.f[fi].charge > ONE && n + c.bonus_dmg >= CHARGE_MIN;
+        let mult = if use_charge { self.f[fi].charge } else { ONE };
+        let mut dmg = rdiv(((n + c.bonus_dmg) * ONE + self.f[fi].growth.sum()) * mult, ONE * ONE);
+        dmg = self.on_hit(fi, dmg);
+        if self.f[fi].relics != 0 {
+            let m = self.relic_hit(fi);
+            dmg = mul_p(dmg, m);
+        }
+        if self.f[fi].has(RL_GLASSCANNON) {
+            dmg = min(mul_p(dmg, ONE + R_GLASSDMG_P), max(dmg, dmg + mul_p(self.f[foe].max_hp, R_GLASSCAP_P)));
+        }
+        if !sure && self.f[foe].dodge > 0 {
+            self.spend_charge(fi, use_charge);
+            let x = &mut self.f[foe];
+            x.dodge -= 1;
+            x.dodges += 1;
+            // onDodge (duelist): counter ready, shed the strongest poison
+            if x.hero == H_DUELIST {
+                x.f_counter = 1;
+                if x.poisons.len > 0 {
+                    let mut k = 0;
+                    for i in 0..x.poisons.len {
+                        if x.poisons.v[i] > x.poisons.v[k] {
+                            k = i;
+                        }
+                    }
+                    x.poisons.remove(k);
+                }
+            }
+            if x.has(RL_COUNTERSTEP) {
+                x.f_counter = 1;
+            }
+            let g = if self.f[fi].hero == H_CHRONO && self.f[foe].slow_t > 0 { CHRONO_GRAZE_P } else { DODGE_GRAZE_P };
+            let graze = mul_p(dmg, g);
+            if graze > 0 {
+                self.deal(foe, graze, ONE - pierce_p, Kind::Hit);
+            }
+            return -1;
+        }
+        {
+            let f = &mut self.f[fi];
+            f.big_hit = max(f.big_hit, dmg);
+        }
+        self.f[foe].hits_taken += 1;
+        self.on_landed(fi);
+        self.spend_charge(fi, use_charge);
+        if self.f[foe].shield > 0 && pierce_p < ONE {
+            dmg = max(1, mul_p(dmg, ONE - SHIELD_GUARD_P));
+        }
+        let hp_before = self.f[foe].hp;
+        self.deal(foe, dmg, ONE - pierce_p, Kind::Hit);
+        let dealt = max(0, hp_before - max(0, self.f[foe].hp));
+        let leech = leech_p + self.f[fi].leech_next;
+        self.f[fi].leech_next = 0;
+        if leech > 0 && dealt > 0 {
+            self.heal(c, max(1, mul_p(dealt, leech)));
+        }
+        let th = min(self.f[foe].thorns.sum(), ceil_div(dmg * 3, 4));
+        if th > 0 && self.f[fi].hp > 0 {
+            self.deal(fi, th, ONE, Kind::Thorns);
+        }
+        if self.f[foe].ult_until > self.t && self.f[fi].hp > 0 {
+            for _ in 0..2 {
+                self.add_poison(fi, 1, 4 * ONE);
+            }
+        }
+        dealt
+    }
+    fn spend_charge(&mut self, fi: usize, used: bool) {
+        if !used {
+            return;
+        }
+        let f = &mut self.f[fi];
+        if f.charge_hits > 1 {
+            f.charge_hits -= 1;
+        } else {
+            f.charge = ONE;
+            f.charge_hits = 0;
+        }
+    }
+    /// heroes.ts onHit hooks
+    fn on_hit(&mut self, fi: usize, dmg: i64) -> i64 {
+        let (foe_slowed, foe_frozen) = (self.f[1 - fi].slow_t > 0, self.f[1 - fi].frozen > 0);
+        let f = &mut self.f[fi];
+        if f.hero == H_ASSASSIN {
+            f.f_hits += 1;
+            if f.f_hits == 1 || (ASSASSIN_EVERY > 0 && f.f_hits % ASSASSIN_EVERY == 0) {
+                return mul_p(dmg, ASSASSIN_FIRST_P);
+            }
+        } else if f.hero == H_DUELIST {
+            if f.f_counter != 0 {
+                f.f_counter = 0;
+                return mul_p(dmg, DUELIST_COUNTER_P);
+            }
+        } else if f.hero == H_CHRONO && (foe_slowed || foe_frozen) {
+            return mul_p(dmg, ONE + CHRONO_SLOW_HIT_P);
+        }
+        dmg
+    }
+    /// heroes.ts onLanded hooks
+    fn on_landed(&mut self, fi: usize) {
         let foe = 1 - fi;
+        let hero = self.f[fi].hero;
+        if hero == H_ASSASSIN {
+            self.wound_foe(foe, ASSASSIN_WOUND_P, 2 * ONE);
+        } else if hero == H_WITCH && self.f[foe].frozen > 0 && WITCH_WOUND_P > 0 {
+            self.wound_foe(foe, WITCH_WOUND_P, 3 * ONE);
+        }
+    }
+    /// hookApi.woundFoe (no status event)
+    fn wound_foe(&mut self, foe: usize, pct_p: i64, secs_p: i64) {
+        if self.f[foe].hp <= 0 {
+            return;
+        }
+        self.add_wound(foe, pct_p, secs_p);
+    }
+    fn shield(&mut self, fi: usize, n: i64) {
+        let n = self.melt_shield(fi, n);
+        let f = &mut self.f[fi];
+        f.shield += n;
+        f.shield_got += n;
+    }
+    fn heal(&mut self, c: &Ctx, mut n: i64) {
+        let fi = c.fi;
+        let foe = &self.f[1 - fi];
+        let f = &self.f[fi];
+        let mut m = if f.has(RL_VITALITY) { ONE + R_VITALITY_P } else { ONE };
+        if foe.thorns.len > 0 {
+            m = mul_p(m, foe.thorns_heal);
+        }
+        if f.poisons.len > 0 {
+            m = mul_p(m, POISON_HEAL_P);
+        }
+        if f.wound_t > 0 {
+            m = mul_p(m, ONE - f.wound_p);
+        }
+        if m != ONE {
+            n = if m > 0 { max(1, mul_p(n, m)) } else { 0 };
+        }
+        let f = &mut self.f[fi];
+        let h = min(n, f.max_hp - f.hp);
+        if h > 0 {
+            f.hp += h;
+        }
+        let over = mul_p(n - max(0, h), R_OVERFLOW_P);
+        if over > 0 && f.has(RL_OVERFLOW) {
+            self.shield(fi, over);
+        }
+    }
+    fn burn(&mut self, c: &Ctx, d: i64, secs_p: i64) {
+        let f = &self.f[c.fi];
+        let s2 = secs_p + if f.has(RL_KINDLING) { R_KINDLING_P } else { 0 };
+        // pyro: whole seconds × pyro.burn (heroes.ts burnSecs)
+        let s3 = if f.hero == H_PYRO { rdiv(s2 * PYRO_BURN_P, ONE * ONE) * ONE } else { s2 };
+        self.add_burn(1 - c.fi, d, s3);
+    }
+    fn poison(&mut self, c: &Ctx, d: i64, secs_p: i64) {
+        let extra = if self.f[c.fi].has(RL_VIRULENCE) { R_VIRULENCE } else { 0 };
+        self.add_poison(1 - c.fi, d + extra, secs_p);
+    }
+    fn freeze(&mut self, c: &Ctx, secs_p: i64) {
+        let (fi, foe) = (c.fi, 1 - c.fi);
         if !self.can_control(foe) {
             return;
         }
@@ -443,13 +1005,13 @@ impl Sim {
             self.f[foe].ignore_freeze = false;
             return;
         }
-        let mut tp = mul_p(secs_p * 10, ctl);
+        let perma = if self.f[fi].has(RL_PERMAFROST) { R_PERMAFROST_P } else { 0 };
+        let mut t_p = mul_p((secs_p + perma) * TPS, c.ctl);
         if self.f[fi].hero == H_WITCH {
-            tp += WITCH_FREEZE_TICKS * ONE;
+            t_p += WITCH_FREEZE_TICKS * ONE;
         }
-        tp = mul_p(mul_p(tp, dr_of(self.f[foe].freeze_n)), self.f[foe].ctl_keep);
-        let room = self.ctl_room(foe);
-        let ticks = core::cmp::max(0, core::cmp::min(core::cmp::min(MAX_FREEZE_TICKS, room), rdiv(tp, ONE)));
+        t_p = mul_p(mul_p(t_p, dr_of(self.f[foe].freeze_n)), self.f[foe].ctl_keep);
+        let ticks = max(0, min(min(MAX_FREEZE_TICKS, self.ctl_room(foe)), rdiv(t_p, ONE)));
         let x = &mut self.f[foe];
         x.freeze_n += 1;
         if ticks > x.frozen {
@@ -460,70 +1022,68 @@ impl Sim {
             self.controlled(foe);
         }
     }
-
-    fn slow(&mut self, fi: usize, pct0: i64, secs0: i64, ctl: i64) {
-        let foe = 1 - fi;
-        let s0 = mul_p(secs0, ctl);
-        let (pct, secs) = if self.f[fi].hero == H_CHRONO { (pct0 + 100_000, s0 + ONE) } else { (pct0, s0) };
-        let p = core::cmp::min(SLOW_CAP_P, mul_p(pct, self.f[foe].ctl_keep));
-        {
-            let x = &mut self.f[foe];
-            x.slow_p = if x.slow_t > 0 { core::cmp::max(x.slow_p, p) } else { p };
+    fn slow(&mut self, c: &Ctx, pct0: i64, secs0: i64) {
+        let (fi, foe) = (c.fi, 1 - c.fi);
+        let (mut p0, mut s0) = (pct0, secs0);
+        if self.f[fi].has(RL_GALE) {
+            p0 += R_GALE_P;
+            s0 += ONE;
         }
-        let room = if self.shaking(foe) {
-            0
-        } else {
-            let x = &self.f[foe];
-            core::cmp::max(0, core::cmp::min(self.s_cap, 2 * CTL_BASE + (6 * self.t) / 10) - x.slow_total - x.slow_t)
-        };
+        let s1 = mul_p(s0, c.ctl);
+        let (pct, secs) = if self.f[fi].hero == H_CHRONO { (p0 + 100_000, s1 + ONE) } else { (p0, s1) };
+        let p = min(SLOW_CAP_P, mul_p(pct, self.f[foe].ctl_keep));
+        let sh = self.shaking(foe);
+        let t = self.t;
+        let s_cap = self.s_cap;
         let x = &mut self.f[foe];
-        let add = core::cmp::min(room, core::cmp::max(0, ceil_div(secs * 10, ONE) - x.slow_t));
+        x.slow_p = if x.slow_t > 0 { max(x.slow_p, p) } else { p };
+        let room = if sh { 0 } else { max(0, min(s_cap, max(t, CTL_MIN_T) / 2) - x.slow_total - x.slow_t) };
+        let add = min(room, max(0, ceil_div(secs * TPS, ONE) - x.slow_t));
         if add <= 0 && x.slow_t <= 0 {
             return;
         }
         x.slow_t += add;
+        if add > 0 {
+            self.f[fi].ctl_landed += 1;
+        }
         if add >= REACT_MIN && p >= 300_000 {
             self.controlled(foe);
         }
     }
-
-    fn delay(&mut self, fi: usize, secs_p: i64, ctl: i64) {
-        let foe = 1 - fi;
+    fn delay(&mut self, c: &Ctx, secs_p: i64) {
+        let (fi, foe) = (c.fi, 1 - c.fi);
         if !self.can_control(foe) {
             return;
         }
-        let tp = mul_p(mul_p(mul_p(secs_p * 10, ctl), dr_of(self.f[foe].delay_n)), self.f[foe].ctl_keep);
-        let ticks = core::cmp::max(0, core::cmp::min(self.ctl_room(foe), rdiv(tp, ONE)));
+        let x = &self.f[foe];
+        let t_p = mul_p(mul_p(mul_p(secs_p * TPS, c.ctl), dr_of(x.delay_n)), x.ctl_keep);
+        let ticks = max(0, min(self.ctl_room(foe), rdiv(t_p, ONE)));
         let t = self.t;
         let x = &mut self.f[foe];
         x.delay_n += 1;
         if ticks > 0 {
             x.frozen_total += ticks;
-            for b in x.blocks[..x.nb].iter_mut() {
-                b.prog = core::cmp::max(0, b.prog - ticks * ONE);
+            for b in &mut x.blocks[..x.nb] {
+                b.prog = max(0, b.prog - ticks * ONE);
             }
             x.immune_until = t + CTL_IMMUNE;
+            self.f[fi].ctl_landed += 1;
         }
         if ticks >= REACT_MIN {
             self.controlled(foe);
         }
     }
-
-    fn cleanse(&mut self, fi: usize, stacks: i64) -> i64 {
+    fn cleanse(&mut self, fi: usize, stacks: i64, dot_only: bool) -> i64 {
+        let mut n = self.remove_dots(fi, min(stacks, CLEANSE_MAX));
+        if dot_only {
+            return n;
+        }
         let t = self.t;
         let f = &mut self.f[fi];
-        let mut n = 0;
-        let mut r = 0;
-        while r < stacks && f.burns.len > 0 {
-            let mut k = 0;
-            for i in 0..f.burns.len {
-                if f.burns.v[i] > f.burns.v[k] {
-                    k = i;
-                }
-            }
-            f.burns.remove(k);
+        if f.wound_t > 0 {
+            f.wound_t = 0;
+            f.wound_p = 0;
             n += 1;
-            r += 1;
         }
         if f.slow_t > 0 {
             f.slow_t = 0;
@@ -537,20 +1097,20 @@ impl Sim {
         }
         n
     }
-
     fn dispel(&mut self, fi: usize, times: i64, share_p: i64, steal: bool) -> i64 {
         let foe = 1 - fi;
         let mut n = 0;
-        for _ in 0..times {
+        let mut r = 0;
+        while r < times {
             let mut any = false;
             if self.f[foe].growth.len > 0 {
-                let (v, _) = self.f[foe].growth.pop();
-                let keep = v / 2;
+                let (g, _) = self.f[foe].growth.pop();
+                let keep = (g / (2 * ONE)) * ONE;
                 if keep > 0 {
                     self.f[foe].growth.push(keep, 0);
                 }
                 if steal {
-                    self.f[fi].growth.push(v - keep, 0);
+                    self.f[fi].growth.push(g - keep, 0);
                 }
                 n += 1;
                 any = true;
@@ -559,7 +1119,7 @@ impl Sim {
             if x.thorns.len > 0 {
                 let (v, until) = x.thorns.pop();
                 if x.hero == H_THORNGUARD && v >= 2 {
-                    push_thorns(x, v / 2, until);
+                    x.thorns.push(v / 2, until);
                 }
                 n += 1;
                 any = true;
@@ -579,6 +1139,7 @@ impl Sim {
             if !any {
                 break;
             }
+            r += 1;
         }
         let x = &mut self.f[foe];
         let cut = (x.shield * share_p) / ONE;
@@ -589,199 +1150,269 @@ impl Sim {
         n
     }
 
-    /// run one skill variant (skills.ts execNode with the combat.ts ctx)
+    /// skills.ts execNode with the combat.ts ctx
     fn run_skill(&mut self, fi: usize, bi: usize, power: i64, bonus_dmg: i64) {
-        let foe = 1 - fi;
         let blk = self.f[fi].blocks[bi];
-        let ctl = core::cmp::min(ONE, power);
-        let v = |x: i64| core::cmp::max(1, rdiv(x * power, ONE * ONE));
-        let mut removed: i64 = 0;
-        for e in node(blk.id, blk.v).fx.iter() {
+        let sundial = if self.f[fi].has(RL_SUNDIAL) { ONE + R_SUNDIAL_P } else { ONE };
+        let c = Ctx {
+            fi,
+            power,
+            ctl: min(ONE, power),
+            bonus_dmg,
+            secs_p: min(TIME_CAP_S * ONE, mul_p(self.t * (ONE / TPS), sundial)),
+            in_line: blk.in_line,
+        };
+        let foe = 1 - fi;
+        let (mut removed, mut tried, mut landed) = (0i64, 0i64, 0i64);
+        for e in node(blk.id, blk.v).fx {
+            let missed = tried > 0 && landed == 0;
             match *e {
                 Eff::Hit(h) => {
                     if h.if_slowed && self.f[foe].slow_t <= 0 {
                         continue;
                     }
                     for _ in 0..h.times {
-                        let mut np = h.n + h.per_removed * removed;
-                        if h.shield_pct != 0 {
-                            np += self.f[fi].shield * h.shield_pct;
+                        let mut n_p = h.n + h.per_removed * removed;
+                        if h.shield_pct > 0 {
+                            let used_p = self.f[fi].shield * h.shield_pct;
+                            n_p += used_p;
+                            let spend = rdiv(mul_p(used_p, SHIELD_SPEND_P), ONE);
+                            self.f[fi].shield = max(0, self.f[fi].shield - spend);
                         }
-                        if h.thorns_x != 0 {
-                            np += self.f[fi].thorns.sum() * h.thorns_x;
+                        if h.thorns_x > 0 {
+                            n_p += self.f[fi].thorns.sum() * h.thorns_x;
                         }
-                        if h.burn_pct != 0 {
-                            np += self.burn_left(foe) * h.burn_pct;
+                        if h.burn_pct > 0 {
+                            n_p += self.f[foe].burns.left() * h.burn_pct;
                         }
-                        if np <= 0 {
+                        if h.poison_pct > 0 {
+                            n_p += self.f[foe].poisons.left() * h.poison_pct;
+                        }
+                        if h.per_burn > 0 {
+                            n_p += self.f[foe].burns.len as i64 * h.per_burn;
+                        }
+                        if h.per_dodge > 0 {
+                            n_p += self.f[fi].dodge * h.per_dodge;
+                        }
+                        if h.per_sec > 0 {
+                            n_p += mul_p(c.secs_p, h.per_sec);
+                        }
+                        if h.per_worth > 0 {
+                            n_p += self.f[fi].worth * h.per_worth;
+                        }
+                        if n_p <= 0 {
                             break;
                         }
                         let mut m = ONE;
-                        let fo = &self.f[foe];
-                        if h.exec_m != 0 && fo.hp * ONE < fo.max_hp * h.exec_hp {
+                        let x = &self.f[foe];
+                        if h.exec_hp > 0 && x.hp * ONE < x.max_hp * h.exec_hp {
                             m = mul_p(m, h.exec_m);
                         }
-                        if h.frozen != 0 && fo.frozen > 0 {
+                        if h.frozen > 0 && x.frozen > 0 {
                             m = mul_p(m, h.frozen);
                         }
-                        if h.no_shield != 0 && fo.shield <= 0 {
+                        if h.no_shield > 0 && x.shield <= 0 {
                             m = mul_p(m, h.no_shield);
                         }
-                        self.hit(fi, blk.id, v(mul_p(np, m)), bonus_dmg, h.pierce, h.leech);
-                        if h.burn_dps != 0 {
-                            self.burn(fi, v(h.burn_dps), h.burn_secs);
+                        tried += 1;
+                        let amt = self.v(&c, mul_p(n_p, m));
+                        let d = self.hit(&c, amt, h.pierce, h.leech, h.sure);
+                        if d < 0 {
+                            continue;
+                        }
+                        landed += 1;
+                        if h.burn_dps > 0 {
+                            let dps = self.v(&c, h.burn_dps);
+                            self.burn(&c, dps, h.burn_secs);
+                        }
+                        if h.poison_dps > 0 {
+                            let dps = self.v(&c, h.poison_dps);
+                            self.poison(&c, dps, h.poison_secs);
                         }
                     }
                 }
-                Eff::Shield(n) => self.f[fi].shield += v(n),
-                Eff::Heal(n) => self.heal(fi, v(n)),
-                Eff::Burn { dps, secs, growth_half } => {
-                    let g = if growth_half { (self.f[fi].growth.sum() / 2) * ONE } else { 0 };
-                    self.burn(fi, v(dps + g), secs);
+                Eff::Shield { n, per_sec, per_worth } => {
+                    let amt = self.v(&c, n + mul_p(c.secs_p, per_sec) + per_worth * self.f[fi].worth);
+                    self.shield(fi, amt);
                 }
-                Eff::Freeze(s) => self.freeze(fi, s, ctl),
-                Eff::Slow { pct, secs } => self.slow(fi, pct, secs, ctl),
-                Eff::Delay(s) => self.delay(fi, s, ctl),
-                Eff::Grow(n) => self.f[fi].growth.push(v(n), 0),
+                Eff::Heal { n, per_sec, per_worth } => {
+                    let amt = self.v(&c, n + mul_p(c.secs_p, per_sec) + per_worth * self.f[fi].worth);
+                    self.heal(&c, amt);
+                }
+                Eff::Accel { pct, min: mn } => {
+                    let b = &mut self.f[fi].blocks[bi];
+                    b.cd = max(mul_p(b.cd0, mn), b.cd - mul_p(b.cd0, pct));
+                }
+                Eff::Burn { dps, secs, growth_half, stacks } => {
+                    for _ in 0..stacks {
+                        let g = if growth_half { self.f[fi].growth.sum() / (2 * ONE) } else { 0 };
+                        let d = self.v(&c, dps + g * ONE);
+                        self.burn(&c, d, secs);
+                    }
+                }
+                Eff::Poison { dps, secs, stacks } => {
+                    for _ in 0..stacks {
+                        let d = self.v(&c, dps);
+                        self.poison(&c, d, secs);
+                    }
+                }
+                Eff::Freeze(secs) => {
+                    if !missed {
+                        self.freeze(&c, secs);
+                    }
+                }
+                Eff::Slow { pct, secs } => self.slow(&c, pct, secs),
+                Eff::Delay(secs) => {
+                    if !missed {
+                        self.delay(&c, secs);
+                    }
+                }
+                Eff::Grow(n) => {
+                    let g = mul_p(mul_p(n, c.power), if c.in_line { ONE } else { GROW_OFFLINE_P });
+                    self.grow(fi, rdiv(g, 10_000) * 10_000);
+                }
                 Eff::Charge { mult, hits } => {
                     let f = &mut self.f[fi];
                     if mult >= f.charge {
                         f.charge = mult;
-                        f.charge_hits = core::cmp::max(1, hits);
+                        f.charge_hits = max(1, hits);
                     }
                 }
                 Eff::Thorns { n, perm, heal } => {
+                    let v = self.v(&c, n);
                     let until = if perm { PERM } else { self.thorns_until(fi) };
-                    let f = &mut self.f[fi];
-                    push_thorns(f, v(n), until);
+                    self.push_thorns(fi, v, until);
                     if heal >= 0 {
-                        f.thorns_heal = core::cmp::min(f.thorns_heal, heal);
+                        let f = &mut self.f[fi];
+                        f.thorns_heal = min(f.thorns_heal, heal);
                     }
                 }
                 Eff::Steadfast { keep, ignore_freeze } => {
                     let f = &mut self.f[fi];
-                    f.ctl_keep = core::cmp::min(f.ctl_keep, keep);
+                    f.ctl_keep = min(f.ctl_keep, keep);
                     if ignore_freeze {
                         f.ignore_freeze = true;
                     }
                     if f.frozen > 0 {
-                        f.frozen = core::cmp::max(1, mul_p(f.frozen, keep));
+                        f.frozen = max(1, mul_p(f.frozen, keep));
                     }
                 }
-                Eff::Cleanse(n) => removed = self.cleanse(fi, n),
-                Eff::Dispel { n, shield, steal } => removed = self.dispel(fi, n, shield, steal),
-                Eff::Amplify(cap0) => {
-                    let cap = core::cmp::max(1, mul_p(cap0, ctl));
-                    let until = self.thorns_until(fi);
-                    let f = &mut self.f[fi];
-                    let g = core::cmp::min(cap, f.growth.sum());
-                    let th = core::cmp::min(cap, f.thorns.sum());
-                    if g > 0 {
-                        f.growth.push(g, 0);
-                    }
-                    if th > 0 {
-                        push_thorns(f, th, until);
-                    }
-                    if f.charge > ONE {
-                        f.charge = ONE + core::cmp::min(cap * ONE, (f.charge - ONE) * 2);
-                    }
+                Eff::Cleanse { n, dot, line_all } => {
+                    removed = self.cleanse(fi, if line_all && c.in_line { 99 } else { n }, dot);
+                }
+                Eff::Dispel { n, shield, steal } => {
+                    removed = self.dispel(fi, n, shield, steal);
                 }
                 Eff::Leech(p) => {
                     let f = &mut self.f[fi];
-                    f.leech_next = core::cmp::max(f.leech_next, p);
+                    f.leech_next = max(f.leech_next, p);
                 }
+                Eff::Dodge(n) => {
+                    if c.power >= DODGE_MIN_POWER_P {
+                        self.add_dodge(fi, max(1, mul_p(n, min(ONE, c.power))));
+                    }
+                }
+                Eff::Haste { pct, secs } => self.add_haste(fi, mul_p(pct, min(ONE, c.power)), secs),
+                Eff::Wound { pct, secs } => self.add_wound(foe, pct, mul_p(secs, c.ctl)),
             }
         }
     }
 
-    fn burn(&mut self, fi: usize, dps: i64, secs: i64) {
-        let s = if self.f[fi].hero == H_PYRO { mul_p(secs, PYRO_BURN_P) } else { secs };
-        self.add_burn(1 - fi, dps, s * 10);
-    }
-
-    /// fires one skill; writes the follow-up fires (trigger bonuses + engines) into `next`, returns how many
-    fn fire_one(&mut self, fi: usize, q: Fire, next: &mut [Fire; 4]) -> usize {
+    /// Fires one skill (plus marks, ★★★ echo and shield-on-fire). Writes the follow-up fires; returns how many.
+    fn fire_one(&mut self, fi: usize, q: Fire, next: &mut [Fire; 8]) -> usize {
         let foe = 1 - fi;
-        let t = self.t;
         let bi = q.bi as usize;
+        let t = self.t;
+        let first_cast = self.f[fi].blocks[bi].fired == 0 && self.f[fi].has(RL_WHETSTONE);
         {
-            let blk = &mut self.f[fi].blocks[bi];
-            if q.from {
-                blk.trig_at = t + core::cmp::min(TRIGGER_GAP_MAX, core::cmp::max(TRIGGER_GAP, blk.cd));
+            let f = &mut self.f[fi];
+            if let Some(from) = q.from {
+                let by_engine = node(f.blocks[from as usize].id, f.blocks[from as usize].v).engine.is_some();
+                let b = &mut f.blocks[bi];
+                b.trig_at = t + min(TRIGGER_GAP_MAX, max(if by_engine { ENGINE_GAP } else { TRIGGER_GAP }, b.cd));
                 if q.restart {
-                    blk.prog = 0;
+                    b.prog = 0;
                 }
             }
+            f.blocks[bi].fired += 1;
+            f.last_fire = t;
+            if f.blocks[bi].line_cast {
+                f.line_casts += 1;
+            }
         }
-        self.f[fi].last_fire = t;
         let blk = self.f[fi].blocks[bi];
-        let power = mul_p(blk.power, q.mult);
+        let power = mul_all(&[blk.power, q.mult, if first_cast { ONE + R_WHETSTONE_P } else { ONE }]);
+        let dealt_before = self.f[fi].dealt_total;
         self.run_skill(fi, bi, power, mul_p(blk.dmg, q.mult));
         if blk.shield_on_fire > 0 && self.f[fi].hp > 0 {
-            self.f[fi].shield += core::cmp::max(1, mul_p(blk.shield_on_fire, q.mult));
+            let n = self.melt_shield(fi, max(1, mul_p(blk.shield_on_fire, q.mult)));
+            let f = &mut self.f[fi];
+            f.shield += n;
+            f.shield_got += n;
         }
         if blk.mark == MARK_ECHO && self.f[foe].hp > 0 && self.f[fi].hp > 0 {
-            self.run_skill(fi, bi, rdiv(power, 2), rdiv(blk.dmg * q.mult, 2 * ONE));
+            self.run_skill(fi, bi, rdiv(power, 2), mul_p(blk.dmg, rdiv(q.mult, 2)));
         }
-        if blk.mark == MARK_BURN && self.f[foe].hp > 0 {
-            self.add_burn(foe, 1, 30);
+        if blk.mark == MARK_BURN && self.f[foe].hp > 0 && q.from.is_none() {
+            self.add_burn(foe, 1 + self.day / 3, 4 * ONE);
+        }
+        if blk.star >= 3 && lv_of(blk.v) >= 3 && self.f[foe].hp > 0 && self.f[fi].hp > 0 {
+            let extra = ((self.f[fi].dealt_total - dealt_before) * STAR_ECHO_P) / ONE;
+            if extra > 0 {
+                self.deal(foe, extra, ONE, Kind::Hit);
+            }
         }
         let tm = if q.depth >= 1 { mul_p(q.mult, CHAIN_DECAY_P) } else { q.mult };
         let mut nn = 0;
-        for k in 0..blk.ntrig as usize {
-            next[nn] = Fire { bi: blk.triggers[k], depth: q.depth + 1, from: true, mult: tm, restart: false };
+        for &tb in &blk.triggers[..blk.ntrig as usize] {
+            next[nn] = Fire { bi: tb, depth: q.depth + 1, from: Some(q.bi), mult: tm, restart: false };
             nn += 1;
         }
         if let Some(en) = node(blk.id, blk.v).engine {
-            let ep = mul_p(mul_p(en.power, blk.power), core::cmp::min(ONE, q.mult));
-            let na = blk.nadj as usize;
-            match en.kind {
-                EngineKind::Gear if na > 0 => {
-                    for _ in 0..core::cmp::min(en.n as usize, na) {
-                        let b = &mut self.f[fi].blocks[bi];
-                        let target = b.adj[(b.rr as usize) % na];
-                        b.rr += 1;
-                        next[nn] = Fire { bi: target, depth: q.depth + 1, from: true, mult: ep, restart: false };
-                        nn += 1;
-                    }
+            let ep = mul_all(&[en.power, blk.power, min(ONE, q.mult)]);
+            let nadj = blk.nadj as usize;
+            if en.kind == EngineKind::Gear && nadj > 0 {
+                let k = min(en.n as i64, nadj as i64) as usize;
+                for _ in 0..k {
+                    let b = &mut self.f[fi].blocks[bi];
+                    let target = blk.adj[(b.rr % nadj as i64) as usize];
+                    b.rr += 1;
+                    next[nn] = Fire { bi: target, depth: q.depth + 1, from: Some(q.bi), mult: ep, restart: false };
+                    nn += 1;
                 }
-                EngineKind::Overclock => {
-                    for k in 0..na {
-                        next[nn] = Fire { bi: blk.adj[k], depth: q.depth + 1, from: true, mult: ep, restart: !en.keep };
-                        nn += 1;
-                    }
+            } else if en.kind == EngineKind::Overclock {
+                for &a in &blk.adj[..nadj] {
+                    next[nn] = Fire { bi: a, depth: q.depth + 1, from: Some(q.bi), mult: ep, restart: !en.keep };
+                    nn += 1;
                 }
-                _ => {}
             }
         }
         nn
     }
 
-    /// fire a skill then everything it sets off, breadth-first (each skill at most once per chain)
+    /// Fire a skill, then everything it sets off (breadth-first, each skill at most once per chain).
     fn fire(&mut self, fi: usize, start: usize) {
-        let foe = 1 - fi;
         let mut seen: u16 = 1 << start;
-        let mut queue = [Fire::default(); MAX_SKILLS];
-        let (mut head, mut tail) = (0usize, 0usize);
-        queue[tail] = Fire { bi: start as u8, depth: 0, from: false, mult: ONE, restart: false };
-        tail += 1;
-        let mut next = [Fire::default(); 4];
+        let mut queue = [Fire::default(); 16];
+        let (mut head, mut tail) = (0usize, 1usize);
+        queue[0] = Fire { bi: start as u8, depth: 0, from: None, mult: ONE, restart: false };
         while head < tail {
             let q = queue[head];
             head += 1;
-            if self.f[fi].hp <= 0 || self.f[foe].hp <= 0 {
+            if self.f[fi].hp <= 0 || self.f[1 - fi].hp <= 0 {
                 return;
             }
+            let mut next = [Fire::default(); 8];
             let nn = self.fire_one(fi, q, &mut next);
             if q.depth >= MAX_CHAIN {
                 continue;
             }
             for n in &next[..nn] {
-                let bit = 1u16 << n.bi;
-                if seen & bit != 0 || self.t < self.f[fi].blocks[n.bi as usize].trig_at {
+                let b = n.bi as usize;
+                if seen & (1 << b) != 0 || self.t < self.f[fi].blocks[b].trig_at {
                     continue;
                 }
-                seen |= bit;
+                seen |= 1 << b;
                 queue[tail] = *n;
                 tail += 1;
             }
@@ -789,15 +1420,12 @@ impl Sim {
     }
 
     fn react_all(&mut self, fi: usize) {
-        let foe = 1 - fi;
         while self.f[fi].npending > 0 {
             let f = &mut self.f[fi];
             let bi = f.pending[0] as usize;
-            for k in 1..f.npending {
-                f.pending[k - 1] = f.pending[k];
-            }
+            f.pending.copy_within(1..f.npending, 0);
             f.npending -= 1;
-            if self.f[fi].hp <= 0 || self.f[foe].hp <= 0 || self.t < self.f[fi].blocks[bi].react_at {
+            if self.f[fi].hp <= 0 || self.f[1 - fi].hp <= 0 || self.t < self.f[fi].blocks[bi].react_at {
                 continue;
             }
             let t = self.t;
@@ -827,32 +1455,68 @@ impl Sim {
                 f.immune_until = t + CTL_IMMUNE;
             }
         }
-        let rate = if f.slow_t > 0 { ONE - f.slow_p } else { ONE };
+        let rate = mul_p(if f.slow_t > 0 { ONE - f.slow_p } else { ONE }, if f.haste_t > 0 { ONE + f.haste_p } else { ONE });
         let mut ready = [0u8; MAX_SKILLS];
         let mut nr = 0;
-        let nb = f.nb;
-        for (bi, b) in f.blocks[..nb].iter_mut().enumerate() {
+        for bi in 0..f.nb {
+            let b = &mut f.blocks[bi];
             if frozen && b.mark != MARK_STEADFAST {
                 continue;
             }
             b.prog += rate;
-            if b.prog >= b.cd_p {
-                b.prog -= b.cd_p;
+            if b.prog >= b.cd * ONE {
+                b.prog -= b.cd * ONE;
                 ready[nr] = bi as u8;
                 nr += 1;
             }
         }
-        for k in 0..nr {
-            self.fire(fi, ready[k] as usize);
+        for &bi in &ready[..nr] {
+            self.fire(fi, bi as usize);
         }
+    }
+
+    /// once a second (combat.ts: t % TPS === 0)
+    fn second(&mut self) {
+        let sec = self.t / TPS;
+        for fi in 0..2 {
+            if self.f[fi].hp <= 0 {
+                continue;
+            }
+            let hero = self.f[fi].hero;
+            if hero == H_DUELIST && DUELIST_REGEN > 0 && sec > 0 && sec % DUELIST_REGEN == 0 {
+                self.add_dodge(fi, 1);
+            } else if hero == H_SAGE && SAGE_GROW > 0 && sec > 0 && sec % SAGE_GROW == 0 {
+                self.grow(fi, ONE);
+            }
+        }
+        for fi in 0..2 {
+            if self.f[fi].hp > 0 && self.f[fi].has(RL_OLDROOTS) && sec > 0 && sec % R_OLDROOTS == 0 {
+                self.grow(fi, ONE);
+            }
+        }
+        for fi in 0..2 {
+            if self.f[fi].burns.len > 0 && self.f[fi].hp > 0 {
+                let d = self.f[fi].burns.sum();
+                let melt = if self.f[1 - fi].has(RL_MELTDOWN) { R_MELTDOWN_P } else { ONE };
+                let f = &mut self.f[fi];
+                f.shield -= min(f.shield, mul_p(mul_p(d, BURN_SCORCH_P), melt));
+                self.deal(fi, d, 0, Kind::Burn);
+                self.f[fi].burns.tick_down();
+            }
+            if self.f[fi].poisons.len > 0 && self.f[fi].hp > 0 {
+                let d = self.f[fi].poisons.sum();
+                self.deal(fi, d, 0, Kind::Poison);
+                self.f[fi].poisons.tick_down();
+            }
+        }
+        self.ult_check();
     }
 }
 
-/// Same contract as combat.ts simulate(a, b, seed, day): deterministic winner, ticks and HP left.
 pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &mut P) -> Outcome {
     let d = day.clamp(1, DAYS);
     let f_cap = FREEZE_CAP[d];
-    // one zeroed heap block for the whole fight state (all-zero is a valid Sim: integers, bools, u8/u16 arrays)
+    // one zeroed heap block for the whole fight state (all-zero is a valid Sim: integers, bools, small arrays)
     let mut s: Box<Sim> = unsafe {
         let layout = core::alloc::Layout::new::<Sim>();
         let p = alloc::alloc::alloc_zeroed(layout) as *mut Sim;
@@ -861,18 +1525,29 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
     };
     s.f_cap = f_cap;
     s.s_cap = rdiv(f_cap * 7, 4);
+    s.day = day as i64;
     init_fighter(&mut s.f[0], a, day);
     init_fighter(&mut s.f[1], b, day);
     let mut rng = Rng::new(seed);
     let first = rng.int(2) as i64;
+    // ใจเหล็ก from the start when the build owns a steadfast skill
+    for fi in 0..2 {
+        let f = &mut s.f[fi];
+        for bi in 0..f.nb {
+            let st = node(f.blocks[bi].id, f.blocks[bi].v).steadfast;
+            f.ctl_keep = min(f.ctl_keep, st);
+        }
+    }
+    // onStart: the duelist starts with a dodge charge
+    for fi in 0..2 {
+        if s.f[fi].hero == H_DUELIST {
+            s.add_dodge(fi, 1);
+        }
+    }
     let (f_start, f_step) = (FATIGUE_START[d], FATIGUE_STEP[d]);
     let mut winner: i8 = -1;
     let mut decided = false;
     let mut t = 1;
-    // countdowns instead of t % 40, t % 10 and the fatigue modulo (same ticks, no division in the loop)
-    let (mut to40, mut to10) = (40i64, 10i64);
-    let mut to_fatigue = if f_start >= 1 { f_start } else { 1 };
-    let mut fatigue_n: i64 = 0;
     while t <= MAX_TICKS {
         s.t = t;
         let order: [usize; 2] = if (t + first) % 2 == 0 { [0, 1] } else { [1, 0] };
@@ -880,15 +1555,20 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
             s.act(side);
             s.react_all(1 - side);
             s.react_all(side);
+            s.ult_check();
         }
-        to40 -= 1;
-        to10 -= 1;
-        let dr_tick = to40 == 0;
+        let dr_tick = t % FREEZE_DR_DECAY == 0;
         for fi in 0..2 {
             let f = &mut s.f[fi];
             if f.slow_t > 0 {
                 f.slow_t -= 1;
                 f.slow_total += 1;
+            }
+            if f.haste_t > 0 {
+                f.haste_t -= 1;
+            }
+            if f.wound_t > 0 {
+                f.wound_t -= 1;
             }
             if dr_tick && f.freeze_n > 0 {
                 f.freeze_n -= 1;
@@ -896,7 +1576,6 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
             if dr_tick && f.delay_n > 0 {
                 f.delay_n -= 1;
             }
-            // thorns that wore off (permanent ones never do): scan only when the earliest expiry is due
             if f.thorns_next <= t {
                 let mut k = 0;
                 while k < f.thorns.len {
@@ -909,42 +1588,23 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
                 f.thorns_next = f.thorns.min_until();
             }
         }
-        if dr_tick {
-            to40 = 40;
+        if t % TPS == 0 {
+            s.second();
         }
-        if to10 == 0 {
-            to10 = 10;
+        if t >= f_start && (t - f_start) % TPS == 0 {
+            let n = ((t - f_start) / TPS + 1) * f_step;
             for fi in 0..2 {
-                if s.f[fi].burns.len == 0 || s.f[fi].hp <= 0 {
-                    continue;
-                }
-                let total = s.f[fi].burns.sum();
-                s.deal(fi, total, 0, Src::Burn);
-                let bu = &mut s.f[fi].burns;
-                let mut k = 0;
-                while k < bu.len {
-                    let left = bu.until[k] as i64 - 10;
-                    bu.until[k] = left.max(0) as u16;
-                    if left > 0 {
-                        k += 1;
-                    } else {
-                        bu.remove(k);
-                    }
-                }
+                s.deal(fi, n, 0, Kind::Fatigue);
             }
-        }
-        to_fatigue -= 1;
-        if to_fatigue == 0 {
-            // fatigue every second from f_start: n-th second deals n × step
-            fatigue_n += 1;
-            let n = fatigue_n * f_step;
-            s.deal(0, n, 0, Src::Fatigue);
-            s.deal(1, n, 0, Src::Fatigue);
-            to_fatigue = 10;
         }
         probe.tick(t, &s.f);
         if s.f[0].hp <= 0 || s.f[1].hp <= 0 {
-            winner = if s.f[0].hp == s.f[1].hp { -1 } else if s.f[0].hp > s.f[1].hp { 0 } else { 1 };
+            if s.f[0].hp <= 0 && s.f[1].hp <= 0 {
+                let d = s.f[0].dealt_total - s.f[1].dealt_total;
+                winner = if d.abs() * 20 <= max(s.f[0].dealt_total, s.f[1].dealt_total) { -1 } else if d > 0 { 0 } else { 1 };
+            } else {
+                winner = if s.f[0].hp > 0 { 0 } else { 1 };
+            }
             decided = true;
             break;
         }
@@ -952,20 +1612,9 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
     }
     if !decided {
         t = MAX_TICKS;
-        let r0 = s.f[0].hp * s.f[1].max_hp;
-        let r1 = s.f[1].hp * s.f[0].max_hp;
-        winner = if r0 == r1 { -1 } else if r0 > r1 { 0 } else { 1 };
+        let c0 = s.f[0].hp * s.f[1].max_hp;
+        let c1 = s.f[1].hp * s.f[0].max_hp;
+        winner = if c0 == c1 { -1 } else if c0 > c1 { 0 } else { 1 };
     }
     Outcome { winner, ticks: t, hp: [s.f[0].hp, s.f[1].hp] }
-}
-
-#[cfg(test)]
-mod size_tests {
-    use super::*;
-    #[test]
-    fn state_fits_an_sbf_frame() {
-        let f = core::mem::size_of::<Fighter>();
-        std::println!("Fighter {} B, Sim {} B, Build {} B", f, core::mem::size_of::<Sim>(), core::mem::size_of::<Build>());
-        assert!(2 * f < 4096, "two fighters must fit one 4 KB frame");
-    }
 }

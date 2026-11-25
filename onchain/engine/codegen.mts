@@ -1,31 +1,36 @@
 // Codegen: TS game data (the single source of truth) → Rust consts for mochi-engine.
 // Run from arena-game-jj:  npm run ts-to-rust (or npx tsx onchain/engine/codegen.mts)
-// Writes engine/mochi-engine/src/data.rs. Re-run after any change to skills.ts / heroes.ts / tuning.ts / combat.ts tables.
+// Writes engine/mochi-engine/src/data.rs. Re-run after any change to skills.ts / heroes.ts / tuning.ts / relics.ts /
+// combat.ts tables. Sim v22: ppm values are P() of the same data the TS fight passes through P().
+//
+// Stage note (sim v22): the fight data is complete; the run (run.ts) section comes back with the run.rs port.
 import fs from 'node:fs';
-import { SKILL_LIST, VARIANTS, type Effect } from '../../src/sim/skills';
-import { HEROES } from '../../src/sim/heroes';
+import { SKILL_LIST, VARIANTS, WORTH_BY_LV, TIME_CAP_S, DODGE_MIN_POWER, type Effect } from '../../src/sim/skills';
+import { HEROES, ULT_LV2_POW, ULT_LV2_LV3, ULT_PIECES, lineAffinity, ultPow, ultTrig } from '../../src/sim/heroes';
 import { T } from '../../src/sim/tuning';
-import { P } from '../../src/sim/fixed';
-import { SIM_VERSION, hpFor, fatigueStart, fatigueStep, freezeCap, TRIGGER_GAP, TRIGGER_GAP_MAX, CTL_IMMUNE, CTL_BASE, SHAKE_OFF, THORNS_TICKS, MAX_TICKS } from '../../src/sim/combat';
-import { ARCHES } from '../../src/sim/types';
-import { MAX_BONUS, BONUS_KINDS } from '../../src/sim/links';
-import * as RUN from '../../src/sim/run';
-import { hits } from '../../src/sim/skills';
-import { randomAiBuild } from '../../src/sim/bot';
-import { hashSeed } from '../../src/sim/rng';
+import { P, rdiv } from '../../src/sim/fixed';
+import * as C from '../../src/sim/combat';
+import { LINES } from '../../src/sim/types';
+import { MAX_BONUS, BONUS_KINDS, POWER_BONUS, HASTE_BONUS } from '../../src/sim/links';
+import { RELICS, MAX_RELICS } from '../../src/sim/relics';
 
 const DAYS = 40; // tables for days 1..=DAYS (the game caps a run at day 20)
-const archIdx = (a: string) => (a === 'none' ? 4 : ARCHES.indexOf(a as never));
+const lineIdx = (l: string) => (l === 'none' ? LINES.length : LINES.indexOf(l as never));
 const heroIdx = (h?: string) => (h ? HEROES.findIndex((x) => x.id === h) : 255);
-const skillIdx = (id: string) => SKILL_LIST.findIndex((d) => d.id === id);
+const NL = String.fromCharCode(10);
 
 function eff(e: Effect): string {
   switch (e.k) {
     case 'hit':
-      return `Eff::Hit(Hit { n: ${P(e.n)}, times: ${e.times ?? 1}, pierce: ${P(e.pierce ?? 0)}, exec_hp: ${e.exec ? P(e.exec[0]) : 0}, exec_m: ${e.exec ? P(e.exec[1]) : 0}, frozen: ${P(e.frozen ?? 0)}, no_shield: ${P(e.noShield ?? 0)}, shield_pct: ${P(e.shieldPct ?? 0)}, thorns_x: ${P(e.thornsX ?? 0)}, burn_pct: ${P(e.burnPct ?? 0)}, if_slowed: ${!!e.ifSlowed}, leech: ${P(e.leech ?? 0)}, burn_dps: ${e.burn ? P(e.burn[0]) : 0}, burn_secs: ${e.burn ? e.burn[1] : 0}, per_removed: ${P(e.perRemoved ?? 0)} })`;
-    case 'shield': return `Eff::Shield(${P(e.n)})`;
-    case 'heal': return `Eff::Heal(${P(e.n)})`;
-    case 'burn': return `Eff::Burn { dps: ${P(e.dps)}, secs: ${e.secs}, growth_half: ${!!e.growthHalf} }`;
+      return `Eff::Hit(Hit { n: ${P(e.n)}, times: ${e.times ?? 1}, pierce: ${P(e.pierce ?? 0)}, exec_hp: ${e.exec ? P(e.exec[0]) : 0}, exec_m: ${e.exec ? P(e.exec[1]) : 0}, frozen: ${P(e.frozen ?? 0)}, no_shield: ${P(e.noShield ?? 0)}, shield_pct: ${P(e.shieldPct ?? 0)}, thorns_x: ${P(e.thornsX ?? 0)}, burn_pct: ${P(e.burnPct ?? 0)}, if_slowed: ${!!e.ifSlowed}, leech: ${P(e.leech ?? 0)}, burn_dps: ${e.burn ? P(e.burn[0]) : 0}, burn_secs: ${e.burn ? P(e.burn[1]) : 0}, poison_dps: ${e.poison ? P(e.poison[0]) : 0}, poison_secs: ${e.poison ? P(e.poison[1]) : 0}, per_burn: ${P(e.perBurn ?? 0)}, poison_pct: ${P(e.poisonPct ?? 0)}, per_dodge: ${P(e.perDodge ?? 0)}, sure: ${!!e.sure}, per_removed: ${P(e.perRemoved ?? 0)}, per_sec: ${P(e.perSec ?? 0)}, per_worth: ${P(e.perWorth ?? 0)} })`;
+    case 'shield': return `Eff::Shield { n: ${P(e.n)}, per_sec: ${P(e.perSec ?? 0)}, per_worth: ${P(e.perWorth ?? 0)} }`;
+    case 'heal': return `Eff::Heal { n: ${P(e.n)}, per_sec: ${P(e.perSec ?? 0)}, per_worth: ${P(e.perWorth ?? 0)} }`;
+    case 'accel': return `Eff::Accel { pct: ${P(e.pct)}, min: ${P(e.min)} }`;
+    case 'burn': return `Eff::Burn { dps: ${P(e.dps)}, secs: ${P(e.secs)}, growth_half: ${!!e.growthHalf}, stacks: ${e.stacks ?? 1} }`;
+    case 'poison': return `Eff::Poison { dps: ${P(e.dps)}, secs: ${P(e.secs)}, stacks: ${e.stacks ?? 1} }`;
+    case 'dodge': return `Eff::Dodge(${e.n})`;
+    case 'haste': return `Eff::Haste { pct: ${P(e.pct)}, secs: ${P(e.secs)} }`;
+    case 'wound': return `Eff::Wound { pct: ${P(e.pct)}, secs: ${P(e.secs)} }`;
     case 'freeze': return `Eff::Freeze(${P(e.secs)})`;
     case 'slow': return `Eff::Slow { pct: ${P(e.pct)}, secs: ${P(e.secs)} }`;
     case 'delay': return `Eff::Delay(${P(e.secs)})`;
@@ -33,122 +38,132 @@ function eff(e: Effect): string {
     case 'charge': return `Eff::Charge { mult: ${P(e.mult)}, hits: ${e.hits ?? 1} }`;
     case 'thorns': return `Eff::Thorns { n: ${P(e.n)}, perm: ${!!e.perm}, heal: ${e.heal === undefined ? -1 : P(e.heal)} }`;
     case 'steadfast': return `Eff::Steadfast { keep: ${P(e.keep ?? 0.4)}, ignore_freeze: ${!!e.ignoreFreeze} }`;
-    case 'cleanse': return `Eff::Cleanse(${e.n})`;
+    case 'cleanse': return `Eff::Cleanse { n: ${e.n}, dot: ${!!e.dot}, line_all: ${!!e.lineAll} }`;
     case 'dispel': return `Eff::Dispel { n: ${e.n}, shield: ${P(e.shield ?? 0.2)}, steal: ${!!e.steal} }`;
-    case 'amplify': return `Eff::Amplify(${e.cap})`;
     case 'leech': return `Eff::Leech(${P(e.pct)})`;
   }
 }
 
 const out: string[] = [];
-out.push(`// GENERATED by engine/codegen.mts from arena-game-jj/src/sim (sim v${SIM_VERSION}). Do not edit by hand.`);
+const c = (name: string, v: number, doc?: string, ty = 'i64') => out.push(`${doc ? `/// ${doc}${NL}` : ''}pub const ${name}: ${ty} = ${v};`);
+out.push(`// GENERATED by engine/codegen.mts from arena-game-jj/src/sim (sim v${C.SIM_VERSION}). Do not edit by hand.`);
 out.push('#![allow(clippy::all)]');
 out.push('use crate::types::*;\n');
-out.push(`pub const SIM_VERSION: i64 = ${SIM_VERSION};`);
-out.push(`pub const MAX_TICKS: i64 = ${MAX_TICKS};`);
-out.push(`pub const TRIGGER_GAP: i64 = ${TRIGGER_GAP};\npub const TRIGGER_GAP_MAX: i64 = ${TRIGGER_GAP_MAX};`);
-out.push(`pub const CTL_IMMUNE: i64 = ${CTL_IMMUNE};\npub const CTL_BASE: i64 = ${CTL_BASE};\npub const SHAKE_OFF: i64 = ${SHAKE_OFF};\npub const THORNS_TICKS: i64 = ${THORNS_TICKS};`);
-out.push(`pub const MAX_BONUS: usize = ${MAX_BONUS};`);
-out.push(`/// tuning.ts values the engine uses directly (ppm unless noted)`);
-out.push(`pub const CHAIN_DECAY_P: i64 = ${P(T.chainDecay)};`);
-out.push(`pub const ASSASSIN_FIRST_P: i64 = ${P(T['assassin.first'])};`);
-out.push(`pub const DUELIST_THIRD_P: i64 = ${P(T['duelist.third'])};`);
-out.push(`pub const BERSERKER_HITS: i64 = ${T['berserker.hits']};`);
-out.push(`pub const PYRO_BURN_P: i64 = ${P(T['pyro.burn'])};`);
-out.push(`/// witch: extra freeze, in whole ticks`);
-out.push(`pub const WITCH_FREEZE_TICKS: i64 = ${Math.round(T['witch.freeze'] * 10)};`);
+c('SIM_VERSION', C.SIM_VERSION);
+c('TPS', C.TPS);
+c('MAX_TICKS', C.MAX_TICKS);
+c('TRIGGER_GAP', C.TRIGGER_GAP);
+c('TRIGGER_GAP_MAX', C.TRIGGER_GAP_MAX);
+c('ENGINE_GAP', C.ENGINE_GAP);
+c('CTL_IMMUNE', C.CTL_IMMUNE);
+c('CTL_MIN_T', C.CTL_MIN_T);
+c('SHAKE_OFF', C.SHAKE_OFF);
+c('THORNS_TICKS', C.THORNS_TICKS);
+c('FIRST_CAST', C.FIRST_CAST);
+c('FIRST_CAST_STEP', C.FIRST_CAST_STEP);
+c('FIRST_CAST_MAX', C.FIRST_CAST_MAX);
+c('FIRST_CAST_DAYS', C.FIRST_CAST_DAYS, undefined, 'usize');
+c('CLEANSE_MAX', C.CLEANSE_MAX);
+c('ULT_MIN_T', C.ULT_MIN_T);
+c('SIGIL_MAX', C.SIGIL_MAX, undefined, 'usize');
+c('TIME_CAP_S', TIME_CAP_S);
+c('MAX_BONUS', MAX_BONUS, undefined, 'usize');
+c('MAX_RELICS', MAX_RELICS, undefined, 'usize');
+out.push(`pub const WORTH_BY_LV: [i64; 4] = [${WORTH_BY_LV.join(', ')}];`);
 out.push(`pub const BONUS_KINDS: [&str; ${BONUS_KINDS.length}] = [${BONUS_KINDS.map((k) => `"${k}"`).join(', ')}];`);
+out.push(`pub const LINE_IDS: [&str; ${LINES.length}] = [${LINES.map((l) => `"${l}"`).join(', ')}];`);
+c('LINE_NONE', LINES.length, 'skill line index for "none"', 'u8');
+c('LINE_DODGE', lineIdx('dodge'), undefined, 'u8');
+
+out.push('/// ppm values the fight uses (P() of the same data as combat.ts / heroes.ts / skills.ts)');
+const p = (name: string, v: number) => c(name, P(v));
+p('QUICK_MARK_P', C.QUICK_MARK);
+p('THORNS_HEAL_P', C.THORNS_HEAL);
+p('POWER_BONUS_P', POWER_BONUS);
+p('HASTE_BONUS_P', HASTE_BONUS);
+p('DODGE_MIN_POWER_P', DODGE_MIN_POWER);
+p('ULT_LV2_POW_P', ULT_LV2_POW);
+c('ULT_PIECES_1', ULT_PIECES[0], undefined, 'usize');
+c('ULT_PIECES_2', ULT_PIECES[1], undefined, 'usize');
+c('ULT_LV2_LV3', ULT_LV2_LV3, undefined, 'usize');
+const tp: [string, string][] = [
+  ['chainDecay', 'CHAIN_DECAY_P'], ['star.cd3', 'STAR_CD3_P'], ['star.pow', 'STAR_POW_P'], ['star.pow3', 'STAR_POW3_P'], ['star.echo', 'STAR_ECHO_P'],
+  ['line.lv3', 'LINE_LV3_P'], ['grow.offline', 'GROW_OFFLINE_P'], ['dodge.graze', 'DODGE_GRAZE_P'], ['chrono.graze', 'CHRONO_GRAZE_P'],
+  ['shield.spend', 'SHIELD_SPEND_P'], ['shield.guard', 'SHIELD_GUARD_P'], ['burn.scorch', 'BURN_SCORCH_P'], ['burn.shield', 'BURN_SHIELD_P'],
+  ['poison.heal', 'POISON_HEAL_P'], ['haste.cap', 'HASTE_CAP_P'], ['ult.cap', 'ULT_CAP_P'], ['ult.knight.hp', 'ULT_KNIGHT_HP_P'],
+  ['ult.berserker.grow', 'ULT_BERSERKER_GROW_P'], ['knight.shield', 'KNIGHT_SHIELD_P'], ['assassin.first', 'ASSASSIN_FIRST_P'],
+  ['assassin.wound', 'ASSASSIN_WOUND_P'], ['duelist.counter', 'DUELIST_COUNTER_P'], ['pyro.burn', 'PYRO_BURN_P'], ['witch.wound', 'WITCH_WOUND_P'],
+  ['chrono.slowHit', 'CHRONO_SLOW_HIT_P'], ['luckycat.worth', 'LUCKYCAT_WORTH_P'], ['thornguard.head', 'THORNGUARD_HEAD_P'],
+  ['thornguard.poison', 'THORNGUARD_POISON_SECS_P'],
+];
+for (const [k, n] of tp) p(n, T[k as keyof typeof T]);
+// relic numbers
+for (const r of ['whetstone', 'executioner', 'counterstep', 'spikedshield', 'bastion', 'overflow', 'vitality', 'meltdown', 'kindling', 'rot',
+  'permafrost', 'permafrostCd', 'brittle', 'gale', 'tailspin', 'quickdraw', 'wanderer', 'twinline', 'ironhide', 'glassHp', 'glassCap', 'glassDmg',
+  'lonewolf', 'sigil', 'piggybank', 'luckycoin', 'sundial'])
+  p(`R_${r.toUpperCase()}_P`, T[`relic.${r}` as keyof typeof T]);
+out.push('/// plain integers from tuning.ts');
+c('CHARGE_MIN', T['charge.min']);
+c('DODGE_CAP', T['dodge.cap']);
+c('BERSERKER_HITS', T['berserker.hits']);
+c('ASSASSIN_EVERY', T['assassin.every']);
+c('DUELIST_REGEN', T['duelist.regen']);
+c('SAGE_GROW', T['sage.grow']);
+c('ULT_THORNGUARD_POISON', T['ult.thornguard.poison']);
+c('R_VIRULENCE', T['relic.virulence']);
+c('R_OLDROOTS', T['relic.oldroots']);
+// these must be whole numbers for the integer port (asserted, so a tuning change that breaks it fails codegen)
+for (const k of ['charge.min', 'dodge.cap', 'berserker.hits', 'assassin.every', 'duelist.regen', 'sage.grow', 'ult.thornguard.poison', 'relic.virulence', 'relic.oldroots'] as const)
+  if (!Number.isInteger(T[k])) throw new Error(`tuning ${k} = ${T[k]} must be an integer for the Rust engine`);
+c('WITCH_FREEZE_TICKS', rdiv(P(T['witch.freeze']) * 10, 1_000_000), 'witch: extra freeze, whole ticks (as heroes.ts)');
+
+// relic ids → bits
+out.push(`pub const RELIC_IDS: [&str; ${RELICS.length}] = [${RELICS.map((r) => `"${r.id}"`).join(', ')}];`);
+RELICS.forEach((r, i) => c(`RL_${r.id.toUpperCase()}`, i, undefined, 'u8'));
 
 // per-day tables (index = day, 0 unused)
 const days = Array.from({ length: DAYS + 1 }, (_, d) => Math.max(1, d));
 out.push(`pub const DAYS: usize = ${DAYS};`);
-out.push(`pub const HP_BY_DAY: [i64; ${DAYS + 1}] = [${days.map(hpFor).join(', ')}];`);
-out.push(`pub const FATIGUE_START: [i64; ${DAYS + 1}] = [${days.map(fatigueStart).join(', ')}];`);
-out.push(`pub const FATIGUE_STEP: [i64; ${DAYS + 1}] = [${days.map(fatigueStep).join(', ')}];`);
-out.push(`pub const FREEZE_CAP: [i64; ${DAYS + 1}] = [${days.map(freezeCap).join(', ')}];`);
+out.push(`pub const FATIGUE_START: [i64; ${DAYS + 1}] = [${days.map(C.fatigueStart).join(', ')}];`);
+out.push(`pub const FATIGUE_STEP: [i64; ${DAYS + 1}] = [${days.map(C.fatigueStep).join(', ')}];`);
+out.push(`pub const FREEZE_CAP: [i64; ${DAYS + 1}] = [${days.map(C.freezeCap).join(', ')}];`);
+for (const d of days) if (!Number.isInteger(C.freezeCap(d))) throw new Error('freezeCap must be whole ticks');
 
-// heroes: max HP and start shield per day (hooks evaluated in TS so rounding is identical)
-const heroHp = HEROES.map((h) => days.map((d) => (h.hooks.maxHp ? h.hooks.maxHp(hpFor(d)) : hpFor(d))));
-const heroShield = HEROES.map((h, i) => days.map((_, d) => (h.hooks.startShield ? h.hooks.startShield(0, heroHp[i][d]) : 0)));
+// heroes
+const heroHp = HEROES.map((h) => days.map((d) => (h.hooks.maxHp ? h.hooks.maxHp(C.hpFor(d)) : C.hpFor(d))));
 out.push(`pub const HERO_IDS: [&str; ${HEROES.length}] = [${HEROES.map((h) => `"${h.id}"`).join(', ')}];`);
-out.push(`pub const HERO_MAX_HP: [[i64; ${DAYS + 1}]; ${HEROES.length}] = [${heroHp.map((r) => `[${r.join(', ')}]`).join(',\n  ')}];`);
-out.push(`pub const HERO_START_SHIELD: [[i64; ${DAYS + 1}]; ${HEROES.length}] = [${heroShield.map((r) => `[${r.join(', ')}]`).join(',\n  ')}];`);
-out.push(`pub const HERO_ARCH: [u8; ${HEROES.length}] = [${HEROES.map((h) => archIdx(h.arch)).join(', ')}];`);
-out.push(`pub const HERO_UNIQUE: [u8; ${HEROES.length}] = [${HEROES.map((h) => skillIdx(h.unique)).join(', ')}];`);
-out.push(`pub const H_KNIGHT: u8 = ${heroIdx('knight')};\npub const H_THORNGUARD: u8 = ${heroIdx('thornguard')};\npub const H_ASSASSIN: u8 = ${heroIdx('assassin')};\npub const H_DUELIST: u8 = ${heroIdx('duelist')};`);
-out.push(`pub const H_BERSERKER: u8 = ${heroIdx('berserker')};\npub const H_PYRO: u8 = ${heroIdx('pyro')};\npub const H_WITCH: u8 = ${heroIdx('witch')};\npub const H_CHRONO: u8 = ${heroIdx('chrono')};`);
-out.push(`/// thornguard: thorns last this many seconds`);
-out.push(`pub const THORNGUARD_THORNS_SECS: i64 = ${HEROES.find((h) => h.id === 'thornguard')!.hooks.thornsSecs};`);
+out.push(`pub const HERO_MAX_HP: [[i64; ${DAYS + 1}]; ${HEROES.length}] = [${heroHp.map((r) => `[${r.join(', ')}]`).join(`,${NL}  `)}];`);
+out.push(`pub const HERO_LINE: [u8; ${HEROES.length}] = [${HEROES.map((h) => lineIdx(h.line)).join(', ')}];`);
+out.push(`/// ถนัดสาย per hero, ppm`);
+out.push(`pub const HERO_AFF_P: [i64; ${HEROES.length}] = [${HEROES.map((h) => P(lineAffinity(h.id))).join(', ')}];`);
+out.push(`/// ultimate trigger per hero and level (index = lv): plain count (0 for HP-share triggers), and ppm (for HP-share triggers)`);
+out.push(`pub const ULT_TRIG: [[i64; 3]; ${HEROES.length}] = [${HEROES.map((h) => `[0, ${[1, 2].map((lv) => (Number.isInteger(ultTrig(h.id, lv)) ? ultTrig(h.id, lv) : 0)).join(', ')}]`).join(', ')}];`);
+out.push(`pub const ULT_TRIG_P: [[i64; 3]; ${HEROES.length}] = [${HEROES.map((h) => `[0, ${P(ultTrig(h.id, 1))}, ${P(ultTrig(h.id, 2))}]`).join(', ')}];`);
+out.push(`pub const ULT_POW_P: [[i64; 3]; ${HEROES.length}] = [${HEROES.map((h) => `[0, ${P(ultPow(h.id, 1))}, ${P(ultPow(h.id, 2))}]`).join(', ')}];`);
+for (const h of HEROES) for (const lv of [1, 2]) {
+  const v = ultTrig(h.id, lv);
+  if (['duelist', 'pyro', 'thornguard', 'witch', 'chrono', 'luckycat', 'sage'].includes(h.id) && !Number.isInteger(v)) throw new Error(`ult trigger ${h.id} Lv${lv} must be whole`);
+}
+for (const id of ['knight', 'thornguard', 'assassin', 'duelist', 'berserker', 'pyro', 'witch', 'chrono', 'luckycat', 'sage']) c(`H_${id.toUpperCase()}`, heroIdx(id), undefined, 'u8');
+c('THORNGUARD_THORNS_SECS', HEROES.find((h) => h.id === 'thornguard')!.hooks.thornsSecs!, 'thornguard: thorns last this many seconds');
 
 // skills
-out.push(`\npub const SKILL_IDS: [&str; ${SKILL_LIST.length}] = [${SKILL_LIST.map((d) => `"${d.id}"`).join(', ')}];`);
+out.push(`${NL}pub const SKILL_IDS: [&str; ${SKILL_LIST.length}] = [${SKILL_LIST.map((d) => `"${d.id}"`).join(', ')}];`);
 out.push(`pub const SKILLS: [SkillDef; ${SKILL_LIST.length}] = [`);
 for (const d of SKILL_LIST) {
   const nodes = VARIANTS.map((v) => {
     const n = d.tree[v];
     const en = n.engine ? `Some(Engine { kind: ${n.engine.kind === 'gear' ? 'EngineKind::Gear' : 'EngineKind::Overclock'}, power: ${P(n.engine.power)}, n: ${n.engine.n ?? 1}, keep: ${!!n.engine.keep} })` : 'None';
-    const reacts = n.fx.some((e) => e.k === 'cleanse' || e.k === 'steadfast');
-    return `    Node { cd: ${n.cd}, engine: ${en}, reacts: ${reacts}, fx: &[${n.fx.map(eff).join(', ')}] }`;
+    // same as skills.ts reacts()
+    const reacts = n.fx.some((e) => (e.k === 'cleanse' && !e.dot) || e.k === 'steadfast');
+    const steadfast = n.fx.reduce((m, e) => (e.k === 'steadfast' ? Math.min(m, P(e.keep ?? 0.4)) : m), 1_000_000);
+    return `    Node { cd: ${n.cd}, engine: ${en}, reacts: ${reacts}, steadfast: ${steadfast}, fx: &[${n.fx.map(eff).join(', ')}] }`;
   });
-  out.push(`  // ${d.id}\n  SkillDef { arch: ${archIdx(d.arch)}, hero: ${heroIdx(d.hero)}, tree: [\n${nodes.join(',\n')},\n  ] },`);
+  out.push(`  // ${d.id}${NL}  SkillDef { line: ${lineIdx(d.line)}, hero: ${heroIdx(d.hero)}, tree: [${NL}${nodes.join(`,${NL}`)},${NL}  ] },`);
 }
 out.push('];');
 
-// ---------------- run (run.ts) ----------------
-/** rng.next() < p  ⇔  next_u32() < ceil(p · 2^32)  (next() = v / 2^32 exactly) */
-const th = (p: number) => Math.ceil(p * 2 ** 32);
-out.push('\n// run.ts');
-out.push(`pub const START_HP: i64 = ${RUN.START_HP};
-pub const WIN_TARGET: i64 = ${RUN.WIN_TARGET};
-pub const SHOP_SIZE: usize = ${RUN.SHOP_SIZE};`);
-out.push(`pub const PRICES: [i64; 3] = [${RUN.PRICES.join(', ')}];
-pub const REROLL: i64 = ${RUN.REROLL};
-pub const MAX_LV: i64 = ${RUN.MAX_LV};`);
-out.push(`pub const DAY1_GOLD: i64 = ${RUN.DAY1_GOLD};
-pub const MAX_SLOTS: i64 = ${RUN.MAX_SLOTS};
-pub const LOSS_CAP: i64 = ${RUN.LOSS_CAP};`);
-out.push(`pub const LOSS_EVERY: i64 = ${T['run.lossEvery']};
-pub const WISH_BASE: i64 = ${RUN.WISH_BASE};
-pub const HERO_CHOICES: usize = ${RUN.HERO_CHOICES};`);
-out.push(`pub const N_MARKS: u32 = ${RUN.MARKS.length};
-pub const N_ARCHES: u32 = ${ARCHES.length};`);
-out.push(`/// day-1 shop of each hero (skill indices)`);
-out.push(`pub const HERO_DAY1: [[u8; ${RUN.SHOP_SIZE}]; ${HEROES.length}] = [${HEROES.map((h) => `[${h.day1.slice(0, RUN.SHOP_SIZE).map(skillIdx).join(', ')}]`).join(', ')}];`);
-out.push(`/// some variant of the skill hits (a +damage bonus would do nothing otherwise)`);
-out.push(`pub const CAN_HIT: [bool; ${SKILL_LIST.length}] = [${SKILL_LIST.map((d) => Object.values(d.tree).some(hits)).join(', ')}];`);
-// targetsFor(id, hero) = shared skills + the hero's unique (SKILL_LIST order) without id: per-hero list, id removed at pick time
-const tl = HEROES.map((h) => SKILL_LIST.map((d, k) => [d, k] as const).filter(([d]) => !d.hero || d.hero === h.id).map(([, k]) => k));
-const tmax = Math.max(...tl.map((l) => l.length));
-out.push(`/// bonus targets per hero (shared skills + own unique, SKILL_LIST order); padded with 255`);
-out.push(`pub const HERO_TARGETS: [[u8; ${tmax}]; ${HEROES.length}] = [${tl.map((l) => `[${[...l, ...Array(tmax - l.length).fill(255)].join(', ')}]`).join(', ')}];`);
-out.push(`pub const HERO_TARGETS_LEN: [u8; ${HEROES.length}] = [${tl.map((l) => l.length).join(', ')}];`);
-out.push(`/// rng.next() < p thresholds (exact): bonus kind roll, bonus target roll, 2-bonus roll, upgrade-vs-fresh roll`);
-out.push(`pub const TH_DMG: u32 = ${th(0.3)};
-pub const TH_SHIELD: u32 = ${th(0.45)};
-pub const TH_HASTE: u32 = ${th(0.6)};
-pub const TH_POWER: u32 = ${th(0.75)};`);
-out.push(`pub const TH_TARGET_SKILL: u32 = ${th(0.6)};
-pub const TH_TWO_BONUS: u32 = ${th(0.35)};
-pub const TH_UPGRADE: u32 = ${th(0.5)};`);
-
-// bot templates (requirement: bots fill in when no ghost fits; they persist across seasons): real bot builds
-const BOT_K = 4, BOT_DAYS = 20;
-const lit = (b: ReturnType<typeof randomAiBuild>) => {
-  const sk = Array.from({ length: 8 }, (_, i) => {
-    const k = b.skills[i];
-    if (!k) return 'SkillInst { id: 0, v: 0, mark: 0, nb: 0, bonus: [Bonus { t: 0, e: 0 }; 3] }';
-    const bo = Array.from({ length: MAX_BONUS }, (_, j) => { const x = k.bonus?.[j]; return x ? `Bonus { t: ${x.t.startsWith('arch:') ? 200 + ARCHES.indexOf(x.t.slice(5) as never) : skillIdx(x.t)}, e: ${BONUS_KINDS.indexOf(x.e)} }` : 'Bonus { t: 0, e: 0 }'; });
-    return `SkillInst { id: ${skillIdx(k.id)}, v: ${VARIANTS.indexOf(k.v as never)}, mark: ${k.mark ? RUN.MARKS.indexOf(k.mark) + 1 : 0}, nb: ${k.bonus?.length ?? 0}, bonus: [${bo.join(', ')}] }`;
-  });
-  return `Build { hero: ${heroIdx(b.hero)}, n: ${b.skills.length}, skills: [${sk.join(', ')}] }`;
-};
-out.push(`/// bot templates: BOT_BUILDS[day - 1][k] = randomAiBuild(day, hashSeed('bot', day, k))`);
-out.push(`pub const BOT_K: usize = ${BOT_K};
-pub const BOT_DAYS: usize = ${BOT_DAYS};`);
-const NL = String.fromCharCode(10);
-out.push(`pub const BOT_BUILDS: [[Build; ${BOT_K}]; ${BOT_DAYS}] = [${Array.from({ length: BOT_DAYS }, (_, d) => `[${Array.from({ length: BOT_K }, (_, k) => lit(randomAiBuild(d + 1, hashSeed('bot', d + 1, k)))).join(',' + NL + '  ')}]`).join(',' + NL)}];`);
-
 const file = new URL('./mochi-engine/src/data.rs', import.meta.url);
 fs.mkdirSync(new URL('./mochi-engine/src/', import.meta.url), { recursive: true });
-fs.writeFileSync(file, out.join('\n') + '\n');
-console.log(`wrote data.rs: ${SKILL_LIST.length} skills, ${HEROES.length} heroes, sim v${SIM_VERSION}`);
+fs.writeFileSync(file, out.join(NL) + NL);
+console.log(`wrote data.rs: ${SKILL_LIST.length} skills, ${HEROES.length} heroes, ${RELICS.length} relics, sim v${C.SIM_VERSION}`);
