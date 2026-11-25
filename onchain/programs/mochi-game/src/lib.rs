@@ -1,6 +1,9 @@
-//! Mochi Moon game program. The authoritative rules are `mochi-engine` (bit-exact with the TS game, sim v13);
-//! this program adds what only the chain can enforce:
-//! - zero-copy state (Player 1,640 B, Pool shard 9,816 B, Ranking 808 B): account bytes used in place
+//! Mochi Moon game program. The authoritative rules are `mochi-engine` (bit-exact with the TS game, sim v22 /
+//! run v14); this program adds what only the chain can enforce:
+//! - the secret seed lifecycle (onchain/docs/RANDOMNESS.md): one VRF request per run, the secret in a `RunSecret`
+//!   account nobody can read (zero-member permission), a public commitment at run start, the secret revealed at run
+//!   end; every roll (shop, rerolls, bonuses, stars, wishes, relics, marks, fight seed, opponent) comes from it
+//! - zero-copy state (Player, Pool shard, Ranking, RunSecret): account bytes used in place
 //! - versioning (magic, layout version, sim version) checked on every access
 //! - phase guards: shop actions and fights only in the shop phase, last chance / mark only in their phases
 //! - batching: `act_batch` applies up to MAX_BATCH actions atomically
@@ -23,9 +26,13 @@ use ephemeral_rollups_sdk::{
     cpi::DelegateConfig,
     ephem::MagicIntentBundleBuilder,
 };
+use ephemeral_vrf_sdk::anchor::{vrf, vrf_callback};
+use ephemeral_vrf_sdk::consts::DEFAULT_EPHEMERAL_QUEUE;
+use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix, RequestRandomnessParams};
+use ephemeral_vrf_sdk::types::SerializableAccountMeta;
 use mochi_engine::data::{BOT_BUILDS, BOT_DAYS, BOT_K, SIM_VERSION};
 use mochi_engine::ghost::{journal_day, GhostSet, JOURNAL_MAX, MAX_GHOSTS};
-use mochi_engine::run::{hero_choices, RunState, PHASE_DEAD, PHASE_LASTCHANCE, PHASE_MARK, PHASE_SHOP, PHASE_WON, RUN_STATE_SIZE};
+use mochi_engine::run::{hero_choices, RunState, PHASE_DEAD, PHASE_LASTCHANCE, PHASE_MARK, PHASE_RELIC, PHASE_SHOP, PHASE_WON, RUN_STATE_SIZE};
 use mochi_engine::types::Build;
 use solana_sha256_hasher::hashv;
 
@@ -34,7 +41,17 @@ declare_id!("Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh");
 pub const PLAYER_MAGIC: u32 = 0x4D50_4C31; // "MPL1"
 pub const POOL_MAGIC: u32 = 0x4D50_4F31; // "MPO1"
 pub const RANK_MAGIC: u32 = 0x4D52_4B31; // "MRK1"
-pub const LAYOUT: u16 = 3;
+pub const SECRET_MAGIC: u32 = 0x4D53_4331; // "MSC1"
+pub const SSECRET_MAGIC: u32 = 0x4D53_5331; // "MSS1"
+/// layout 4 = sim v22 / run v14 (RunState 184 B, 93-byte builds, 7-byte ghost skills, RunSecret)
+pub const LAYOUT: u16 = 4;
+pub const BUILD_BYTES: usize = core::mem::size_of::<Build>();
+/// a VRF request that got no callback for this many slots may be re-sent (same run, output never seen)
+pub const VRF_TIMEOUT_SLOTS: u64 = 3_000;
+/// RunSecret.status
+pub const SEC_NONE: u32 = 0;
+pub const SEC_WAITING: u32 = 1;
+pub const SEC_SET: u32 = 2;
 /// a session key is valid for at most this long (the owner re-approves after)
 pub const MAX_SESSION: i64 = 7 * 86_400;
 pub const SEATS: usize = 6;
@@ -51,6 +68,8 @@ pub const ST_PICK: u8 = 1;
 pub const ST_RUN: u8 = 2;
 pub const ST_ENDED: u8 = 3;
 pub const ST_FINAL: u8 = 4;
+/// begin_run sent the VRF request; nothing random exists yet
+pub const ST_WAIT_VRF: u8 = 5;
 /// Player.last_kind
 pub const OPP_GHOST: u8 = 1;
 pub const OPP_BOT: u8 = 2;
@@ -62,7 +81,9 @@ pub mod mochi_game {
 
     // ======================= Solana (base layer) =======================
 
-    pub fn init_season(ctx: Context<InitSeason>, id: u32, start_ts: i64, end_ts: i64) -> Result<()> {
+    /// `secret_commit` = sha256(season secret): fixes the season secret before any run starts (RANDOMNESS.md §2)
+    pub fn init_season(ctx: Context<InitSeason>, id: u32, start_ts: i64, end_ts: i64, secret_commit: [u8; 32]) -> Result<()> {
+        ctx.accounts.season.secret_commit = secret_commit;
         require!(end_ts > start_ts, GameError::BadTime);
         let s = &mut ctx.accounts.season;
         s.admin = ctx.accounts.admin.key();
@@ -104,6 +125,7 @@ pub mod mochi_game {
     /// later on the TEE (`join_pool`), because the pool shard is delegated there.
     pub fn init_player(ctx: Context<InitPlayer>, season: u32, shard: u16) -> Result<()> {
         prefund(&ctx.accounts.owner, &ctx.accounts.player.to_account_info(), &ctx.accounts.system_program, 2)?;
+        prefund(&ctx.accounts.owner, &ctx.accounts.run_secret.to_account_info(), &ctx.accounts.system_program, 0)?;
         let mut pl = ctx.accounts.player.load_init()?;
         pl.magic = PLAYER_MAGIC;
         pl.layout = LAYOUT;
@@ -112,6 +134,19 @@ pub mod mochi_game {
         pl.season = season;
         pl.shard = shard;
         pl.seat = NO_SEAT;
+        let mut sx = ctx.accounts.run_secret.load_init()?;
+        sx.magic = SECRET_MAGIC;
+        sx.season = season;
+        sx.owner = ctx.accounts.owner.key();
+        Ok(())
+    }
+
+    /// The season secret's account (on Solana, empty); filled on the TEE by `set_season_secret`.
+    pub fn init_season_secret(ctx: Context<InitSeasonSecret>, season: u32) -> Result<()> {
+        prefund(&ctx.accounts.admin, &ctx.accounts.season_secret.to_account_info(), &ctx.accounts.system_program, 0)?;
+        let mut ss = ctx.accounts.season_secret.load_init()?;
+        ss.magic = SSECRET_MAGIC;
+        ss.season = season;
         Ok(())
     }
 
@@ -140,6 +175,17 @@ pub mod mochi_game {
         let v = ctx.accounts.validator.as_ref().map(|v| v.key());
         let owner = ctx.accounts.owner.key();
         ctx.accounts.delegate_player(&ctx.accounts.owner, &[b"player".as_ref(), &season.to_le_bytes(), owner.as_ref()], DelegateConfig { validator: v, ..Default::default() })?;
+        Ok(())
+    }
+    pub fn delegate_secret(ctx: Context<DelegateSecret>, season: u32) -> Result<()> {
+        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
+        let owner = ctx.accounts.owner.key();
+        ctx.accounts.delegate_run_secret(&ctx.accounts.owner, &[b"secret".as_ref(), &season.to_le_bytes(), owner.as_ref()], DelegateConfig { validator: v, ..Default::default() })?;
+        Ok(())
+    }
+    pub fn delegate_season_secret(ctx: Context<DelegateSeasonSecret>, season: u32) -> Result<()> {
+        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
+        ctx.accounts.delegate_season_secret(&ctx.accounts.admin, &[b"season_secret".as_ref(), &season.to_le_bytes()], DelegateConfig { validator: v, ..Default::default() })?;
         Ok(())
     }
     pub fn delegate_pool(ctx: Context<DelegatePool>, season: u32, shard: u16) -> Result<()> {
@@ -236,6 +282,27 @@ pub mod mochi_game {
         let seeds: &[&[u8]] = &[b"pool", &season.to_le_bytes(), &shard.to_le_bytes(), &[ctx.bumps.pool]];
         permission_cpi(&ctx.accounts.pool.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)
     }
+    /// The run secret's permission: NO members, so no RPC caller (player, session key, admin) can read it.
+    pub fn secret_permission(ctx: Context<SecretPermission>, season: u32) -> Result<()> {
+        let owner = ctx.accounts.owner.key();
+        let bump = ctx.bumps.run_secret;
+        let seeds: &[&[u8]] = &[b"secret", &season.to_le_bytes(), owner.as_ref(), &[bump]];
+        if ctx.accounts.permission.lamports() == 0 {
+            permission_cpi(&ctx.accounts.run_secret.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)?;
+        }
+        ctx.accounts.run_secret.load_mut()?.private = 1;
+        Ok(())
+    }
+    /// The season secret's permission: NO members.
+    pub fn season_secret_permission(ctx: Context<SeasonSecretPermission>, season: u32) -> Result<()> {
+        let bump = ctx.bumps.season_secret;
+        let seeds: &[&[u8]] = &[b"season_secret", &season.to_le_bytes(), &[bump]];
+        if ctx.accounts.permission.lamports() == 0 {
+            permission_cpi(&ctx.accounts.season_secret.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)?;
+        }
+        ctx.accounts.season_secret.load_mut()?.private = 1;
+        Ok(())
+    }
     pub fn ranking_permission(ctx: Context<RankingPermission>, season: u32) -> Result<()> {
         if ctx.accounts.permission.lamports() > 0 {
             return Ok(());
@@ -246,47 +313,98 @@ pub mod mochi_game {
 
     // ======================= TEE: gameplay =======================
 
-    /// Secret salt, written only after delegation (the account is private by then).
-    pub fn set_salt(ctx: Context<PlayerSeason>, salt: u64) -> Result<()> {
-        let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
-        require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
-        require!(pl.salt == 0, GameError::BadStatus);
-        let h = hashv(&[&salt.to_le_bytes()[..], &Clock::get()?.slot.to_le_bytes()[..]]).to_bytes();
-        pl.salt = u64::from_le_bytes(h[..8].try_into().unwrap()) | 1;
+    /// The season secret (admin, on the TEE, once): must match the commitment published at `init_season`.
+    pub fn set_season_secret(ctx: Context<SetSeasonSecret>, secret: [u8; 32]) -> Result<()> {
+        let mut ss = ctx.accounts.season_secret.load_mut()?;
+        require!(ss.magic == SSECRET_MAGIC && ss.season == ctx.accounts.season.id && ss.set == 0, GameError::BadStatus);
+        require!(ss.private == 1 || cfg!(feature = "local"), GameError::NotPrivate);
+        require!(hashv(&[&secret[..]]).to_bytes() == ctx.accounts.season.secret_commit, GameError::BadCommit);
+        ss.secret = secret;
+        ss.set = 1;
         Ok(())
     }
 
-    /// Roll the run seed (fallback randomness: hash of the secret salt + slot) and offer the hero choices.
-    pub fn begin_run(ctx: Context<PlayerSeason>) -> Result<()> {
+    /// Start a run: ONE VRF request; nothing random is computed here (RANDOMNESS.md §2 step 1).
+    pub fn begin_run(ctx: Context<BeginRun>) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let slot = Clock::get()?.slot;
-        let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
-        require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
-        require!(pl.status == ST_IDLE && pl.salt != 0 && pl.seat != NO_SEAT, GameError::BadStatus);
-        let h = hashv(&[&pl.salt.to_le_bytes()[..], &pl.run_no.to_le_bytes()[..], &slot.to_le_bytes()[..]]).to_bytes();
-        let seed = u32::from_le_bytes(h[..4].try_into().unwrap());
-        start_pick(&mut pl, seed);
-        Ok(())
+        let (owner, run_no) = {
+            let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+            let mut sx = ctx.accounts.run_secret.load_mut()?;
+            require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
+            check_secret(&sx, &pl)?;
+            require!(sx.private == 1 || cfg!(feature = "local"), GameError::NotPrivate);
+            require!(pl.status == ST_IDLE && pl.seat != NO_SEAT, GameError::BadStatus);
+            pl.run_no += 1;
+            pl.status = ST_WAIT_VRF;
+            pl.vrf_slot = slot;
+            // the previous run's commitment / choices go: until the callback this run has no random value at all
+            pl.secret_commit = [0; 32];
+            pl.choices = [0; 4];
+            sx.run_no = pl.run_no;
+            sx.status = SEC_WAITING;
+            (pl.owner, pl.run_no)
+        };
+        request_vrf(&ctx, owner, run_no)
     }
 
-    /// Pick one of the offered heroes; the run starts (run.ts newRun).
+    /// A VRF request that never came back (after VRF_TIMEOUT_SLOTS): ask again for the SAME run. Safe: the player
+    /// never saw an output, so a re-request cannot be used to choose one.
+    pub fn retry_vrf(ctx: Context<BeginRun>) -> Result<()> {
+        let slot = Clock::get()?.slot;
+        let (owner, run_no) = {
+            let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+            let sx = ctx.accounts.run_secret.load()?;
+            check_secret(&sx, &pl)?;
+            require!(pl.status == ST_WAIT_VRF && sx.status == SEC_WAITING && sx.run_no == pl.run_no, GameError::BadStatus);
+            require!(slot >= pl.vrf_slot + VRF_TIMEOUT_SLOTS, GameError::BadTime);
+            pl.vrf_slot = slot;
+            (pl.owner, pl.run_no)
+        };
+        request_vrf(&ctx, owner, run_no)
+    }
+
+    /// VRF callback (signed by the VRF program's scoped identity for this program): derive the run secret, commit to
+    /// it, offer the heroes (RANDOMNESS.md §2 step 2).
+    pub fn vrf_callback(ctx: Context<VrfCallback>, randomness: [u8; 32]) -> Result<()> {
+        let mut pl = ctx.accounts.player.load_mut()?;
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
+        let ss = ctx.accounts.season_secret.load()?;
+        fulfill(&mut pl, &mut sx, &ss, &randomness)
+    }
+
+    /// LOCAL VALIDATOR ONLY (feature "local", never deployed): the admin stands in for the VRF oracle.
+    #[cfg(feature = "local")]
+    pub fn local_vrf(ctx: Context<LocalVrf>, randomness: [u8; 32]) -> Result<()> {
+        require_keys_eq!(ctx.accounts.season.admin, ctx.accounts.admin.key(), GameError::NotOwner);
+        let mut pl = ctx.accounts.player.load_mut()?;
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
+        let ss = ctx.accounts.season_secret.load()?;
+        fulfill(&mut pl, &mut sx, &ss, &randomness)
+    }
+
+    /// Pick one of the offered heroes; the run starts (run.ts newRun with the secret).
     pub fn pick_hero(ctx: Context<PlayerSeason>, choice: u8) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let sx = ctx.accounts.run_secret.load()?;
         require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
-        require!(pl.status == ST_PICK && (choice as usize) < 3, GameError::BadStatus);
+        check_secret(&sx, &pl)?;
+        require!(pl.status == ST_PICK && (choice as usize) < 3 && sx.status == SEC_SET && sx.run_no == pl.run_no, GameError::BadStatus);
         let hero = pl.choices[choice as usize];
-        start_run(&mut pl, hero);
+        start_run(&mut pl, hero, sx.rs);
         Ok(())
     }
 
-    /// One player action (shop, last chance, mark, concede), phase-guarded.
+    /// One player action (shop, relic day, last chance, mark, concede), phase-guarded.
     pub fn act(ctx: Context<PlayerSeason>, code: u8, a: i8, b: i8) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let sx = ctx.accounts.run_secret.load()?;
         require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
-        require!(pl.status == ST_RUN, GameError::BadStatus);
-        require!(apply(run_mut(&mut pl), code, a as i64, b as i64), GameError::Rejected);
+        check_secret(&sx, &pl)?;
+        require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
+        require!(apply(run_mut(&mut pl), code, a as i64, b as i64, sx.rs), GameError::Rejected);
         after_actions(&mut pl);
         Ok(())
     }
@@ -297,12 +415,14 @@ pub mod mochi_game {
         season_active(&ctx.accounts.season)?;
         require!(actions.len() % 3 == 0 && !actions.is_empty() && actions.len() / 3 <= MAX_BATCH, GameError::BatchSize);
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let sx = ctx.accounts.run_secret.load()?;
         require!(ctx.accounts.season.id == pl.season, GameError::BadAccount);
-        require!(pl.status == ST_RUN, GameError::BadStatus);
+        check_secret(&sx, &pl)?;
+        require!(pl.status == ST_RUN && sx.status == SEC_SET, GameError::BadStatus);
         let mut s = *run_mut(&mut pl);
         let n = actions.len() / 3;
         for (i, x) in actions.chunks_exact(3).enumerate() {
-            if !apply(&mut s, x[0], x[1] as i8 as i64, x[2] as i8 as i64) {
+            if !apply(&mut s, x[0], x[1] as i8 as i64, x[2] as i8 as i64, sx.rs) {
                 msg!("batch: action {} rejected", i);
                 return err!(GameError::Rejected);
             }
@@ -321,17 +441,19 @@ pub mod mochi_game {
         season_active(&ctx.accounts.season)?;
         let slot = Clock::get()?.slot;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
         let mut pool = ctx.accounts.pool.load_mut()?;
         let mut rk = ctx.accounts.ranking.load_mut()?;
         bind(&ctx.accounts.season, &pl, &pool, &rk)?;
-        require!(pl.status == ST_RUN && run_mut(&mut pl).phase == PHASE_SHOP, GameError::BadPhase);
+        check_secret(&sx, &pl)?;
+        require!(pl.status == ST_RUN && sx.status == SEC_SET && run_mut(&mut pl).phase == PHASE_SHOP, GameError::BadPhase);
         let day = run_mut(&mut pl).day;
-        pool.nonce = pool.nonce.wrapping_add(1);
-        let h = hashv(&[&pl.salt.to_le_bytes()[..], &pl.run_no.to_le_bytes()[..], &[day][..], &pool.nonce.to_le_bytes()[..], &slot.to_le_bytes()[..]]).to_bytes();
+        // fight seed + opponent pick from the secret and the day only: a failed / retried transaction gets the same
+        let h = hashv(&[&sx.secret[..], &b"fight"[..], &[day][..]]).to_bytes();
         let seed = u32::from_le_bytes(h[..4].try_into().unwrap());
-        let mut r = u32::from_le_bytes(h[4..8].try_into().unwrap()) as u64 | 1;
+        let mut r = u64::from_le_bytes(h[8..16].try_into().unwrap()) | 1;
         let (opp, kind) = pick_opponent(&mut pl, &pool, day, &mut r);
-        do_fight(&mut pl, &mut pool, &mut rk, &opp, kind, seed, slot);
+        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, kind, seed, slot);
         Ok(())
     }
 
@@ -339,11 +461,13 @@ pub mod mochi_game {
     pub fn finish_run(ctx: Context<Fight>) -> Result<()> {
         let slot = Clock::get()?.slot;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
         let mut pool = ctx.accounts.pool.load_mut()?;
         let mut rk = ctx.accounts.ranking.load_mut()?;
         bind(&ctx.accounts.season, &pl, &pool, &rk)?;
+        check_secret(&sx, &pl)?;
         require!(pl.status == ST_ENDED, GameError::BadStatus);
-        archive(&mut pl, &mut pool, &mut rk, slot);
+        archive(&mut pl, &mut sx, &mut pool, &mut rk, slot);
         Ok(())
     }
 
@@ -389,22 +513,29 @@ pub mod mochi_game {
         {
             let mut pl = ctx.accounts.player.load_mut()?;
             require!(pl.magic == PLAYER_MAGIC && pl.season == ctx.accounts.season.id, GameError::BadAccount);
-            pl.salt = 0;
+            let mut sx = ctx.accounts.run_secret.load_mut()?;
+            check_secret(&sx, &pl)?;
+            // the committed copies are public: no secret, no unfinished run state leaves the TEE
+            sx.secret = [0; 32];
+            sx.vrf = [0; 32];
+            sx.rs = 0;
+            sx.status = SEC_NONE;
             pl.seen = 0;
-            pl.pending_seed = 0;
+            pl.look_seed = 0;
+            pl.secret_commit = [0; 32];
             pl.choices = [0; 4];
             pl.run = [0; RUN_STATE_SIZE];
-            pl.prev = [0; 82];
+            pl.prev = [0; BUILD_BYTES];
             pl.journal = [0; JOURNAL_MAX];
             pl.journal_len = 0;
-            pl.last_opp = [0; 82];
+            pl.last_opp = [0; BUILD_BYTES];
             pl.last_seed = 0;
             pl.claim_proof = [0; 32 * LB_DEPTH];
             pl.claim_ready = 0;
             pl.status = ST_FINAL;
         }
         MagicIntentBundleBuilder::new(ctx.accounts.payer.to_account_info(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
-            .commit_and_undelegate(&[ctx.accounts.player.to_account_info()])
+            .commit_and_undelegate(&[ctx.accounts.player.to_account_info(), ctx.accounts.run_secret.to_account_info()])
             .build_and_invoke()?;
         Ok(())
     }
@@ -442,11 +573,16 @@ pub mod mochi_game {
 
     // ---------------- bench only (feature "bench"): replay recorded runs exactly ----------------
     #[cfg(feature = "bench")]
-    pub fn bench_begin(ctx: Context<PlayerSeason>, seed: u32, hero: u8) -> Result<()> {
+    pub fn bench_begin(ctx: Context<PlayerSeason>, seed: u32, secret: u32, hero: u8) -> Result<()> {
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
         require!(pl.status == ST_IDLE && pl.seat != NO_SEAT, GameError::BadStatus);
-        start_pick(&mut pl, seed);
-        start_run(&mut pl, hero);
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
+        pl.run_no += 1;
+        sx.run_no = pl.run_no;
+        sx.status = SEC_SET;
+        sx.rs = secret;
+        pl.look_seed = seed;
+        start_run(&mut pl, hero, secret);
         Ok(())
     }
     #[cfg(feature = "bench")]
@@ -459,29 +595,37 @@ pub mod mochi_game {
         Ok(())
     }
     #[cfg(feature = "bench")]
-    pub fn bench_fight_vs(ctx: Context<Fight>, opp: [u8; 82], seed: u32) -> Result<()> {
+    pub fn bench_fight_vs(ctx: Context<Fight>, opp: [u8; BUILD_BYTES], seed: u32) -> Result<()> {
         season_active(&ctx.accounts.season)?;
         let slot = Clock::get()?.slot;
         let mut pl = player_mut(&ctx.accounts.player, &ctx.accounts.owner)?;
+        let mut sx = ctx.accounts.run_secret.load_mut()?;
         let mut pool = ctx.accounts.pool.load_mut()?;
         let mut rk = ctx.accounts.ranking.load_mut()?;
         bind(&ctx.accounts.season, &pl, &pool, &rk)?;
         require!(pl.status == ST_RUN && run_mut(&mut pl).phase == PHASE_SHOP, GameError::BadPhase);
         let opp: Build = read_build(&opp);
-        do_fight(&mut pl, &mut pool, &mut rk, &opp, OPP_BOT, seed, slot);
+        do_fight(&mut pl, &mut sx, &mut pool, &mut rk, &opp, OPP_BOT, seed, slot);
         Ok(())
     }
 }
 
 // ======================= rules the chain adds =======================
 
-/// Phase guard + strict validity, then the engine action. Returns accepted.
-fn apply(s: &mut RunState, code: u8, a: i64, b: i64) -> bool {
+/// Phase guard + strict validity, then the engine action (codes as engine/diff/run-gen.mts). Returns accepted.
+/// `rs` = the run's secret roll seed (RunSecret.rs): every roll of the run comes from it.
+fn apply(s: &mut RunState, code: u8, a: i64, b: i64, rs: u32) -> bool {
     let n = s.n as i64;
+    let sec = Some(rs);
     let idx = |x: i64| if x < 0 { usize::MAX } else { x as usize };
     match code {
         0..=6 if s.phase != PHASE_SHOP => false,
-        0 => s.buy(idx(a)),
+        11 | 12 if s.phase != PHASE_RELIC => false,
+        // b = branch of an upgrade: -1 = the card's own, 0 / 1 = the first / second next branch
+        0 => {
+            if b < -1 || b > 1 { return false; }
+            s.buy(idx(a), if b < 0 { None } else { Some(b as usize) })
+        }
         1 => {
             if a < 0 || a >= n { return false; }
             s.sell(a as usize);
@@ -492,40 +636,76 @@ fn apply(s: &mut RunState, code: u8, a: i64, b: i64) -> bool {
             s.move_skill(a, b);
             true
         }
-        3 => s.reroll(),
+        3 => s.reroll(sec),
         4 => s.toggle_lock(idx(a)),
         5 => s.buy_slot(),
-        6 => s.wish(),
+        6 => s.wish(sec),
         7 => {
             if s.phase != PHASE_LASTCHANCE || !(0..=2).contains(&a) { return false; }
-            s.choose_last_chance(a as u8);
+            s.choose_last_chance(a as u8, sec);
             true
         }
-        8 => {
-            if s.phase != PHASE_MARK || a < -1 || a >= n { return false; }
-            s.apply_mark(a);
-            true
-        }
+        8 => s.phase == PHASE_MARK && s.apply_mark(a, sec),
         9 => {
             if s.phase == PHASE_WON || s.phase == PHASE_DEAD { return false; }
             s.concede();
             true
         }
+        11 => s.pick_relic(a),
+        12 => s.reroll_relic(sec),
         _ => false,
     }
 }
 
-fn start_pick(pl: &mut Player, seed: u32) {
-    pl.pending_seed = seed;
-    let c = hero_choices(seed);
+/// RANDOMNESS.md §2 step 2: run secret = H(vrf ‖ season secret ‖ owner ‖ run), public commitment, hero choices.
+fn fulfill(pl: &mut Player, sx: &mut RunSecret, ss: &SeasonSecret, randomness: &[u8; 32]) -> Result<()> {
+    require!(pl.magic == PLAYER_MAGIC && pl.layout == LAYOUT, GameError::BadLayout);
+    check_secret(sx, pl)?;
+    require!(ss.magic == SSECRET_MAGIC && ss.season == pl.season && ss.set == 1, GameError::BadAccount);
+    require!(pl.status == ST_WAIT_VRF && sx.status == SEC_WAITING && sx.run_no == pl.run_no, GameError::BadStatus);
+    let run = pl.run_no.to_le_bytes();
+    let secret = hashv(&[&b"mochi-run"[..], &randomness[..], &ss.secret[..], pl.owner.as_ref(), &run[..]]).to_bytes();
+    sx.secret = secret;
+    sx.vrf = *randomness;
+    sx.rs = u32_of(&hashv(&[&secret[..], &b"run"[..]]).to_bytes());
+    sx.status = SEC_SET;
+    pl.secret_commit = hashv(&[&b"mochi-commit"[..], &secret[..], &run[..]]).to_bytes();
+    pl.look_seed = u32_of(&hashv(&[&secret[..], &b"look"[..]]).to_bytes());
+    let c = hero_choices(u32_of(&hashv(&[&secret[..], &b"heroes"[..]]).to_bytes()));
     pl.choices = [c[0], c[1], c[2], 0];
     pl.status = ST_PICK;
+    Ok(())
+}
+fn u32_of(h: &[u8; 32]) -> u32 {
+    u32::from_le_bytes(h[..4].try_into().unwrap())
+}
+/// the VRF request of begin_run / retry_vrf; the callback gets Player, RunSecret, SeasonSecret
+fn request_vrf(ctx: &Context<BeginRun>, owner: Pubkey, run_no: u32) -> Result<()> {
+    let caller_seed = hashv(&[&b"mochi-vrf"[..], &ctx.accounts.season.id.to_le_bytes()[..], owner.as_ref(), &run_no.to_le_bytes()[..]]).to_bytes();
+    let meta = |k: Pubkey, w: bool| SerializableAccountMeta { pubkey: k.to_bytes().into(), is_signer: false, is_writable: w };
+    let ix = create_request_randomness_ix(RequestRandomnessParams {
+        payer: ctx.accounts.owner.key().to_bytes().into(),
+        oracle_queue: ctx.accounts.oracle_queue.key().to_bytes().into(),
+        callback_program_id: crate::ID.to_bytes().into(),
+        callback_discriminator: instruction::VrfCallback::DISCRIMINATOR.to_vec(),
+        caller_seed,
+        accounts_metas: Some(vec![meta(ctx.accounts.player.key(), true), meta(ctx.accounts.run_secret.key(), true), meta(ctx.accounts.season_secret.key(), false)]),
+        ..Default::default()
+    });
+    if cfg!(feature = "local") {
+        return Ok(()); // no VRF oracle on a local validator: the admin answers with `local_vrf`
+    }
+    ctx.accounts.invoke_signed_vrf(&ctx.accounts.owner.to_account_info(), &ix)?;
+    Ok(())
+}
+fn check_secret(sx: &RunSecret, pl: &Player) -> Result<()> {
+    require!(sx.magic == SECRET_MAGIC && sx.season == pl.season && sx.owner == pl.owner, GameError::BadAccount);
+    Ok(())
 }
 
-fn start_run(pl: &mut Player, hero: u8) {
-    let s = RunState::new(hero, pl.pending_seed);
+fn start_run(pl: &mut Player, hero: u8, rs: u32) {
+    let s = RunState::new(hero, pl.look_seed, Some(rs));
     *run_mut(pl) = s;
-    pl.run_no += 1;
     pl.journal_len = 0;
     pl.fought = 0;
     pl.prev = build_bytes(&Build { hero, ..Default::default() });
@@ -579,7 +759,7 @@ fn pick_opponent(pl: &mut Player, pool: &Pool, day: u8, r: &mut u64) -> (Build, 
     (ghost_set(pool, bit / MAX_GHOSTS).build(bit % MAX_GHOSTS, day), OPP_GHOST)
 }
 
-fn do_fight(pl: &mut Player, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kind: u8, seed: u32, slot: u64) {
+fn do_fight(pl: &mut Player, sx: &mut RunSecret, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kind: u8, seed: u32, slot: u64) {
     let (day, cur) = {
         let run = run_mut(pl);
         (run.day, run.to_build())
@@ -590,7 +770,7 @@ fn do_fight(pl: &mut Player, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kin
     pl.journal_len += w as u16;
     pl.prev = build_bytes(&cur);
     pl.fought = day;
-    let o = run_mut(pl).fight(opp, seed);
+    let o = run_mut(pl).fight(opp, seed, Some(sx.rs));
     // the last fight, for the client's replay: simulate(build of `day`, last_opp, last_seed, day)
     pl.last_opp = build_bytes(opp);
     pl.last_seed = seed;
@@ -599,12 +779,21 @@ fn do_fight(pl: &mut Player, pool: &mut Pool, rk: &mut Ranking, opp: &Build, kin
     pl.last_result = (o.winner + 2) as u8; // 1 draw, 2 won, 3 lost
     let ph = run_mut(pl).phase;
     if ph == PHASE_WON || ph == PHASE_DEAD {
-        archive(pl, pool, rk, slot);
+        archive(pl, sx, pool, rk, slot);
     }
 }
 
-/// Store the run's ghost (final build + every fought day) and update the personal best + ranking.
-fn archive(pl: &mut Player, pool: &mut Pool, rk: &mut Ranking, slot: u64) {
+/// Store the run's ghost (final build + every fought day), update the personal best + ranking, and reveal the
+/// run's secret (anyone can now re-check every roll of the run against `secret_commit`).
+fn archive(pl: &mut Player, sx: &mut RunSecret, pool: &mut Pool, rk: &mut Ranking, slot: u64) {
+    pl.revealed_secret = sx.secret;
+    pl.revealed_vrf = sx.vrf;
+    pl.revealed_run = pl.run_no;
+    sx.secret = [0; 32];
+    sx.vrf = [0; 32];
+    sx.rs = 0;
+    sx.status = SEC_NONE;
+
     let (cur, hero, wins, hp) = {
         let run = run_mut(pl);
         (run.to_build(), run.hero, run.wins, run.hp)
@@ -716,12 +905,11 @@ fn permission_cpi<'info>(
 
 // ======================= zero-copy views + checks =======================
 
-const _: () = assert!(core::mem::offset_of!(Player, run) % 4 == 0 && core::mem::size_of::<Player>() == 1680);
-const _: () = assert!(core::mem::offset_of!(Player, session_expiry) == 1640 && core::mem::offset_of!(Player, session_key) == 1648);
-const _: () = assert!(core::mem::offset_of!(Pool, ghosts) % 4 == 0 && GHOST_SET == 1600);
+const _: () = assert!(core::mem::offset_of!(Player, run) % 4 == 0 && core::mem::size_of::<Player>() % 8 == 0);
+const _: () = assert!(core::mem::offset_of!(Pool, ghosts) % 4 == 0 && GHOST_SET == 1600 && BUILD_BYTES == 93 && RUN_STATE_SIZE == 184);
 
 fn run_mut(pl: &mut Player) -> &mut RunState {
-    // run is 164 bytes at a 4-aligned offset of an 8-aligned account: a valid, aligned RunState (integers only)
+    // run is 184 bytes at a 4-aligned offset of an 8-aligned account: a valid, aligned RunState (integers only)
     unsafe { &mut *(pl.run.as_mut_ptr() as *mut RunState) }
 }
 fn ghost_set(pool: &Pool, seat: usize) -> &GhostSet {
@@ -730,10 +918,10 @@ fn ghost_set(pool: &Pool, seat: usize) -> &GhostSet {
 fn ghost_set_mut(pool: &mut Pool, seat: usize) -> &mut GhostSet {
     unsafe { &mut *(pool.ghosts.as_mut_ptr().add(seat * GHOST_SET) as *mut GhostSet) }
 }
-fn build_bytes(b: &Build) -> [u8; 82] {
+fn build_bytes(b: &Build) -> [u8; BUILD_BYTES] {
     unsafe { core::mem::transmute_copy(b) }
 }
-fn read_build(x: &[u8; 82]) -> Build {
+fn read_build(x: &[u8; BUILD_BYTES]) -> Build {
     unsafe { core::ptr::read_unaligned(x.as_ptr() as *const Build) }
 }
 
@@ -787,21 +975,42 @@ pub struct Season {
     pub id: u32,
     pub start_ts: i64,
     pub end_ts: i64,
+    /// sha256(season secret), published before the season starts (RANDOMNESS.md §2)
+    pub secret_commit: [u8; 32],
 }
 
+const PLAYER_HEAD: usize = 4 * 8 + 5 * 32 + 9 * 4 + 4 * 2 + 8 + 4;
+const PLAYER_BODY: usize = PLAYER_HEAD + RUN_STATE_SIZE + 2 * BUILD_BYTES + JOURNAL_MAX + 32 * LB_DEPTH;
+pub const PLAYER_PAD: usize = (8 - PLAYER_BODY % 8) % 8;
+
 /// One per player per season. Zero-copy; `run` is a mochi_engine RunState, `prev` / `last_opp` are Builds.
+/// Readable by its owner + session key (TEE permission). Holds NO secret of a run in progress: only the commitment
+/// (`secret_commit`) and, after a run ended, that run's revealed secret.
 #[account(zero_copy)]
 pub struct Player {
-    pub salt: u64,
+    /// slot of the pending VRF request (retry_vrf after VRF_TIMEOUT_SLOTS)
+    pub vrf_slot: u64,
     pub seen: u64,
     pub best_slot: u64,
+    /// session key the owner approved (wallet signs once); valid while now < session_expiry (unix ts)
+    pub session_expiry: i64,
     pub owner: Pubkey,
+    pub session_key: Pubkey,
+    /// sha256("mochi-commit" ‖ secret ‖ run_no) of the run in progress
+    pub secret_commit: [u8; 32],
+    /// the last ENDED run (revealed_run): its secret and the VRF output it came from
+    pub revealed_secret: [u8; 32],
+    pub revealed_vrf: [u8; 32],
     pub magic: u32,
     pub season: u32,
     pub run_no: u32,
     pub resets: u32,
     pub best_score: u32,
-    pub pending_seed: u32,
+    /// the run's cosmetic seed (RunState.seed): H(secret, "look"); no roll uses it
+    pub look_seed: u32,
+    pub last_seed: u32,
+    pub claim_reward: u32,
+    pub revealed_run: u32,
     pub layout: u16,
     pub sim: u16,
     pub shard: u16,
@@ -809,25 +1018,49 @@ pub struct Player {
     pub seat: u8,
     pub status: u8,
     pub fought: u8,
-    pub _r: u8,
-    pub choices: [u8; 4],
-    pub run: [u8; RUN_STATE_SIZE],
-    pub prev: [u8; 82],
-    pub journal: [u8; JOURNAL_MAX],
-    /// the last fight (client replay): opponent build, day, result (1 draw, 2 won, 3 lost), opponent kind
-    pub last_opp: [u8; 82],
+    /// the last fight (client replay): day, result (1 draw, 2 won, 3 lost), opponent kind
     pub last_day: u8,
     pub last_result: u8,
     pub last_kind: u8,
     pub claim_ready: u8,
     pub claim_rank: u8,
-    pub last_seed: u32,
-    pub claim_reward: u32,
+    pub choices: [u8; 4],
+    pub run: [u8; RUN_STATE_SIZE],
+    pub prev: [u8; BUILD_BYTES],
+    pub last_opp: [u8; BUILD_BYTES],
+    pub journal: [u8; JOURNAL_MAX],
     pub claim_proof: [u8; 32 * LB_DEPTH],
-    pub _p2: [u8; 4],
-    /// session key the owner approved (wallet signs once); valid while now < session_expiry (unix ts)
-    pub session_expiry: i64,
-    pub session_key: Pubkey,
+    pub _pad: [u8; PLAYER_PAD],
+}
+const _: () = assert!(core::mem::offset_of!(Player, run) == PLAYER_HEAD && core::mem::size_of::<Player>() == PLAYER_BODY + PLAYER_PAD);
+
+/// The run secret (PDA ["secret", season, owner]). Its TEE permission has NO members: no RPC caller can read it;
+/// only this program, while executing, does. Scrubbed before it ever leaves the TEE.
+#[account(zero_copy)]
+pub struct RunSecret {
+    pub magic: u32,
+    pub season: u32,
+    pub run_no: u32,
+    /// SEC_NONE / SEC_WAITING (VRF requested) / SEC_SET
+    pub status: u32,
+    /// the engine's roll seed: u32(H(secret, "run"))
+    pub rs: u32,
+    /// 1 once the zero-member permission exists (begin_run requires it)
+    pub private: u32,
+    pub owner: Pubkey,
+    pub secret: [u8; 32],
+    pub vrf: [u8; 32],
+}
+
+/// The season secret (PDA ["season_secret", season]): mixed into every run secret so the VRF oracle alone can't
+/// compute one. Zero-member permission; its hash is Season.secret_commit.
+#[account(zero_copy)]
+pub struct SeasonSecret {
+    pub magic: u32,
+    pub season: u32,
+    pub set: u32,
+    pub private: u32,
+    pub secret: [u8; 32],
 }
 
 #[account(zero_copy)]
@@ -929,7 +1162,143 @@ pub struct InitPlayer<'info> {
     pub owner: Signer<'info>,
     #[account(init, payer = owner, space = 8 + core::mem::size_of::<Player>(), seeds = [b"player".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
     pub player: AccountLoader<'info, Player>,
+    #[account(init, payer = owner, space = 8 + core::mem::size_of::<RunSecret>(), seeds = [b"secret".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+#[instruction(season: u32)]
+pub struct InitSeasonSecret<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(has_one = admin, seeds = [b"season".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_acc: Account<'info, Season>,
+    #[account(init, payer = admin, space = 8 + core::mem::size_of::<SeasonSecret>(), seeds = [b"season_secret".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
+    pub system_program: Program<'info, System>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+#[instruction(season: u32)]
+pub struct DelegateSecret<'info> {
+    pub owner: Signer<'info>,
+    /// CHECK: delegated PDA
+    #[account(mut, del, seeds = [b"secret".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
+    pub run_secret: UncheckedAccount<'info>,
+    /// CHECK: checked by the delegation program
+    pub validator: Option<UncheckedAccount<'info>>,
+}
+
+#[delegate]
+#[derive(Accounts)]
+#[instruction(season: u32)]
+pub struct DelegateSeasonSecret<'info> {
+    pub admin: Signer<'info>,
+    #[account(has_one = admin, seeds = [b"season".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_acc: Account<'info, Season>,
+    /// CHECK: delegated PDA
+    #[account(mut, del, seeds = [b"season_secret".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_secret: UncheckedAccount<'info>,
+    /// CHECK: checked by the delegation program
+    pub validator: Option<UncheckedAccount<'info>>,
+}
+
+#[derive(Accounts)]
+#[instruction(season: u32)]
+pub struct SecretPermission<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut, seeds = [b"secret".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    /// CHECK: verified by the permission program
+    #[account(mut, seeds = [PERMISSION_SEED, run_secret.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub permission: UncheckedAccount<'info>,
+    /// CHECK: Permission Program
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: verified by the magic program
+    #[account(mut, address = EPHEMERAL_VAULT_ID)]
+    pub ephemeral_vault: UncheckedAccount<'info>,
+    /// CHECK: Magic Program
+    #[account(address = MAGIC_PROGRAM_ID)]
+    pub magic_program: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
+#[instruction(season: u32)]
+pub struct SeasonSecretPermission<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(has_one = admin, seeds = [b"season".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_acc: Account<'info, Season>,
+    #[account(mut, seeds = [b"season_secret".as_ref(), &season.to_le_bytes()], bump)]
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
+    /// CHECK: verified by the permission program
+    #[account(mut, seeds = [PERMISSION_SEED, season_secret.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    pub permission: UncheckedAccount<'info>,
+    /// CHECK: Permission Program
+    #[account(address = PERMISSION_PROGRAM_ID)]
+    pub permission_program: UncheckedAccount<'info>,
+    /// CHECK: verified by the magic program
+    #[account(mut, address = EPHEMERAL_VAULT_ID)]
+    pub ephemeral_vault: UncheckedAccount<'info>,
+    /// CHECK: Magic Program
+    #[account(address = MAGIC_PROGRAM_ID)]
+    pub magic_program: UncheckedAccount<'info>,
+}
+
+#[derive(Accounts)]
+pub struct SetSeasonSecret<'info> {
+    pub admin: Signer<'info>,
+    #[account(has_one = admin)]
+    pub season: Account<'info, Season>,
+    #[account(mut, seeds = [b"season_secret".as_ref(), &season.id.to_le_bytes()], bump)]
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
+}
+
+/// begin_run / retry_vrf: the player's accounts + the VRF request accounts (`#[vrf]` adds program_identity,
+/// vrf_program, slot_hashes, system_program)
+#[vrf]
+#[derive(Accounts)]
+pub struct BeginRun<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    #[account(seeds = [b"season_secret".as_ref(), &season.id.to_le_bytes()], bump)]
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
+    pub season: Account<'info, Season>,
+    /// CHECK: the ephemeral VRF queue
+    #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE.to_bytes().into())]
+    pub oracle_queue: UncheckedAccount<'info>,
+}
+
+/// The VRF callback (`#[vrf_callback]` adds the scoped VRF identity signer)
+#[vrf_callback]
+#[derive(Accounts)]
+pub struct VrfCallback<'info> {
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
+}
+
+#[cfg(feature = "local")]
+#[derive(Accounts)]
+pub struct LocalVrf<'info> {
+    pub admin: Signer<'info>,
+    pub season: Account<'info, Season>,
+    #[account(mut)]
+    pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
+    #[account(seeds = [b"season_secret".as_ref(), &season.id.to_le_bytes()], bump)]
+    pub season_secret: AccountLoader<'info, SeasonSecret>,
 }
 
 #[derive(Accounts)]
@@ -1062,12 +1431,14 @@ pub struct OwnerOnly<'info> {
     pub player: AccountLoader<'info, Player>,
 }
 
-/// Signer (owner or session key) + their Player + Season (id checked against the player's).
+/// Signer (owner or session key) + their Player + RunSecret + Season (all checked against the player's).
 #[derive(Accounts)]
 pub struct PlayerSeason<'info> {
     pub owner: Signer<'info>,
     #[account(mut)]
     pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
     pub season: Account<'info, Season>,
 }
 
@@ -1076,6 +1447,8 @@ pub struct Fight<'info> {
     pub owner: Signer<'info>,
     #[account(mut)]
     pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
     #[account(mut)]
     pub pool: AccountLoader<'info, Pool>,
     #[account(mut)]
@@ -1113,6 +1486,8 @@ pub struct FinalizePlayer<'info> {
     pub season: Account<'info, Season>,
     #[account(mut)]
     pub player: AccountLoader<'info, Player>,
+    #[account(mut)]
+    pub run_secret: AccountLoader<'info, RunSecret>,
 }
 
 #[commit]
@@ -1167,4 +1542,9 @@ pub enum GameError {
     NotRanked,
     #[msg("bad merkle proof")]
     BadProof,
+    #[msg("the secret account is not private yet (zero-member permission missing)")]
+    NotPrivate,
+    #[msg("value does not match its commitment")]
+    BadCommit,
 }
+

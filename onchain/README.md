@@ -39,17 +39,19 @@ Accounts per season: `Season` (times), `Ranking` (top 16 + reward Merkle root), 
 one `Player` per wallet (run state, journal of every day's build, session key). Player, pool and ranking are
 delegated to the TEE and private (permission program); only the season's final results come back to Solana.
 
-Instructions:
+Instructions (sim v22, layout 4; randomness: docs/RANDOMNESS.md):
 
-- **admin / season:** `init_season`, `set_season_end`, `init_pool`, `init_ranking`, `delegate_pool`,
-  `delegate_ranking`, `pool_permission`, `ranking_permission`
-- **player setup (owner signs, 2 approvals):** `init_player` + `delegate_player`, then `set_session` +
-  `player_permission`; `revoke_session`
-- **play (owner or session key, on the TEE):** `set_salt`, `join_pool`, `begin_run`, `pick_hero`, `act`,
-  `act_batch` (≤ 32 actions, atomic), `fight` (vs a ghost from the pool, or a bot), `finish_run`
-- **season end:** `close_season`, `issue_proof`, `finalize_player` (scrub + commit back to Solana), `publish_root`,
-  `clear_pool`, then players `claim_reward` with their Merkle proof
-- `bench_*` exist only with `--features bench` (forced seeds for replaying recorded runs), never in production
+- **admin / season:** `init_season` (+ season secret commitment), `init_season_secret`, `delegate_season_secret`,
+  `season_secret_permission` (no members), `set_season_secret` (TEE, must match the commitment), `set_season_end`,
+  `init_pool`, `init_ranking`, `delegate_pool`, `delegate_ranking`, `pool_permission`, `ranking_permission`
+- **player setup (owner signs):** `init_player` (creates Player + RunSecret), `delegate_player`, `delegate_secret`,
+  then on the TEE `set_session` + `player_permission`, `secret_permission` (no members); `revoke_session`
+- **play (owner or session key, on the TEE):** `join_pool`, `begin_run` (VRF request), `vrf_callback` (VRF program only),
+  `retry_vrf` (after VRF_TIMEOUT_SLOTS), `pick_hero`, `act`, `act_batch` (≤ 32 actions, atomic), `fight`, `finish_run`
+- **season end:** `close_season`, `issue_proof`, `finalize_player` (scrub Player + RunSecret, commit back to Solana),
+  `publish_root`, `clear_pool`, then players `claim_reward` with their Merkle proof
+- `local_vrf` exists only with `--features local` (local validator: the admin answers VRF requests); `bench_*` only with
+  `--features bench`. Neither is ever deployed.
 
 Session keys: the owner approves a browser key for at most 7 days; it can only call the play instructions, can be
 revoked, and is a member of the account's privacy permission together with the owner.

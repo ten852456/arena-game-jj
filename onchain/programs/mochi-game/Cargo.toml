@@ -1,7 +1,7 @@
 [package]
 name = "mochi-game"
 version = "0.1.0"
-description = "Mochi Moon on-chain game (stage 5): real engine, zero-copy state, phase guards, batching, compressed ghosts"
+description = "Mochi Moon on-chain game (sim v22): real engine, secret seed (VRF), zero-copy state, phase guards, batching, compressed ghosts"
 edition = "2021"
 
 [lib]
@@ -12,6 +12,8 @@ name = "mochi_game"
 default = []
 # bench-only instructions (forced seed / given opponent) for replaying recorded runs exactly; never in production
 bench = []
+# LOCAL VALIDATOR ONLY: no VRF oracle / TEE permissions there, the admin answers VRF requests (local_vrf); never deploy
+local = []
 cpi = ["no-entrypoint"]
 no-entrypoint = []
 no-idl = []
@@ -27,3 +29,4 @@ bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 solana-sha256-hasher = "3.1.0"
 mochi-engine = { path = "../../engine/mochi-engine" }
 ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
+ephemeral-vrf-sdk = { version = "0.17.3", features = ["anchor"] }

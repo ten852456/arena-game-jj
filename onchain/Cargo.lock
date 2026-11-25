@@ -736,8 +736,8 @@ dependencies = [
  "ephemeral-rollups-sdk-attribute-delegate",
  "ephemeral-rollups-sdk-attribute-ephemeral",
  "ephemeral-rollups-sdk-attribute-ephemeral-accounts",
- "ephemeral-vrf-sdk",
- "ephemeral-vrf-sdk-vrf-macro",
+ "ephemeral-vrf-sdk 0.4.1",
+ "ephemeral-vrf-sdk-vrf-macro 0.4.1",
  "five8 0.2.1",
  "getrandom 0.2.16",
  "magicblock-delegation-program-api",
@@ -815,9 +815,22 @@ checksum = "77f3741c733907c10e0d0b32f9aa485c20a73e0b1e7e673a0ac38185fb2a6c11"
 dependencies = [
  "anchor-lang",
  "borsh 1.6.0",
- "ephemeral-vrf-sdk-vrf-macro",
+ "ephemeral-vrf-sdk-vrf-macro 0.4.1",
  "solana-program 3.0.0",
  "solana-system-interface 3.2.0",
+]
+
+[[package]]
+name = "ephemeral-vrf-sdk"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a6e80db66b345edea9bd07834bcc7a6ba490d1485f26694f0997a0329c702f77"
+dependencies = [
+ "anchor-lang",
+ "borsh 1.6.0",
+ "ephemeral-vrf-sdk-vrf-macro 0.17.3",
+ "solana-program 3.0.0",
+ "solana-system-interface 2.0.0",
 ]
 
 [[package]]
@@ -825,6 +838,17 @@ name = "ephemeral-vrf-sdk-vrf-macro"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7b8b3fe3863a27d4c0f32da7b3cfeff179772fd4124d6c9fdcb9d4ab23cd602"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "ephemeral-vrf-sdk-vrf-macro"
+version = "0.17.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4db39f8c0da21e16b3e57141959023a3de6f759eb0b258ae5c9441c938160480"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1223,6 +1247,7 @@ dependencies = [
  "anchor-lang",
  "bytemuck",
  "ephemeral-rollups-sdk",
+ "ephemeral-vrf-sdk 0.17.3",
  "mochi-engine",
  "solana-sha256-hasher 3.1.0",
 ]
