@@ -1,0 +1,24 @@
+{
+  "mode": "tee",
+  "rpc": "https://api.devnet.solana.com",
+  "tee": "/tee",
+  "validator": "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo",
+  "program": "Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh",
+  "season": 939903114,
+  "shard": 0,
+  "disc": {
+    "init_player": "721bdb90320fe442",
+    "set_salt": "884bf380758993d1",
+    "begin_run": "51ea7760f7e41dbf",
+    "pick_hero": "ddaa30542e01659a",
+    "act": "729ee570f232e305",
+    "act_batch": "5c75345d695d9ab6",
+    "fight": "6b145fc6041c2362",
+    "finish_run": "7d92f3d538dcd619",
+    "set_session": "9c877e6fb8cec28d",
+    "player_permission": "421f0b799e3cf86d",
+    "delegate_player": "eb9ff566a1c7fe59",
+    "join_pool": "0e413e107411c36b",
+    "revoke_session": "565cc678900207c2"
+  }
+}
