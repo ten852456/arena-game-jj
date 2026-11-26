@@ -197,8 +197,10 @@ export interface RunStart { mode: F.Mode; shiny: boolean; casualNth?: number }
  * first). The hero must be one this player may use today. A hero at work is called back (it keeps what it made).
  * The run rolls once for a moonlit (shiny) hero. The tutorial run is free. Returns an error response or the start.
  */
-export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string, mode: F.Mode): Res | RunStart {
+export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string, asked: F.Mode): Res | RunStart {
   if (!HEROES_BY_ID[hero]) return bad('bad hero');
+  // the free tutorial run is always casual: the recorded mode is the one actually paid for (security review)
+  const mode: F.Mode = tutorial ? 'casual' : asked;
   // gate off: nothing to count (and no town to cap shiny rolls on), so no town record and no shiny roll
   if (!RUN_LIMIT) return { mode, shiny: false };
   const now = Date.now();
@@ -207,7 +209,7 @@ export function startRunGate(playerId: string, hero: string, tutorial: boolean, 
   const f = farmOf(playerId, now)!;
   if (!F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
   let casualNth: number | undefined;
-  if (mode === 'ranked' && !tutorial) {
+  if (mode === 'ranked') {
     const err = F.spendRun(f, now);
     if (err) return { status: 409, json: { error: err, code: 'no_tickets' } };
   } else {
