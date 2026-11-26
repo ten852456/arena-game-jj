@@ -20,6 +20,9 @@ export const RUN_LIMIT = process.env.FARM_GATE !== 'off';
 /** Players the server knew before the farm existed own every hero (owner 2026-11-26). */
 const FARM_LAUNCH = Number(process.env.FARM_LAUNCH ?? Date.parse('2026-11-27T00:00:00+07:00'));
 const MAX_OPS = 32;
+/** new towns per IP per hour (a shared school or home network still fits) */
+const NEW_TOWNS_PER_IP = 30;
+const newTownAllowed = (ip: string) => allow('farmnew:' + ip, NEW_TOWNS_PER_IP, 3_600_000);
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
@@ -115,7 +118,7 @@ export function handleFarmOps(body: any, ip: string): Res {
   if (!playerId || !Array.isArray(ops) || !ops.length || ops.length > MAX_OPS) return bad('bad request');
   if (!allow('farm:' + playerId, 120, 3_600_000)) return bad('too many farm actions, try again later', 429);
   // a new farm record: the IP limit first, so random ids from one IP cannot flood the db
-  if (!Object.hasOwn(db.farms, playerId) && !allow('farmnew:' + ip, 10, 3_600_000)) return bad('too many new towns from here, try again later', 429);
+  if (!Object.hasOwn(db.farms, playerId) && !newTownAllowed(ip)) return bad('too many new towns from here, try again later', 429);
   const now = Date.now();
   const f = farmOf(playerId, now)!;
   // all-or-nothing: run the batch on a copy, keep it only if every op worked
@@ -138,7 +141,10 @@ export function handleFarmOps(body: any, ip: string): Res {
   const poured = (copy.pouredSeason === SEASON ? copy.poured : 0) - poured0;
   if (poured > 0) {
     const m = monument(SEASON);
-    if (poured0 === 0) m.players++;
+    // a player counts toward the goal only once they reach the personal minimum: fake ids pouring 1 wood each
+    // cannot raise the goal (security review)
+    const total = poured0 + poured;
+    if (poured0 < F.MONUMENT_MIN_PERSONAL && total >= F.MONUMENT_MIN_PERSONAL) m.players++;
     m.points += poured;
   }
   copy.updatedAt = now;
@@ -168,9 +174,13 @@ export function handleHatch(body: any): Res {
  * costs a free run or a ticket. A hero at work is called back (it keeps what it made). The tutorial run is free.
  * Returns an error response or null.
  */
-export function startRunGate(playerId: string, hero: string, tutorial: boolean): Res | null {
+export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string): Res | null {
   if (!HEROES_BY_ID[hero]) return bad('bad hero');
+  // gate off: nothing to count, so no town record is made here
+  if (!RUN_LIMIT) return null;
   const now = Date.now();
+  // same per-IP limit as POST /api/farm before a new town record is made (security review: sibling-path parity)
+  if (!Object.hasOwn(db.farms, playerId) && !newTownAllowed(ip)) return bad('too many new players from here, try again later', 429);
   const f = farmOf(playerId, now)!;
   if (RUN_LIMIT && !F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
   if (RUN_LIMIT && !tutorial) {

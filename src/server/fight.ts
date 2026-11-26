@@ -111,7 +111,7 @@ function syncLegacy(t: RunTrack) {
   Object.assign(t, { hp, ghost });
 }
 
-export function handleFight(body: any): Res {
+export function handleFight(body: any, ip = '?'): Res {
   const runId = cleanId(body?.runId);
   // a fight always belongs to a player: runs are bound to the playerId that started them
   const playerId = cleanId(body?.playerId);
@@ -159,7 +159,7 @@ export function handleFight(body: any): Res {
   // Farm (docs/FARM.md): day 1 of a new run uses a free run or a ticket, and the hero must be owned or in today's
   // rotation. The tutorial run is free. Nothing is spent when the gate says no.
   if (!prev && day === 1) {
-    const gate = startRunGate(playerId, build.hero, tutorial);
+    const gate = startRunGate(playerId, build.hero, tutorial, ip);
     if (gate) return gate;
   }
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.

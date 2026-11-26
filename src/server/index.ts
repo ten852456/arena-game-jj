@@ -78,7 +78,7 @@ type Route = (req: IncomingMessage, q: URLSearchParams) => Res | Promise<Res>;
 const routes: Record<string, Route> = {
   'POST /api/fight': async (req) => {
     const body: any = await readBody(req);
-    const r = handleFight(body);
+    const r = handleFight(body, ipOf(req));
     const j: any = r.status === 200 ? r.json : null;
     if (j) logEvent({ e: 'fight', t: Date.now(), p: typeof body?.playerId === 'string' ? body.playerId.slice(0, 64) : undefined, day: j.day, won: !!j.won, ai: !!j.opponent?.ai, tut: !!j.tutorial });
     return r;

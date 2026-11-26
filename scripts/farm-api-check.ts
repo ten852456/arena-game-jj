@@ -82,14 +82,16 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
   const [, g] = await get('/api/farm?playerId=' + P);
   check('monument shows a goal and the ruler\'s 20% gift', g.monument.goal > 0 && g.monument.points >= Math.round(0.2 * g.monument.goal), JSON.stringify(g.monument));
   const [sp, jp] = await post('/api/farm', { playerId: P, ops: [{ op: 'pour', res: 'wood', n: 10 }] });
-  check('pour 10 wood', sp === 200 && jp.monument.mine === 10 && jp.monument.players >= 1);
+  check('pour 10 wood (below the personal minimum: not counted as a player, so fake ids cannot raise the goal)', sp === 200 && jp.monument.mine === 10 && jp.monument.players === 0);
 }
 
 // creating towns: limited per IP (the last check: it uses up this IP's allowance for an hour)
 {
   let limited = false;
-  for (let i = 0; i < 12 && !limited; i++) limited = (await post('/api/farm', { playerId: `${P}-new${i}`, ops: [{ op: 'collect' }] }))[0] === 429;
+  for (let i = 0; i < 40 && !limited; i++) limited = (await post('/api/farm', { playerId: `${P}-new${i}`, ops: [{ op: 'collect' }] }))[0] === 429;
   check('random ids from one IP cannot create towns without limit', limited);
+  const [sf, jf] = await fight(`${P}-newfight`, `${P}-newfight-r`, 'knight');
+  check('…and a day-1 fight cannot create one either (same limit)', sf === 429, JSON.stringify(jf));
 }
 
 console.log(fails ? `\n${fails} farm API check(s) failed` : '\nall farm API checks passed');

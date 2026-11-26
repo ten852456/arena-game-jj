@@ -169,13 +169,27 @@ function capRecord<T>(rec: Record<string, T>, cap: number, time: (x: T) => numbe
   for (const k of keys.slice(0, keys.length - cap)) delete rec[k];
 }
 
+/**
+ * Over the cap, only towns that hold nothing of value go (oldest first): a town with an unlock, a ticket, an
+ * upgrade, an egg, a cosmetic or a monument pour is never evicted, so a flood of new ids cannot push it out
+ * (security review). Valuable towns can only come from real play, which is rate-limited.
+ */
+function capFarms() {
+  const keys = Object.keys(db.farms);
+  if (keys.length <= PLAYER_CAP) return;
+  const empty = (f: FarmState) =>
+    f.owned.length <= 4 && !f.tickets && !f.eggs.length && !f.cosmetics.length && !f.poured && Object.values(f.lv).every((l) => l === 1);
+  const drop = keys.filter((k) => empty(db.farms[k])).sort((a, b) => db.farms[a].updatedAt - db.farms[b].updatedAt);
+  for (const k of drop.slice(0, keys.length - PLAYER_CAP)) delete db.farms[k];
+}
+
 export function enforceCaps() {
   if (db.fights.length > FIGHT_CAP) db.fights.splice(0, db.fights.length - FIGHT_CAP);
   if (db.runs.length > RUN_CAP) db.runs.splice(0, db.runs.length - RUN_CAP);
   capRecord(db.tracks, TRACK_CAP, (x) => x.t);
   capRecord(db.players, PLAYER_CAP, (x) => x.updatedAt);
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
-  capRecord(db.farms, PLAYER_CAP, (x) => x.updatedAt);
+  capFarms();
 }
 
 let saveTimer: NodeJS.Timeout | null = null;
