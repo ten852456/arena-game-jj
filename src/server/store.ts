@@ -170,17 +170,19 @@ function capRecord<T>(rec: Record<string, T>, cap: number, time: (x: T) => numbe
 }
 
 /**
- * Over the cap, only towns that hold nothing of value go (oldest first): a town with an unlock, a ticket, an
- * upgrade, an egg, a cosmetic or a monument pour is never evicted, so a flood of new ids cannot push it out
- * (security review). Valuable towns can only come from real play, which is rate-limited.
+ * A hard cap on towns. Over it, the least valuable towns go first, oldest first: value counts real investment
+ * (unlocked heroes, cosmetics, tickets, eggs, upgrades, a pour past the personal minimum), so a flood of new ids
+ * evicts each other long before a played town; a trivial pour buys no protection (security review).
  */
+const MONUMENT_MIN = 300; // src/sim/farm.ts MONUMENT_MIN_PERSONAL (store.ts stays free of sim imports)
+const farmValue = (f: FarmState) =>
+  Math.max(0, f.owned.length - 4) * 10 + f.cosmetics.length * 5 + f.tickets + f.eggs.length * 3 +
+  Object.values(f.lv).reduce((a, l) => a + (l - 1) * 2, 0) + (f.poured >= MONUMENT_MIN ? 5 : 0);
 function capFarms() {
   const keys = Object.keys(db.farms);
   if (keys.length <= PLAYER_CAP) return;
-  const empty = (f: FarmState) =>
-    f.owned.length <= 4 && !f.tickets && !f.eggs.length && !f.cosmetics.length && !f.poured && Object.values(f.lv).every((l) => l === 1);
-  const drop = keys.filter((k) => empty(db.farms[k])).sort((a, b) => db.farms[a].updatedAt - db.farms[b].updatedAt);
-  for (const k of drop.slice(0, keys.length - PLAYER_CAP)) delete db.farms[k];
+  keys.sort((a, b) => farmValue(db.farms[a]) - farmValue(db.farms[b]) || db.farms[a].updatedAt - db.farms[b].updatedAt);
+  for (const k of keys.slice(0, keys.length - PLAYER_CAP)) delete db.farms[k];
 }
 
 export function enforceCaps() {
