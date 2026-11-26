@@ -64,7 +64,8 @@ async function buySpotlit(p, touch) {
   const card = p.locator('.card.offer').nth(i);
   const name = (await card.locator('.offer-name').innerText()).trim();
   const bb = await card.locator('[data-a="buy"]').boundingBox();
-  await tapAt(p, touch, bb.x + bb.width / 2, bb.y + bb.height / 2);
+  // shop v2: hold to buy (a press of ~0.75s on the price button)
+  await p.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await p.mouse.down(); await p.waitForTimeout(750); await p.mouse.up();
   await p.waitForTimeout(500);
   return name;
 }

@@ -96,12 +96,13 @@ const STEPS: Step[] = [
       if (r && !r.skills.length) pair ??= chainPair(r);
       return offerCard(pair?.[0] ?? -1) ?? anyBuyable();
     },
-    text: () => L('ซื้อ skill นี้ก่อน ตอนสู้มันจะทำงานเอง', 'Buy this skill first. In a fight it fires all by itself.'),
+    text: () => L('กดค้างที่ skill นี้จนเต็มเพื่อซื้อ ตอนสู้มันจะทำงานเอง', 'Hold this skill until it fills to buy it. In a fight it fires all by itself.'),
     done: () => skills() >= 1,
   },
   {
     id: 'buy2',
     view: 'shop',
+    enter: () => H.drawer(false), // the drawer opened on the first buy: the next card must not be under it
     target: () => {
       const r = H.run();
       return (r ? offerCard(partnerOffer(r)) : null) ?? anyBuyable();
@@ -109,8 +110,8 @@ const STEPS: Step[] = [
     title: () => (H.run() && partnerOffer(H.run()!) >= 0 ? L('🔗 ตัวนี้ต่อโซ่ได้!', '🔗 This one chains!') : ''),
     text: () =>
       H.run() && partnerOffer(H.run()!) >= 0
-        ? L('ซื้อเลย มันจะไปวางติดกับตัวแรก', 'Buy it and it goes right next to your first skill.')
-        : L('ซื้ออีก 1 skill', 'Buy one more skill.'),
+        ? L('กดค้างซื้อเลย มันจะไปวางติดกับตัวแรก', 'Hold to buy it: it goes right next to your first skill.')
+        : L('กดค้างซื้ออีก 1 skill', 'Hold to buy one more skill.'),
     done: () => skills() >= 2 || !anyBuyable(),
   },
   {

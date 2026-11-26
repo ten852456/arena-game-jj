@@ -23,6 +23,7 @@ import './depth.css'; // relics, stars, marks, branch picker, build card, codex
 import './pages.css'; // profile name card, leaderboard
 import './arenaux.css'; // arena UX pass: decluttered shop and fight in simple mode, detail sheet, coach marks
 import './pickux.css'; // card hero select over the arena: radar, platform, Start
+import './shop2.css'; // one-screen shop: the bunny's stall, hold to buy, skills drawer, day splash
 import { initCodex } from './codex';
 import { mountFeedback } from './feedback';
 import { deviceKind, track } from './track';

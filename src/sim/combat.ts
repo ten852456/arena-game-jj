@@ -32,7 +32,7 @@ import type {
  */
 
 /** Bump when combat rules or numbers change: old replays can no longer be re-simulated. */
-export const SIM_VERSION = 21;
+export const SIM_VERSION = 22;
 export const TPS = 10; // ticks per second
 export const MAX_TICKS = 90 * TPS;
 /**
@@ -70,7 +70,7 @@ export const TRIGGER_GAP = 2 * TPS;
 export const TRIGGER_GAP_MAX = 4 * TPS;
 /** a skill set off by an engine (ฟันเฟือง / เร่งเครื่อง) can't be set off again for at least this long (sim v14) */
 export const ENGINE_GAP = 3 * TPS;
-/** a double KO where the damage dealt is this close (share of the bigger) is a draw */
+/** (sim v15–v21) a double KO this close in damage dealt was a draw; since sim v22 a double KO is always side 0's loss */
 export const DRAW_SHARE = 0.05;
 /** each chain step after the first fires weaker: step 2 = ×0.75, step 3 = ×0.56 … (tuning.ts `chainDecay`) */
 export const CHAIN_DECAY = T.chainDecay;
@@ -1118,13 +1118,12 @@ export function simulate(a: Build, b: Build, seed: number, day = 1, opts: { trac
     }
 
     if (F[0].hp <= 0 || F[1].hp <= 0) {
-      // one side down: the other wins. Both down in the same tick (double KO): the side that dealt more damage in the
-      // whole fight wins, then the one less below zero, else a draw (sim v14; before: only "less below zero")
-      // (sim v15) damage within DRAW_SHARE of each other is a draw (costs no run HP): "who went further below zero" no longer decides
-      if (F[0].hp <= 0 && F[1].hp <= 0) {
-        const d = F[0].dealtTotal - F[1].dealtTotal;
-        winner = Math.abs(d) <= DRAW_SHARE * Math.max(F[0].dealtTotal, F[1].dealtTotal) ? -1 : d > 0 ? 0 : 1;
-      } else winner = F[0].hp > 0 ? 0 : 1;
+      // one side down: the other wins. Both down in the same tick (double KO): side 0 loses (sim v22). Side 0 is the
+      // player who started the fight (the server's fight is simulate(your build, the ghost's)), so a double KO is
+      // never a draw and never a win: you have to be the one still standing. (sim v14–v21: more damage dealt won,
+      // within DRAW_SHARE a draw.)
+      if (F[0].hp <= 0 && F[1].hp <= 0) winner = 1;
+      else winner = F[0].hp > 0 ? 0 : 1;
       decided = true;
       break;
     }

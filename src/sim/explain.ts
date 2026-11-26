@@ -293,12 +293,8 @@ export function explain(
   let tiebreak: string | undefined;
   if (bothDown)
     tiebreak = L(
-      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ใครทำดาเมจรวมทั้งการสู้มากกว่าชนะ (ต่างกันไม่เกิน 5% = เสมอ ไม่เสียเลือดของรอบ): ดาเมจ ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
-        draw ? ` เท่ากันพอดีจึง${drawWord}` : ` → ${N[r.winner as Side]} ชนะ`
-      }`,
-      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: whoever dealt more damage over the whole fight wins (within 5% it is a draw that costs no run HP): damage ${N[me]} ${my.dealt} · ${N[foe]} ${their.dealt}${
-        draw ? `, exactly equal, so it is a ${drawWord}` : ` → ${N[r.winner as Side]} wins`
-      }`,
+      `ทั้งสองฝ่ายเลือดหมดในวินาทีเดียวกัน (${sec(len)} วิ) กติกา: ล้มพร้อมกัน = ฝ่ายที่เข้ามาท้าสู้ (${N[0]}) แพ้เสมอ ต้องเป็นคนที่ยังยืนอยู่ถึงจะชนะ → ${N[r.winner as Side]} ชนะ`,
+      `Both sides ran out of HP in the same second (${sec(len)}s); the rule: a double KO is always a loss for the challenger (${N[0]}), you have to be the one still standing → ${N[r.winner as Side]} wins`,
     );
   else if (timeout)
     tiebreak = L(
@@ -721,8 +717,8 @@ export function explain(
     add(
       60,
       L(
-        `ล้มพร้อมกัน แต่${N[foe]}ทำดาเมจรวมมากกว่า (${their.dealt} ต่อ ${my.dealt}, ต่างกันเกิน 5% จึงไม่เสมอ) → ดาเมจอีกนิดเดียวก็เสมอหรือชนะ: อัปเลเวล skill หลัก หรือเพิ่มโล่/ฟื้นเลือด`,
-        `Both fell at once, but${N[foe]}dealt more damage in total (${their.dealt} vs ${my.dealt}, more than 5% apart, so not a draw) → a little more damage draws or wins it: level up your main skill or add shield/healing`,
+        `ล้มพร้อมกัน ซึ่งนับเป็นแพ้ของคนท้า → อีกนิดเดียวก็ชนะ: ให้ตัวเองรอดอีกจังหวะเดียว (เพิ่มโล่/ฟื้นเลือด) หรือปิดเกมให้เร็วขึ้น (อัปเลเวล skill หลัก)`,
+        `Both fell at once, and a double KO counts as the challenger's loss → you were one beat from winning: survive one more hit (shield / healing) or finish sooner (level up your main skill)`,
       ),
       'ko',
     );

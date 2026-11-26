@@ -93,7 +93,7 @@ async function play(label, ctxOpts, runs = 1) {
         for (let i = 0; i < 6; i++) {
           const btn = p.locator('[data-a="buy"]:not([disabled])').first();
           if (!(await btn.count())) break;
-          await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(250);
+          if (await p.locator('.shop2.drawer-open').count()) { await p.locator('.drawer-x').click().catch(() => {}); await p.waitForTimeout(400); } await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ delay: 750, timeout: 4000 }).catch(() => {}); await p.waitForTimeout(350); // hold to buy
         }
         if (day === 2) await shot(`run${run}-shop-d2`);
         await tap('[data-a="fight"]', 1200);

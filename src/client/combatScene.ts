@@ -739,15 +739,33 @@ export class CombatScene extends Phaser.Scene {
    */
   private koZoom(s: number) {
     if (this.quiet || this.still) return;
+    // both went down on the same blow: one shot of the middle, one "DOUBLE K.O." (never two stamps)
+    if (this.koActive) {
+      this.tweens.add({ targets: this, koX: W / 2, duration: 220, ease: 'Cubic.Out' });
+      const t = this.koText;
+      if (t?.active) {
+        this.tweens.killTweensOf(t);
+        t.setText(L('น็อคคู่!', 'DOUBLE K.O.!')).setPosition(W / 2, t.y).setScale(1.5).setAlpha(0);
+        this.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
+      }
+      return;
+    }
     this.koActive = true;
     this.koX = POS[s] + (s === 0 ? 30 : -30); // a little toward the middle: both fighters stay in the shot
     this.koY = GROUND - HERO_H * 0.55;
     this.tweens.add({ targets: this, koK: 1.45, duration: 260, ease: 'Cubic.Out' });
+    // inside the close-up shot (zoom 1.45 around koX / koY): never above the top edge or past a side
+    const vw = W / 1.45;
+    const vh = H / 1.45;
+    const sx = Phaser.Math.Clamp(this.koX - vw / 2, 0, W - vw);
+    const sy = Phaser.Math.Clamp(this.koY - vh / 2, 0, H - vh);
+    const kx = Phaser.Math.Clamp(POS[s], sx + 70, sx + vw - 70);
+    const ky = Math.max(sy + 34, this.koY - 52);
     const ko = this.add
-      .text(POS[s], GROUND - HERO_H - 30, L('น็อค!', 'K.O.!'), { fontFamily: FONT, fontSize: '40px', fontStyle: 'bold', color: '#ffe066', stroke: '#8a1030', strokeThickness: 8 })
+      .text(kx, ky, L('น็อค!', 'K.O.!'), { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: '#ffe066', stroke: '#8a1030', strokeThickness: 8 })
       .setOrigin(0.5)
       .setDepth(23)
-      .setScale(2.4)
+      .setScale(1.7)
       .setAlpha(0);
     this.intro.push(ko); // cleared with the intro objects (next fight / skip)
     this.koText = ko;
