@@ -213,3 +213,16 @@ h2, .hero h1 { font-family: Kanit, sans-serif; letter-spacing: -0.5px; }
   .mbar .btn { width: 100%; justify-content: center; }
   .foot { padding-bottom: 100px; }
 }
+
+/* build depth + earn (v0.0.1 landing update) */
+.sub { max-width: 720px; margin: -4px auto 22px; color: var(--muted); }
+.depth-grid, .earn-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.depth-grid article, .earn-grid article { background: var(--panel); border: 3px solid var(--line); border-radius: 22px; padding: 18px 20px; }
+.depth-grid h3, .earn-grid h3 { margin: 6px 0 6px; }
+.depth-grid p, .earn-grid p { margin: 0; color: #e6dcff; line-height: 1.55; }
+.d-ico { display: inline-flex; width: 40px; height: 40px; align-items: center; justify-content: center; border-radius: 12px; background: rgba(255, 213, 114, 0.14); font-size: 22px; }
+.earn-grid em { font-style: normal; font-size: 0.7em; font-weight: 700; padding: 2px 9px; border-radius: 999px; vertical-align: middle; margin-left: 6px; }
+.earn-grid em.plan { background: rgba(212, 200, 247, 0.2); color: #d4c8f7; }
+.earn-grid em.live { background: rgba(178, 235, 203, 0.2); color: #b2ebcb; }
+.center-badges { justify-content: center; margin-top: 18px; }
+@media (max-width: 860px) { .depth-grid, .earn-grid { grid-template-columns: 1fr; } }
