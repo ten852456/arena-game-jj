@@ -1,7 +1,7 @@
 // Farm (idle town) screens: the resource bar, the lumber yard / mine / shrine cards, the arena gate (runs left,
 // tickets), hero unlocks, the work egg and the season monument. Rules live in src/sim/farm.ts; the server decides
 // everything (src/server/farm.ts) and this file only shows its answer and sends actions.
-import { api, type FarmBuilding, type FarmOpReq, type FarmView } from './api';
+import { api, type FarmBuilding, type FarmOpReq, type FarmView, type FeedRow } from './api';
 import { IMAGES } from './assets';
 import { L } from '../i18n';
 import { HEROES, HEROES_BY_ID } from '../sim/heroes';
@@ -10,6 +10,7 @@ import * as F from '../sim/farm';
 import * as M from './views/meta';
 
 export let farm: FarmView | null = null;
+export let feed: FeedRow[] = [];
 /** local time when `farm` arrived (the countdowns run from it) */
 let gotAt = 0;
 let loading: Promise<void> | null = null;
@@ -19,10 +20,10 @@ const name = (h: string) => HEROES_BY_ID[h]?.name ?? h;
 
 /** Fetch the farm (the town calls this on entry and the timer refreshes it). */
 export function loadFarm(onDone?: () => void): Promise<void> {
-  loading ??= api
-    .farm(M.playerId())
-    .then((f) => {
+  loading ??= Promise.all([api.farm(M.playerId()), api.feed().catch(() => ({ rows: [] as FeedRow[] }))])
+    .then(([f, fd]) => {
       farm = f;
+      feed = fd.rows;
       gotAt = Date.now();
     })
     .catch(() => {
@@ -38,7 +39,9 @@ export function loadFarm(onDone?: () => void): Promise<void> {
 /** Heroes the hero pick may offer (null: no farm data or the gate is off → every hero). */
 // owned + today's rotation (the server also accepts yesterday's rotation, for a run picked just before midnight)
 export const usablePool = (): string[] | null => (farm && farm.runLimit ? [...new Set([...farm.owned, ...farm.rotation])] : null);
+/** ranked needs a ticket (casual is always free) */
 export const outOfRuns = () => !!farm && farm.runLimit && farm.runsLeft <= 0;
+export const rankedTickets = () => (farm ? farm.runsLeft : 0);
 
 // ---------- icons ----------
 const IMG = IMAGES as unknown as Record<string, string | undefined>;
@@ -144,7 +147,7 @@ export function arenaGateHTML(): string {
   if (!f || !f.runLimit) return '';
   const canCraft = f.crafted < F.TICKET_CRAFT_CAP && f.tickets < F.TICKET_HOLD;
   return `<div class="fgate">
-    <p>${L(`รอบฟรี <b>${f.free}</b> (วันละ ${F.FREE_RUNS} ที่ไม่ได้ใช้สะสมได้ถึง ${F.FREE_BANK}) · ตั๋ว <b>${f.tickets}</b>/${F.TICKET_HOLD}`, `Free runs <b>${f.free}</b> (${F.FREE_RUNS} a day, unused ones bank up to ${F.FREE_BANK}) · tickets <b>${f.tickets}</b>/${F.TICKET_HOLD}`)}</p>
+    <p>${L(`ทั่วไป: ฟรี ไม่จำกัด · แรงค์: ตั๋วฟรี <b>${f.free}</b> (วันละ ${F.FREE_RUNS} สะสมได้ ${F.FREE_BANK}) + ตั๋วที่ทำ <b>${f.tickets}</b>/${F.TICKET_HOLD} · ชนะ ${F.RANKED_REFUND_WINS}+ ได้ตั๋วคืน`, `Casual: free, unlimited · Ranked: free tickets <b>${f.free}</b> (${F.FREE_RUNS} a day, bank ${F.FREE_BANK}) + crafted <b>${f.tickets}</b>/${F.TICKET_HOLD} · ${F.RANKED_REFUND_WINS}+ wins refunds the ticket`)}</p>
     <div class="actions"><button data-a="farmCraft" ${canCraft ? '' : 'disabled'}>${L('ทำตั๋ว', 'Craft a ticket')} ${costHTML(F.TICKET_COST, have(f))}</button>
     <span class="muted">${L(`วันนี้ทำแล้ว ${f.crafted}/${F.TICKET_CRAFT_CAP}`, `crafted today ${f.crafted}/${F.TICKET_CRAFT_CAP}`)}</span></div>
   </div>`;
@@ -232,6 +235,9 @@ export async function farmAction(a: string, el: HTMLElement): Promise<string> {
     case 'farmUnlock': ops = [{ op: 'unlock', hero: i }]; break;
     case 'farmPour': ops = [{ op: 'pour', res: i as 'wood' | 'ore' | 'crystal', n: Number(el.dataset.n) || 0 }]; break;
     case 'farmRepair': ops = [{ op: 'repair' }]; break;
+    case 'farmCollectAll': ops = [{ op: 'collect' }]; break;
+    case 'farmFill': ops = fillOps(); if (!ops.length) return L('ไม่มีฮีโร่ว่างหรือช่องว่าง', 'No idle hero or free slot'); break;
+    case 'farmPourFind': ops = [{ op: 'pourFind', id: i }]; break;
     case 'farmHatch':
       try {
         const r = await api.hatch(M.playerId());
@@ -249,6 +255,13 @@ export async function farmAction(a: string, el: HTMLElement): Promise<string> {
     const before = farm;
     farm = await api.farmOps(M.playerId(), ops);
     gotAt = Date.now();
+    if (farm.found?.length) {
+      void api.feed().then((fd) => (feed = fd.rows)).catch(() => {});
+      return farm.found.map((id) => {
+        const x = F.FINDS.find((y) => y.id === id);
+        return x ? L(`✨ ของหายาก! ${x.th} (โอกาส 1 ใน ${Math.round(1 / x.odds)})`, `✨ Lucky find! ${x.en} (1 in ${Math.round(1 / x.odds)})`) : id;
+      }).join(' · ');
+    }
     if (a === 'farmCollect' && before) {
       const r = F.RES_OF[i as FarmBuilding];
       return L(`ได้${resName(r)} +${farm.res[r] - before.res[r]}`, `+${farm.res[r] - before.res[r]} ${resName(r)}`);
@@ -259,3 +272,59 @@ export async function farmAction(a: string, el: HTMLElement): Promise<string> {
     return errText(e);
   }
 }
+
+// ---------- one-tap helpers ----------
+/** "Fill jobs": every idle hero to its best free slot (a landmark its line suits first). */
+export function fillOps(): FarmOpReq[] {
+  const f = farm;
+  if (!f) return [];
+  const free: Record<FarmBuilding, number> = { lumber: 0, mine: 0, shrine: 0 };
+  for (const b of F.BUILDING_IDS) free[b] = f.slots[b] - f.jobs[b].length;
+  const idle = f.usable.filter((h) => !f.inRun.includes(h) && !F.BUILDING_IDS.some((x) => f.jobs[x].some((j) => j.hero === h)));
+  const ops: FarmOpReq[] = [];
+  // heroes that fit somewhere go first, to the landmark they fit
+  idle.sort((a, b) => Number(F.BUILDING_IDS.some((x) => F.fits(b, x))) - Number(F.BUILDING_IDS.some((x) => F.fits(a, x))));
+  for (const h of idle) {
+    const b = F.BUILDING_IDS.find((x) => free[x] > 0 && F.fits(h, x)) ?? F.BUILDING_IDS.find((x) => free[x] > 0);
+    if (!b) break;
+    free[b]--;
+    ops.push({ op: 'send', b, hero: h });
+  }
+  return ops;
+}
+export const readyTotal = () => {
+  const f = farm;
+  const out = { wood: 0, ore: 0, crystal: 0 };
+  if (f) for (const b of F.BUILDING_IDS) out[F.RES_OF[b]] += f.jobs[b].reduce((a, j) => a + j.ready, 0);
+  return out;
+};
+export const idleCount = () => fillOps().length;
+
+// ---------- lucky finds, moonlit heroes, town feed ----------
+export function findsHTML(): string {
+  const f = farm;
+  if (!f) return '';
+  const have = F.FINDS.filter((x) => (f.finds[x.id] ?? 0) > 0);
+  const shinies = f.shinies.map(name).join(', ');
+  return `<div class="ffinds"><h4>${L('ของหายากที่พบ', 'Lucky finds')}</h4>
+    <p class="muted small">${L(`ฮีโร่ที่ทำงานมีโอกาสเจอของหายากทุกชั่วโมงทำงาน (วันละ ${F.FIND_ROLLS_PER_DAY} ครั้ง) · ใช้ทำของแต่ง หรือเติมอนุสาวรีย์ · ไม่เพิ่มพลังในการสู้`, `Working heroes roll for a rare find every work-hour (${F.FIND_ROLLS_PER_DAY} rolls a day) · craft looks or pour into the monument · never a fight bonus`)}</p>
+    ${have.length ? have.map((x) => `<div class="funl"><b>${x.golden ? '🌟' : '✨'} ${esc(L(x.th, x.en))} ×${f.finds[x.id]}</b><button class="small" data-a="farmPourFind" data-i="${x.id}">${L('เติมอนุสาวรีย์', 'Pour')} +${F.FIND_POINTS[x.id]}</button></div>`).join('') : `<p class="muted small">${L('ยังไม่เจอ · โอกาส: ไข่มุกจันทร์ 1/400 (เหมือง ลานตัดไม้) · เศษวัตถุ 1/600 (ศาลเจ้า) · ไข่มุกทอง 1/8000', 'None yet · odds: Moon Pearl 1/400 (mine, lumber) · Relic Shard 1/600 (shrine) · Golden Pearl 1/8000')}</p>`}
+    <p class="small">${L('ฮีโร่แสงจันทร์ (โอกาส 1/1024 ต่อรอบ):', 'Moonlit heroes (1 in 1024 per run):')} ${shinies || L('ยังไม่มี', 'none yet')}</p></div>`;
+}
+
+export function feedHTML(): string {
+  if (!feed.length) return `<div class="ffeed"><h4>${L('ข่าวในเมือง', 'Town feed')}</h4><p class="muted small">${L('ยังไม่มีใครเจอของหายาก', 'No rare finds yet')}</p></div>`;
+  const what = (r: FeedRow) => {
+    if (r.kind === 'shiny') return L(`ได้ ${name(r.id)} แสงจันทร์ ✦`, `rolled a moonlit ${name(r.id)} ✦`);
+    const x = F.FINDS.find((y) => y.id === r.id);
+    return L(`เจอ ${x?.th ?? r.id}`, `found a ${x?.en ?? r.id}`);
+  };
+  return `<div class="ffeed"><h4>${L('ข่าวในเมือง', 'Town feed')}</h4><ul>${feed
+    .slice(0, 8)
+    .map((r) => `<li class="${r.first ? 'first' : ''}">${r.first ? `<b>${L('คนแรกของซีซั่น!', 'WORLD FIRST')}</b> · ` : ''}${esc(r.name)} ${what(r)}</li>`)
+    .join('')}</ul></div>`;
+}
+
+/** a locked hero can be unlocked right now (the Hero Hall badge on the map) */
+export const canUnlockAny = () =>
+  !!farm && farm.owned.length < HEROES.length && farm.stardust >= F.UNLOCK_COST.stardust && farm.res.crystal >= F.UNLOCK_COST.crystal;

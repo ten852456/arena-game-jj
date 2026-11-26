@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[2]
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 RAW = Path(ARGS[0]) if ARGS else ROOT / "scripts/assets/.cache/raw"
 OUT = ROOT / "src/client/public/assets/img"
-FARM_IDS = {"res-wood", "res-ore", "res-crystal", "ticket", "egg", "egg-cracking", "monument"}
+TOWN_IDS = {"town-ground", "td-mine", "td-shrine", "td-lumber", "td-hall", "td-arena", "td-board", "td-tower", "td-market", "td-nest"}
+FARM_IDS = {"res-wood", "res-ore", "res-crystal", "ticket", "egg", "egg-cracking", "monument"} | TOWN_IDS
 
 # out name: (source png, keyed?, max width, crop box as fractions (l, t, r, b) or None, webp quality)
 SOURCES = {
@@ -31,6 +32,17 @@ SOURCES = {
     "egg-cracking": ("egg-cracking.png", True, 256, "bbox", 88),
     "monument": ("monument.png", True, 512, "bbox", 88),
     "chest": ("chest.png", True, 512, "bbox", 85),
+    # top-down town (sim farm, 2026-11-26): the ground map and one sprite per landmark, same 3/4 camera
+    "town-ground": ("town-ground.png", False, 1600, None, 80),
+    "td-mine": ("td-mine.png", True, 360, "bbox", 86),
+    "td-shrine": ("td-shrine.png", True, 360, "bbox", 86),
+    "td-lumber": ("td-lumber.png", True, 360, "bbox", 86),
+    "td-hall": ("td-hall.png", True, 360, "bbox", 86),
+    "td-arena": ("td-arena.png", True, 420, "bbox", 86),
+    "td-board": ("td-board.png", True, 360, "bbox", 86),
+    "td-tower": ("td-tower.png", True, 300, "bbox", 86),
+    "td-market": ("td-market.png", True, 360, "bbox", 86),
+    "td-nest": ("td-nest.png", True, 200, "bbox", 86),
     "header-leaderboard": ("header-leaderboard.png", False, 1200, (0, 0.12, 1, 0.82), 86),
 }
 
@@ -63,6 +75,18 @@ def save(img, name, q):
     return img
 
 
+def warm_wood(img):
+    """The generated log bundle came out purple, too close to the ore icon at 20 px: turn violet hues to warm brown."""
+    a = np.array(img.convert("RGBA"))
+    hsv = np.array(Image.fromarray(a[..., :3]).convert("HSV")).astype(int)
+    h, s = hsv[..., 0], hsv[..., 1]
+    sel = (a[..., 3] > 0) & (h > 150) & (h < 235) & (s > 40)
+    h[sel] = (18 + (h[sel] - 190) // 6) % 256
+    s[sel] = np.clip(s[sel] * 0.9, 0, 255)
+    rgb = np.array(Image.fromarray(hsv.astype("uint8"), "HSV").convert("RGB"))
+    return Image.fromarray(np.dstack([rgb, a[..., 3]]), "RGBA")
+
+
 def main():
     made = {}
     for name, (src, keyed, max_w, crop, q) in SOURCES.items():
@@ -78,6 +102,8 @@ def main():
         elif crop:
             w, h = img.size
             img = img.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
+        if name == "res-wood":
+            img = warm_wood(img)
         made[name] = save(fit(img, max_w), name, q)
 
     if "--farm" in sys.argv:

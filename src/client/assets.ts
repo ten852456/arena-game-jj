@@ -23,6 +23,17 @@ export const IMAGES = {
   egg: `${BASE}img/egg.webp`,
   eggCracking: `${BASE}img/egg-cracking.webp`,
   monument: `${BASE}img/monument.webp`,
+  /** top-down town (farm): the ground map (1600x900) and one sprite per landmark, same 3/4 camera */
+  townGround: `${BASE}img/town-ground.webp`,
+  tdMine: `${BASE}img/td-mine.webp`,
+  tdShrine: `${BASE}img/td-shrine.webp`,
+  tdLumber: `${BASE}img/td-lumber.webp`,
+  tdHall: `${BASE}img/td-hall.webp`,
+  tdArena: `${BASE}img/td-arena.webp`,
+  tdBoard: `${BASE}img/td-board.webp`,
+  tdTower: `${BASE}img/td-tower.webp`,
+  tdMarket: `${BASE}img/td-market.webp`,
+  tdNest: `${BASE}img/td-nest.webp`,
   /** reward chest spilling stardust, transparent, 512x504 */
   chest: `${BASE}img/chest.webp`,
   /** 1200x560 leaderboard / profile header (three mochi on podiums) */

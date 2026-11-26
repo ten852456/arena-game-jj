@@ -1,354 +1,189 @@
 import Phaser from 'phaser';
-import { HEROES } from '../sim/heroes';
-import { drawTownBackdrop, FOLK_COLORS, makeTownArt, R, RABBIT } from './townArt';
-import { BUILDINGS, BUILDING_BY_ID, RABBIT_X, WORLD_W } from './townData';
+import { BUILDINGS } from './townData';
+import { IMAGES } from './assets';
 import { ZOOM } from './view';
-import { perf } from './perf';
 import { L } from '../i18n';
+import type { FarmView } from './api';
 
 let resolveTown!: (s: TownScene) => void;
 export const townReady = new Promise<TownScene>((r) => (resolveTown = r));
 
 const W = 640;
 const H = 300;
-const GROUND = 258;
 const FONT = 'Kanit, sans-serif';
-const TAP_SLOP = 8; // px a pointer may move and still count as a tap
-// minimap bar
-const MX = 170;
-const MW = 300;
-const MH = 14;
-const MY = 300 - MH - 4; // bottom strip, below the road, so tall buildings' labels never collide
+/** the ground map (16:9) fitted to the full height: the whole town on one screen, no scrolling */
+const MAP_H = H;
+const MAP_W = (MAP_H * 16) / 9;
+const MAP_X = (W - MAP_W) / 2;
+/** sprite key and on-map width per landmark */
+const SPRITE: Record<string, [string, number]> = {
+  mine: ['tdMine', 84], shrine: ['tdShrine', 82], lumber: ['tdLumber', 82], hall: ['tdHall', 80],
+  arena: ['tdArena', 104], board: ['tdBoard', 82], tower: ['tdTower', 58], market: ['tdMarket', 80],
+};
+const PRODUCER: Record<string, 'wood' | 'ore' | 'crystal'> = { lumber: 'wood', mine: 'ore', shrine: 'crystal' };
+const RES_KEY = { wood: 'resWood', ore: 'resOre', crystal: 'resCrystal' } as const;
+/** the egg nest sits on the plaza, in front of the arena */
+const NEST: [number, number] = [0.5, 0.75];
 
-/** Side-scrolling town: drag left/right, tap a landmark. */
+const at = (fx: number, fy: number): [number, number] => [MAP_X + fx * MAP_W, fy * MAP_H];
+
+/**
+ * Top-down town (sim farm, 2026-11-26): the ground map with every landmark on its plot, all on one screen.
+ * Over each producer a bubble shows what is ready (tap = collect); badges mark an egg to hatch or a hero to
+ * unlock; tapping the arena goes straight to battle. Replaces the side-scrolling town (playtest: too much
+ * scrolling, nothing on the map showed what was ready).
+ */
 export class TownScene extends Phaser.Scene {
   onSelect?: (id: string) => void;
-  /** the arena was tapped while selected, or its "Enter" bubble was tapped */
+  /** the arena was tapped */
   onEnter?: (id: string) => void;
-  /** big "Enter the arena ▶" bubble over the arena while it is selected */
-  private bubble!: Phaser.GameObjects.Container;
-  private bubbleText!: Phaser.GameObjects.Text;
-  private bubbleBg!: Phaser.GameObjects.Graphics;
-  private bubbleW = 0;
-  private bubbleH = 0;
+  /** a ready bubble over a producer was tapped */
+  onCollect?: (id: string) => void;
   private images = new Map<string, Phaser.GameObjects.Image>();
   private labels = new Map<string, Phaser.GameObjects.Text>();
+  private subs = new Map<string, Phaser.GameObjects.Text>();
+  private bubbles = new Map<string, { box: Phaser.GameObjects.Container; bg: Phaser.GameObjects.Graphics; icon: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }>();
+  private badges = new Map<string, Phaser.GameObjects.Container>();
+  private ring!: Phaser.GameObjects.Graphics;
+  private nest!: Phaser.GameObjects.Image;
   private selected: string | null = null;
-  private arrow!: Phaser.GameObjects.Graphics;
-  private mini!: Phaser.GameObjects.Graphics;
-  private clouds: Phaser.GameObjects.Image[] = [];
-  private cloudWrap = 0;
-  private dragging = false;
-  private onMini = false;
-  private downX = 0;
-  private downScroll = 0;
-  private moved = 0;
-  private vel = 0; // px per ms, for inertia
-  private lastX = 0;
-  private lastT = 0;
-  private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 
   constructor() {
     super({ key: 'town', active: true });
   }
 
-  private clamp(x: number) {
-    return Phaser.Math.Clamp(x, 0, WORLD_W - W);
+  preload() {
+    const img = IMAGES as unknown as Record<string, string>;
+    this.load.image('townGround', img.townGround);
+    for (const [k] of Object.values(SPRITE)) this.load.image(k, img[k]);
+    this.load.image('tdNest', img.tdNest);
+    for (const k of Object.values(RES_KEY)) this.load.image(k, img[k]);
   }
 
   create() {
-    makeTownArt(this);
     const cam = this.cameras.main;
-    cam.setOrigin(0, 0).setZoom(ZOOM); // scroll is clamped by hand, see clamp()
+    cam.setOrigin(0, 0).setZoom(ZOOM).setBackgroundColor('#1b1433');
+    this.add.image(MAP_X, 0, 'townGround').setOrigin(0, 0).setDisplaySize(MAP_W, MAP_H).setDepth(0);
 
-    const bd = drawTownBackdrop(this, WORLD_W, W, H, GROUND);
-    this.clouds = bd.clouds;
-    this.cloudWrap = bd.cloudWrap;
-
-    this.addRabbit();
-
+    this.ring = this.add.graphics().setDepth(1);
     for (const b of BUILDINGS) {
-      const img = this.add
-        .image(b.x, GROUND + 4, this.textures.exists('bld_' + b.id) ? 'bld_' + b.id : 'bld_tower') // new landmark before its art
-        .setOrigin(0.5, 1)
-        .setScale(1 / R)
-        .setDepth(2)
-        .setInteractive({ useHandCursor: true });
-      // desktop hover: warm tint + soft glow (glow needs WebGL; canvas renderer just tints)
-      img.on('pointerover', () => {
-        img.setTint(0xfff1c8);
-        if (b.open && perf().hoverGlow && !img.preFX?.list.length) img.preFX?.addGlow(0xffd56b, 3, 0, false, 0.1, 12);
-      });
-      img.on('pointerout', () => {
-        img.clearTint();
-        img.preFX?.clear();
-      });
+      const [key, w] = SPRITE[b.id] ?? ['tdHall', 80];
+      const [x, y] = at(b.pos[0], b.pos[1]);
+      const img = this.add.image(x, y + 12, key).setOrigin(0.5, 0.86).setDepth(2 + y / 1000);
+      img.setScale(w / img.width).setInteractive({ useHandCursor: true });
+      if (!b.open) img.setAlpha(0.55);
+      img.on('pointerover', () => img.setTint(0xfff1c8));
+      img.on('pointerout', () => img.clearTint());
+      img.on('pointerup', () => this.tapBuilding(b.id));
       const label = this.add
-        .text(b.x, img.y - img.displayHeight - 6, b.name, {
-          fontFamily: FONT, fontSize: '16px', color: '#ffffff', stroke: '#1d1612', strokeThickness: 5,
-        })
-        .setOrigin(0.5, 1)
+        .text(x, y + 16, b.name, { fontFamily: FONT, fontSize: '11px', color: '#ffffff', stroke: '#1d1612', strokeThickness: 4 })
+        .setOrigin(0.5, 0)
+        .setDepth(6);
+      // workers sit on the label's line ("Mine 1/2"), so nothing reaches into the row below
+      const sub = this.add
+        .text(x, y + 17, '', { fontFamily: FONT, fontSize: '9px', color: '#ffe3a3', stroke: '#1d1612', strokeThickness: 3 })
+        .setOrigin(0, 0)
         .setDepth(6);
       this.images.set(b.id, img);
       this.labels.set(b.id, label);
+      this.subs.set(b.id, sub);
+      // the ready bubble sits on the roof, low enough that the top row never clips it
+      if (PRODUCER[b.id]) this.makeBubble(b.id, x, Math.max(14, y - img.displayHeight * 0.55));
     }
-
-    // townsfolk: little mochi bunnies hop between the buildings
-    const ranges: [number, number][] = [[900, 1250], [980, 1500], [1250, 1750], [600, 1100]];
-    HEROES.forEach((_h, i) => {
-      const [a, b] = ranges[i % ranges.length];
-      const s = this.add
-        .image(Phaser.Math.Between(a, b), GROUND + 22, 'folk_' + (i % FOLK_COLORS.length))
-        .setOrigin(0.5, 1)
-        .setScale(1 / R)
-        .setDepth(5);
-      this.wander(s, a, b);
-    });
-
-    this.arrow = this.add.graphics().setDepth(8);
-    this.arrow.fillStyle(0xffd56b).fillTriangle(-8, 0, 8, 0, 0, 10);
-    this.arrow.lineStyle(1.5, 0x2f2538).strokeTriangle(-8, 0, 8, 0, 0, 10);
-    this.arrow.setVisible(false);
-
-    this.mini = this.add.graphics().setScrollFactor(0).setDepth(10);
-
-    this.bubbleBg = this.add.graphics();
-    this.bubbleText = this.add
-      .text(0, 0, '', { fontFamily: FONT, fontSize: '17px', color: '#2a1a08', fontStyle: 'bold' })
-      .setOrigin(0.5, 0.5);
-    this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setDepth(9).setVisible(false);
-    this.paintBubble();
-    this.tweens.add({ targets: this.bubble, scale: 1.07, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-
-    // ---- input: drag to scroll, tap to select, minimap to jump ----
-    // pointer x/y are canvas pixels; divide by ZOOM to get view units
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      const px = p.x / ZOOM;
-      if (this.inMini(p)) {
-        this.onMini = true;
-        this.jumpMini(px);
-        return;
-      }
-      this.tweens.killTweensOf(cam);
-      this.dragging = true;
-      this.downX = this.lastX = px;
-      this.downScroll = cam.scrollX;
-      this.moved = 0;
-      this.vel = 0;
-      this.lastT = this.time.now;
-    });
-    this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      const px = p.x / ZOOM;
-      if (this.onMini && p.isDown) return this.jumpMini(px);
-      if (!this.dragging) return;
-      cam.scrollX = this.clamp(this.downScroll - (px - this.downX));
-      this.moved = Math.max(this.moved, Math.abs(px - this.downX));
-      const now = this.time.now;
-      const dt = now - this.lastT;
-      if (dt > 0) this.vel = (-(px - this.lastX) / dt) * 0.6 + this.vel * 0.4;
-      this.lastX = px;
-      this.lastT = now;
-    });
-    const up = (p: Phaser.Input.Pointer) => {
-      if (this.onMini) {
-        this.onMini = false;
-        return;
-      }
-      if (!this.dragging) return;
-      this.dragging = false;
-      if (this.moved < TAP_SLOP) {
-        this.vel = 0;
-        this.tap(p);
-      } else if (this.time.now - this.lastT > 90) {
-        this.vel = 0; // held still before releasing → no fling
-      }
-    };
-    this.input.on('pointerup', up);
-    this.input.on('pointerupoutside', up);
-    this.input.on('wheel', (_p: unknown, _o: unknown, dx: number, dy: number) => {
-      this.tweens.killTweensOf(cam);
-      this.vel = 0;
-      cam.scrollX = this.clamp(cam.scrollX + (dx + dy) / ZOOM);
-    });
-    this.cursors = this.input.keyboard?.createCursorKeys();
-
-    cam.scrollX = this.clamp(BUILDING_BY_ID.hall.x - W / 2);
+    const [nx, ny] = at(NEST[0], NEST[1]);
+    this.nest = this.add.image(nx, ny, 'tdNest').setDepth(3).setInteractive({ useHandCursor: true });
+    this.nest.setScale(40 / this.nest.width);
+    this.nest.on('pointerup', () => this.tapBuilding('hall'));
+    this.makeBadge('nest', nx + 14, ny - 12, '!', 0xff7a93);
+    const hall = this.images.get('hall')!;
+    this.makeBadge('hall', hall.x + 30, hall.y - hall.displayHeight * 0.8, '↑', 0x8fdcb0);
+    this.refreshLabels();
     resolveTown(this);
   }
 
-  /** The landmark: a giant mochi rabbit pounding mochi; the mallet swings and the mochi squashes. */
-  private addRabbit() {
-    const s = 1 / R;
-    const left = RABBIT_X - RABBIT.w / 2;
-    const top = GROUND + 4 - RABBIT.h;
-    this.add.image(RABBIT_X, GROUND + 4, 'deco_rabbit').setOrigin(0.5, 1).setScale(s).setDepth(2);
-    const mochi = this.add
-      .image(left + RABBIT.mochi[0], top + RABBIT.mochi[1], 'deco_mochi')
-      .setOrigin(0.5, 1)
-      .setScale(s)
-      .setDepth(2.1);
-    const k = RABBIT.kine;
-    const kine = this.add
-      .image(left + RABBIT.shoulder[0], top + RABBIT.shoulder[1], 'deco_kine')
-      .setOrigin(k.px / k.w, 0.5)
-      .setScale(s)
-      .setDepth(2.2)
-      .setAngle(40);
-    this.tweens.add({
-      targets: kine,
-      angle: -12,
-      duration: 300,
-      ease: 'Quad.easeIn',
-      yoyo: true,
-      hold: 140,
-      repeatDelay: 650,
-      repeat: -1,
-      onYoyo: () =>
-        this.tweens.add({ targets: mochi, scaleY: s * 0.6, scaleX: s * 1.2, duration: 90, yoyo: true, ease: 'Sine.easeOut' }),
-    });
+  private makeBubble(id: string, x: number, y: number) {
+    const bg = this.add.graphics();
+    const icon = this.add.image(-12, 0, RES_KEY[PRODUCER[id]]);
+    icon.setScale(14 / Math.max(icon.width, icon.height));
+    const text = this.add.text(-3, 0, '', { fontFamily: FONT, fontSize: '11px', color: '#3a2b48', fontStyle: 'bold' }).setOrigin(0, 0.5);
+    const box = this.add.container(x, y, [bg, icon, text]).setDepth(8).setVisible(false);
+    box.setSize(56, 20).setInteractive({ useHandCursor: true });
+    box.on('pointerup', () => this.onCollect?.(id));
+    this.tweens.add({ targets: box, y: y - 3, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.bubbles.set(id, { box, bg, icon, text });
   }
 
-  /** Bunnies hop to a random spot in their range, rest, then pick another. */
-  private wander(s: Phaser.GameObjects.Image, a: number, b: number) {
-    const tx = Phaser.Math.Between(a, b);
-    const base = GROUND + 22;
-    s.setFlipX(tx < s.x);
-    const hops = Math.max(1, Math.round(Math.abs(tx - s.x) / 26));
-    this.tweens.add({
-      targets: s,
-      x: tx,
-      duration: hops * 340,
-      onComplete: () => this.time.delayedCall(Phaser.Math.Between(600, 2800), () => this.wander(s, a, b)),
-    });
-    this.tweens.add({ targets: s, y: base - 7, duration: 170, yoyo: true, repeat: hops - 1, ease: 'Sine.easeOut' });
+  private makeBadge(id: string, x: number, y: number, mark: string, color: number) {
+    const g = this.add.graphics().fillStyle(color).fillCircle(0, 0, 7).lineStyle(1.5, 0x1d1612).strokeCircle(0, 0, 7);
+    const t = this.add.text(0, 0, mark, { fontFamily: FONT, fontSize: '10px', color: '#1d1612', fontStyle: 'bold' }).setOrigin(0.5);
+    const c = this.add.container(x, y, [g, t]).setDepth(9).setVisible(false);
+    this.tweens.add({ targets: c, scale: 1.15, duration: 600, yoyo: true, repeat: -1 });
+    this.badges.set(id, c);
   }
 
-  private inMini(p: Phaser.Input.Pointer) {
-    const x = p.x / ZOOM;
-    const y = p.y / ZOOM;
-    return y >= MY - 6 && x >= MX - 4 && x <= MX + MW + 4;
+  private tapBuilding(id: string) {
+    if (id === 'arena') return this.onEnter?.('arena');
+    this.onSelect?.(id);
   }
 
-  private jumpMini(x: number) {
-    this.vel = 0;
-    this.tweens.killTweensOf(this.cameras.main);
-    this.cameras.main.scrollX = this.clamp(((x - MX) / MW) * WORLD_W - W / 2);
-  }
-
-  private tap(p: Phaser.Input.Pointer) {
-    const wp = this.cameras.main.getWorldPoint(p.x, p.y);
-    if (this.bubble.visible && this.bubbleBounds().contains(wp.x, wp.y)) return this.onEnter?.('arena');
-    for (const b of [...BUILDINGS].reverse()) {
-      const img = this.images.get(b.id)!;
-      const lbl = this.labels.get(b.id)!;
-      if (img.getBounds().contains(wp.x, wp.y) || lbl.getBounds().contains(wp.x, wp.y)) {
-        // the arena: first tap selects it and shows the "Enter" bubble, the next tap goes in
-        if (b.id === 'arena' && this.selected === 'arena') return this.onEnter?.('arena');
-        this.focus(b.id);
-        this.onSelect?.(b.id);
-        return;
+  /** Show the farm on the map: ready bubbles, worker counts, badges. Null hides them (no farm data). */
+  setFarm(f: FarmView | null, canUnlock = false) {
+    for (const [id, b] of this.bubbles) {
+      const jobs = f?.jobs[id as 'lumber'] ?? [];
+      const ready = jobs.reduce((a, j) => a + j.ready, 0);
+      const full = jobs.some((j) => j.fill >= 1);
+      b.box.setVisible(ready > 0);
+      if (ready > 0) {
+        b.text.setText(`+${ready}${full ? ' ' + L('เต็ม', 'FULL') : ''}`);
+        const w = 24 + b.text.width;
+        b.bg.clear().fillStyle(full ? 0xffe3a3 : 0xfff4e4).fillRoundedRect(-20, -10, w, 20, 10).lineStyle(1.5, 0x3a2b48).strokeRoundedRect(-20, -10, w, 20, 10);
+        b.box.setSize(w, 20);
+      }
+      const sub = this.subs.get(id);
+      const label = this.labels.get(id);
+      if (sub && label) {
+        sub.setText(f ? ` ${jobs.length}/${f.slots[id as 'lumber']}` : '');
+        // the label and its worker count centred together on the plot
+        const total = label.width + sub.width;
+        label.setOrigin(0, 0).setX(this.images.get(id)!.x - total / 2);
+        sub.setX(label.x + label.width);
       }
     }
-  }
-
-  private paintBubble() {
-    this.bubbleText.setText(L('เข้าอารีน่า ▶', 'Enter arena ▶'));
-    const w = Math.ceil(this.bubbleText.width) + 28;
-    const h = 34;
-    this.bubbleBg
-      .clear()
-      .fillStyle(0x1d1612, 0.35)
-      .fillRoundedRect(-w / 2 + 2, -h / 2 + 3, w, h, 14)
-      .fillStyle(0xffd56b)
-      .fillRoundedRect(-w / 2, -h / 2, w, h, 14)
-      .lineStyle(2, 0x2f2538)
-      .strokeRoundedRect(-w / 2, -h / 2, w, h, 14)
-      .fillStyle(0xffd56b)
-      .fillTriangle(-8, h / 2 - 1, 8, h / 2 - 1, 0, h / 2 + 9);
-    this.bubbleW = w;
-    this.bubbleH = h;
-  }
-
-  /** the Enter bubble in world units (a container has no reliable bounds for its graphics) */
-  private bubbleBounds() {
-    const k = this.bubble.scale;
-    return new Phaser.Geom.Rectangle(this.bubble.x - (this.bubbleW * k) / 2, this.bubble.y - (this.bubbleH * k) / 2, this.bubbleW * k, (this.bubbleH + 10) * k);
+    this.badges.get('nest')?.setVisible(!!f?.eggs[0] && f.eggs[0].h >= f.eggs[0].need);
+    this.nest.setVisible(!!f?.eggs.length);
+    this.badges.get('hall')?.setVisible(canUnlock);
   }
 
   /**
-   * Screen (CSS px, viewport) rectangle of a building, or of the arena's Enter bubble ('bubble').
-   * Used by the guided tutorial to spotlight canvas objects. Null when not on screen.
+   * Screen rectangle (CSS px) of a landmark, for the guided tutorial's spotlight. 'bubble' = the arena too
+   * (the side-view town had an "Enter" bubble over it). Null when not on screen.
    */
   screenRect(id: string): DOMRect | null {
-    const img = this.images.get(id);
-    const b = id === 'bubble' ? (this.bubble.visible ? this.bubbleBounds() : null) : img?.getBounds();
+    const img = this.images.get(id === 'bubble' ? 'arena' : id);
+    const b = img?.getBounds();
     if (!b || !this.sys.isActive()) return null;
     const cr = this.game.canvas.getBoundingClientRect();
     if (!cr.width) return null;
     const k = cr.width / this.scale.width;
     const cam = this.cameras.main;
-    const x = cr.left + (b.x - cam.scrollX) * cam.zoom * k;
-    const y = cr.top + (b.y - cam.scrollY) * cam.zoom * k;
-    return new DOMRect(x, y, b.width * cam.zoom * k, b.height * cam.zoom * k);
+    return new DOMRect(cr.left + (b.x - cam.scrollX) * cam.zoom * k, cr.top + (b.y - cam.scrollY) * cam.zoom * k, b.width * cam.zoom * k, b.height * cam.zoom * k);
   }
 
   /** Re-draw the building labels after a language change. */
   refreshLabels() {
-    for (const b of BUILDINGS) this.labels.get(b.id)?.setText(b.name);
-    this.paintBubble();
+    for (const b of BUILDINGS) this.labels.get(b.id)?.setText(b.open ? b.name : `${b.name} · ${L('เร็วๆ นี้', 'soon')}`);
   }
 
-  /** Highlight a building without moving the camera. */
   setSelected(id: string | null) {
     this.selected = id;
-    for (const [bid, lbl] of this.labels) lbl.setColor(bid === id ? '#ffd56b' : '#ffffff');
-    this.arrow.setVisible(!!id && id !== 'arena');
-    this.bubble.setVisible(id === 'arena');
+    this.ring.clear();
+    const img = id ? this.images.get(id) : null;
+    if (!img) return;
+    this.ring.lineStyle(2, 0xffd56b, 0.95).strokeEllipse(img.x, img.y - 2, img.displayWidth * 0.95, img.displayWidth * 0.36);
   }
 
-  /** Scroll smoothly to a building and select it. */
+  /** The whole town is on screen: nothing to scroll to. Kept for callers of the side-view town. */
   focus(id: string) {
-    const b = BUILDING_BY_ID[id];
-    if (!b) return;
     this.setSelected(id);
-    this.vel = 0;
-    const cam = this.cameras.main;
-    this.tweens.killTweensOf(cam);
-    this.tweens.add({ targets: cam, scrollX: this.clamp(b.x - W / 2), duration: 450, ease: 'Sine.easeInOut' });
-  }
-
-  update(time: number, delta: number) {
-    const cam = this.cameras.main;
-    for (const c of this.clouds) {
-      c.x += delta * 0.006;
-      if (c.x > this.cloudWrap + 60) c.x = -80;
-    }
-    if (!this.dragging && Math.abs(this.vel) > 0.02) {
-      cam.scrollX = this.clamp(cam.scrollX + this.vel * delta);
-      this.vel *= Math.pow(0.9, delta / 16);
-    } else if (!this.dragging) this.vel = 0;
-    if (this.cursors?.left.isDown) cam.scrollX = this.clamp(cam.scrollX - 0.5 * delta);
-    if (this.cursors?.right.isDown) cam.scrollX = this.clamp(cam.scrollX + 0.5 * delta);
-
-    if (this.selected) {
-      const lbl = this.labels.get(this.selected)!;
-      this.arrow.setPosition(lbl.x, lbl.y - lbl.height - 14 + Math.sin(time / 180) * 3);
-      if (this.selected === 'arena') this.bubble.setPosition(lbl.x, Math.max(24, lbl.y - lbl.height - 26));
-    }
-    this.drawMini();
-  }
-
-  private drawMini() {
-    const g = this.mini.clear();
-    const sx = this.cameras.main.scrollX;
-    g.fillStyle(0x000000, 0.45).fillRect(MX - 4, MY - 2, MW + 8, MH + 4);
-    g.fillStyle(0xd3c9ee, 0.9).fillRect(MX, MY + MH - 3, MW, 3);
-    for (const b of BUILDINGS) {
-      const x = Math.round(MX + (b.x / WORLD_W) * MW);
-      const color = b.id === 'arena' ? 0xffd56b : b.open ? 0xffffff : 0x9aa4ad;
-      g.fillStyle(color).fillRect(x - 2, MY + 2, b.id === 'arena' ? 6 : 4, MH - 6);
-      if (b.id === this.selected) g.lineStyle(1, 0xffd56b).strokeRect(x - 4, MY, 9, MH - 2);
-    }
-    g.lineStyle(2, 0xffffff, 0.9).strokeRect(MX + (sx / WORLD_W) * MW, MY - 1, (W / WORLD_W) * MW, MH + 2);
   }
 }

@@ -17,7 +17,12 @@ export interface FightResponse {
     line?: Line;
     build: Build;
     rating: number;
+    /** the opponent's hero is moonlit (shiny) */
+    shiny?: boolean;
   };
+  /** arena mode the server recorded for this run, and whether its hero is moonlit (shiny) */
+  mode?: 'casual' | 'ranked';
+  shiny?: boolean;
   /** rating window the opponent was found in (null = AI) and how many player builds were in it */
   match?: { window: number | null; pool: number };
   result: CombatResult;
@@ -150,6 +155,13 @@ export interface FarmView {
   newbie: number;
   monument: { season: string; mine: number; points: number; goal: number; players: number; tiers: number[]; minPersonal: number };
   stored?: boolean;
+  finds: Record<string, number>;
+  shinies: string[];
+  findRolls: number;
+  casualRuns: number;
+  casualTicket: boolean;
+  /** lucky finds of this action (POST answers only) */
+  found?: string[];
 }
 export type FarmOpReq =
   | { op: 'send'; b: FarmBuilding; hero: string }
@@ -159,7 +171,9 @@ export type FarmOpReq =
   | { op: 'upgrade'; b: FarmBuilding }
   | { op: 'unlock'; hero: string }
   | { op: 'pour'; res: 'wood' | 'ore' | 'crystal'; n: number }
-  | { op: 'repair' };
+  | { op: 'repair' }
+  | { op: 'pourFind'; id: string };
+export interface FeedRow { t: number; name: string; kind: 'find' | 'shiny'; id: string; first?: true }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { ...init, headers: { 'content-type': 'application/json' } });
@@ -171,7 +185,7 @@ const qs = (o: Record<string, string | number | undefined>) =>
   new URLSearchParams(Object.entries(o).filter((e): e is [string, string | number] => e[1] !== undefined && e[1] !== '').map(([k, v]) => [k, String(v)])).toString();
 
 export const api = {
-  fight: (body: { runId: string; name: string; day: number; rating: number; build: Build; playerId?: string; tutorial?: boolean }) =>
+  fight: (body: { runId: string; name: string; day: number; rating: number; build: Build; playerId?: string; tutorial?: boolean; mode?: 'casual' | 'ranked' }) =>
     req<FightResponse>('/api/fight', { method: 'POST', body: JSON.stringify(body) }),
   replay: (id: string) => req<ReplayRecord>('/api/replay/' + encodeURIComponent(id)),
   /** line mix of the player builds the next fight could meet */
@@ -182,6 +196,7 @@ export const api = {
   farm: (playerId: string) => req<FarmView>('/api/farm?' + qs({ playerId })),
   /** one visit: ops applied in order, all-or-nothing */
   farmOps: (playerId: string, ops: FarmOpReq[]) => req<FarmView>('/api/farm', { method: 'POST', body: JSON.stringify({ playerId, ops }) }),
+  feed: () => req<{ rows: FeedRow[] }>('/api/feed'),
   hatch: (playerId: string) => req<{ got: string; farm: FarmView }>('/api/farm/hatch', { method: 'POST', body: JSON.stringify({ playerId }) }),
   leaderboard: (period: 'season' | 'day' = 'season', playerId?: string) =>
     req<LeaderboardResponse>('/api/leaderboard?' + qs({ period, playerId })),

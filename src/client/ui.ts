@@ -563,8 +563,24 @@ function render() {
 
 /** the farm is fetched once per town visit (a failed fetch is not retried in a loop) */
 let farmAsked = false;
+/** arena mode picked on the hero-pick screen (remembered): casual is free, ranked costs a ticket */
+let pickMode: 'casual' | 'ranked' = fetchStore('mochi.mode') === 'ranked' ? 'ranked' : 'casual';
+/** the town's one-tap row: collect everything, send every idle hero to work, and the big Battle button */
+function townActionsHTML() {
+  const ready = FU.readyTotal();
+  const any = ready.wood + ready.ore + ready.crystal > 0;
+  const idle = FU.idleCount();
+  const tickets = FU.rankedTickets();
+  return `<div class="town-actions">
+    <button class="collect-all" data-a="farmCollectAll" ${any ? '' : 'disabled'}>${L('เก็บทั้งหมด', 'Collect all')} ${(['wood', 'ore', 'crystal'] as const).filter((k) => ready[k]).map((k) => `${FU.resIcon(k)}${ready[k]}`).join(' ')}</button>
+    <button class="fill-jobs" data-a="farmFill" ${idle ? '' : 'disabled'}>${L(`ส่งไปทำงาน · ว่าง ${idle}`, `Fill jobs · ${idle} idle`)}</button>
+    <button class="battle-big" data-a="enterArena"><b>${runActive() ? L('เล่นต่อ ▶', 'CONTINUE ▶') : L('ต่อสู้ ▶', 'BATTLE ▶')}</b><small>${L(`ทั่วไปฟรี · แรงค์ ตั๋ว ${tickets}`, `Casual free · Ranked ${tickets} ticket${tickets === 1 ? '' : 's'}`)}</small></button>
+  </div>`;
+}
+
 function renderTown() {
   stage.town.setSelected(selected);
+  stage.town.setFarm(FU.farm, FU.canUnlockAny());
   if (!farmAsked) {
     farmAsked = true;
     void FU.loadFarm(() => {
@@ -594,11 +610,11 @@ function renderTown() {
         done ? `<button data-a="lastResults">${L('ผลรอบล่าสุด', 'Last run results')}</button>` : ''
       }<button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
     } else if (b.id === 'board') {
-      body += FU.monumentHTML();
+      body += FU.feedHTML() + FU.monumentHTML();
       body += `<div class="actions"><button class="primary" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
       body += `<div class="actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button><button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
-      body += FU.eggHTML() + FU.hallFarmHTML();
+      body += FU.eggHTML() + FU.findsHTML() + FU.hallFarmHTML();
       body += `<p class="muted">${L(
         `ฮีโร่ทั้งหมด ${HEROES.length} ตัว · แต่ละรอบสุ่มให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย`,
         `${HEROES.length} heroes · each run offers ${R.HERO_CHOICES} at random, from different styles`,
@@ -618,10 +634,11 @@ function renderTown() {
   <section class="town-card glass">
     <h2 class="town-h">${L('เมืองของคุณ', 'Your town')}</h2>
     <p class="town-hint">${L(
-      'ลากซ้ายขวาเพื่อเดินดูเมือง (ใช้ล้อเมาส์หรือปุ่มลูกศรก็ได้) · แตะอาคารเพื่อดูรายละเอียด · แตะแผนที่ย่อด้านล่างเพื่อกระโดดไปจุดนั้น',
-      'Drag left and right to walk around town (the mouse wheel or arrow keys work too) · tap a building for details · tap the mini map below to jump there',
+      'แตะฟองบนอาคารเพื่อเก็บของ · แตะอาคารเพื่อดูฮีโร่ที่ทำงาน · แตะสนามประลองเพื่อต่อสู้',
+      'Tap a bubble on a building to collect · tap a building to see its workers · tap the arena to battle',
     )}</p>
     ${FU.farmBarHTML()}
+    ${townActionsHTML()}
     <div class="chips">${chips}</div>
     ${detail}
   </section>`;
@@ -629,7 +646,14 @@ function renderTown() {
 
 function renderTitle() {
   const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed()), R.HERO_CHOICES, FU.usablePool() ?? undefined).map((id) => HEROES_BY_ID[id]);
-  const noRuns = !runActive() && FU.outOfRuns();
+  const noRuns = !runActive() && pickMode === 'ranked' && FU.outOfRuns();
+  const tickets = FU.rankedTickets();
+  const modeTabs = runActive()
+    ? ''
+    : `<div class="mode-tabs" role="tablist">
+      <button role="tab" class="mode casual${pickMode === 'casual' ? ' on' : ''}" aria-selected="${pickMode === 'casual'}" data-a="pickMode" data-i="casual"><b>${L('ทั่วไป', 'Casual')}</b><small>${L('ฟรี เล่นได้ไม่จำกัด · ผงดาวครึ่งเดียว', 'Free, unlimited · half stardust')}</small></button>
+      <button role="tab" class="mode ranked${pickMode === 'ranked' ? ' on' : ''}" aria-selected="${pickMode === 'ranked'}" data-a="pickMode" data-i="ranked"><b>${L('แรงค์', 'Ranked')} ${FU.resIcon('ticket')}×${tickets}</b><small>${L('ใช้ตั๋ว 1 ใบ · ชนะ 7+ ได้ตั๋วคืน · ขึ้นกระดานผู้นำ', '1 ticket · 7+ wins refunds it · leaderboard and prizes')}</small></button>
+    </div>`;
   if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
   if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : R.lookFor(nextSeed!, previewHero));
   const resume = runActive()
@@ -654,7 +678,8 @@ function renderTitle() {
       <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
     </div>
     ${resume}
-    ${noRuns ? `<p class="toast">${L('วันนี้รอบฟรีหมดแล้ว · ทำตั๋วจากไม้และแร่ได้ที่สนามประลองในเมือง หรือรอพรุ่งนี้ (รอบที่ไม่ได้ใช้สะสมได้)', 'No free runs left today · craft a ticket from wood and ore at the arena in town, or come back tomorrow (unused runs bank up)')} <button data-a="town">${L('ไปเมือง', 'Go to town')}</button></p>` : ''}
+    ${modeTabs}
+    ${noRuns ? `<p class="toast">${L('ไม่มีตั๋วแรงค์ · เล่นแบบทั่วไปได้ฟรี หรือทำตั๋วจากไม้และแร่ที่สนามประลอง (ได้ฟรีวันละ 1 ใบ)', 'No ranked tickets · play Casual for free, or craft one from wood and ore at the arena (1 free every day)')} <button data-a="town">${L('ไปเมือง', 'Go to town')}</button></p>` : ''}
     ${runActive() ? '' : `<p class="pick-note">${L(
       `รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย · แตะการ์ดเพื่อเริ่ม (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`,
       `This run offers ${R.HERO_CHOICES} heroes from different styles · tap a card to start (see every hero in the Hero Hall in town)`,
@@ -1783,10 +1808,14 @@ async function doFight() {
   let res: FightResponse;
   try {
     // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
-    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}) };
+    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}), ...(r.day === 1 ? { mode: r.mode ?? 'casual' } : {}) };
     tutorialFight = false;
     res = await api.fight(body as Parameters<typeof api.fight>[0]);
     M.rememberFromFight(res);
+    if (res.shiny && !r.shiny) {
+      r.shiny = true;
+      toast = L(`✦ ${HEROES_BY_ID[r.hero].name} ของคุณเป็นร่างแสงจันทร์! (โอกาส 1 ใน 1024) ทุกคนที่เจอคุณจะเห็น`, `✦ Your ${HEROES_BY_ID[r.hero].name} is MOONLIT! (1 in 1024) Everyone who meets your build sees it`);
+    }
     if (import.meta.env.DEV) {
       // the browser can re-run the exact fight from the seed — this is what makes replays shareable
       const local = simulate(build, res.opponent.build, res.seed, r.day);
@@ -1969,16 +1998,21 @@ function onClick(ev: Event) {
       {
         const seed = nextSeed ?? randSeed();
         if (!R.heroChoices(seed, R.HERO_CHOICES, FU.usablePool() ?? undefined).includes(arg)) break; // only an offered hero can start a run
-        if (FU.outOfRuns()) {
-          toast = L('รอบฟรีหมดแล้ว: ทำตั๋วที่สนามประลองในเมือง', 'No runs left: craft a ticket at the arena in town');
+        if (pickMode === 'ranked' && FU.outOfRuns()) {
+          toast = L('ไม่มีตั๋วแรงค์: เล่นแบบทั่วไปได้ฟรี', 'No ranked tickets: play Casual for free');
           break;
         }
         nextSeed = null;
         run = R.newRun(arg, seed, uid());
+        run.mode = pickMode;
         track('run_start', { hero: arg });
         heroVoice(arg, 'pick', true); // the hero greets you in its own voice (sim v21)
       }
       view = 'shop';
+      break;
+    case 'pickMode':
+      pickMode = arg === 'ranked' ? 'ranked' : 'casual';
+      store('mochi.mode', pickMode);
       break;
     case 'resume':
       view = phaseView(run!);
@@ -2326,6 +2360,16 @@ export function startUI(st: Stage) {
     if (view !== 'town' || id !== 'arena' || busy) return;
     view = runActive() ? phaseView(run!) : 'title';
     render();
+  };
+  st.town.onCollect = (id) => {
+    if (view !== 'town') return;
+    const fake = document.createElement('button');
+    fake.dataset.i = id;
+    void FU.farmAction('farmCollect', fake).then((msg) => {
+      if (msg) toast = msg;
+      sfx('reroll');
+      render();
+    });
   };
   st.town.onSelect = (id) => {
     selected = id;

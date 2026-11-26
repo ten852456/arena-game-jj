@@ -32,3 +32,26 @@
 .fodds { margin: 4px 0; padding-left: 18px; font-size: 0.88em; }
 .funl { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0; }
 button.small { padding: 3px 10px; font-size: 0.88em; }
+
+/* one-tap row: collect all, fill jobs, the big Battle button */
+.town-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin: 6px 0 8px; }
+.town-actions button { min-height: 48px; border-radius: 14px; font-weight: 700; }
+.town-actions .collect-all { background: var(--m-cream); color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
+.town-actions .fill-jobs { background: rgba(178, 235, 203, 0.12); border: 2px solid rgba(178, 235, 203, 0.7); color: var(--m-mint); }
+.town-actions .battle-big { flex: 1 1 100%; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, #ffd572, #ffb35c); color: var(--ink); border: 0; box-shadow: 0 5px 0 #c47a2c; }
+.town-actions .battle-big b { font-size: 1.4em; line-height: 1.1; }
+.town-actions .battle-big small { font-weight: 600; opacity: 0.85; }
+.town-actions button:disabled { opacity: 0.45; }
+
+/* Casual / Ranked tabs on the hero pick */
+.mode-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 10px; }
+.mode-tabs .mode { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 60px; padding: 8px 12px; border-radius: 16px; text-align: left; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 232, 196, 0.25); }
+.mode-tabs .mode b { font-size: 1.15em; display: inline-flex; align-items: center; gap: 4px; }
+.mode-tabs .mode small { opacity: 0.85; }
+.mode-tabs .casual.on { border-color: var(--m-mint); background: rgba(178, 235, 203, 0.12); }
+.mode-tabs .ranked.on { border-color: var(--m-gold); background: rgba(255, 213, 114, 0.14); }
+
+.ffinds, .ffeed { margin: 8px 0; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px dashed var(--moon-line); }
+.ffinds h4, .ffeed h4 { margin: 4px 0; }
+.ffeed ul { margin: 4px 0; padding-left: 18px; font-size: 0.9em; }
+.ffeed li.first { color: var(--m-gold); }

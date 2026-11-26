@@ -101,6 +101,10 @@ export const RUN_VERSION = 13;
 export interface RunState {
   v: typeof RUN_VERSION;
   id: string;
+  /** arena mode (farm): casual is free, ranked costs a ticket; the server records it on day 1 */
+  mode?: 'casual' | 'ranked';
+  /** the server rolled a moonlit (shiny) hero for this run */
+  shiny?: boolean;
   seed: number;
   hero: string;
   day: number;

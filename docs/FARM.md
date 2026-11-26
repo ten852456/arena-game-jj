@@ -329,6 +329,29 @@ account clusters), shadow-flag at 50 (off prize boards and the ghost pool), huma
 rented builds never count, payout wallet fixed for the season.
 Conflict to settle: eggs and hatched cosmetics are "never tradable" today; a cosmetics market would change that.
 
+## Playtest round 2 (owner, 2026-11-26)
+
+Owner played the first build: the side-scrolling town was inconvenient and confusing, the farm needed something
+random to talk about, and the arena should be free. Three research passes (layout UX, community RNG, casual vs
+ranked) and a mockup (claude.ai artifact "Mochi Moon town hub redesign"); owner decisions:
+- **Top-down town** (owner chose it over the one-screen side-view hub): a 3/4 top-down ground map with 8 plots,
+  every landmark on one screen, no scrolling (`src/client/townScene.ts`, art `town-ground.webp` + `td-*.webp`
+  made with Codex). Ready bubbles over producers (tap = collect), worker counts, egg and unlock badges, tap the
+  arena = battle. One-tap row in the panel: Collect all, Fill jobs (best free slot per idle hero), BATTLE.
+- **Casual free + Ranked ticket.** Casual: free, unlimited, stardust ×0.5 (×0.25 after 3 a day), an egg and a
+  ticket for the first 10-win casual run of a day, off the leaderboard. Ranked: 1 ticket per run, 1 free ticket a
+  day (bank 3), crafted tickets (30 wood + 20 ore, 4 a day, hold 8), 7+ wins refunds the ticket, stardust ×1.2,
+  eggs at 3 and 10 wins, the leaderboard and prizes. A tutorial run is always casual. Casual and Ranked share one
+  ghost pool (few players).
+- **Lucky finds** while working: one roll per hero-hour at collect time, 24 rolls a day; Moon Pearl 1/400 (mine,
+  lumber), Shrine Relic Shard 1/600 (shrine), Golden Moon Pearl 1/8000; pour into the monument for points.
+  **Moonlit (shiny) heroes**: 1/1024 per run, 5 rolls a day (casual is free). Both go to the **town feed**
+  (`GET /api/feed`, "world first" per season).
+- **Trading later:** new finds (pearls, shiny looks) may become tradable with a 7-day lock; egg cosmetics,
+  resources, tickets and heroes stay account-bound.
+- Not built yet: hero pets, Moon Rain event, collection log page, crafting cosmetics from finds, shiny glow in
+  the fight scene (only a toast and the Hero Hall list now), separate season rating.
+
 ## Open questions
 
 1. Bot quota (vision: resources also pay for bot runs) — later, when bots ship.
