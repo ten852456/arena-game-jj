@@ -26,6 +26,7 @@ export const NOTES: Note[] = [
       'อาคารอัปเกรดได้ไม่จำกัดเลเวล และฮีโร่เก่งงานขึ้นเมื่อทำงานนาน (ความชำนาญ)',
       'ไข่งาน ของหายากระหว่างทำงาน ฮีโร่แสงจันทร์ และข่าวในเมือง',
       'อนุสาวรีย์ประจำซีซั่น: ร่วมกันเติมทรัพยากรเพื่อปกป้องเมือง',
+      'โหลดเร็วขึ้นมาก: ไฟล์เกมเล็กลง 4 เท่า และเปิดครั้งต่อไปแทบไม่ต้องโหลดใหม่',
       'สมดุล: แพ้วันที่ 1–2 เสียเลือด 1 · ของวิเศษ 1 ใน 3 เข้ากับสายฮีโร่เสมอ · สุ่มร้านฟรีวันละ 1 ครั้ง · โบนัสชนะติดสูงสุด +2',
     ],
     en: [
@@ -35,6 +36,7 @@ export const NOTES: Note[] = [
       'Buildings level up without a cap, and heroes get better at a job the longer they do it (mastery)',
       'Work eggs, lucky finds while working, moonlit heroes and a town feed',
       'Season monument: pour resources together to protect the town',
+      'Loads much faster: the game download is 4× smaller, and later visits reuse almost everything',
       'Balance: a loss on days 1–2 costs 1 HP · 1 of 3 relics always fits your hero line · 1 free shop reroll a day · win-streak gold up to +2',
     ],
   },
