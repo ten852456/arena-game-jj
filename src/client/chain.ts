@@ -1,5 +1,5 @@
 /**
- * On-chain mode (`?chain=1`): the authoritative run lives in the `mochi-game` program (onchain/programs/mochi-game),
+ * On-chain mode (the default on this branch; `?chain=0` turns it off): the authoritative run lives in the `mochi-game` program (onchain/programs/mochi-game),
  * whose rules are the Rust port of src/sim (bit-exact, sim v22). Randomness: onchain/docs/RANDOMNESS.md.
  *
  * Wallets: the owner is Phantom (or a burner key with `&wallet=burner`). The owner signs twice, once:
@@ -119,7 +119,8 @@ export class StaleState extends Error {}
 /** forget queued local actions (after a resync the local state they were built on is gone) */
 export const chainDropQueue = () => { queue.length = 0; };
 
-export const chainOn = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('chain') === '1';
+/** this branch is the on-chain version: chain mode is the default; `?chain=0` = the normal server game (tests, dev) */
+export const chainOn = () => typeof location !== 'undefined' && new URLSearchParams(location.search).get('chain') !== '0';
 
 let cfg: ChainConfig | null = null;
 let base: Connection;

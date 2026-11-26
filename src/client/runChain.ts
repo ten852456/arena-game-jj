@@ -1,5 +1,5 @@
 /**
- * run.ts for the UI: everything re-exported. In chain mode (`?chain=1`) every DETERMINISTIC action the local rules
+ * run.ts for the UI: everything re-exported. In chain mode (the default; `?chain=0` = off) every DETERMINISTIC action the local rules
  * accept (buy, sell, move, lock, slot, pick relic, concede) is also queued as its on-chain action code and sent with
  * the next chain transaction (chain.ts). Actions with a random outcome (reroll, wish, last chance, mark, relic
  * reroll, fight) are not played locally in chain mode: ui.ts sends them with chain.chainRoll and takes the chain's

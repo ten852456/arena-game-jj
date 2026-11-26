@@ -1,5 +1,5 @@
 /**
- * On-chain mode overlay (?chain=1): a badge in the top-right corner on every screen (network, wallet, SOL,
+ * On-chain mode overlay (the default; off with ?chain=0): a badge in the top-right corner on every screen (network, wallet, SOL,
  * connection state, last on-chain fight) and a profile window with what the chain holds for this player.
  * Self-contained DOM + CSS: the game's screens are not touched.
  */

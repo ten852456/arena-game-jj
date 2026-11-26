@@ -85,7 +85,7 @@ let run: R.RunState | null = null;
 let view: View = 'title';
 /** seed of the next run: it also decides which heroes are offered. Kept until a run starts, so leaving the screen does not re-roll. */
 let nextSeed: number | null = null;
-/** on-chain mode (?chain=1): connection state; the hero choices of a run being started (from the chain's VRF) */
+/** on-chain mode (the default; ?chain=0 = off): connection state; the hero choices of a run being started (from the chain's VRF) */
 let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
 let chainChoices: string[] | null = null;
 /** their day-1 shops (published by the program with the choices) */
@@ -2420,7 +2420,7 @@ export function startUI(st: Stage) {
   render();
 }
 
-// ---------- on-chain mode (?chain=1) ----------
+// ---------- on-chain mode (the default; ?chain=0 = off) ----------
 /** UI actions with a random outcome → their chain code and argument */
 const CHAIN_ROLL: Record<string, (n: number, arg: string) => [number, number]> = {
   reroll: () => [3, 0],

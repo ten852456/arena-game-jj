@@ -4,10 +4,10 @@ Status 2026-11-26: everything below is ready locally; nothing has been pushed an
 Do it only with the product owner's go-ahead.
 
 ## What it is
-The same server + client image as the live list game (Dockerfile), from branch `mochi-list-v2-onchain`. With
-`/play/?chain=1` the game runs on chain: rules in the `mochi-game` program on the MagicBlock TEE (devnet), all
-randomness from the VRF oracle, accounts and season results on Solana devnet. Without `?chain=1` it is the normal
-server game (sim v22 balance on this branch).
+The same server + client image as the live list game (Dockerfile), from branch `mochi-list-v2-onchain`. At `/play`
+(the default on this branch) the game runs on chain: rules in the `mochi-game` program on the MagicBlock TEE (devnet), all
+randomness from the VRF oracle, accounts and season results on Solana devnet. With `/play?chain=0` it is the normal
+server game (sim v22 balance on this branch; the e2e scripts use it).
 
 | | |
 |---|---|
@@ -31,7 +31,7 @@ branch on the fork and its OWN Railway service. Never push this branch to `ten85
 3. Railway (project `arena-ab-test`): New service → GitHub repo `ten852456/arena-game-jj`, branch from step 2,
    builder = Dockerfile. Attach a volume at `/app/data`. Variables: none required (`PORT` is set by Railway).
    Generate a domain, e.g. `mochi-onchain-production.up.railway.app`.
-4. After deploy: open `<url>/play/?chain=1`, connect Phantom (devnet), play one run; `curl` a fight without
+4. After deploy: open `<url>/play`, connect Phantom (devnet), play one run; `curl` a fight without
    playerId → must be 400.
 
 ## Known limits for testers
