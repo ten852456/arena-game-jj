@@ -16,6 +16,13 @@ export const IMAGES = {
   bannerDefeat: `${BASE}img/banner-defeat.webp`,
   /** stardust (ผงดาว) currency icon, transparent, 256x313 */
   stardust: `${BASE}img/stardust.webp`,
+  resWood: `${BASE}img/res-wood.webp`,
+  resOre: `${BASE}img/res-ore.webp`,
+  resCrystal: `${BASE}img/res-crystal.webp`,
+  ticket: `${BASE}img/ticket.webp`,
+  egg: `${BASE}img/egg.webp`,
+  eggCracking: `${BASE}img/egg-cracking.webp`,
+  monument: `${BASE}img/monument.webp`,
   /** reward chest spilling stardust, transparent, 512x504 */
   chest: `${BASE}img/chest.webp`,
   /** 1200x560 leaderboard / profile header (three mochi on podiums) */

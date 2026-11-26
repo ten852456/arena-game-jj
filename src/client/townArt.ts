@@ -176,6 +176,30 @@ const seeded = (seed: number) => () => (seed = (seed * 16807) % 2147483647) / 21
 // ---------------------------------------------------------------- landmarks
 
 export function makeTownArt(scene: Phaser.Scene) {
+  // Moon shrine: torii gate, lanterns and a crystal altar.
+  art(scene, 'bld_shrine', 140, 150, (c) => {
+    ell(c, 70, 142, 65, 7); paint(c, P.stoneShade, 1.5);
+    rr(c, 28, 126, 84, 12, 3); paint(c, P.stone, 2);
+    rr(c, 34, 116, 72, 12, 3); paint(c, P.stoneShade, 2);
+    rr(c, 38, 63, 64, 54, 4); paint(c, P.paper, 2);
+    arch(c, 54, 78, 32, 39); paint(c, P.dark, 2);
+    c.beginPath(); c.moveTo(29, 65); c.quadraticCurveTo(42, 58, 48, 42);
+    c.lineTo(92, 42); c.quadraticCurveTo(98, 58, 111, 65);
+    c.quadraticCurveTo(70, 73, 29, 65); c.closePath(); paint(c, P.violet, 2.5);
+    line(c, [38, 62, 70, 66, 102, 62], P.lilac, 2);
+    crescent(c, 70, 48, 6, P.gold);
+    glow(c, 70, 96, 26, '166,244,255', 0.65);
+    crystal(c, 70, 110, 28, P.crystal);
+    sparkle(c, 82, 85, 5, P.mochi);
+    for (const x of [17, 115]) { rr(c, x, 38, 8, 101, 3); paint(c, P.pinkDeep, 2); }
+    rr(c, 15, 57, 110, 7, 3); paint(c, P.woodDark, 2);
+    c.beginPath(); c.moveTo(8, 25); c.quadraticCurveTo(70, 36, 132, 25);
+    c.lineTo(127, 39); c.quadraticCurveTo(70, 45, 13, 39); c.closePath(); paint(c, P.pinkDeep, 2.5);
+    line(c, [16, 31, 70, 36, 124, 31], P.pink, 2);
+    for (const x of [22, 118]) { line(c, [x, 65, x, 72], INK, 1.5); lantern(c, x, 79); }
+    sparkle(c, 48, 93, 3, P.crystal);
+  });
+
   // ---- เหมือง: crater mound with a glowing moon-crystal mine and a cart ----
   art(scene, 'bld_mine', 168, 126, (c) => {
     shaded(

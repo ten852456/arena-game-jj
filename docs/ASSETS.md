@@ -74,6 +74,12 @@ Processing: wide backgrounds are centre-cropped to 16:9 and scaled to 1920×1080
 ≤ 450 KB); the game backdrop also gets a light blur, −15 % saturation and −18 % brightness; the panel texture is
 blended with a half-offset copy so it tiles; badges are keyed, cropped square around the badge and scaled to 128 px.
 
+### Set 3: farm
+
+The farm set contains `res-wood`, `res-ore`, `res-crystal`, `ticket`, `egg`, and `egg-cracking` (transparent, maximum width 256 px), plus the wider `monument` (maximum width 512 px). The typed keys are `resWood`, `resOre`, `resCrystal`, `ticket`, `egg`, `eggCracking`, and `monument`. The small icons are designed to read at 20–32 px.
+
+Prompts are in `scripts/assets/prompts/farm-icons.txt`. Generate each PNG on flat magenta, copy it to `scripts/assets/.cache/raw/` using the names in that file, then run `python scripts/assets/images.py --farm` to key, crop and export just this set. The shrine landmark is drawn in `townArt.ts` rather than exported as an image.
+
 ## Sound effects (`assets/sfx/<name>.ogg` + `.mp3`, mono)
 
 | Name | Use |

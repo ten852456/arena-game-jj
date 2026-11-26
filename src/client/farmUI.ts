@@ -44,7 +44,7 @@ export const outOfRuns = () => !!farm && farm.runLimit && farm.runsLeft <= 0;
 const IMG = IMAGES as unknown as Record<string, string | undefined>;
 const ICON: Record<string, [string, string]> = {
   wood: ['resWood', '🪵'], ore: ['resOre', '🪨'], crystal: ['resCrystal', '💎'], ticket: ['ticket', '🎟️'],
-  stardust: ['stardust', '✨'], egg: ['egg', '🥚'], monument: ['monument', '🗿'],
+  stardust: ['stardust', '✨'], egg: ['egg', '🥚'], eggReady: ['eggCracking', '🐣'], monument: ['monument', '🗿'],
 };
 export function resIcon(k: string, big = false) {
   const [key, emoji] = ICON[k] ?? ['', '•'];
@@ -177,7 +177,7 @@ export function eggHTML(): string {
         .join('')}</ul><p class="muted small">${L(`การันตีของหายากภายใน ${F.EGG_PITY} ฟอง (ตอนนี้ ${f.pity}) · ไข่ได้จากการเล่นเท่านั้น ไม่ขาย ไม่แลก`, `A rare is guaranteed within ${F.EGG_PITY} eggs (now ${f.pity}) · eggs come from play only, never sold or traded`)}</p></details>`
     : `<p class="muted">${L('สะสมครบทุกชิ้นแล้ว!', 'Collection complete!')}</p>`;
   const body = egg
-    ? `<div class="fegg">${resIcon('egg', true)}<div><b>${L('ไข่งาน', 'Work egg')}</b> ${f.eggs.length > 1 ? L(`(+${f.eggs.length - 1} รอในรัง)`, `(+${f.eggs.length - 1} waiting)`) : ''}
+    ? `<div class="fegg">${resIcon(egg.h >= egg.need ? 'eggReady' : 'egg', true)}<div><b>${L('ไข่งาน', 'Work egg')}</b> ${f.eggs.length > 1 ? L(`(+${f.eggs.length - 1} รอในรัง)`, `(+${f.eggs.length - 1} waiting)`) : ''}
         <div class="fbar"><i style="width:${Math.min(100, Math.round((egg.h / egg.need) * 100))}%"></i></div>
         <small>${L(`ชั่วโมงทำงานของฮีโร่ ${Math.floor(egg.h)}/${egg.need}`, `hero work-hours ${Math.floor(egg.h)}/${egg.need}`)}</small></div>
         <button class="primary" data-a="farmHatch" ${egg.h >= egg.need ? '' : 'disabled'}>${L('ฟัก!', 'Hatch!')}</button></div>`
