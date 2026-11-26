@@ -188,3 +188,22 @@ admin answers 503). Ten wrong tokens from one IP, or 50 in total, within 10 minu
 | `GET /api/admin/waitlist` · `GET /api/admin/waitlist.csv` | the list, newest first; CSV with formula-safe cells |
 | `GET /api/admin/runs` | newest 100 finished runs and 50 fights (with replay ids) |
 | `POST /api/admin/announce {on, th, en}` | set or clear the banner |
+
+## Farm (idle town)
+
+Rules and numbers: `src/sim/farm.ts`; design: `docs/FARM.md`. The server's clock is the only clock.
+
+- `GET /api/farm?playerId=…` → the farm as of now: `res`, `caps`, `lv`, `slots`, `jobs` (per landmark: `hero`,
+  `ready`, `fill`, `fullIn` ms), `free` (banked free runs), `tickets`, `runsLeft`, `owned`, `rotation`, `usable`,
+  `inRun`, `eggs`, `odds`, `cosmetics`, `stamps`, `headStart`, `newbie`, `monument`, `runLimit`, `scale`. An unknown
+  player gets the farm they would start with (`stored: false`); a look never creates a record.
+- `POST /api/farm {playerId, ops}` → one visit, ops applied in order, **all-or-nothing** (409 `{error, at}` names the
+  op that failed). Ops: `send {b, hero}`, `recall {hero}`, `collect {b?}`, `craft {n}`, `upgrade {b}`,
+  `unlock {hero}`, `pour {res, n}`, `repair`. At most 32 ops. Limits: 120 calls per player per hour; a new town
+  needs the per-IP allowance (30 new towns per IP per hour).
+- `POST /api/farm/hatch {playerId}` → hatches the first egg if it has its work-hours: `{got, farm}`.
+- `POST /api/fight`, day 1 of a new run: 409 `{code: 'hero_locked'}` when the hero is not owned or in the free
+  rotation, 409 `{code: 'no_runs'}` when there is no free run or ticket left (the tutorial run is free).
+- `POST /api/run/finish`: `reward.eggs` = work eggs laid by this run (3 and 10 win marks).
+- Env: `FARM_TIME_SCALE` (playtests: 60 = one game hour per real minute), `FARM_GATE=off` (no hero lock, no run
+  limit), `FARM_LAUNCH` (players known before this time own every hero).

@@ -294,6 +294,41 @@ At season end the world is threatened; everyone pours resources into the city ha
 - Build order: **server MVP first** (jobs, collect, tickets, unlocks, upgrades, `FARM_TIME_SCALE`) → Tower
   supplies, work egg, monument → port to `engine-v12`.
 
+## Built (2026-11-26, server + client MVP)
+
+Code: `src/sim/farm.ts` (rules and numbers), `src/server/farm.ts` (API, arena gate), `src/client/farmUI.ts` (town
+cards). Checks: `scripts/farm-check.ts` (in `npm test`), `scripts/farm-api-check.ts` (`npm run farm-api`, against a
+server with `FARM_TIME_SCALE=3600`). Not built yet: Tower supplies (no Tower), tower research, market, the pass
+itself (`pass` flag exists), VRF (server randomness for now).
+
+**Numbers changed after the engagement research (fair, not punishing; sources in the research notes):**
+- Storage 12 / 14 / 16 / 20 / 24 h by level (8 h lost a third of a 2-collects-a-day player's output at night).
+- Crystal 1 per 12 h (one per collect). Warehouse 3 days of output (covers a weekend).
+- Free runs: 3 a day, **unused ones bank up to 6** (a missed day is not lost; owner had chosen "reset at midnight",
+  banking is the softer version of it).
+- Upgrades Lv2 60w+40o (paid by the 5-minute first shift) · Lv3 250/150/2c · Lv4 1200/800/6c · Lv5 3000/2000/15c.
+- Work egg: 48 work-hours (3 wins), 120 (10 wins); nest holds 4, one incubates; the pass hatches 1.5× faster.
+- Stamp card: 7 days by total days played (never consecutive), starts with 2 stamps; full card = 2 crystal + 24 egg hours.
+- New players: output ×2 on day 0 fading to ×1 over 7 days.
+- Monument: goal = 2,500 points × players who poured at least 300; starts 20% filled (the ruler's gift);
+  bronze / silver / gold at 100 / 130 / 160%; contributors (≥ 300) are never hit by the calamity.
+
+**Security review fixes:** the per-IP new-town limit also guards the day-1 fight path; a player counts toward the
+monument goal only past the personal minimum (fake ids cannot raise it); towns have a hard cap and the least
+valuable go first.
+
+## RMT and bots (research 2026-11-26, owner: tolerate RMT, fight bots with detection)
+
+Research recommendation (not decided): everything stays account-bound inside the game and account/wallet sales
+are tolerated (not policed); later an **official market for cosmetics only** with a 5–10% fee as a sink. Never
+tradable: wood, ore, crystal, stardust, supplies, heroes, tickets (a ticket is a board attempt). Lessons: Diablo 3
+auction house removed (trading became the game), Axie SLP collapse, Pixels ~40% bots, Lost Ark false bans.
+Bots: log per-action timing (+ hashed IP/device), nightly scores (collect regularity, no-sleep, no input,
+account clusters), shadow-flag at 50 (off prize boards and the ghost pool), human review at 80, ban waves every
+2–3 weeks and before payouts, 72 h payout hold, appeals. Prize guardrails: board counts the first N runs a day,
+rented builds never count, payout wallet fixed for the season.
+Conflict to settle: eggs and hatched cosmetics are "never tradable" today; a cosmetics market would change that.
+
 ## Open questions
 
 1. Bot quota (vision: resources also pay for bot runs) — later, when bots ship.
