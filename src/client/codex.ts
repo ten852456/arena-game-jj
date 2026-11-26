@@ -196,7 +196,7 @@ function build(): Entry[] {
       L('การ์ดพรบอกไว้ก่อนซื้อเสมอว่าจะให้อะไร', 'The wish card always says which one you get before you buy'),
     ]), 'wish mark upgrade');
   add('shop', 'reroll', L('🎲 สุ่มใหม่ และ 🔒 ล็อก', '🎲 Reroll and 🔒 lock'),
-    p(L(`สุ่มการ์ดใหม่ ${R.REROLL} เงิน · ล็อกการ์ดได้ฟรี การ์ดที่ล็อกอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน`, `New cards for ${R.REROLL} gold · locking is free: a locked card stays through rerolls and into the next day`)), 'reroll lock');
+    p(L(`สุ่มการ์ดใหม่ ${R.REROLL} เงิน (ครั้งแรกของวันฟรี) · ล็อกการ์ดได้ฟรี การ์ดที่ล็อกอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน`, `New cards for ${R.REROLL} gold (the first each day is free) · locking is free: a locked card stays through rerolls and into the next day`)), 'reroll lock');
   add('shop', 'slot', L('＋ ช่อง skill', '＋ Skill slot'),
     p(L(`ช่องถาวรทั้งรอบ ราคา ${R.slotPrice({ slotBuys: 0 } as R.RunState)}, ${R.slotPrice({ slotBuys: 1 } as R.RunState)}, ${R.slotPrice({ slotBuys: 2 } as R.RunState)} … (สูงสุด ${R.MAX_SLOTS} ช่อง) · ซื้อได้เมื่อช่องเต็มแล้วเท่านั้น`, `A slot for the whole run: ${R.slotPrice({ slotBuys: 0 } as R.RunState)}, ${R.slotPrice({ slotBuys: 1 } as R.RunState)}, ${R.slotPrice({ slotBuys: 2 } as R.RunState)} … (up to ${R.MAX_SLOTS}) · only when every slot is filled`)), 'slot');
   add('shop', 'sell', L('ขาย', 'Selling'),

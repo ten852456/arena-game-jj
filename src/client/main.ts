@@ -24,6 +24,7 @@ import './pages.css'; // profile name card, leaderboard
 import './farm.css'; // idle town: resources, landmarks, eggs, monument
 import { initCodex } from './codex';
 import { mountFeedback } from './feedback';
+import { mountVersion, notesOnStart } from './releaseNotes';
 import { deviceKind, track } from './track';
 import { playerId } from './views/meta';
 import { initDepthArt } from './depthArt';
@@ -111,6 +112,8 @@ async function boot() {
   initInfoMode(); // simple / detailed skill info: ⓘ in the header, Alt to peek
   mountMute();
   mountFeedback(); // 💬 in the header (wide screens) + the announcement banner
+  mountVersion(); // v0.0.x chip (release notes) + a banner when a newer version is deployed
+  notesOnStart(); // "What's new" once after an update
   playerId(); // make sure the anonymous player id exists, so the open is counted per player
   track('game_open', { lang: getLang(), device: deviceKind() });
   paintTagline();

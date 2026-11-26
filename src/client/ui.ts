@@ -972,7 +972,7 @@ function renderShop() {
 
   <section class="sv-sec sv-shop">
     <div class="sv-h">${goldPillHTML(r.gold)}<h3>${L('ร้าน skill', 'Skill shop')}</h3>
-      <button class="reroll" data-a="reroll" ${r.gold < R.REROLL ? 'disabled' : ''} title="${L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ)', 'New cards (locked cards stay)')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} ${coinHTML(R.REROLL)}</button></div>
+      <button class="reroll" data-a="reroll" ${r.gold < R.rerollPrice(r) ? 'disabled' : ''} title="${L('สุ่มการ์ดใหม่ (การ์ดที่ล็อกไว้อยู่ต่อ) · ครั้งแรกของวันฟรี', 'New cards (locked cards stay) · the first one each day is free')}">${L('🎲 สุ่มใหม่', '🎲 Reroll')} ${R.rerollPrice(r) ? coinHTML(R.REROLL) : `<b class="free-tag">${L('ฟรี', 'FREE')}</b>`}</button></div>
     <p class="sv-note info-det">${L(
       '<b>ลากการ์ด</b>ไปวางในรายการ skill ของคุณ (หรือแตะการ์ด แล้วแตะ <b>+</b> ตรงที่อยากวาง) · การ์ด <b>▲</b> = อัปเกรด skill ที่มีอยู่',
       '<b>Drag a card</b> into your skill list (or tap a card, then tap <b>+</b> where you want it) · a <b>▲</b> card levels up a skill you own',

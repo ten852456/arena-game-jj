@@ -63,16 +63,16 @@ for (const [name, b, day] of forged) if (typeof validateBuild(b, day) !== 'strin
 // security review (round 4): a draw costs no HP, so draws never lead to a last chance; and supply + awaken never stack
 if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were counted as losses (last chance from draws)');
 {
-  // a record with a death on day 7: a build that needs the free slot AND the awaken gold must be rejected
-  const rec = [0, 0, 0, 0, 0, 0, 0] as RunRecord;
-  const ways = allowances(8, rec);
-  if (new Set(ways.map((w) => w.opt)).size !== 3 || ways.some((w) => w.opt === 'none')) bad.push('a death on day 7 should give the three last-chance choices');
-  const gold = runMax(8, rec).gold;
-  const need = (free: number, b: Build) => buildCost(b, 8, free);
+  // a record with a death on day 8 (v0.0.1: days 1–2 cost 1 HP, so 7 losses are 15 HP and no longer a death): a build that needs the free slot AND the awaken gold must be rejected
+  const rec = [0, 0, 0, 0, 0, 0, 0, 0] as RunRecord;
+  const ways = allowances(9, rec);
+  if (new Set(ways.map((w) => w.opt)).size !== 3 || ways.some((w) => w.opt === 'none')) bad.push('a death on day 8 should give the three last-chance choices');
+  const gold = runMax(9, rec).gold;
+  const need = (free: number, b: Build) => buildCost(b, 9, free);
   // search builds that fit only when supply AND awaken stack: every one of them must be rejected
   const ids = ['shield', 'stoneskin', 'cleanse', 'bulwark', 'strike', 'jab', 'heavy', 'feast'];
   let stacked = 0;
-  for (let n = 4; n <= 7; n++)
+  for (let n = 4; n <= 8; n++)
     for (let lv3 = 0; lv3 <= n; lv3++) {
       const lv2 = 0;
       const sk = ids.slice(0, n).map((id, i) => ({ id, v: i < lv3 ? 'a1' : '' }));
@@ -81,15 +81,15 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
       const one = ways.some((w) => need(w.freeSlots, bb) <= w.cap(n));
       if (both && !one) {
         stacked++;
-        if (typeof validateBuild(bb, 8, rec) !== 'string') bad.push(`supply and awaken were granted together (${n} skills, ${lv3} Lv3, ${lv2} Lv2)`);
+        if (typeof validateBuild(bb, 9, rec) !== 'string') bad.push(`supply and awaken were granted together (${n} skills, ${lv3} Lv3, ${lv2} Lv2)`);
       }
     }
   if (!stacked) bad.push('no build needs supply + awaken stacked: the test proves nothing');
   const b: Build = { hero: 'knight', skills: ids.slice(0, 6).map((id) => ({ id, v: 'a1' })) };
-  if (typeof validateBuild(b, 8, rec, 'mark') !== 'string' && need(0, b) > gold) bad.push('a pinned last-chance choice was ignored');
+  if (typeof validateBuild(b, 9, rec, 'mark') !== 'string' && need(0, b) > gold) bad.push('a pinned last-chance choice was ignored');
   if (need(0, b) <= gold) bad.push('pinned-choice test build is too cheap');
   // supply: either +8 gold and a slot, or 12 gold (slots full) and no slot, never both
-  const sup = allowances(8, rec, 'supply');
+  const sup = allowances(9, rec, 'supply');
   if (sup.some((w) => w.freeSlots > 0 && w.cap(6) > gold + 8)) bad.push('supply gave a free slot together with the full-slots gold');
   if (sup.length !== 2) bad.push(`supply should give two separate ways here (got ${sup.length})`);
   if (couldBeFull(1, 7)) bad.push('couldBeFull: a day-1 run with 7 gold cannot have 8 slots');
@@ -99,29 +99,29 @@ if (runMax(12, Array(11).fill(2) as RunRecord).lastChance) bad.push('draws were 
     const n = 6;
     const bb: Build = { hero: 'knight', skills: ids.slice(0, n).map((id, i) => ({ id, v: i < k % 7 ? 'a1' : i < (k % 7) + 2 ? 'a' : '' })) };
     const withSlot = need(1, bb);
-    if (withSlot > gold + 8 && withSlot <= gold + SUPPLY_GOLD_FULL && need(0, bb) > gold + SUPPLY_GOLD_FULL && typeof validateBuild(bb, 8, rec, 'supply') !== 'string') bad.push('supply slot + full-slots gold were combined');
+    if (withSlot > gold + 8 && withSlot <= gold + SUPPLY_GOLD_FULL && need(0, bb) > gold + SUPPLY_GOLD_FULL && typeof validateBuild(bb, 9, rec, 'supply') !== 'string') bad.push('supply slot + full-slots gold were combined');
   }
   // the two checks must agree on ONE way: a build with a mark (only the Mark way allows it) and a running spend that only
   // Supply's +8 gold covers passes each check under a different way, so the fight must be rejected
   const marked: Build = { hero: 'knight', skills: [{ id: 'shield', v: 'a', mark: 'echo' }, { id: 'bulwark', v: '' }] };
-  if (typeof validateBuild(marked, 8, rec) === 'string') bad.push('mixed-way test: the marked build should pass validateBuild alone');
+  if (typeof validateBuild(marked, 9, rec) === 'string') bad.push('mixed-way test: the marked build should pass validateBuild alone');
   const prevSpent = { build: marked, spent: gold + 5, paidSlots: 0 };
-  const mixed = spendCheck(prevSpent, marked, 8, rec);
+  const mixed = spendCheck(prevSpent, marked, 9, rec);
   if (mixed.length) bad.push(`a build passed with marks from one last-chance way and gold from another (${mixed.map((w) => w.opt).join(', ')})`);
-  if (!spendCheck({ build: marked, spent: gold - 1, paidSlots: 0 }, marked, 8, rec).some((w) => w.opt === 'mark')) bad.push('mixed-way test: the honest Mark way should pass');
+  if (!spendCheck({ build: marked, spent: gold - 1, paidSlots: 0 }, marked, 9, rec).some((w) => w.opt === 'mark')) bad.push('mixed-way test: the honest Mark way should pass');
 }
 // security review (round 7): each last-chance way keeps its own ledger; one way's spend never combines with another's cap
 {
-  const rec = [0, 0, 0, 0, 0, 0, 0, 1] as RunRecord;
-  const G = runMax(9, rec).gold;
+  const rec = [0, 0, 0, 0, 0, 0, 0, 0, 1] as RunRecord;
+  const G = runMax(10, rec).gold;
   const B: Build = { hero: 'knight', skills: [{ id: 'shield', v: 'a1', mark: 'echo' }, { id: 'bulwark', v: '' }] };
   const cur: Build = { hero: 'knight', skills: [...B.skills, { id: 'stoneskin', v: '' }] };
   const ledger = { 'mark:0': { spent: G - 2, paidSlots: 0, wishMarks: 0, freeMarks: 1 }, 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } };
-  if (spendCheck({ build: B, ledger }, cur, 9, rec).length) bad.push('ledger: a way passed with another ways cheaper spend (mark spend + supply gold)');
+  if (spendCheck({ build: B, ledger }, cur, 10, rec).length) bad.push('ledger: a way passed with another ways cheaper spend (mark spend + supply gold)');
   // the same numbers collapsed into one shared ledger would have let it through (the hole the per-way ledger closes)
-  if (!spendCheck({ build: B, spent: G - 2, paidSlots: 0, wishMarks: 0, freeMarks: 1 }, cur, 9, rec).length) bad.push('ledger test: the collapsed ledger should show the hole');
+  if (!spendCheck({ build: B, spent: G - 2, paidSlots: 0, wishMarks: 0, freeMarks: 1 }, cur, 10, rec).length) bad.push('ledger test: the collapsed ledger should show the hole');
   // a way dropped earlier never comes back
-  if (spendCheck({ build: B, ledger: { 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } } }, B, 9, rec).some((w) => w.opt === 'mark')) bad.push('ledger: a dropped way came back');
+  if (spendCheck({ build: B, ledger: { 'supply:1': { spent: G + 7, paidSlots: 0, wishMarks: 1, freeMarks: 0 } } }, B, 10, rec).some((w) => w.opt === 'mark')) bad.push('ledger: a dropped way came back');
 }
 let markChi = 0;
 // security review (round 9): the two wish-mark kinds of a run are independent (FNV low bits used to pair them)

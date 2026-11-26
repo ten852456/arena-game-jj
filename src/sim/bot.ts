@@ -2,7 +2,7 @@ import { HEROES, HEROES_BY_ID, ULT_LV2_LV3, ULT_PIECES, ultLv3, ultPieces } from
 import { activeBonuses } from './links';
 import { Rng, hashSeed } from './rng';
 import {
-  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, relicRerollsLeft, reroll, rerollRelic, sell, slotPrice, slotsOf, toBuild, upgradeOf,
+  LV3_DAY, MAX_SLOTS, PRICES, REROLL, buy, buySlot, incomeFor, newRun, offerChoices, pickRelic, priceOf, relicRerollsLeft, reroll, rerollPrice, rerollRelic, sell, slotPrice, slotsOf, toBuild, upgradeOf,
   type Offer, type RunState,
 } from './run';
 import { RELICS_BY_ID, RELIC_DAYS, relicFits, relicFitsBuild, rollRelicOffer } from './relics';
@@ -282,7 +282,7 @@ function ensureHitter(s: RunState, keep: (k: SkillInstance) => number, rules: Bo
       if (s.skills.length >= slotsOf(s)) sell(s, weakest(s, keep));
       if (!buy(s, pick)) return true;
     }
-    if (s.day <= 1 || s.gold < REROLL + PRICES[0]) return false;
+    if (s.day <= 1 || s.gold < rerollPrice(s) + PRICES[0]) return false;
     reroll(s);
   }
   return ownedHitters(s) > 0;
@@ -378,7 +378,7 @@ export function botShopTurn(s: RunState, rules: BotRules) {
       bought++;
       continue;
     }
-    if (rerolls < rules.maxRerolls && s.gold >= REROLL + PRICES[0] + rules.reserve) {
+    if (rerolls < rules.maxRerolls && s.gold >= rerollPrice(s) + PRICES[0] + rules.reserve) {
       reroll(s);
       rerolls++;
       continue;
@@ -494,7 +494,7 @@ function hardShopTurn(s: RunState, rules: BotRules) {
       version++;
       continue;
     }
-    if (rerolls < rules.maxRerolls && s.gold >= REROLL + PRICES[0] + rules.reserve) {
+    if (rerolls < rules.maxRerolls && s.gold >= rerollPrice(s) + PRICES[0] + rules.reserve) {
       reroll(s);
       rerolls++;
       continue;
@@ -527,8 +527,10 @@ export function aiRun(hero: string, day: number, prefer: Line[], seed: number, t
       s.day = d;
       s.gold += incomeFor(d, 0, hero).base;
       s.rolls = 0;
-      reroll(s); // costs 1, but gives a fresh shop for the day
-      s.gold += 1;
+      const paid = rerollPrice(s);
+      reroll(s); // a fresh shop for the day: refund exactly what it cost (v0.0.1: the first reroll of a day is free)
+      s.gold += paid;
+      s.rolls = 0; // the bot keeps the day's free reroll, like a player
       // relic days: the same 3-card offer a player gets (sim v17)
       if (RELIC_DAYS.includes(d)) {
         s.relicDays = [...(s.relicDays ?? []), d];

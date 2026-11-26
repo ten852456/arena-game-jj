@@ -182,13 +182,16 @@ export const sellPrice = (k: SkillInstance) => lvOf(k.v) + (k.star ?? 0);
  * (≈ day 13–16) survives 3–4 defeats, plus the last chance.
  */
 export const LOSS_CAP = 3;
-export const damageFor = (day: number) => Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / T['run.lossEvery']));
+/** v0.0.1 (design meeting): a loss on days 1–2 costs 1 HP (early forgiveness), then 2 to day 4, then 3. */
+export const EARLY_LOSS_DAYS = 2;
+export const damageFor = (day: number) => (day <= EARLY_LOSS_DAYS ? 1 : Math.min(LOSS_CAP, 1 + Math.ceil(Math.max(1, day) / T['run.lossEvery'])));
 
 /** Win streak bonus is clearly bigger than the loss-streak comeback money. */
 export function incomeFor(day: number, streak: number, hero?: string) {
   // แมวกวัก (sim v21): + gold every day from day 2
   const base = (day <= 1 ? DAY1_GOLD : 5 + Math.min(Math.floor(day / 2), 3)) + (hero === 'luckycat' && day >= 2 ? T['luckycat.income'] : 0);
-  const bonus = streak >= 5 ? 3 : streak >= 3 ? 2 : streak >= 2 ? 1 : streak <= -2 ? 1 : 0;
+  // v0.0.1 (design meeting): win-streak gold capped at +2 (was +3 from 5 wins), so early luck snowballs less
+  const bonus = streak >= 3 ? 2 : streak >= 2 ? 1 : streak <= -2 ? 1 : 0;
   return { base, bonus };
 }
 
@@ -441,10 +444,13 @@ export function wish(s: RunState): WishResult {
   return { idx: i, from, mark: k.mark };
 }
 
+/** v0.0.1 (design meeting): the first shop reroll of each day is free (`rolls` resets every day). */
+export const rerollPrice = (s: RunState) => (s.rolls === 0 ? 0 : REROLL);
 export function reroll(s: RunState): string | null {
   if (s.phase === 'relic') return 'เลือกของวิเศษก่อน';
-  if (s.gold < REROLL) return 'เงินไม่พอ';
-  s.gold -= REROLL;
+  const price = rerollPrice(s);
+  if (s.gold < price) return 'เงินไม่พอ';
+  s.gold -= price;
   s.rolls++;
   rollShop(s);
   return null;

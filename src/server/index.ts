@@ -2,7 +2,7 @@
 // tiered AI fallback), runs the fight, keeps fights so replays can be shared by link, and records finished runs
 // for the stardust reward, profiles and leaderboards. API: docs/API.md. Storage: ./store.ts (data/db.json).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { handleFight, handleScout, type Res } from './fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
@@ -16,6 +16,8 @@ import {
 } from './site';
 
 const PORT = Number(process.env.PORT ?? 8787);
+/** the running game version (package.json): open tabs compare it with theirs and offer a reload */
+const VERSION = String(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version ?? '0.0.0');
 const DIST = join(ROOT, 'dist');
 
 // builds saved before unique default names all say "ผู้เล่น": give them their Mochi-1234 name
@@ -102,6 +104,7 @@ const routes: Record<string, Route> = {
   'POST /api/farm': async (req) => handleFarmOps(await readBody(req), ipOf(req)),
   'POST /api/farm/hatch': async (req) => handleHatch(await readBody(req)),
   'GET /api/feed': () => handleFeed(),
+  'GET /api/version': () => ({ status: 200, json: { version: VERSION } }),
   'GET /api/stats': () => ({
     status: 200,
     json: { snapshots: db.snapshots.length, fights: db.fights.length, runs: db.runs.length, players: Object.keys(db.players).length },

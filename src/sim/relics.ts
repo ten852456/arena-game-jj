@@ -33,8 +33,12 @@ export const relicOffersAll = (seed: number, hero: string, day: number, owned: s
   Array.from({ length: 1 + relicRerolls() }, (_, r) => rollRelicOffer(seed, hero, day, owned, skills, r));
 /** a relic of the hero's line is this many times as likely as any other in the offer (after the first one is owned) */
 const LINE_W = 1.3;
-/** sim v22: false = relic offers are fully random (no guaranteed fit, no line weight) */
-const RELIC_LUCK = false;
+/**
+ * v0.0.1 (design meeting 2026-11-26): offers stay random, but 1 of the 3 always fits the build (RELIC_LUCK); the
+ * hero-line weight on the other two stays off (RELIC_WEIGHT), so the offer is still a surprise. sim v22 had both off.
+ */
+const RELIC_LUCK = true;
+const RELIC_WEIGHT = false;
 
 export const RELICS: RelicDef[] = [
   // ⚔ hit
@@ -197,7 +201,7 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   }
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
-    const w = rest.map((r) => (RELIC_LUCK && relicFits(r.id, line) ? LINE_W : 1));
+    const w = rest.map((r) => (RELIC_WEIGHT && relicFits(r.id, line) ? LINE_W : 1));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;
