@@ -818,8 +818,11 @@ function sellSkill(i: number, from: DOMRect | null) {
 function dropSkill(from: number, to: number) {
   const r = run;
   if (!r || view !== 'shop' || !r.skills[from]) return;
-  const [k] = r.skills.splice(from, 1);
-  r.skills.splice(to, 0, k);
+  // one step at a time through R.moveSkill (= the same order as taking it out and inserting it at `to`), so chain
+  // mode queues every move for the chain; editing r.skills directly changed only the screen, not the build fought
+  const end = Math.max(0, Math.min(to, r.skills.length - 1));
+  for (let i = from; i < end; i++) R.moveSkill(r, i, 1);
+  for (let i = from; i > end; i--) R.moveSkill(r, i, -1);
   saveRun();
   render();
 }
