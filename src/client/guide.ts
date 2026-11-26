@@ -79,8 +79,13 @@ const STEPS: Step[] = [
   {
     id: 'hero',
     view: 'title',
-    target: () => $('.heroes.pick3'),
-    text: () => L('เลือกฮีโร่ 1 ตัว ตัวไหนก็ได้!', 'Pick a hero. Any one is fine!'),
+    // the card hero select: first the 3 cards, then (one card open) the open card and the Start button under the hero
+    target: () =>
+      $('.pk-card.focused') ? [$('.pk-card.focused'), $('.pk-start')].filter((e): e is Element => !!e) : ($('.pk-cards') ?? $('.heroes.pick3')),
+    text: () =>
+      $('.pk-card.focused')
+        ? L('ชอบตัวนี้ไหม? กดเริ่มเลย!', 'Like this one? Press Start!')
+        : L('แตะการ์ดฮีโร่ 1 ใบ ตัวไหนก็ได้!', 'Tap a hero card. Any one is fine!'),
     done: () => H.view() === 'shop',
   },
   {
@@ -91,12 +96,13 @@ const STEPS: Step[] = [
       if (r && !r.skills.length) pair ??= chainPair(r);
       return offerCard(pair?.[0] ?? -1) ?? anyBuyable();
     },
-    text: () => L('ซื้อ skill นี้ก่อน ตอนสู้มันจะทำงานเอง', 'Buy this skill first. In a fight it fires all by itself.'),
+    text: () => L('กดค้างที่ skill นี้จนเต็มเพื่อซื้อ ตอนสู้มันจะทำงานเอง', 'Hold this skill until it fills to buy it. In a fight it fires all by itself.'),
     done: () => skills() >= 1,
   },
   {
     id: 'buy2',
     view: 'shop',
+    enter: () => H.drawer(false), // the drawer opened on the first buy: the next card must not be under it
     target: () => {
       const r = H.run();
       return (r ? offerCard(partnerOffer(r)) : null) ?? anyBuyable();
@@ -104,8 +110,8 @@ const STEPS: Step[] = [
     title: () => (H.run() && partnerOffer(H.run()!) >= 0 ? L('🔗 ตัวนี้ต่อโซ่ได้!', '🔗 This one chains!') : ''),
     text: () =>
       H.run() && partnerOffer(H.run()!) >= 0
-        ? L('ซื้อเลย มันจะไปวางติดกับตัวแรก', 'Buy it and it goes right next to your first skill.')
-        : L('ซื้ออีก 1 skill', 'Buy one more skill.'),
+        ? L('กดค้างซื้อเลย มันจะไปวางติดกับตัวแรก', 'Hold to buy it: it goes right next to your first skill.')
+        : L('กดค้างซื้ออีก 1 skill', 'Hold to buy one more skill.'),
     done: () => skills() >= 2 || !anyBuyable(),
   },
   {
@@ -130,7 +136,7 @@ const STEPS: Step[] = [
     view: 'fighting',
     passive: true,
     target: () => $('.mm-speed'),
-    text: () => L('นั่งดูได้เลย skill ทำงานเองตามเวลาของมัน ⏱ · กด 1x 2x 4x เปลี่ยนความเร็ว', 'Just watch: each skill fires on its own timer ⏱ · tap 1x 2x 4x to change speed'),
+    text: () => L('นั่งดูได้เลย skill ทำงานเองตามเวลาของมัน ⏱ · กดปุ่ม ▶ เพื่อเปลี่ยนความเร็ว', 'Just watch: each skill fires on its own timer ⏱ · tap ▶ to change speed'),
     done: () => H.view() === 'result',
   },
   {
@@ -200,7 +206,10 @@ function resolve(step: Step): { rect: DOMRect | null; els: Element[] } {
   return { rect: rects.length ? union(rects) : null, els };
 }
 
+/** the words in the bubble now (a step may change them while it is up) */
+let shownText = '';
 function paintBubble(step: Step) {
+  shownText = step.text();
   const title = step.title?.() ?? '';
   const next = step.next?.() ?? '';
   bubble.innerHTML = `<div class="gd-arrow" aria-hidden="true"></div>
@@ -291,7 +300,7 @@ function tick() {
     root.dataset.step = step.id;
     step.enter?.();
     paintBubble(step);
-  }
+  } else if (step.text() !== shownText) paintBubble(step); // a step whose words follow the screen (hero: card open → Start)
   const waiting = !!step.view && step.view !== v;
   const { rect, els } = waiting ? { rect: null, els: [] } : resolve(step);
   holeEls = els;

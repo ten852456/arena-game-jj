@@ -93,3 +93,15 @@ body[data-view='town'] .town-slot { order: 1; flex: 1 1 0; margin: 0; min-height
   .town-hud .town-actions .battle-big { min-width: 150px; min-height: 44px; }
   .town-hud .battle-big small { display: none; }
 }
+
+/* Casual / Ranked tabs on JJ's card hero pick (pickux.css): under the cards; once a card is open, Start takes that
+   spot, so the tabs move up where the title was (the title fades out then) */
+.pickv .pk-modes { position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); z-index: 5; width: min(560px, 92%); transition: bottom 0.4s, top 0.4s; }
+.pickv .pk-modes .mode-tabs { margin: 0; }
+.pickv .pk-modes .mode { background: rgba(20, 14, 50, 0.78); }
+.pickv .pk-modes .toast { position: static; transform: none; margin: 6px auto 0; animation: none; pointer-events: auto; text-align: center; }
+.pickv.has-focus .pk-modes { bottom: auto; top: 70px; }
+@media (max-height: 520px) {
+  .pickv .pk-modes .mode small { display: none; }
+  .pickv .pk-modes .mode { min-height: 40px; padding: 4px 10px; }
+}

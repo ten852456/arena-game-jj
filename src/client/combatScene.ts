@@ -25,6 +25,10 @@ export const W = 640;
 export const H = 300;
 const GROUND = 250;
 const POS = [205, 435];
+/** hero select: the hero stands this far forward on the floor, on a glowing platform (see setPodium) */
+const PODIUM_DY = 24;
+/** hero select: the camera looks this much lower (extra sand is painted below the arena), so the hero sits higher on screen */
+const PODIUM_SHIFT = 42;
 const FONT = 'Kanit, sans-serif';
 export const SPEED_KEY = 'mochi.speed';
 function savedSpeed() {
@@ -110,11 +114,26 @@ export class CombatScene extends Phaser.Scene {
   private playing = false;
   private ending = false;
   private quiet = false;
+  /** fight intro (VS splash) on screen: its objects and timers, gone on skip / next fight */
+  private intro: Phaser.GameObjects.GameObject[] = [];
+  private introTimers: Phaser.Time.TimerEvent[] = [];
+  /** KO camera: zoom factor (1 = normal) and the world point it closes in on */
+  private koK = 1;
+  private koX = W / 2;
+  private koY = H / 2;
+  private koActive = false;
+  private koCam = false;
+  private koText?: Phaser.GameObjects.Text;
+  /** extra wait before onDone: the result banner waits for the KO slow-mo */
+  private endDelay = 0;
   private onEvent?: (e: CombatEvent) => void;
   private onDone?: () => void;
   /** ambient arena life (lanterns, petals, crowd) and the shop hero's idle moves (idle.ts) */
   private life!: ArenaLife;
   private heroIdle!: HeroIdle;
+  private podium?: Phaser.GameObjects.Container;
+  private podiumOn = false;
+  private podiumGlow?: Phaser.GameObjects.Graphics;
   /** hero + look standing alone in the arena right now ('' = none) */
   private idleKey = '';
 
@@ -254,13 +273,50 @@ export class CombatScene extends Phaser.Scene {
     this.casts = [0, 0];
     this.delayUntil = [0, 0];
     this.fighters.forEach((f, i) => {
-      f.setAngle(0).setAlpha(1).clearTint().setX(POS[i]).setVisible(false);
+      f.setAngle(0).setAlpha(1).clearTint().setX(POS[i]).setY(GROUND).setVisible(false);
       this.keys[i] = null;
       this.want[i] = '';
       this.dead[i] = false;
       this.poseKind[i] = null;
     });
+    if (hero && this.podiumOn) this.fighters[0].setY(GROUND + PODIUM_DY);
+    this.cameras.main.setScroll(0, this.podiumOn ? PODIUM_SHIFT : 0);
+    this.podium?.setVisible(!!hero && this.podiumOn);
+    if (hero && this.podiumOn && this.podiumGlow) {
+      // killAll() above stopped it: breathe again
+      this.podiumGlow.setAlpha(1).setScale(1);
+      this.tweens.add({ targets: this.podiumGlow, alpha: 0.35, scaleX: 1.08, scaleY: 1.08, duration: 1300, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
     if (hero) this.show(0, hero, look, W / 2);
+  }
+
+  /**
+   * Hero select: stand the idle hero forward on the arena floor, on a glowing platform, instead of on the back-wall
+   * line where fighters stand in a fight. Takes effect on the next idle().
+   */
+  setPodium(on: boolean) {
+    this.podiumOn = on;
+    if (on && !this.podium) {
+      const x = W / 2;
+      const y = GROUND + PODIUM_DY;
+      const g = this.add.graphics();
+      g.fillStyle(0x1a1238, 0.28).fillEllipse(0, 6, 150, 30); // soft shadow on the floor
+      g.fillStyle(0x6f5bc4, 1).fillEllipse(0, 4, 118, 26); // platform side
+      g.fillStyle(0xb9a8ff, 1).fillEllipse(0, 0, 118, 24); // platform top
+      g.fillStyle(0xe9e1ff, 1).fillEllipse(0, -1, 96, 17);
+      g.lineStyle(2, 0xffe2a0, 0.9).strokeEllipse(0, -1, 104, 20); // gold rim
+      const glow = this.add.graphics();
+      glow.fillStyle(0xffe2a0, 0.35).fillEllipse(0, 0, 150, 34);
+      glow.setBlendMode(Phaser.BlendModes.ADD);
+      this.podium = this.add.container(x, y, [glow, g]).setDepth(1.9).setVisible(false);
+      // sand below the arena's bottom edge, for the lowered camera (same colour as the bottom of the sand gradient)
+      this.add.rectangle(0, H - 1, W, PODIUM_SHIFT + 24, 0xddd0ec).setOrigin(0).setDepth(-1);
+      this.podiumGlow = glow;
+    }
+    if (!on) {
+      this.podium?.setVisible(false);
+      if (!this.playing) this.cameras.main.setScroll(0, 0);
+    }
   }
 
   /** Put a chibi on a fighter slot; it appears once its textures are made (first time only takes a moment). */
@@ -342,10 +398,142 @@ export class CombatScene extends Phaser.Scene {
     this.drawBars();
     this.drawQueue();
     this.playing = true;
+    this.startIntro(data);
+  }
+
+  /** intro length at the current fight speed (4x is about half) */
+  private introMs(ms: number) {
+    return Math.round(ms * (this.speed >= 4 ? 0.55 : this.speed >= 2 ? 0.75 : 1));
+  }
+
+  /**
+   * Fight intro, fighting-game style: the two sides slam in on coloured panels (big hero, name, hero), a "VS" stamp
+   * lands with a thump and a shake, then "FIGHT!" and the panels fly off. The replay clock is held meanwhile, so the
+   * fight itself starts after it. Skipped with prefers-reduced-motion; Skip clears it.
+   */
+  private startIntro(data: PlayData) {
+    this.endIntro();
+    if (this.still) return;
+    const T = (ms: number) => this.introMs(ms);
+    const total = T(1750);
+    this.hold(total + 40);
+    const side = [data.left, data.right];
+    const add = <O extends Phaser.GameObjects.GameObject>(o: O) => (this.intro.push(o), o);
+    const later = (ms: number, fn: () => void) => this.introTimers.push(this.time.delayedCall(ms, fn));
+    // dim the arena
+    const shade = add(this.add.rectangle(0, 0, W, H, 0x120a2a, 0).setOrigin(0).setDepth(40));
+    this.tweens.add({ targets: shade, fillAlpha: 0.62, duration: T(180) });
+    const PANEL = [0x2f5f9e, 0x9e3550];
+    const EDGE = [0x9fd3ff, 0xffaaaa];
+    const top = 62;
+    const bot = 238;
+    const slant = 34;
+    const panels = [0, 1].map((i) => {
+      const g = add(this.add.graphics().setDepth(41));
+      const pts = i === 0
+        ? [0, top, W / 2 + slant, top, W / 2 - slant, bot, 0, bot]
+        : [W / 2 + slant, top, W, top, W, bot, W / 2 - slant, bot];
+      g.fillStyle(PANEL[i], 0.92);
+      g.beginPath();
+      g.moveTo(pts[0], pts[1]);
+      for (let k = 2; k < pts.length; k += 2) g.lineTo(pts[k], pts[k + 1]);
+      g.closePath();
+      g.fillPath();
+      g.lineStyle(3, EDGE[i], 1);
+      g.strokePath();
+      g.x = i === 0 ? -W : W;
+      this.tweens.add({ targets: g, x: 0, duration: T(260), ease: 'Cubic.Out' });
+      return g;
+    });
+    // the two heroes, bigger than in the fight, sliding in behind their panel
+    // (a hero's art is drawn the first time it is seen: if it is not ready yet, try again a moment later)
+    const portraits: (Phaser.GameObjects.Image | null)[] = [null, null];
+    const portrait = (i: number, delay: number) => {
+      const key = this.keys[i];
+      if (portraits[i] || !key) return;
+      const x = i === 0 ? 150 : W - 150;
+      const im = add(
+        this.add.image(i === 0 ? -120 : W + 120, bot - 6, key + '_idle').setOrigin(0.5, CHIBI_ORIGIN_Y).setScale(HERO_S * 1.3).setFlipX(i === 1).setDepth(42),
+      );
+      this.tweens.add({ targets: im, x, duration: T(320), delay, ease: 'Back.Out' });
+      portraits[i] = im;
+    };
+    [0, 1].forEach((i) => portrait(i, T(70)));
+    for (const at of [T(140), T(320)]) later(at, () => [0, 1].forEach((i) => portrait(i, 0)));
+    const names = [0, 1].map((i) => {
+      const hero = HEROES_BY_ID[side[i].build.hero];
+      const x = i === 0 ? 150 : W - 150;
+      const nm = add(
+        this.add
+          .text(i === 0 ? -200 : W + 200, top + 18, side[i].name, { fontFamily: FONT, fontSize: '22px', color: '#ffffff', stroke: '#1d1238', strokeThickness: 6 })
+          .setOrigin(0.5)
+          .setDepth(43),
+      );
+      const sub = add(
+        this.add
+          .text(i === 0 ? -200 : W + 200, top + 40, hero?.name ?? '', { fontFamily: FONT, fontSize: '14px', color: SIDE_COLOR[i], stroke: '#1d1238', strokeThickness: 4 })
+          .setOrigin(0.5)
+          .setDepth(43),
+      );
+      this.tweens.add({ targets: [nm, sub], x, duration: T(300), delay: T(120), ease: 'Cubic.Out' });
+      return [nm, sub];
+    });
+    fightSfx('whoosh', { vol: 0.9 });
+    // VS stamp
+    const vs = add(
+      this.add.text(W / 2, 150, 'VS', { fontFamily: FONT, fontSize: '72px', fontStyle: 'bold', color: '#ffd166', stroke: '#3a2400', strokeThickness: 10 })
+        .setOrigin(0.5)
+        .setDepth(44)
+        .setScale(3)
+        .setAlpha(0),
+    );
+    later(T(420), () => {
+      this.tweens.add({ targets: vs, scale: 1, alpha: 1, duration: T(170), ease: 'Quad.In' });
+      later(T(170), () => {
+        this.shake(7, 320);
+        fightSfx('thump');
+        fightSfx('bell', { pitch: -4, vol: 0.7 });
+        const flash = add(this.add.rectangle(0, 0, W, H, 0xffffff, 0.55).setOrigin(0).setDepth(45));
+        this.tweens.add({ targets: flash, fillAlpha: 0, duration: T(260) });
+        portraits.forEach((im) => im && this.tweens.add({ targets: im, y: im.y - 8, duration: T(120), yoyo: true, ease: 'Quad.Out' }));
+      });
+    });
+    // FIGHT! and everything flies off
+    later(T(1200), () => {
+      this.tweens.add({ targets: vs, scale: 0.4, alpha: 0, duration: T(160) });
+      panels.forEach((g, i) => this.tweens.add({ targets: g, x: i === 0 ? -W : W, duration: T(260), ease: 'Cubic.In' }));
+      portraits.forEach((im, i) => im && this.tweens.add({ targets: im, x: i === 0 ? -140 : W + 140, duration: T(260), ease: 'Cubic.In' }));
+      names.flat().forEach((t) => this.tweens.add({ targets: t, alpha: 0, duration: T(160) }));
+      this.tweens.add({ targets: shade, fillAlpha: 0, duration: T(300) });
+      const go = add(
+        this.add.text(W / 2, 150, L('สู้!', 'FIGHT!'), { fontFamily: FONT, fontSize: '64px', fontStyle: 'bold', color: '#ffffff', stroke: '#c2304f', strokeThickness: 10 })
+          .setOrigin(0.5)
+          .setDepth(44)
+          .setScale(0.4),
+      );
+      this.tweens.add({ targets: go, scale: 1.15, duration: T(180), ease: 'Back.Out' });
+      this.tweens.add({ targets: go, alpha: 0, scale: 1.4, delay: T(380), duration: T(220) });
+      fightSfx('whoosh', { pitch: 4 });
+      this.shake(4, 200);
+    });
+    later(total, () => this.endIntro());
+  }
+
+  /** remove the intro (done, skipped, or a new fight) */
+  private endIntro() {
+    this.introTimers.forEach((t) => t.remove(false));
+    this.introTimers = [];
+    this.intro.forEach((o) => {
+      this.tweens.killTweensOf(o);
+      o.destroy();
+    });
+    this.intro = [];
   }
 
   skip() {
     if (!this.playing) return;
+    this.endIntro();
+    this.koReset();
     this.quiet = true;
     while (this.ei < this.evs.length) this.handle(this.evs[this.ei++]);
     this.quiet = false;
@@ -366,6 +554,7 @@ export class CombatScene extends Phaser.Scene {
     this.life.update(t, delta);
     this.fxl.update(vdt);
     this.updateShake(t);
+    this.applyKoCam();
     this.danger.update(t, delta, this.hp[0] / Math.max(1, this.maxHp[0]), this.playing);
     if (!this.playing) {
       this.heroIdle.update(t, delta);
@@ -447,7 +636,7 @@ export class CombatScene extends Phaser.Scene {
     this.ffx.update(vdt, this.fighters, this.fstate, this.speed);
     if (this.ei >= this.evs.length && !this.ending) {
       this.ending = true;
-      this.time.delayedCall(1400, () => {
+      this.time.delayedCall(1400 + this.endDelay, () => {
         this.playing = false;
         this.onDone?.();
       });
@@ -516,18 +705,97 @@ export class CombatScene extends Phaser.Scene {
     const cam = this.cameras.main;
     if (this.shDur <= 0) return;
     const p = (t - this.shT0) / this.shDur;
+    const [bx, by] = this.koScroll();
     if (p >= 1 || this.still) {
       this.shDur = 0;
-      cam.setScroll(0, 0);
+      cam.setScroll(bx, by);
       return;
     }
     const a = this.shAmp * (1 - p) * (1 - p);
-    cam.setScroll((Math.random() * 2 - 1) * a, (Math.random() * 2 - 1) * a * 0.7);
+    cam.setScroll(bx + (Math.random() * 2 - 1) * a, by + (Math.random() * 2 - 1) * a * 0.7);
+  }
+
+  /** camera scroll that keeps the KO point centred at zoom koK (0, 0 at normal zoom) */
+  private koScroll(): [number, number] {
+    if (this.koK <= 1.001) return [0, 0];
+    const vw = W / this.koK;
+    const vh = H / this.koK;
+    return [Phaser.Math.Clamp(this.koX - vw / 2, 0, W - vw), Phaser.Math.Clamp(this.koY - vh / 2, 0, H - vh)];
+  }
+
+  /** zoom + scroll for the KO close-up (only touches the camera while it is, or was just, zoomed) */
+  private applyKoCam() {
+    const on = this.koK > 1.001;
+    if (!on && !this.koCam) return;
+    const cam = this.cameras.main;
+    cam.setZoom(ZOOM * this.koK);
+    if (this.shDur <= 0) cam.setScroll(...this.koScroll());
+    this.koCam = on;
+  }
+
+  /**
+   * The final blow: the camera closes in on the fighter going down (1.45x) while the slow-mo runs, with a "K.O."
+   * stamp; the end event then waits for it before the result banner (koOut zooms back out first).
+   */
+  private koZoom(s: number) {
+    if (this.quiet || this.still) return;
+    // both went down on the same blow: one shot of the middle, one "DOUBLE K.O." (never two stamps)
+    if (this.koActive) {
+      this.tweens.add({ targets: this, koX: W / 2, duration: 220, ease: 'Cubic.Out' });
+      const t = this.koText;
+      if (t?.active) {
+        this.tweens.killTweensOf(t);
+        t.setText(L('น็อคคู่!', 'DOUBLE K.O.!')).setPosition(W / 2, t.y).setScale(1.5).setAlpha(0);
+        this.tweens.add({ targets: t, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
+      }
+      return;
+    }
+    this.koActive = true;
+    this.koX = POS[s] + (s === 0 ? 30 : -30); // a little toward the middle: both fighters stay in the shot
+    this.koY = GROUND - HERO_H * 0.55;
+    this.tweens.add({ targets: this, koK: 1.45, duration: 260, ease: 'Cubic.Out' });
+    // inside the close-up shot (zoom 1.45 around koX / koY): never above the top edge or past a side
+    const vw = W / 1.45;
+    const vh = H / 1.45;
+    const sx = Phaser.Math.Clamp(this.koX - vw / 2, 0, W - vw);
+    const sy = Phaser.Math.Clamp(this.koY - vh / 2, 0, H - vh);
+    const kx = Phaser.Math.Clamp(POS[s], sx + 70, sx + vw - 70);
+    const ky = Math.max(sy + 34, this.koY - 52);
+    const ko = this.add
+      .text(kx, ky, L('น็อค!', 'K.O.!'), { fontFamily: FONT, fontSize: '36px', fontStyle: 'bold', color: '#ffe066', stroke: '#8a1030', strokeThickness: 8 })
+      .setOrigin(0.5)
+      .setDepth(23)
+      .setScale(1.7)
+      .setAlpha(0);
+    this.intro.push(ko); // cleared with the intro objects (next fight / skip)
+    this.koText = ko;
+    this.tweens.add({ targets: ko, scale: 1, alpha: 1, duration: 200, ease: 'Back.Out' });
+    fightSfx('crack', { pitch: -6 });
+  }
+
+  /** back to the normal shot */
+  private koOut() {
+    if (!this.koActive) return;
+    this.koActive = false;
+    this.tweens.add({ targets: this, koK: 1, duration: 420, ease: 'Cubic.InOut' });
+    // the stamp makes room for the result banner
+    if (this.koText?.active) this.tweens.add({ targets: this.koText, alpha: 0, y: this.koText.y - 16, duration: 300 });
+  }
+
+  private koReset() {
+    this.tweens.killTweensOf(this);
+    this.koActive = false;
+    this.koK = 1;
+    this.endDelay = 0;
+    this.koCam = true; // one more applyKoCam puts the zoom back
+    this.applyKoCam();
   }
 
   private resetJuice() {
     this.holdUntil = this.stopUntil = this.slowUntil = 0;
     this.shDur = 0;
+    this.endIntro();
+    this.koReset();
     this.cameras.main.setScroll(0, 0);
     this.anticT0 = [-1e9, -1e9];
     this.lungeT0 = [-1e9, -1e9];
@@ -644,18 +912,29 @@ export class CombatScene extends Phaser.Scene {
       case 'end': {
         const w = e.winner;
         this.endWinner = w;
-        this.banner.setText(this.bannerText()).setColor(w === 0 ? '#3fbf6a' : w === 1 ? '#ff5a72' : '#8f86b8').setStroke('#3a2b48', 6);
-        this.paintPlate();
-        const fit = (this.banner.getData('fit') as number) ?? 1;
-        this.banner.setScale(0.5 * fit);
-        this.bannerPlate.setScale(0.5);
-        if (w === 0 && !this.quiet) {
-          this.life.cheer();
-          confetti(this, POS[0], GROUND - HERO_H - 10, Math.round(46 * perf().confetti));
-          this.time.delayedCall(180, () => confetti(this, W / 2, 150, Math.round(30 * perf().confetti)));
-        }
-        this.tweens.add({ targets: this.banner, scale: fit, duration: 250, ease: 'Back.Out' });
-        this.tweens.add({ targets: this.bannerPlate, scale: 1, duration: 250, ease: 'Back.Out' });
+        const showBanner = () => {
+          this.banner.setText(this.bannerText()).setColor(w === 0 ? '#3fbf6a' : w === 1 ? '#ff5a72' : '#8f86b8').setStroke('#3a2b48', 6);
+          this.paintPlate();
+          const fit = (this.banner.getData('fit') as number) ?? 1;
+          this.banner.setScale(0.5 * fit);
+          this.bannerPlate.setScale(0.5);
+          if (w === 0 && !this.quiet) {
+            this.life.cheer();
+            confetti(this, POS[0], GROUND - HERO_H - 10, Math.round(46 * perf().confetti));
+            this.time.delayedCall(180, () => confetti(this, W / 2, 150, Math.round(30 * perf().confetti)));
+          }
+          this.tweens.add({ targets: this.banner, scale: fit, duration: 250, ease: 'Back.Out' });
+          this.tweens.add({ targets: this.bannerPlate, scale: 1, duration: 250, ease: 'Back.Out' });
+        };
+        if (this.koActive && !this.quiet) {
+          // the KO close-up: let the slow-mo play out, pull the camera back, then the result
+          const wait = Math.max(0, this.slowUntil - this.time.now) + 120;
+          this.endDelay = wait + 420;
+          this.time.delayedCall(wait, () => {
+            this.koOut();
+            this.time.delayedCall(380, showBanner);
+          });
+        } else showBanner();
         ([0, 1] as Side[]).forEach((s) => {
           if (w !== -1 && s !== w) {
             const f = this.fighters[s];
@@ -767,9 +1046,10 @@ export class CombatScene extends Phaser.Scene {
   /** kill blow: long hit-stop then 0.3x slow-mo, big shake (the KO itself plays on the end event) */
   private killBlow(s: number, stop = 180) {
     const hs = Math.max(0.5, this.hs());
-    this.hitStop(Math.max(180, stop) * hs, 400 * hs);
+    this.hitStop(Math.max(220, stop) * hs, 950 * hs);
     this.shake(8, 450);
     this.ffx.flash(s);
+    this.koZoom(s);
   }
 
   /** Frozen / pushed-back label over a fighter, and "no skill fired" once the fight is over. */

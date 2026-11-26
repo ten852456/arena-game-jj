@@ -56,8 +56,9 @@ async function play(label, ctxOpts, runs = 1) {
   for (let run = 0; run < runs; run++) {
     await tap('[data-a="goto"][data-i="arena"]');
     await tap('[data-a="enterArena"]', 700);
-    ok(`${label} run${run}: hero pick shows logo + 3 heroes`, (await has('.brand-logo')) && (await p.locator('[data-a="start"]').count()) === 3);
-    await tap('[data-a="start"]', 900);
+    ok(`${label} run${run}: hero pick deals 3 hero cards`, (await p.locator('.pk-card').count()) === 3);
+    await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+    await tap('.pk-start', 900);
     ok(`${label} run${run}: shop opens`, await has('[data-a="fight"]'));
     ok(`${label} run${run}: shop has no horizontal scroll`, await noHScroll());
     await shot(`run${run}-shop-d1`);
@@ -86,13 +87,13 @@ async function play(label, ctxOpts, runs = 1) {
           await tap('[data-lang="th"]', 900);
           ok(`${label} run${run}: back to Thai`, /[฀-๿]/.test(await text()) && before.length > 0);
           ok(`${label} run${run}: firing timeline visible`, (await has('[class*="timeline"], [class*="tl-"], .gs-tl, svg')));
-          if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
+          if (await has('.skillrow[data-sheet]')) { await p.locator('.skillrow[data-sheet]').first().click({ button: 'right', position: { x: 60, y: 12 } }).catch(() => {}); await p.waitForTimeout(500); ok(`${label} run${run}: skill tree window opens (detail sheet, right-click)`, (await has('button[data-a="treeClose"]')) && (await has('.sheet-acts [data-a="sheetSell"]'))); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
         }
         // buy what we can afford (left to right), then fight
         for (let i = 0; i < 6; i++) {
           const btn = p.locator('[data-a="buy"]:not([disabled])').first();
           if (!(await btn.count())) break;
-          await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(250);
+          if (await p.locator('.shop2.drawer-open').count()) { await p.locator('.drawer-x').click().catch(() => {}); await p.waitForTimeout(400); } await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ delay: 750, timeout: 4000 }).catch(() => {}); await p.waitForTimeout(350); // hold to buy
         }
         if (day === 2) await shot(`run${run}-shop-d2`);
         await tap('[data-a="fight"]', 1200);

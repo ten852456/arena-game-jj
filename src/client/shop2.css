@@ -1,0 +1,315 @@
+/* ===== Shop v2: one screen, no page scroll. Hero + fight left, the bunny's stall in the middle, skills in a drawer ===== */
+/* (.shopv.shop2 outranks the old three-column .shopv rules in layout.css / theme.css, media queries included) */
+
+.shopv.shop2 {
+  height: 100%; display: grid; gap: 10px 12px; padding: 0;
+  grid-template-columns: minmax(210px, 0.34fr) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'top top' 'side stall';
+}
+.shopv.shop2 > .sv-top { grid-area: top; }
+.shopv.shop2 > .sv-side { grid-area: side; display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
+.shopv.shop2 .sv-slot { flex: 1 1 auto; min-height: 90px; }
+.shopv.shop2 .sv-hero { flex: none; max-height: 40%; overflow: auto; scrollbar-width: thin; }
+.shopv.shop2 .sv-scout { flex: none; }
+.shopv.shop2 .sv-fight {
+  flex: none; display: flex; gap: 8px; align-items: stretch; padding: 8px; border-radius: 20px;
+  background: var(--paper) 0 0 / 240px repeat, var(--night); border: 3px solid var(--ink-deep); box-shadow: 0 4px 0 var(--ink-deep);
+}
+.shopv.shop2 .sv-fight .fightbtn { flex: 1 1 auto; min-height: 52px; font-size: 19px; flex-wrap: wrap; justify-content: center; row-gap: 0; }
+.shopv.shop2 .sv-fight .fightbtn small { flex-basis: 100%; font-size: 11.5px; }
+.shopv.shop2 .sv-fight > .ghost { flex: none; width: 48px; }
+
+/* ---- the stall ---- */
+.shopv.shop2 .stall-wrap { grid-area: stall; position: relative; min-height: 0; display: flex; }
+.shopv.shop2 .sv-shop.stall {
+  flex: 1 1 auto; position: relative; min-height: 0; display: flex; flex-direction: column; gap: 6px; margin: 0;
+  padding: 0 14px 10px; overflow: hidden; border-radius: 24px;
+  background: var(--paper) 0 0 / 240px repeat, linear-gradient(180deg, #3a2f78, #2a2160 60%, #241c52);
+  border: 3px solid var(--ink-deep); box-shadow: 0 5px 0 var(--ink-deep), 0 18px 34px rgba(8, 4, 24, 0.32);
+}
+/* striped awning with a scalloped edge along the top of the stall */
+.stall-awning {
+  flex: none; height: 30px; margin: 0 -14px; position: relative;
+  background: repeating-linear-gradient(90deg, #ff9fbc 0 34px, #fff3e2 34px 68px);
+  border-bottom: 3px solid var(--ink-deep);
+}
+.stall-awning::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: -15px; height: 14px;
+  background: radial-gradient(circle at 17px 0, #ff9fbc 13px, transparent 14px) 0 0 / 68px 14px repeat-x,
+    radial-gradient(circle at 51px 0, #fff3e2 13px, transparent 14px) 0 0 / 68px 14px repeat-x;
+  filter: drop-shadow(0 3px 0 var(--ink-deep));
+}
+.shopv.shop2 .stall-head { flex: none; display: flex; align-items: center; gap: 12px; margin: 14px 0 0; flex-wrap: nowrap; }
+.shopv.shop2 .stall-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; flex: none; }
+.shopv.shop2 .stall-head .more-below { flex: none; }
+.shopv.shop2 .sv-note, .shopv.shop2 .coach, .shopv.shop2 .tip-line { flex: none; margin: 0; }
+/* the cards: a grid that fits the stall; only if it truly can't, the grid (not the page) scrolls */
+.shopv.shop2 .stall .shop {
+  flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(138px, 1fr)); grid-auto-rows: auto;
+  align-content: start; gap: 10px; padding: 6px 2px 4px; margin: 0;
+}
+.shopv.shop2 .stall .shop .card.offer { min-height: 0; }
+.shopv.shop2 .stall .shop .card.empty { grid-column: auto; order: 9; min-height: 0; border-radius: 20px; font-size: 13px; }
+/* ---- the shop bunny ---- */
+.keeper { display: flex; align-items: flex-end; gap: 6px; min-width: 0; flex: 1 1 auto; }
+.keeper-bun { flex: none; width: 92px; height: 92px; margin-top: -8px; overflow: visible; transform-origin: 50% 100%; animation: kb-bob 2.6s ease-in-out infinite; }
+.kb-eyes { transform-box: fill-box; transform-origin: center; animation: kb-blink 4.2s infinite; }
+.kb-ear-r { transform-box: fill-box; transform-origin: 50% 100%; animation: kb-ear 5.5s ease-in-out infinite; }
+.keeper-say {
+  position: relative; margin: 0 0 26px; padding: 6px 12px; min-width: 0; max-width: 340px; border-radius: 16px; font-size: 14px; line-height: 1.3;
+  color: #3a2b48; background: #fff8ec; border: 2.5px solid var(--ink-deep); box-shadow: 0 3px 0 var(--ink-deep);
+  overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.keeper-say::before { content: ''; position: absolute; left: -9px; bottom: 8px; width: 12px; height: 12px; background: #fff8ec; border-left: 2.5px solid var(--ink-deep); border-bottom: 2.5px solid var(--ink-deep); transform: rotate(45deg); }
+.keeper.k-happy .keeper-bun { animation: kb-hop 0.5s ease-out 2, kb-bob 2.6s ease-in-out 1s infinite; }
+.keeper.k-sad .keeper-bun { animation: kb-sad 0.6s ease-in-out; }
+.keeper.k-talk .keeper-bun { animation: kb-talk 0.4s ease-in-out 2; }
+.keeper.k-happy .keeper-say, .keeper.k-sad .keeper-say, .keeper.k-talk .keeper-say { animation: ks-pop 0.25s ease-out; }
+.keeper.k-sad .keeper-say { background: #ffe9ee; }
+@keyframes kb-bob { 50% { transform: translateY(-3px) scaleY(1.02); } }
+@keyframes kb-blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+@keyframes kb-ear { 0%, 80%, 100% { transform: rotate(0); } 86% { transform: rotate(-14deg); } 92% { transform: rotate(6deg); } }
+@keyframes kb-hop { 30% { transform: translateY(-12px) scale(1.05, 0.95); } 60% { transform: translateY(0) scale(0.95, 1.05); } }
+@keyframes kb-sad { 30%, 70% { transform: rotate(-6deg) translateY(2px); } 50% { transform: rotate(6deg) translateY(2px); } }
+@keyframes kb-talk { 50% { transform: scale(1.04, 0.97); } }
+@keyframes ks-pop { from { transform: scale(0.85); opacity: 0.4; } }
+
+/* ---- hold to buy: the price button fills left to right; let go early and it drains ---- */
+.shopv.shop2 .stall .card.offer { touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+.shopv.shop2 .stall .card.offer .buy { position: relative; overflow: hidden; isolation: isolate; }
+.shopv.shop2 .stall .card.offer .buy::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; transform: scaleX(0); transform-origin: 0 50%;
+  background: linear-gradient(90deg, #ffe08a, #ffc04d); transition: transform 0.18s ease-out;
+}
+.shopv.shop2 .stall .card.offer.holding .buy::before { transform: scaleX(1); transition: transform var(--hold-ms, 560ms) linear; }
+.shopv.shop2 .stall .card.offer.holding { transform: scale(0.97); box-shadow: 0 0 0 3px #ffe08a, 0 0 22px rgba(255, 224, 138, 0.55) !important; transition: transform 0.12s; }
+.shopv.shop2 .stall .card.offer.hold-nope { animation: hold-nope 0.32s ease-in-out; }
+@keyframes hold-nope { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+
+/* ---- the skills drawer (right) ---- */
+.shopv.shop2 .sv-drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 12; width: min(400px, 52%);
+  display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 24px;
+  background: var(--paper) 0 0 / 240px repeat, #221a4e; border: 3px solid var(--ink-deep);
+  box-shadow: -10px 0 30px rgba(8, 4, 24, 0.5), 0 5px 0 var(--ink-deep);
+  /* resting: only a tab of skill icons peeks in at the right edge (overlapping the stall a little) */
+  --peek: 60px;
+  transform: translateX(calc(100% - var(--peek)));
+  transition: transform 0.34s cubic-bezier(0.22, 1.15, 0.36, 1);
+}
+.shopv.shop2.drawer-open .sv-drawer { transform: none; }
+.shopv.shop2 .sv-drawer .drawer-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding-left: calc(var(--peek) - 10px); transition: padding 0.34s; }
+.shopv.shop2.drawer-open .sv-drawer .drawer-body { padding-left: 0; }
+/* the peek tab: count, one icon per skill (empty slots as dots), chains; it fades out once the drawer is open */
+#panel .shopv.shop2 .peek-tab {
+  position: absolute; left: 0; top: 0; bottom: 0; z-index: 3; width: var(--peek); min-height: 0; padding: 12px 0; margin: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 7px; border: 0; border-radius: 22px 0 0 22px;
+  background: linear-gradient(90deg, #2c2366, #221a4e) !important; box-shadow: none !important; border-image: none; cursor: pointer; color: var(--cream);
+  transition: opacity 0.2s; transform: none; filter: none;
+}
+.shopv.shop2.drawer-open .peek-tab { opacity: 0; pointer-events: none; }
+.peek-tab .pt-n { font-size: 13px; font-weight: 800; color: var(--moon); }
+.peek-tab .pt-ico { width: 38px; height: 38px; border-radius: 50%; background: #1a1444; box-shadow: 0 0 0 2px var(--pa, #c6c1e8), 0 2px 0 var(--ink-deep); border-left: 0 !important; }
+.peek-tab .pt-empty { width: 30px; height: 30px; border-radius: 50%; border: 2px dashed rgba(255, 255, 255, 0.25); }
+.peek-tab .pt-link { font-size: 12px; font-weight: 700; color: #ffe066; }
+.peek-tab .pt-arrow { margin-top: auto; font-size: 16px; color: var(--lav); animation: pt-nudge 1.6s ease-in-out infinite; }
+@keyframes pt-nudge { 50% { transform: translateX(-3px); } }
+.shopv.shop2.drawer-instant .sv-drawer, .shopv.shop2.drawer-instant .sv-shop.stall::after { transition: none !important; }
+.shopv.shop2 .sv-drawer .sv-mine { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 2px; margin: 0; background: none; border: 0; box-shadow: none; outline: 0; border-image: none; }
+.shopv.shop2 .sv-drawer .sv-mine > .sv-h { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; padding: 2px 0 6px; background: #221a4e; }
+.shopv.shop2 .sv-drawer .sv-mine > .sv-h h3 { margin: 0; }
+.shopv.shop2 .sv-drawer .drawer-x { margin-left: auto; width: 36px; min-width: 36px; padding: 0; }
+.shopv.shop2 .sv-drawer .list-wrap { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: 'list' 'tl' 'panel'; gap: 8px; }
+.shopv.shop2 .sv-drawer .sell-jar { position: static; flex: none; margin: 0; display: flex; }
+/* the stall dims a little behind the open drawer (and still works: buy another card with the drawer open) */
+.shopv.shop2 .sv-shop.stall::after { content: ''; position: absolute; inset: 0; background: rgba(10, 6, 30, 0.35); opacity: 0; pointer-events: none; transition: opacity 0.3s; border-radius: inherit; }
+.shopv.shop2.drawer-open .sv-shop.stall::after { opacity: 1; }
+/* the stall keeps clear of the peek tab: the cards and the gold / reroll end before it */
+.shopv.shop2 .sv-shop.stall { padding-right: calc(var(--peek-w, 60px) + 6px); }
+.shopv.shop2 .stall-awning { margin-right: calc(-1 * (var(--peek-w, 60px) + 6px)); }
+
+/* ---- day splash ---- */
+.day-splash {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; cursor: pointer;
+  background: radial-gradient(ellipse at 50% 45%, rgba(40, 28, 90, 0.72), rgba(10, 6, 28, 0.9));
+  animation: ds-in 0.28s ease-out both;
+}
+.day-splash.out { animation: ds-out 0.3s ease-in forwards; pointer-events: none; }
+.ds-card {
+  position: relative; min-width: min(420px, 90vw); padding: 22px 28px 16px; border-radius: 28px; text-align: center; color: var(--cream);
+  background: var(--paper) 0 0 / 240px repeat, linear-gradient(180deg, #3a2f78, #251c58); border: 3px solid var(--ink-deep);
+  box-shadow: 0 6px 0 var(--ink-deep), 0 30px 60px rgba(0, 0, 0, 0.45); animation: ds-card 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+.ds-moon { position: absolute; top: -34px; left: 50%; width: 64px; height: 64px; margin-left: -32px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 38%, #fffdf0, #f7e3b2 60%, #e9c98a); box-shadow: 0 0 28px rgba(255, 226, 160, 0.7), 0 0 0 3px var(--ink-deep); }
+.ds-day { margin: 18px 0 6px; font-size: 22px; color: var(--moon); letter-spacing: 0.04em; }
+.ds-day b { font-size: 46px; display: inline-block; animation: ds-num 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) 0.15s both; }
+.ds-last { margin: 0 0 10px; font-size: 14px; font-weight: 700; }
+.ds-last.won { color: #9ef0b4; } .ds-last.lost { color: #ffb3c4; }
+.ds-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px; margin: 6px 0; }
+.ds-h { width: 16px; height: 15px; background: #4a3d7a; clip-path: path('M8 15 L1.5 8.5 A4 4 0 0 1 8 3 A4 4 0 0 1 14.5 8.5 Z'); animation: ds-pop 0.3s ease-out both; animation-delay: calc(0.2s + var(--k) * 0.03s); }
+.ds-h.on { background: #ff7d9c; }
+.ds-h.lost { background: #ff7d9c; animation: ds-pop 0.3s ease-out both, ds-break 0.6s ease-in 0.9s forwards; animation-delay: calc(0.2s + var(--k) * 0.03s), 0.9s; }
+.ds-s { width: 18px; height: 18px; background: #4a3d7a; clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%); }
+.ds-s.on { background: #ffd166; }
+.ds-s.new { animation: ds-star 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) 0.7s both; }
+.ds-gold { margin: 10px 0 2px; display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 22px; color: #ffd166; animation: ds-pop 0.35s ease-out 0.55s both; }
+.ds-gold small { font-size: 13px; color: var(--lav); }
+.ds-gold .coin-ico { width: 26px; height: 26px; }
+.ds-note { margin: 6px auto 0; padding: 4px 12px; width: fit-content; border-radius: 999px; font-size: 13.5px; font-weight: 700; background: rgba(255, 226, 160, 0.16); border: 1px solid rgba(255, 226, 160, 0.5); animation: ds-pop 0.35s ease-out 0.75s both; }
+.ds-tap { display: block; margin-top: 12px; font-size: 11.5px; color: var(--lav); opacity: 0.8; }
+@keyframes ds-in { from { opacity: 0; } }
+@keyframes ds-out { to { opacity: 0; transform: scale(1.04); } }
+@keyframes ds-card { from { opacity: 0; transform: translateY(30px) scale(0.85); } }
+@keyframes ds-num { from { transform: scale(2.2); opacity: 0; } }
+@keyframes ds-pop { from { transform: scale(0); opacity: 0; } }
+@keyframes ds-break { 40% { transform: scale(1.3) rotate(-10deg); } to { transform: scale(0.6) translateY(8px); background: #4a3d7a; opacity: 0.6; } }
+@keyframes ds-star { from { transform: scale(2.4) rotate(-40deg); opacity: 0; } }
+
+/* ---- short landscape (phones sideways) ---- */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shopv.shop2 { gap: 5px 6px; grid-template-columns: minmax(150px, 0.3fr) minmax(0, 1fr); }
+  .shopv.shop2 .sv-hero { max-height: 34%; }
+  .shopv.shop2 .sv-fight { padding: 4px; border-radius: 14px; }
+  .shopv.shop2 .sv-fight .fightbtn { min-height: 40px; font-size: 15px; }
+  .shopv.shop2 .sv-fight .fightbtn small { display: none; }
+  .shopv.shop2 .sv-fight > .ghost { width: 38px; }
+  .shopv.shop2 .sv-shop.stall { padding: 0 8px 6px; border-radius: 16px; gap: 4px; }
+  .stall-awning { height: 16px; margin: 0 -8px; }
+  .shopv.shop2 .sv-shop.stall { padding-right: calc(var(--peek-w) + 6px); }
+  .shopv.shop2 .stall-awning { margin-right: calc(-1 * (var(--peek-w) + 6px)); }
+  .stall-awning::after { bottom: -9px; height: 8px; background-size: 40px 8px; }
+  .shopv.shop2 .stall-head { margin-top: 4px; gap: 6px; }
+  .keeper-bun { width: 46px; height: 46px; margin-top: -12px; }
+  .keeper-say { margin-bottom: 8px; font-size: 12px; padding: 3px 9px; -webkit-line-clamp: 1; }
+  .shopv.shop2 .stall .shop { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 5px; padding-top: 2px; }
+  .shopv.shop2 .sv-drawer { width: min(340px, 62%); border-radius: 16px; padding: 6px; --peek: 46px; }
+  .shopv.shop2 { --peek-w: 46px; }
+  .peek-tab .pt-ico { width: 28px; height: 28px; }
+  .peek-tab .pt-empty { width: 22px; height: 22px; }
+  .ds-card { padding: 14px 18px 10px; } .ds-day { margin-top: 12px; } .ds-day b { font-size: 34px; }
+}
+
+/* ---- upright: hero strip + fight on top, the stall below (the card grid scrolls inside, the page never does) ---- */
+@media (max-aspect-ratio: 1/1) {
+  body[data-view='shop'] { height: 100dvh; overflow: hidden; }
+  body[data-view='shop'] #panel { overflow: hidden; }
+  .shopv.shop2 { display: grid; height: 100%; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); grid-template-areas: 'top' 'side' 'stall'; gap: 6px; }
+  .shopv.shop2 > .sv-side { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'hero fight' 'scout scout'; gap: 6px; align-items: stretch; }
+  .shopv.shop2 .sv-slot { display: none; }
+  .shopv.shop2 .sv-hero { grid-area: hero; max-height: 88px; padding: 6px 10px; }
+  .shopv.shop2 .sv-scout { grid-area: scout; }
+  .shopv.shop2 .sv-fight { grid-area: fight; position: static; margin: 0; border-radius: 16px; flex-direction: column; }
+  .shopv.shop2 .sv-fight .fightbtn small { display: none; }
+  .shopv.shop2 .sv-fight > .ghost { width: auto; min-height: 30px; }
+  .shopv.shop2 .stall .shop { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
+  .shopv.shop2 .sv-drawer { width: auto; left: 0; }
+  .keeper-say { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .keeper-bun, .kb-eyes, .kb-ear-r, .keeper-say, .peek-tab .pt-arrow, .day-splash, .ds-card, .ds-day b, .ds-h, .ds-s, .ds-gold, .ds-note { animation: none !important; }
+  .shopv.shop2 .sv-drawer { transition-duration: 0.01s; }
+}
+html[data-perf='low'] .keeper-bun, html[data-perf='low'] .kb-ear-r { animation: none; }
+
+
+/* ===== shop cards: pages of 3 x 2 landscape cards, icon on the left, text on the right =====
+   [🔒]                                   [▲ Lv2]
+   ( icon )  Name
+             tags
+             effects …
+             [          Buy 3          ]
+   One page fills the stall; 7+ cards → a second page (swipe, the ‹ › arrows or the dots).                      */
+.shopv.shop2 .shop-pager { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.shopv.shop2 .stall .shop {
+  flex: 1 1 auto; min-height: 0; display: flex; gap: 0; padding: 12px 0 0; margin: 0;
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none;
+}
+.shopv.shop2 .stall .shop::-webkit-scrollbar { display: none; }
+.shopv.shop2 .shop-page {
+  flex: 0 0 100%; min-width: 0; scroll-snap-align: start; padding: 0 2px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px 10px;
+}
+/* every card the same size: the cell decides, the card fills it */
+.shopv.shop2 .stall .card.offer, .shopv.shop2 .stall .card.empty {
+  min-width: 0; min-height: 0; height: 100%; margin: 0;
+}
+.shopv.shop2 .stall .card.offer {
+  position: relative; display: flex; flex-direction: row; align-items: stretch; gap: 10px; text-align: left; padding: 12px 10px 10px 10px;
+}
+.shopv.shop2 .stall .card.empty { display: grid; place-items: center; order: 0; grid-column: auto; padding: 0; border-radius: 20px; font-size: 13px; }
+/* lock (and in detailed mode Lv / ⓘ): small, in the top corners, never pushing the layout */
+.shopv.shop2 .stall .card.offer .offer-top { position: absolute; top: 12px; left: 8px; z-index: 2; margin: 0; display: flex; align-items: center; gap: 4px; }
+body.info-detail .shopv.shop2 .stall .card.offer .offer-top { left: auto; right: 8px; }
+#panel .shopv.shop2 .stall .card.offer .offer-top button { width: 28px; min-width: 28px; height: 28px; min-height: 28px; font-size: 13px; }
+.shopv.shop2 .stall .card.offer .offer-top .offer-lv { font-size: 11.5px; }
+/* left: the icon, centred top to bottom, ringed in the skill's line colour */
+.shopv.shop2 .stall .offer-icon {
+  flex: none; align-self: center; display: grid; place-items: center; width: 64px; height: 64px; margin: 10px 0 0 2px; border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, 0.16), rgba(10, 6, 30, 0.35)); box-shadow: 0 0 0 3px var(--pa, #c6c1e8), 0 3px 0 var(--ink-deep);
+}
+.shopv.shop2 .stall .offer-icon .skill-icon { width: 50px; height: 50px; margin: 0; }
+.shopv.shop2 .stall .offer-icon.offer-art { font-size: 32px; line-height: 1; color: var(--moon); }
+/* right: name, tags, effects, then the price at the bottom */
+.shopv.shop2 .stall .offer-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.shopv.shop2 .stall .offer-name { display: flex; align-items: center; gap: 4px; margin: 0; min-height: 0; padding-right: 26px; font-size: 16px; line-height: 1.2; text-align: left; justify-content: flex-start; }
+.shopv.shop2 .stall .offer-name .on-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.shopv.shop2 .stall .offer-meta { display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center; gap: 4px; min-height: 0; margin: 0; }
+.shopv.shop2 .stall .offer-meta:empty { display: none; }
+.shopv.shop2 .stall .offer-meta > * { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shopv.shop2 .stall .offer-desc { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; margin: 0; overflow: hidden; color: var(--mn-mute); font-size: 13px; }
+.shopv.shop2 .stall .offer-desc .chips-row, .shopv.shop2 .stall .offer-desc .sk-simple, .shopv.shop2 .stall .pairs, .shopv.shop2 .stall .pairs-s { justify-content: flex-start; text-align: left; }
+.shopv.shop2 .stall .up-diff, .shopv.shop2 .stall .sc-gain { text-align: left; font-size: 12.5px; }
+.shopv.shop2 .stall .branch-pick { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
+.shopv.shop2 .stall .branch-pick .bp-names { justify-content: flex-start; }
+.shopv.shop2 .stall .card.offer .buy { flex: none; width: 100%; margin-top: auto; min-height: 38px; }
+.shopv.shop2 .stall .card.offer .up-badge { top: -11px; right: -4px; }
+/* page arrows + dots under the cards (only when there is a second page) */
+.shopv.shop2 .pg-nav { flex: none; display: flex; align-items: center; justify-content: center; gap: 10px; }
+#panel .shopv.shop2 .pg-btn { width: 34px; min-width: 34px; height: 30px; min-height: 30px; padding: 0; font-size: 20px; line-height: 1; }
+.shopv.shop2 .pg-dots { display: inline-flex; gap: 8px; }
+#panel .shopv.shop2 .pg-dot { width: 11px; min-width: 11px; height: 11px; min-height: 11px; padding: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.22); border: 0; box-shadow: none; }
+#panel .shopv.shop2 .pg-dot.on { background: var(--moon); box-shadow: 0 0 8px rgba(255, 217, 138, 0.6); }
+
+/* detailed mode: smaller icon, the effect chips may scroll inside the card */
+body.info-detail .shopv.shop2 .stall .offer-icon { width: 48px; height: 48px; }
+body.info-detail .shopv.shop2 .stall .offer-icon .skill-icon { width: 38px; height: 38px; }
+body.info-detail .shopv.shop2 .stall .offer-desc { justify-content: flex-start; overflow: auto; scrollbar-width: none; }
+
+/* phones sideways: same 3 x 2 page, everything smaller */
+@media (orientation: landscape) and (max-height: 500px) {
+  .shopv.shop2 .shop-page { gap: 6px; }
+  .shopv.shop2 .stall .card.offer { padding: 8px 6px 6px; gap: 6px; }
+  .shopv.shop2 .stall .offer-icon { width: 38px; height: 38px; margin-top: 6px; }
+  .shopv.shop2 .stall .offer-icon .skill-icon { width: 30px; height: 30px; }
+  .shopv.shop2 .stall .offer-icon.offer-art { font-size: 20px; }
+  .shopv.shop2 .stall .offer-name { font-size: 13px; }
+  .shopv.shop2 .stall .offer-desc { font-size: 11.5px; }
+  .shopv.shop2 .stall .card.offer .buy { min-height: 28px; font-size: 13px; }
+  .shopv.shop2 .stall .card.offer .offer-top { top: 6px; left: 4px; }
+}
+/* upright: 2 x 3 pages */
+@media (max-aspect-ratio: 1/1) {
+  .shopv.shop2 .shop-page { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); }
+}
+
+/* ===== "My skills" drawer rows: no slot number; icon | text with room on the left (clear of the colour band) ===== */
+.shopv.shop2 .sv-drawer .sk-no { display: none; }
+.shopv.shop2 .sv-drawer .skillrow[data-i] { flex-wrap: nowrap; align-items: center; gap: 8px; padding: 8px 10px 8px 16px; }
+.shopv.shop2 .sv-drawer .skillrow .grip { flex: none; width: 26px; }
+.shopv.shop2 .sv-drawer .skillrow .skill-icon { flex: none; width: 40px; height: 40px; }
+.shopv.shop2 .sv-drawer .skillrow .sk-text { flex: 1 1 auto; min-width: 0; }
+.shopv.shop2 .sv-drawer .skillrow .sk-btns { flex: none; }
+body.info-detail .shopv.shop2 .sv-drawer .skillrow[data-i] { flex-wrap: wrap; }
+body.info-detail .shopv.shop2 .sv-drawer .skillrow .sk-text { flex-basis: calc(100% - 90px); }
+/* a finger may swipe the pages sideways across a card (a hold that moves is not a buy) */
+.shopv.shop2 .stall .card.offer { touch-action: pan-x pan-y; }
+/* the lock sits clear below the card's colour band (#panel: outranks the first-pass corner rule in arenaux.css) */
+#panel .shopv.shop2 .stall .card.offer .offer-top { position: absolute; top: 20px; left: 10px; right: auto; margin: 0; }
+body.info-detail #panel .shopv.shop2 .stall .card.offer .offer-top { left: auto; right: 10px; }
+@media (orientation: landscape) and (max-height: 500px) { #panel .shopv.shop2 .stall .card.offer .offer-top { top: 14px; left: 6px; } }
+#panel .shopv.shop2 .stall .card.offer .offer-icon { margin-top: 24px; }
+@media (orientation: landscape) and (max-height: 500px) { #panel .shopv.shop2 .stall .card.offer .offer-icon { margin-top: 16px; } }

@@ -62,8 +62,9 @@ async function play(label, ctxOpts, runs = 1) {
   for (let run = 0; run < runs; run++) {
     await tap('[data-a="goto"][data-i="arena"]');
     await tap('[data-a="enterArena"]', 700);
-    ok(`${label} run${run}: hero pick shows logo + 3 heroes`, (await has('.brand-logo')) && (await p.locator('[data-a="start"]').count()) === 3);
-    await tap('[data-a="start"]', 900);
+    ok(`${label} run${run}: hero pick deals 3 hero cards`, (await p.locator('.pk-card').count()) === 3);
+    await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+    await tap('.pk-start', 900);
     ok(`${label} run${run}: shop opens`, await has('.shopv'));
     ok(`${label} run${run}: shop has no horizontal scroll`, await noHScroll());
     if (run === 0) {
@@ -125,7 +126,7 @@ async function play(label, ctxOpts, runs = 1) {
             ok(`${label} run${run}: drag (${ctxOpts.hasTouch ? 'touch' : 'mouse'}) reorders the list`, before !== after, `${before} → ${after}`);
           } else ok(`${label} run${run}: drag test skipped (fewer than 2 skills)`, true);
           ok(`${label} run${run}: firing timeline visible`, (await text()).includes('วิ') && (await has('.shopv svg, .tl, [class*="timeline"]')));
-          if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
+          if (await has('.skillrow[data-sheet]')) { await p.locator('.skillrow[data-sheet]').first().click({ button: 'right', position: { x: 60, y: 12 } }).catch(() => {}); await p.waitForTimeout(500); ok(`${label} run${run}: skill tree window opens (detail sheet, right-click)`, (await has('button[data-a="treeClose"]')) && (await has('.sheet-acts [data-a="sheetSell"]'))); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
           // shop HUD + coin pill on the shop panel
           ok(`${label} run${run}: HUD shows HP, day and 10 win stars`, (await has('[data-hud="hp"]')) && (await has('[data-hud="day"]')) && (await p.locator('.hud-star').count()) === 10);
           ok(`${label} run${run}: gold coin pill sits on the shop panel`, await has('.sv-shop .gold-pill .gold-n'));
@@ -148,7 +149,8 @@ async function play(label, ctxOpts, runs = 1) {
             }
             await p.waitForTimeout(800);
           };
-          // sell: drag a skill onto the coin jar
+          // sell: drag a skill onto the coin jar (shop v2: the jar and the list live in the skills drawer)
+          if (!(await has('.shop2.drawer-open'))) await tap('.peek-tab', 500);
           {
             const r0 = await nRows(), g0 = await gold();
             const grip = p.locator('.skillrow[data-i] [data-drag]').last();
@@ -169,9 +171,9 @@ async function play(label, ctxOpts, runs = 1) {
               const bname = (await card.locator('.offer-name').innerText()).trim();
               await card.scrollIntoViewIfNeeded(); await p.waitForTimeout(200);
               if (touch) {
-                await card.locator('.offer-name').click(); await p.waitForTimeout(500);
-                ok(`${label} run${run}: tapping a card shows the ghost + insert targets`, (await has('.put-here.mode-pick')) && (await has('.ins-slot button')));
-                await tap('.put-here.mode-pick', 900);
+                await tap('.drawer-x', 400);
+                await card.locator('.offer-name').click({ delay: 750, timeout: 4000 }).catch(() => {}); await p.waitForTimeout(700);
+                ok(`${label} run${run}: holding a card buys it and opens the skills drawer`, await has('.shop2.drawer-open'));
               } else {
                 const cb = await card.locator('.offer-name').boundingBox();
                 await gesture(cb.x + cb.width / 2, cb.y + cb.height / 2, async () => {
@@ -180,7 +182,7 @@ async function play(label, ctxOpts, runs = 1) {
                 });
               }
               const r1 = await nRows(), g1 = await gold();
-              ok(`${label} run${run}: ${touch ? 'tap-to-place' : 'drag a shop card into the list'} buys it`, r1 === r0 + 1 && g1 < g0, `rows ${r0}→${r1}, gold ${g0}→${g1}`);
+              ok(`${label} run${run}: ${touch ? 'hold-to-buy' : 'drag a shop card into the list'} buys it`, r1 === r0 + 1 && g1 < g0, `rows ${r0}→${r1}, gold ${g0}→${g1}`);
               if (!touch) ok(`${label} run${run}: drag-buy lands where it was dropped (top of the list)`, (await p.locator('.skillrow[data-i="0"] .nm').innerText()).includes(bname), bname);
             } else ok(`${label} run${run}: buy-by-drag skipped (no affordable new skill)`, true);
           }
@@ -189,7 +191,7 @@ async function play(label, ctxOpts, runs = 1) {
         for (let i = 0; i < 6; i++) {
           const btn = p.locator('[data-a="buy"]:not([disabled])').first();
           if (!(await btn.count())) break;
-          await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ timeout: 3000 }).catch(() => {}); await p.waitForTimeout(250);
+          if (await p.locator('.shop2.drawer-open').count()) { await p.locator('.drawer-x').click().catch(() => {}); await p.waitForTimeout(400); } await btn.scrollIntoViewIfNeeded().catch(() => {}); await btn.click({ delay: 750, timeout: 4000 }).catch(() => {}); await p.waitForTimeout(350); // hold to buy
         }
         if (day === 2) await shot(`run${run}-shop-d2`);
         await tap('[data-a="fight"]', 1200);
@@ -288,10 +290,11 @@ async function layout(label, ctxOpts, portrait = false) {
   await fits('town', '.town-card');
   await tap('[data-a="goto"][data-i="arena"]');
   await tap('[data-a="enterArena"]', 900);
-  await fits('hero pick', '[data-a="start"]');
-  await tap('[data-a="start"]', 1000);
+  await fits('hero pick', '.pk-card');
+  await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+  await tap('.pk-start', 1000);
   if (!portrait) await fits('shop', '.shopv');
-  for (let i = 0; i < 4; i++) await tap('[data-a="buy"]:not([disabled])', 250);
+  for (let i = 0; i < 4; i++) { if (await p.locator('.shop2.drawer-open').count()) { await p.locator('.drawer-x').click().catch(() => {}); await p.waitForTimeout(400); } await p.locator('[data-a="buy"]:not([disabled])').first().click({ delay: 750, timeout: 4000 }).catch(() => {}); await p.waitForTimeout(300); } // hold to buy
   await tap('[data-a="fight"]', 1200);
   await fits('fight', '#log');
   await tap('[data-a="skip"]', 1800);

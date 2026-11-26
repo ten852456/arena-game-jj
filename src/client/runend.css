@@ -179,3 +179,33 @@
   .re-on .re-in, .re-on .re-star .f, .re-on .re-crown, .re-on .re-bar i, .re-spot, .re-wrap:not(.re-on) .re-again { animation: none !important; }
   .re-confetti { display: none; }
 }
+
+/* the run-over title is printed on the ribbon picture: size it to the ribbon (not the screen) and keep it inside the
+   ribbon's flat middle, so a long title ("Run set aside", "พักรอบนี้ไว้ก่อน") never spills past its ends */
+.mm-banner { container-type: inline-size; }
+.mm-banner .mm-over-title,
+.over-box .mm-banner .mm-over-title {
+  max-width: 64%; font-size: clamp(11px, 7.4cqw, 24px); line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+}
+
+/* ---------- laptops (about 600–760px of panel height): the left summary fits without scrolling ---------- */
+@media (min-height: 501px) and (max-height: 780px) and (min-aspect-ratio: 1/1) {
+  .over-box .mm-over { padding: 8px 14px 10px; }
+  .over-box .mm-over .mm-banner { width: min(240px, 100%); margin-bottom: -10px; }
+  .over-box .mm-over.won .mm-banner { width: min(220px, 100%); }
+  .over-box .mm-over-hero .hero-art { --s: 2.5; }
+  .over-box .mm-over-sub { font-size: 14px; }
+  .over-box .mm-pips i.re-star { width: 19px; height: 19px; }
+  .over-box .mm-statgrid { gap: 6px; margin: 6px 0; }
+  .over-box .mm-statgrid > * { padding-top: 4px; padding-bottom: 4px; }
+  .over-box .mm-actions.re-actions { margin-top: 4px; gap: 5px; }
+}
+
+/* the title sits in the middle of the ribbon's flat band, measured on the two pictures (both fill the banner's
+   height): defeat / set aside band centre at 49.5% height, ~56% of the box wide; victory at 55%, ~62% wide */
+.over-box .mm-banner { position: relative; }
+.over-box .mm-banner .mm-over-title,
+.over-box .mm-over.won .mm-banner .mm-over-title {
+  position: absolute; left: 50%; top: 49.5%; transform: translate(-50%, -50%); margin: 0; max-width: 56%;
+}
+.over-box .mm-over.won .mm-banner .mm-over-title { top: 55%; max-width: 62%; }

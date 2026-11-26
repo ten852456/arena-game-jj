@@ -21,7 +21,10 @@ import './reward.css';
 import './runend.css'; // end of run: after theme.css so it wins
 import './depth.css'; // relics, stars, marks, branch picker, build card, codex
 import './pages.css'; // profile name card, leaderboard
-import './farm.css'; // idle town: resources, landmarks, eggs, monument
+import './arenaux.css'; // arena UX pass: decluttered shop and fight in simple mode, detail sheet, coach marks
+import './pickux.css'; // card hero select over the arena: radar, platform, Start
+import './shop2.css'; // one-screen shop: the bunny's stall, hold to buy, skills drawer, day splash
+import './farm.css'; // idle town: resources, landmarks, eggs, monument (after the UX sheets: the town bar wins)
 import { initCodex } from './codex';
 import { mountFeedback } from './feedback';
 import { mountVersion, notesOnStart } from './releaseNotes';
