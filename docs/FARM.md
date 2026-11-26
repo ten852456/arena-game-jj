@@ -352,6 +352,20 @@ ranked) and a mockup (claude.ai artifact "Mochi Moon town hub redesign"); owner 
 - Not built yet: hero pets, Moon Rain event, collection log page, crafting cosmetics from finds, shiny glow in
   the fight scene (only a toast and the Hero Hall list now), separate season rating.
 
+## Incremental layer (owner adopted all recommendations, 2026-11-26)
+
+Plan + formulas + growth chart: claude.ai doc "Mochi Moon idle town: summary and incremental plan". Design meeting
+(auto-battler, idle, economy; Codex code review + genre and economy research): doc "Mochi Moon design meeting".
+- Endless building levels past Lv5: cost C(n) = 400 x 1.13^(n-6); output x(1 + 0.15 (n-5)) x 2^floor((n-5)/10);
+  slots and storage stay capped. About 13 h of one full landmark per level at Lv5, 22-26 h past Lv50.
+- Worker mastery per hero and landmark, 1-99, +1% output per level; RuneScape XP curve / 10, 100 XP per work-hour.
+- Magic Tower research (stardust + crystal): storage, nest slot, job auto-refill, warehouse. No auto-collect.
+- Moon Festival: voluntary, from average Lv10; resets levels above Lv5 and stockpiled wood/ore for
+  Moonlight = floor(sqrt(R_earned / 10000)), +2% output each for the season; converts to monument points at season end.
+- Build order: endless levels + mastery (with a 6-week farm sim), then Tower research, then the festival.
+- Open (meeting decisions): pass-slot output out of the monument and 5 picks Casual-only; season-end auto-pour above
+  the warehouse cap; layer gating; relic offers with one fitting slot + a free daily reroll; mint/burn ledger in /admin.
+
 ## Open questions
 
 1. Bot quota (vision: resources also pay for bot runs) — later, when bots ship.
