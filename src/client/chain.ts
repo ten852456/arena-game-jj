@@ -226,9 +226,14 @@ const keysReq = () => [W(session.publicKey, true), W(playerPda()), Rd(secretPda(
 const keysFinish = () => [Rd(session.publicKey, true), W(playerPda()), W(secretPda()), W(poolPda()), W(rankPda()), Rd(seasonPda())];
 const tee = () => cfg!.mode === 'tee';
 
-function delegateIx(name: 'delegate_player' | 'delegate_secret', acc: PublicKey): TransactionInstruction {
-  return ix(name, u32(cfg!.season), [
+/** `delegate` / `set_permission` kinds (program K_*) */
+const K_PLAYER = 0, K_SECRET = 1;
+/** args of `delegate` / `set_permission`: kind u8, season u32, shard u16 */
+const kindArgs = (kind: number) => [kind, ...u32(cfg!.season), ...u16(cfg!.shard)];
+function delegateIx(kind: typeof K_PLAYER | typeof K_SECRET, acc: PublicKey): TransactionInstruction {
+  return ix('delegate', kindArgs(kind), [
     Rd(owner, true),
+    Rd(prog()), // season_acc: none (only the season secret's delegation needs it)
     W(pda([enc('buffer'), acc.toBytes()])),
     W(pda([enc('delegation'), acc.toBytes()], DLP)),
     W(pda([enc('delegation-metadata'), acc.toBytes()], DLP)),
@@ -239,9 +244,9 @@ function delegateIx(name: 'delegate_player' | 'delegate_secret', acc: PublicKey)
     Rd(SystemProgram.programId),
   ]);
 }
-function permissionIx(name: 'player_permission' | 'secret_permission', acc: PublicKey): TransactionInstruction {
-  return ix(name, u32(cfg!.season), [
-    W(owner, true), W(acc), W(pda([enc('permission:'), acc.toBytes()], PERMISSION_PROGRAM)),
+function permissionIx(kind: typeof K_PLAYER | typeof K_SECRET, acc: PublicKey): TransactionInstruction {
+  return ix('set_permission', kindArgs(kind), [
+    W(owner, true), Rd(prog()) /* season_acc: none */, W(acc), W(pda([enc('permission:'), acc.toBytes()], PERMISSION_PROGRAM)),
     Rd(PERMISSION_PROGRAM), W(MAGIC_VAULT), Rd(MAGIC_PROGRAM),
   ]);
 }
@@ -413,7 +418,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
     const ixs = [ix('init_player', [...u32(cfg!.season), ...u16(cfg!.shard)], [W(owner, true), W(playerPda()), W(secretPda()), Rd(SystemProgram.programId)])];
     if (tee()) {
       if (!owner.equals(session.publicKey)) ixs.push(SystemProgram.transfer({ fromPubkey: owner, toPubkey: session.publicKey, lamports: 10_000_000 }));
-      ixs.push(delegateIx('delegate_player', playerPda()), delegateIx('delegate_secret', secretPda()));
+      ixs.push(delegateIx(K_PLAYER, playerPda()), delegateIx(K_SECRET, secretPda()));
     }
     await sendOwner(base, ixs);
   }
@@ -437,11 +442,11 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
   if (!live && !burnerOwner) {
     say('approve', 'approve 2/2 in your wallet: let this browser play for 7 days');
     const ixs = [ix('set_session', [...session.publicKey.toBytes(), ...i64(Math.floor(Date.now() / 1000) + 7 * 86400 - 120)], [Rd(owner, true), W(playerPda())])];
-    if (tee()) ixs.push(permissionIx('player_permission', playerPda()), permissionIx('secret_permission', secretPda()));
+    if (tee()) ixs.push(permissionIx(K_PLAYER, playerPda()), permissionIx(K_SECRET, secretPda()));
     await sendOwner(game, ixs);
     p = await waitPlayer('reading your account…');
   } else if (!live && tee()) {
-    await sendOwner(game, [permissionIx('player_permission', playerPda()), permissionIx('secret_permission', secretPda())]);
+    await sendOwner(game, [permissionIx(K_PLAYER, playerPda()), permissionIx(K_SECRET, secretPda())]);
   }
   if (p![OFF.seat] === 255) {
     await sendSession([ix('join_pool', [], [Rd(session.publicKey, true), W(playerPda()), W(poolPda())])]);

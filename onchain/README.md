@@ -41,11 +41,15 @@ delegated to the TEE and private (permission program); only the season's final r
 
 Instructions (sim v22, layout 4; randomness: docs/RANDOMNESS.md):
 
-- **admin / season:** `init_season` (+ season secret commitment), `init_season_secret`, `delegate_season_secret`,
-  `season_secret_permission` (no members), `set_season_secret` (TEE, must match the commitment), `set_season_end`,
-  `init_pool`, `init_ranking`, `delegate_pool`, `delegate_ranking`, `pool_permission`, `ranking_permission`
-- **player setup (owner signs):** `init_player` (creates Player + RunSecret), `delegate_player`, `delegate_secret`,
-  then on the TEE `set_session` + `player_permission`, `secret_permission` (no members); `revoke_session`
+- **delegation + privacy (one instruction each, `kind`: 0 Player, 1 RunSecret, 2 SeasonSecret, 3 Pool shard,
+  4 Ranking; args `kind, season, shard`):** `delegate` (to the TEE validator) and `set_permission` (TEE). Player /
+  RunSecret: their owner signs; SeasonSecret: the season admin signs (pass the Season account; the other kinds pass
+  the program id for "none"). Permissions: Player = owner + session key, all others no members.
+- **admin / season:** `init_season` (+ season secret commitment), `init_season_secret`, `delegate` + `set_permission`
+  (kind 2), `set_season_secret` (TEE, must match the commitment), `set_season_end`, `init_pool`, `init_ranking`,
+  `delegate` + `set_permission` (kinds 3, 4)
+- **player setup (owner signs):** `init_player` (creates Player + RunSecret), `delegate` (kinds 0, 1), then on the TEE
+  `set_session` + `set_permission` (kinds 0, 1); `revoke_session`
 - **play (owner or session key, on the TEE):** `join_pool`, `begin_run` (VRF request), `vrf_callback` (VRF program only),
   `retry_vrf` (after VRF_TIMEOUT_SLOTS), `pick_hero`, `act`, `act_batch` (≤ 32 actions, atomic), `fight`, `finish_run`
 - **season end:** `close_season`, `issue_proof`, `finalize_player` (scrub Player + RunSecret, commit back to Solana),

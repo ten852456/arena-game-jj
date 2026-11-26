@@ -1245,9 +1245,11 @@ name = "mochi-game"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",
+ "bincode",
  "bytemuck",
  "ephemeral-rollups-sdk",
  "ephemeral-vrf-sdk 0.17.3",
+ "magicblock-magic-program-api",
  "mochi-engine",
  "solana-sha256-hasher 3.1.0",
 ]

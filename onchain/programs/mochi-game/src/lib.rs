@@ -24,12 +24,11 @@ use ephemeral_rollups_sdk::{
     anchor::{commit, delegate, ephemeral},
     consts::{EPHEMERAL_VAULT_ID, MAGIC_PROGRAM_ID, PERMISSION_PROGRAM_ID},
     cpi::DelegateConfig,
-    ephem::MagicIntentBundleBuilder,
 };
-use ephemeral_vrf_sdk::anchor::{vrf, vrf_callback};
-use ephemeral_vrf_sdk::consts::DEFAULT_EPHEMERAL_QUEUE;
-use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix, RequestRandomnessParams};
-use ephemeral_vrf_sdk::types::SerializableAccountMeta;
+use anchor_lang::solana_program::instruction::{AccountMeta as Meta, Instruction};
+use anchor_lang::solana_program::program::{invoke, invoke_signed};
+use ephemeral_vrf_sdk::anchor::VrfProgram;
+use ephemeral_vrf_sdk::consts::{DEFAULT_EPHEMERAL_QUEUE, VRF_PROGRAM_ID};
 use mochi_engine::data::{BOT_BUILDS, BOT_DAYS, BOT_K, SIM_VERSION};
 use mochi_engine::ghost::{journal_day, GhostSet, JOURNAL_MAX, MAX_GHOSTS};
 use mochi_engine::run::{hero_choices, RunState, PHASE_DEAD, PHASE_LASTCHANCE, PHASE_MARK, PHASE_RELIC, PHASE_SHOP, PHASE_WON, RUN_STATE_SIZE};
@@ -83,6 +82,14 @@ pub const ST_WAIT_VRF: u8 = 5;
 /// Player.last_kind
 pub const OPP_GHOST: u8 = 1;
 pub const OPP_BOT: u8 = 2;
+
+/// This program's VRF identity PDA (["identity"], this program): signs our VRF requests. Constant (+ bump) so no
+/// request derives it at run time; test `vrf_constants` checks both against the derivation.
+pub const VRF_IDENTITY: Pubkey = pubkey!("9guCY5B9iURNtft4vjdBP1VjgesggV6jXNnpHaATzmxD");
+pub const VRF_IDENTITY_BUMP: u8 = 253;
+/// The VRF program's scoped identity for this program (["identity", this program], VRF program): the only signer
+/// our VRF callbacks accept. The SDK's `#[vrf_callback]` derives it on every callback; here it is a constant.
+pub const VRF_SCOPED_IDENTITY: Pubkey = pubkey!("6vjJmkDkxtFRxYr8qYUHzZRcA7eL1eNJH2RPk4GrBWNr");
 
 #[ephemeral]
 #[program]
@@ -181,31 +188,17 @@ pub mod mochi_game {
         Ok(())
     }
 
-    pub fn delegate_player(ctx: Context<DelegatePlayer>, season: u32) -> Result<()> {
-        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
-        let owner = ctx.accounts.owner.key();
-        ctx.accounts.delegate_player(&ctx.accounts.owner, &[b"player".as_ref(), &season.to_le_bytes(), owner.as_ref()], DelegateConfig { validator: v, ..Default::default() })?;
-        Ok(())
-    }
-    pub fn delegate_secret(ctx: Context<DelegateSecret>, season: u32) -> Result<()> {
-        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
-        let owner = ctx.accounts.owner.key();
-        ctx.accounts.delegate_run_secret(&ctx.accounts.owner, &[b"secret".as_ref(), &season.to_le_bytes(), owner.as_ref()], DelegateConfig { validator: v, ..Default::default() })?;
-        Ok(())
-    }
-    pub fn delegate_season_secret(ctx: Context<DelegateSeasonSecret>, season: u32) -> Result<()> {
-        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
-        ctx.accounts.delegate_season_secret(&ctx.accounts.admin, &[b"season_secret".as_ref(), &season.to_le_bytes()], DelegateConfig { validator: v, ..Default::default() })?;
-        Ok(())
-    }
-    pub fn delegate_pool(ctx: Context<DelegatePool>, season: u32, shard: u16) -> Result<()> {
-        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
-        ctx.accounts.delegate_pool(&ctx.accounts.admin, &[b"pool".as_ref(), &season.to_le_bytes(), &shard.to_le_bytes()], DelegateConfig { validator: v, ..Default::default() })?;
-        Ok(())
-    }
-    pub fn delegate_ranking(ctx: Context<DelegateRanking>, season: u32) -> Result<()> {
-        let v = ctx.accounts.validator.as_ref().map(|v| v.key());
-        ctx.accounts.delegate_ranking(&ctx.accounts.admin, &[b"ranking".as_ref(), &season.to_le_bytes()], DelegateConfig { validator: v, ..Default::default() })?;
+    /// Delegate one of the program's PDAs to the TEE validator. `kind` (K_*) selects the account, its seeds and who
+    /// may sign: Player / RunSecret = their owner (the seeds hold the signer's key); SeasonSecret = the season admin;
+    /// Pool shard / Ranking = any payer (as before the merge). Wrong seeds for the given account fail the
+    /// delegation CPI (the PDA cannot sign), so the account cannot be swapped.
+    pub fn delegate(ctx: Context<Delegate>, kind: u8, season: u32, shard: u16) -> Result<()> {
+        let a = &ctx.accounts;
+        let (s, sh, signer) = (season.to_le_bytes(), shard.to_le_bytes(), a.payer.key());
+        check_kind_signer(kind, a.season_acc.as_ref(), season, &signer)?;
+        let (seeds, n) = kind_seeds(kind, &s, &sh, &signer)?;
+        let v = a.validator.as_ref().map(|v| v.key());
+        a.delegate_pda(&a.payer, &seeds[..n], DelegateConfig { validator: v, ..Default::default() })?;
         Ok(())
     }
 
@@ -235,39 +228,6 @@ pub mod mochi_game {
 
     // ======================= TEE: permissions =======================
 
-    /// Player is private to its owner and the current session key (create, or update after a new session).
-    pub fn player_permission(ctx: Context<PlayerPermission>, season: u32) -> Result<()> {
-        let owner = ctx.accounts.owner.key();
-        let session = {
-            let pl = ctx.accounts.player.load()?;
-            require_keys_eq!(pl.owner, owner, GameError::NotOwner);
-            pl.session_key
-        };
-        let flags = TX_LOGS_FLAG | TX_MESSAGE_FLAG | TX_BALANCES_FLAG;
-        let mut members = vec![Member { flags, pubkey: owner }];
-        if session != Pubkey::default() {
-            members.push(Member { flags, pubkey: session });
-        }
-        let seeds: &[&[u8]] = &[b"player", &season.to_le_bytes(), owner.as_ref(), &[ctx.bumps.player]];
-        let acc = ctx.accounts.player.to_account_info();
-        if ctx.accounts.permission.lamports() == 0 {
-            return permission_cpi(&acc, &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, members, seeds);
-        }
-        UpdateEphemeralPermissionCpi {
-            payer: acc.clone(),
-            permissioned_account: acc.clone(),
-            permission: ctx.accounts.permission.to_account_info(),
-            vault: ctx.accounts.ephemeral_vault.to_account_info(),
-            magic_program: ctx.accounts.magic_program.to_account_info(),
-            permission_program: ctx.accounts.permission_program.to_account_info(),
-            authority: acc.clone(),
-            authority_is_signer: false,
-            args: EphemeralMembersArgs { is_private: true, members },
-        }
-        .invoke_signed(&[seeds])?;
-        Ok(())
-    }
-
     /// Owner approves a session key (the browser's) until `expiry` (at most MAX_SESSION from now).
     pub fn set_session(ctx: Context<OwnerOnly>, key: Pubkey, expiry: i64) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
@@ -285,40 +245,82 @@ pub mod mochi_game {
         pl.session_expiry = 0;
         Ok(())
     }
-    pub fn pool_permission(ctx: Context<PoolPermission>, season: u32, shard: u16) -> Result<()> {
-        if ctx.accounts.permission.lamports() > 0 {
-            return Ok(());
+    /// The TEE permission of one of the program's PDAs (`kind` and signer rules as in `delegate`):
+    /// - Player: private to its owner + the current session key (create, or update after a new session)
+    /// - RunSecret / SeasonSecret: NO members, so no RPC caller (player, session key, admin) can read it; marks the
+    ///   account private (begin_run / set_season_secret require it)
+    /// - Pool shard / Ranking: no members, created once
+    pub fn set_permission(ctx: Context<SetPermission>, kind: u8, season: u32, shard: u16) -> Result<()> {
+        let a = &ctx.accounts;
+        let (s, sh, signer) = (season.to_le_bytes(), shard.to_le_bytes(), a.payer.key());
+        check_kind_signer(kind, a.season_acc.as_ref(), season, &signer)?;
+        let (seeds, n) = kind_seeds(kind, &s, &sh, &signer)?;
+        let (pda, bump) = Pubkey::find_program_address(&seeds[..n], &crate::ID);
+        let acc = a.target.to_account_info();
+        require_keys_eq!(pda, acc.key(), GameError::BadAccount);
+        let b = [bump];
+        let mut full: [&[u8]; 4] = [&[]; 4];
+        full[..n].copy_from_slice(&seeds[..n]);
+        full[n] = &b;
+        let signer_seeds = &full[..n + 1];
+        let exists = a.permission.lamports() > 0;
+        let cpi = |members: Vec<Member>| permission_cpi(&acc, &a.permission, &a.permission_program, &a.ephemeral_vault, &a.magic_program, members, signer_seeds);
+        match kind {
+            K_PLAYER => {
+                let session = {
+                    let pl = view_mut::<Player>(&acc)?;
+                    require_keys_eq!(pl.owner, signer, GameError::NotOwner);
+                    pl.session_key
+                };
+                let flags = TX_LOGS_FLAG | TX_MESSAGE_FLAG | TX_BALANCES_FLAG;
+                let mut members = vec![Member { flags, pubkey: signer }];
+                if session != Pubkey::default() {
+                    members.push(Member { flags, pubkey: session });
+                }
+                if !exists {
+                    return cpi(members);
+                }
+                UpdateEphemeralPermissionCpi {
+                    payer: acc.clone(),
+                    permissioned_account: acc.clone(),
+                    permission: a.permission.to_account_info(),
+                    vault: a.ephemeral_vault.to_account_info(),
+                    magic_program: a.magic_program.to_account_info(),
+                    permission_program: a.permission_program.to_account_info(),
+                    authority: acc.clone(),
+                    authority_is_signer: false,
+                    args: EphemeralMembersArgs { is_private: true, members },
+                }
+                .invoke_signed(&[signer_seeds])?;
+            }
+            K_SECRET | K_SEASON_SECRET => {
+                // typed check first (owner + discriminator), then the CPI, then the flag
+                if kind == K_SECRET {
+                    view_mut::<RunSecret>(&acc)?;
+                } else {
+                    view_mut::<SeasonSecret>(&acc)?;
+                }
+                if !exists {
+                    cpi(vec![])?;
+                }
+                if kind == K_SECRET {
+                    view_mut::<RunSecret>(&acc)?.private = 1;
+                } else {
+                    view_mut::<SeasonSecret>(&acc)?.private = 1;
+                }
+            }
+            _ => {
+                if kind == K_POOL {
+                    view_mut::<Pool>(&acc)?;
+                } else {
+                    view_mut::<Ranking>(&acc)?;
+                }
+                if !exists {
+                    cpi(vec![])?;
+                }
+            }
         }
-        let seeds: &[&[u8]] = &[b"pool", &season.to_le_bytes(), &shard.to_le_bytes(), &[ctx.bumps.pool]];
-        permission_cpi(&ctx.accounts.pool.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)
-    }
-    /// The run secret's permission: NO members, so no RPC caller (player, session key, admin) can read it.
-    pub fn secret_permission(ctx: Context<SecretPermission>, season: u32) -> Result<()> {
-        let owner = ctx.accounts.owner.key();
-        let bump = ctx.bumps.run_secret;
-        let seeds: &[&[u8]] = &[b"secret", &season.to_le_bytes(), owner.as_ref(), &[bump]];
-        if ctx.accounts.permission.lamports() == 0 {
-            permission_cpi(&ctx.accounts.run_secret.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)?;
-        }
-        ctx.accounts.run_secret.load_mut()?.private = 1;
         Ok(())
-    }
-    /// The season secret's permission: NO members.
-    pub fn season_secret_permission(ctx: Context<SeasonSecretPermission>, season: u32) -> Result<()> {
-        let bump = ctx.bumps.season_secret;
-        let seeds: &[&[u8]] = &[b"season_secret", &season.to_le_bytes(), &[bump]];
-        if ctx.accounts.permission.lamports() == 0 {
-            permission_cpi(&ctx.accounts.season_secret.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)?;
-        }
-        ctx.accounts.season_secret.load_mut()?.private = 1;
-        Ok(())
-    }
-    pub fn ranking_permission(ctx: Context<RankingPermission>, season: u32) -> Result<()> {
-        if ctx.accounts.permission.lamports() > 0 {
-            return Ok(());
-        }
-        let seeds: &[&[u8]] = &[b"ranking", &season.to_le_bytes(), &[ctx.bumps.ranking]];
-        permission_cpi(&ctx.accounts.ranking.to_account_info(), &ctx.accounts.permission, &ctx.accounts.permission_program, &ctx.accounts.ephemeral_vault, &ctx.accounts.magic_program, vec![], seeds)
     }
 
     // ======================= TEE: gameplay =======================
@@ -597,10 +599,8 @@ pub mod mochi_game {
             pl.claim_ready = 0;
             pl.status = ST_FINAL;
         }
-        MagicIntentBundleBuilder::new(ctx.accounts.payer.to_account_info(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
-            .commit_and_undelegate(&[ctx.accounts.player.to_account_info(), ctx.accounts.run_secret.to_account_info()])
-            .build_and_invoke()?;
-        Ok(())
+        let a = &ctx.accounts;
+        commit_undelegate(a.payer.to_account_info(), a.magic_context.to_account_info(), &a.magic_program.to_account_info(), &[a.player.to_account_info(), a.run_secret.to_account_info()])
     }
 
     /// After every ranked player got their proof: scrub the ranking, publish only the root.
@@ -611,10 +611,8 @@ pub mod mochi_game {
             r.entries = [Entry::default(); LB_SIZE];
             r.published = 1;
         }
-        MagicIntentBundleBuilder::new(ctx.accounts.payer.to_account_info(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
-            .commit_and_undelegate(&[ctx.accounts.ranking.to_account_info()])
-            .build_and_invoke()?;
-        Ok(())
+        let a = &ctx.accounts;
+        commit_undelegate(a.payer.to_account_info(), a.magic_context.to_account_info(), &a.magic_program.to_account_info(), &[a.ranking.to_account_info()])
     }
 
     /// Delete every ghost of the season, then commit + undelegate the empty shard.
@@ -628,10 +626,8 @@ pub mod mochi_game {
             p.used = 0;
             p.nonce = 0;
         }
-        MagicIntentBundleBuilder::new(ctx.accounts.payer.to_account_info(), ctx.accounts.magic_context.to_account_info(), ctx.accounts.magic_program.to_account_info())
-            .commit_and_undelegate(&[ctx.accounts.pool.to_account_info()])
-            .build_and_invoke()?;
-        Ok(())
+        let a = &ctx.accounts;
+        commit_undelegate(a.payer.to_account_info(), a.magic_context.to_account_info(), &a.magic_program.to_account_info(), &[a.pool.to_account_info()])
     }
 
     // ---------------- bench only (feature "bench"): replay recorded runs exactly ----------------
@@ -771,21 +767,66 @@ fn do_apply<'info>(
 
 /// the VRF request of request_action / retry_request; the callback gets Player, RunSecret, Pool, Ranking + `req`
 fn request_act_vrf(ctx: &Context<RequestAction>, owner: Pubkey, req: u32) -> Result<()> {
-    let caller_seed = hashv(&[&b"mochi-act"[..], &ctx.accounts.season.id.to_le_bytes()[..], owner.as_ref(), &req.to_le_bytes()[..]]).to_bytes();
-    let meta = |k: Pubkey, w: bool| SerializableAccountMeta { pubkey: k.to_bytes().into(), is_signer: false, is_writable: w };
-    let ix = create_request_randomness_ix(RequestRandomnessParams {
-        payer: ctx.accounts.owner.key().to_bytes().into(),
-        oracle_queue: ctx.accounts.oracle_queue.key().to_bytes().into(),
-        callback_program_id: crate::ID.to_bytes().into(),
-        callback_discriminator: instruction::ApplyRandom::DISCRIMINATOR.to_vec(),
-        caller_seed,
-        accounts_metas: Some(vec![meta(ctx.accounts.player.key(), true), meta(ctx.accounts.run_secret.key(), true), meta(ctx.accounts.pool.key(), true), meta(ctx.accounts.ranking.key(), true)]),
-        callback_args: Some(req.to_le_bytes().to_vec()),
-    });
+    let a = &ctx.accounts;
+    let caller_seed = hashv(&[&b"mochi-act"[..], &a.season.id.to_le_bytes()[..], owner.as_ref(), &req.to_le_bytes()[..]]).to_bytes();
+    let metas = [(a.player.key(), true), (a.run_secret.key(), true), (a.pool.key(), true), (a.ranking.key(), true)];
+    let ix = vrf_request_ix(a.owner.key(), a.oracle_queue.key(), &caller_seed, instruction::ApplyRandom::DISCRIMINATOR, &metas, &req.to_le_bytes());
     if cfg!(feature = "local") {
         return Ok(()); // local validator: the admin answers with `local_apply`
     }
-    ctx.accounts.invoke_signed_vrf(&ctx.accounts.owner.to_account_info(), &ix)?;
+    invoke_vrf(&ix, a.owner.to_account_info(), a.program_identity.to_account_info(), a.oracle_queue.to_account_info(), a.slot_hashes.to_account_info())
+}
+
+/// The VRF program's RequestRandomness instruction, built here instead of with the SDK's builder (smaller, and no
+/// identity derivation per request). Scoped identity, regular priority (discriminator 10, as the SDK's default
+/// `create_request_randomness_ix` + `#[vrf]` send). Data = 8-byte discriminator, then borsh of
+/// { caller_seed, callback_program_id, callback_discriminator: Vec<u8>, callback_accounts_metas: Vec<{pubkey,
+/// is_signer, is_writable}>, callback_args: Vec<u8> }. Test `vrf_request_matches_sdk` checks it byte for byte.
+fn vrf_request_ix(payer: Pubkey, queue: Pubkey, caller_seed: &[u8; 32], disc: &[u8], metas: &[(Pubkey, bool)], args: &[u8]) -> Instruction {
+    let mut d = Vec::with_capacity(8 + 64 + 12 + disc.len() + metas.len() * 34 + args.len());
+    d.extend_from_slice(&[10, 0, 0, 0, 0, 0, 0, 0]);
+    d.extend_from_slice(caller_seed);
+    d.extend_from_slice(crate::ID.as_ref());
+    d.extend_from_slice(&(disc.len() as u32).to_le_bytes());
+    d.extend_from_slice(disc);
+    d.extend_from_slice(&(metas.len() as u32).to_le_bytes());
+    for (k, w) in metas {
+        d.extend_from_slice(k.as_ref());
+        d.extend_from_slice(&[0, *w as u8]); // is_signer = false, is_writable
+    }
+    d.extend_from_slice(&(args.len() as u32).to_le_bytes());
+    d.extend_from_slice(args);
+    Instruction {
+        program_id: VRF_PROGRAM_ID.to_bytes().into(),
+        accounts: vec![
+            Meta::new(payer, true),
+            Meta::new_readonly(VRF_IDENTITY, true),
+            Meta::new(queue, false),
+            Meta::new_readonly(anchor_lang::system_program::ID, false),
+            Meta::new_readonly(SLOT_HASHES_ID, false),
+        ],
+        data: d,
+    }
+}
+/// The CPI, signed by this program's VRF identity (the same accounts as the SDK's `invoke_signed_vrf`).
+fn invoke_vrf<'info>(ix: &Instruction, payer: AccountInfo<'info>, identity: AccountInfo<'info>, queue: AccountInfo<'info>, slot_hashes: AccountInfo<'info>) -> Result<()> {
+    invoke_signed(ix, &[payer, identity, queue, slot_hashes], &[&[b"identity", &[VRF_IDENTITY_BUMP]]])?;
+    Ok(())
+}
+const SLOT_HASHES_ID: Pubkey = pubkey!("SysvarS1otHashes111111111111111111111111111");
+
+/// Commit + undelegate on the TEE: the magic program's `ScheduleCommitAndUndelegate`, built here instead of with
+/// the SDK's intent builder (which pulls in bincode + serde, ~50 KB). Its bincode encoding is the variant index as
+/// u32 LE = [2, 0, 0, 0] (test `commit_undelegate_encoding`). Accounts: payer (signer, writable), magic context
+/// (writable), then the accounts to commit (as the SDK's `commit_and_undelegate_accounts` sends them).
+fn commit_undelegate<'info>(payer: AccountInfo<'info>, magic_context: AccountInfo<'info>, magic_program: &AccountInfo<'info>, accs: &[AccountInfo<'info>]) -> Result<()> {
+    require_keys_eq!(*magic_program.key, MAGIC_PROGRAM_ID.to_bytes().into(), GameError::BadAccount);
+    let mut metas = vec![Meta::new(*payer.key, true), Meta::new(*magic_context.key, false)];
+    metas.extend(accs.iter().map(|a| Meta { pubkey: *a.key, is_signer: a.is_signer, is_writable: a.is_writable }));
+    let ix = Instruction { program_id: *magic_program.key, accounts: metas, data: vec![2, 0, 0, 0] };
+    let mut infos = vec![payer, magic_context];
+    infos.extend_from_slice(accs);
+    invoke(&ix, &infos)?;
     Ok(())
 }
 
@@ -817,22 +858,14 @@ fn u32_of(h: &[u8; 32]) -> u32 {
 }
 /// the VRF request of begin_run / retry_vrf; the callback gets Player, RunSecret, SeasonSecret
 fn request_vrf(ctx: &Context<BeginRun>, owner: Pubkey, run_no: u32) -> Result<()> {
-    let caller_seed = hashv(&[&b"mochi-vrf"[..], &ctx.accounts.season.id.to_le_bytes()[..], owner.as_ref(), &run_no.to_le_bytes()[..]]).to_bytes();
-    let meta = |k: Pubkey, w: bool| SerializableAccountMeta { pubkey: k.to_bytes().into(), is_signer: false, is_writable: w };
-    let ix = create_request_randomness_ix(RequestRandomnessParams {
-        payer: ctx.accounts.owner.key().to_bytes().into(),
-        oracle_queue: ctx.accounts.oracle_queue.key().to_bytes().into(),
-        callback_program_id: crate::ID.to_bytes().into(),
-        callback_discriminator: instruction::VrfCallback::DISCRIMINATOR.to_vec(),
-        caller_seed,
-        accounts_metas: Some(vec![meta(ctx.accounts.player.key(), true), meta(ctx.accounts.run_secret.key(), true), meta(ctx.accounts.season_secret.key(), false)]),
-        callback_args: Some(run_no.to_le_bytes().to_vec()),
-    });
+    let a = &ctx.accounts;
+    let caller_seed = hashv(&[&b"mochi-vrf"[..], &a.season.id.to_le_bytes()[..], owner.as_ref(), &run_no.to_le_bytes()[..]]).to_bytes();
+    let metas = [(a.player.key(), true), (a.run_secret.key(), true), (a.season_secret.key(), false)];
+    let ix = vrf_request_ix(a.owner.key(), a.oracle_queue.key(), &caller_seed, instruction::VrfCallback::DISCRIMINATOR, &metas, &run_no.to_le_bytes());
     if cfg!(feature = "local") {
         return Ok(()); // no VRF oracle on a local validator: the admin answers with `local_vrf`
     }
-    ctx.accounts.invoke_signed_vrf(&ctx.accounts.owner.to_account_info(), &ix)?;
-    Ok(())
+    invoke_vrf(&ix, a.owner.to_account_info(), a.program_identity.to_account_info(), a.oracle_queue.to_account_info(), a.slot_hashes.to_account_info())
 }
 fn check_secret(sx: &RunSecret, pl: &Player) -> Result<()> {
     require!(sx.magic == SECRET_MAGIC && sx.season == pl.season && sx.owner == pl.owner, GameError::BadAccount);
@@ -1025,6 +1058,42 @@ fn prefund<'info>(payer: &Signer<'info>, to: &AccountInfo<'info>, sys: &Program<
         CpiContext::new(sys.key(), Transfer { from: payer.to_account_info(), to: to.clone() }),
         ephemeral_rollups_sdk::ephemeral_accounts::rent(EphemeralPermission::size_of(members as usize) as u32),
     )
+}
+
+/// `delegate` / `set_permission` kinds
+pub const K_PLAYER: u8 = 0;
+pub const K_SECRET: u8 = 1;
+pub const K_SEASON_SECRET: u8 = 2;
+pub const K_POOL: u8 = 3;
+pub const K_RANKING: u8 = 4;
+
+/// the seeds (without bump) of kind `kind`'s PDA; Player / RunSecret use the signer's key
+fn kind_seeds<'a>(kind: u8, s: &'a [u8; 4], sh: &'a [u8; 2], signer: &'a Pubkey) -> Result<([&'a [u8]; 3], usize)> {
+    Ok(match kind {
+        K_PLAYER => ([b"player", s, signer.as_ref()], 3),
+        K_SECRET => ([b"secret", s, signer.as_ref()], 3),
+        K_SEASON_SECRET => ([b"season_secret", s, &[]], 2),
+        K_POOL => ([b"pool", s, sh], 3),
+        K_RANKING => ([b"ranking", s, &[]], 2),
+        _ => return err!(GameError::BadAccount),
+    })
+}
+/// SeasonSecret: the signer must be the season's admin (Season accounts live at ["season", id], so `id` = the PDA).
+fn check_kind_signer(kind: u8, season_acc: Option<&Account<Season>>, season: u32, signer: &Pubkey) -> Result<()> {
+    if kind == K_SEASON_SECRET {
+        let sa = season_acc.ok_or(GameError::BadAccount)?;
+        require!(sa.id == season, GameError::BadAccount);
+        require_keys_eq!(sa.admin, *signer, GameError::NotOwner);
+    }
+    Ok(())
+}
+/// A zero-copy account of this program read in place, with AccountLoader's checks (owner, discriminator, size).
+fn view_mut<'a, T: anchor_lang::ZeroCopy + Owner>(acc: &'a AccountInfo) -> Result<core::cell::RefMut<'a, T>> {
+    require_keys_eq!(*acc.owner, T::owner(), GameError::BadAccount);
+    let data = acc.try_borrow_mut_data()?;
+    let n = core::mem::size_of::<T>();
+    require!(data.len() >= 8 + n && data[..8] == *T::DISCRIMINATOR, GameError::BadAccount);
+    Ok(core::cell::RefMut::map(data, |d| bytemuck::from_bytes_mut(&mut d[8..8 + n])))
 }
 
 fn permission_cpi<'info>(
@@ -1338,76 +1407,6 @@ pub struct InitSeasonSecret<'info> {
     pub system_program: Program<'info, System>,
 }
 
-#[delegate]
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct DelegateSecret<'info> {
-    pub owner: Signer<'info>,
-    /// CHECK: delegated PDA
-    #[account(mut, del, seeds = [b"secret".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
-    pub run_secret: UncheckedAccount<'info>,
-    /// CHECK: checked by the delegation program
-    pub validator: Option<UncheckedAccount<'info>>,
-}
-
-#[delegate]
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct DelegateSeasonSecret<'info> {
-    pub admin: Signer<'info>,
-    #[account(has_one = admin, seeds = [b"season".as_ref(), &season.to_le_bytes()], bump)]
-    pub season_acc: Account<'info, Season>,
-    /// CHECK: delegated PDA
-    #[account(mut, del, seeds = [b"season_secret".as_ref(), &season.to_le_bytes()], bump)]
-    pub season_secret: UncheckedAccount<'info>,
-    /// CHECK: checked by the delegation program
-    pub validator: Option<UncheckedAccount<'info>>,
-}
-
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct SecretPermission<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(mut, seeds = [b"secret".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
-    pub run_secret: AccountLoader<'info, RunSecret>,
-    /// CHECK: verified by the permission program
-    #[account(mut, seeds = [PERMISSION_SEED, run_secret.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
-    pub permission: UncheckedAccount<'info>,
-    /// CHECK: Permission Program
-    #[account(address = PERMISSION_PROGRAM_ID)]
-    pub permission_program: UncheckedAccount<'info>,
-    /// CHECK: verified by the magic program
-    #[account(mut, address = EPHEMERAL_VAULT_ID)]
-    pub ephemeral_vault: UncheckedAccount<'info>,
-    /// CHECK: Magic Program
-    #[account(address = MAGIC_PROGRAM_ID)]
-    pub magic_program: UncheckedAccount<'info>,
-}
-
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct SeasonSecretPermission<'info> {
-    #[account(mut)]
-    pub admin: Signer<'info>,
-    #[account(has_one = admin, seeds = [b"season".as_ref(), &season.to_le_bytes()], bump)]
-    pub season_acc: Account<'info, Season>,
-    #[account(mut, seeds = [b"season_secret".as_ref(), &season.to_le_bytes()], bump)]
-    pub season_secret: AccountLoader<'info, SeasonSecret>,
-    /// CHECK: verified by the permission program
-    #[account(mut, seeds = [PERMISSION_SEED, season_secret.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
-    pub permission: UncheckedAccount<'info>,
-    /// CHECK: Permission Program
-    #[account(address = PERMISSION_PROGRAM_ID)]
-    pub permission_program: UncheckedAccount<'info>,
-    /// CHECK: verified by the magic program
-    #[account(mut, address = EPHEMERAL_VAULT_ID)]
-    pub ephemeral_vault: UncheckedAccount<'info>,
-    /// CHECK: Magic Program
-    #[account(address = MAGIC_PROGRAM_ID)]
-    pub magic_program: UncheckedAccount<'info>,
-}
-
 #[derive(Accounts)]
 pub struct SetSeasonSecret<'info> {
     pub admin: Signer<'info>,
@@ -1417,9 +1416,8 @@ pub struct SetSeasonSecret<'info> {
     pub season_secret: AccountLoader<'info, SeasonSecret>,
 }
 
-/// begin_run / retry_vrf: the player's accounts + the VRF request accounts (`#[vrf]` adds program_identity,
-/// vrf_program, slot_hashes, system_program)
-#[vrf]
+/// begin_run / retry_vrf: the player's accounts + the VRF request accounts (the same ones, in the same order, as the
+/// SDK's `#[vrf]` adds: program_identity, vrf_program, slot_hashes, system_program)
 #[derive(Accounts)]
 pub struct BeginRun<'info> {
     #[account(mut)]
@@ -1434,12 +1432,22 @@ pub struct BeginRun<'info> {
     /// CHECK: the ephemeral VRF queue
     #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE.to_bytes().into())]
     pub oracle_queue: UncheckedAccount<'info>,
+    /// CHECK: this program's VRF identity PDA (["identity"]); signs the request
+    #[account(address = VRF_IDENTITY)]
+    pub program_identity: UncheckedAccount<'info>,
+    pub vrf_program: Program<'info, VrfProgram>,
+    /// CHECK: slot hashes sysvar
+    #[account(address = SLOT_HASHES_ID)]
+    pub slot_hashes: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
 }
 
-/// The VRF callback (`#[vrf_callback]` adds the scoped VRF identity signer)
-#[vrf_callback]
+/// The VRF callback (the scoped VRF identity signer first, as the SDK's `#[vrf_callback]` adds it)
 #[derive(Accounts)]
 pub struct VrfCallback<'info> {
+    /// the VRF program's scoped identity for this program: proves the VRF program sent this callback
+    #[account(address = VRF_SCOPED_IDENTITY)]
+    pub vrf_program_identity: Signer<'info>,
     #[account(mut)]
     pub player: AccountLoader<'info, Player>,
     #[account(mut)]
@@ -1449,7 +1457,6 @@ pub struct VrfCallback<'info> {
 
 /// request_action / retry_request: the player's accounts, the pool shard + ranking (the fight's callback needs them),
 /// and the VRF request accounts
-#[vrf]
 #[derive(Accounts)]
 pub struct RequestAction<'info> {
     #[account(mut)]
@@ -1463,11 +1470,21 @@ pub struct RequestAction<'info> {
     /// CHECK: the ephemeral VRF queue
     #[account(mut, address = DEFAULT_EPHEMERAL_QUEUE.to_bytes().into())]
     pub oracle_queue: UncheckedAccount<'info>,
+    /// CHECK: this program's VRF identity PDA (["identity"]); signs the request
+    #[account(address = VRF_IDENTITY)]
+    pub program_identity: UncheckedAccount<'info>,
+    pub vrf_program: Program<'info, VrfProgram>,
+    /// CHECK: slot hashes sysvar
+    #[account(address = SLOT_HASHES_ID)]
+    pub slot_hashes: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
 }
 
-#[vrf_callback]
 #[derive(Accounts)]
 pub struct ApplyRandom<'info> {
+    /// the VRF program's scoped identity for this program: proves the VRF program sent this callback
+    #[account(address = VRF_SCOPED_IDENTITY)]
+    pub vrf_program_identity: Signer<'info>,
     #[account(mut)]
     pub player: AccountLoader<'info, Player>,
     #[account(mut)]
@@ -1515,42 +1532,6 @@ pub struct JoinPool<'info> {
     pub pool: AccountLoader<'info, Pool>,
 }
 
-#[delegate]
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct DelegatePlayer<'info> {
-    pub owner: Signer<'info>,
-    /// CHECK: delegated PDA
-    #[account(mut, del, seeds = [b"player".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
-    pub player: UncheckedAccount<'info>,
-    /// CHECK: checked by the delegation program
-    pub validator: Option<UncheckedAccount<'info>>,
-}
-
-#[delegate]
-#[derive(Accounts)]
-#[instruction(season: u32, shard: u16)]
-pub struct DelegatePool<'info> {
-    pub admin: Signer<'info>,
-    /// CHECK: delegated PDA
-    #[account(mut, del, seeds = [b"pool".as_ref(), &season.to_le_bytes(), &shard.to_le_bytes()], bump)]
-    pub pool: UncheckedAccount<'info>,
-    /// CHECK: checked by the delegation program
-    pub validator: Option<UncheckedAccount<'info>>,
-}
-
-#[delegate]
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct DelegateRanking<'info> {
-    pub admin: Signer<'info>,
-    /// CHECK: delegated PDA
-    #[account(mut, del, seeds = [b"ranking".as_ref(), &season.to_le_bytes()], bump)]
-    pub ranking: UncheckedAccount<'info>,
-    /// CHECK: checked by the delegation program
-    pub validator: Option<UncheckedAccount<'info>>,
-}
-
 #[derive(Accounts)]
 #[instruction(season: u32)]
 pub struct ClaimReward<'info> {
@@ -1566,57 +1547,32 @@ pub struct ClaimReward<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// `delegate`: the payer (owner for Player / RunSecret, admin for SeasonSecret), the Season (SeasonSecret only), the
+/// PDA (`kind` + args give its seeds; the delegation CPI fails on a mismatch), the TEE validator
+#[delegate]
 #[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct PlayerPermission<'info> {
-    #[account(mut)]
-    pub owner: Signer<'info>,
-    #[account(mut, seeds = [b"player".as_ref(), &season.to_le_bytes(), owner.key().as_ref()], bump)]
-    pub player: AccountLoader<'info, Player>,
-    /// CHECK: verified by the permission program
-    #[account(mut, seeds = [PERMISSION_SEED, player.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
-    pub permission: UncheckedAccount<'info>,
-    /// CHECK: Permission Program
-    #[account(address = PERMISSION_PROGRAM_ID)]
-    pub permission_program: UncheckedAccount<'info>,
-    /// CHECK: verified by the magic program
-    #[account(mut, address = EPHEMERAL_VAULT_ID)]
-    pub ephemeral_vault: UncheckedAccount<'info>,
-    /// CHECK: Magic Program
-    #[account(address = MAGIC_PROGRAM_ID)]
-    pub magic_program: UncheckedAccount<'info>,
+pub struct Delegate<'info> {
+    pub payer: Signer<'info>,
+    pub season_acc: Option<Account<'info, Season>>,
+    /// CHECK: delegated PDA; its seeds come from `kind` and are enforced by the delegation CPI
+    #[account(mut, del)]
+    pub pda: UncheckedAccount<'info>,
+    /// CHECK: checked by the delegation program
+    pub validator: Option<UncheckedAccount<'info>>,
 }
 
+/// `set_permission`: payer (rules as `delegate`), the Season (SeasonSecret only), the PDA (checked against its kind's
+/// seeds, owner and type in the handler), its permission account and the TEE programs
 #[derive(Accounts)]
-#[instruction(season: u32, shard: u16)]
-pub struct PoolPermission<'info> {
+pub struct SetPermission<'info> {
     #[account(mut)]
-    pub admin: Signer<'info>,
-    #[account(mut, seeds = [b"pool".as_ref(), &season.to_le_bytes(), &shard.to_le_bytes()], bump)]
-    pub pool: AccountLoader<'info, Pool>,
-    /// CHECK: verified by the permission program
-    #[account(mut, seeds = [PERMISSION_SEED, pool.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
-    pub permission: UncheckedAccount<'info>,
-    /// CHECK: Permission Program
-    #[account(address = PERMISSION_PROGRAM_ID)]
-    pub permission_program: UncheckedAccount<'info>,
-    /// CHECK: verified by the magic program
-    #[account(mut, address = EPHEMERAL_VAULT_ID)]
-    pub ephemeral_vault: UncheckedAccount<'info>,
-    /// CHECK: Magic Program
-    #[account(address = MAGIC_PROGRAM_ID)]
-    pub magic_program: UncheckedAccount<'info>,
-}
-
-#[derive(Accounts)]
-#[instruction(season: u32)]
-pub struct RankingPermission<'info> {
+    pub payer: Signer<'info>,
+    pub season_acc: Option<Account<'info, Season>>,
+    /// CHECK: checked in the handler (PDA of `kind`, owner, discriminator)
     #[account(mut)]
-    pub admin: Signer<'info>,
-    #[account(mut, seeds = [b"ranking".as_ref(), &season.to_le_bytes()], bump)]
-    pub ranking: AccountLoader<'info, Ranking>,
+    pub target: UncheckedAccount<'info>,
     /// CHECK: verified by the permission program
-    #[account(mut, seeds = [PERMISSION_SEED, ranking.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
+    #[account(mut, seeds = [PERMISSION_SEED, target.key().as_ref()], bump, seeds::program = PERMISSION_PROGRAM_ID)]
     pub permission: UncheckedAccount<'info>,
     /// CHECK: Permission Program
     #[account(address = PERMISSION_PROGRAM_ID)]
@@ -1763,3 +1719,53 @@ pub enum GameError {
     LogFull,
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// the constant identities = their derivations (fails if the program id changes: update the constants)
+    #[test]
+    fn vrf_constants() {
+        assert_eq!(Pubkey::find_program_address(&[b"identity"], &crate::ID), (VRF_IDENTITY, VRF_IDENTITY_BUMP));
+        assert_eq!(ephemeral_vrf_sdk::consts::scoped_vrf_identity(&crate::ID.to_bytes().into()).to_bytes(), VRF_SCOPED_IDENTITY.to_bytes());
+        assert_eq!(ephemeral_vrf_sdk::compat::slot_hashes::ID.to_bytes(), SLOT_HASHES_ID.to_bytes());
+    }
+
+    /// the hand-built request = the SDK's `create_request_randomness_ix` (+ the discriminator `#[vrf]` would set)
+    #[test]
+    fn vrf_request_matches_sdk() {
+        use ephemeral_vrf_sdk::instructions::{create_request_randomness_ix, RequestRandomnessParams};
+        use ephemeral_vrf_sdk::types::SerializableAccountMeta;
+        let k = |i: u8| Pubkey::new_from_array([i; 32]);
+        for (disc, metas, args) in [
+            (instruction::VrfCallback::DISCRIMINATOR, vec![(k(1), true), (k(2), true), (k(3), false)], 7u32.to_le_bytes().to_vec()),
+            (instruction::ApplyRandom::DISCRIMINATOR, vec![(k(1), true), (k(2), true), (k(4), true), (k(5), true)], 123456u32.to_le_bytes().to_vec()),
+        ] {
+            let seed = [9u8; 32];
+            let mine = vrf_request_ix(k(7), k(8), &seed, disc, &metas, &args);
+            let sdk = create_request_randomness_ix(RequestRandomnessParams {
+                payer: k(7).to_bytes().into(),
+                oracle_queue: k(8).to_bytes().into(),
+                callback_program_id: crate::ID.to_bytes().into(),
+                callback_discriminator: disc.to_vec(),
+                caller_seed: seed,
+                accounts_metas: Some(metas.iter().map(|(p, w)| SerializableAccountMeta { pubkey: p.to_bytes().into(), is_signer: false, is_writable: *w }).collect()),
+                callback_args: Some(args.clone()),
+            });
+            assert_eq!(mine.data, sdk.data);
+            assert_eq!(mine.program_id.to_bytes(), sdk.program_id.to_bytes());
+            let a: Vec<_> = mine.accounts.iter().map(|m| (m.pubkey.to_bytes(), m.is_signer, m.is_writable)).collect();
+            let b: Vec<_> = sdk.accounts.iter().map(|m| (m.pubkey.to_bytes(), m.is_signer, m.is_writable)).collect();
+            assert_eq!(a, b);
+        }
+    }
+
+    /// [2, 0, 0, 0] = bincode of MagicBlockInstruction::ScheduleCommitAndUndelegate (what the SDK's
+    /// `commit_and_undelegate_accounts` sends)
+    #[test]
+    fn commit_undelegate_encoding() {
+        let b = bincode::serialize(&magicblock_magic_program_api::instruction::MagicBlockInstruction::ScheduleCommitAndUndelegate).unwrap();
+        assert_eq!(b, vec![2, 0, 0, 0]);
+    }
+}
