@@ -157,8 +157,7 @@ await step('admin: `set_permission` kinds 2/3/4 on the TEE (no members) + set_se
 }, 180_000, 4000));
 if (UI) {
   const cfgPath = new URL('../../src/client/public/chain.json', import.meta.url);
-  const old = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
-  fs.writeFileSync(cfgPath, JSON.stringify({ mode: 'tee', rpc: BASE, tee: old.tee ?? '/tee', validator: VALIDATOR.toBase58(), program: PROGRAM.toBase58(), season: SEASON, shard: SHARD }, null, 2) + '\n');
+  fs.writeFileSync(cfgPath, JSON.stringify({ mode: 'tee', rpc: BASE, tee: TEE, validator: VALIDATOR.toBase58(), program: PROGRAM.toBase58(), season: SEASON, shard: SHARD }, null, 2) + '\n');
   console.log('UI season', SEASON, 'until', new Date(end * 1000).toISOString(), '→ src/client/public/chain.json');
   process.exit(results.every((r) => r.ok) ? 0 : 1);
 }
