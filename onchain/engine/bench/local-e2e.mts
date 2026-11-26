@@ -30,7 +30,7 @@ import { encodeState } from '../diff/run-gen.mts';
 
 const rpc = process.argv[2] ?? 'http://127.0.0.1:18899';
 const c = new Connection(rpc, 'confirmed');
-const PROGRAM = new PublicKey('Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh');
+const PROGRAM = new PublicKey('7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r');
 const VRF = new PublicKey('Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz');
 const QUEUE = new PublicKey('5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc');
 const VRF_ID = PublicKey.findProgramAddressSync([Buffer.from('identity'), PROGRAM.toBuffer()], VRF)[0];

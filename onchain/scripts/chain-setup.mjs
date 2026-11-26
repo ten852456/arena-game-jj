@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, sendAndConfirmTransaction } from '@solana/web3.js';
 
-const [programId = 'Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh', rpc = 'http://127.0.0.1:18899'] = process.argv.slice(2);
+const [programId = '7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r', rpc = 'http://127.0.0.1:18899'] = process.argv.slice(2);
 const PROGRAM = new PublicKey(programId);
 const c = new Connection(rpc, 'confirmed');
 const admin = Keypair.generate();

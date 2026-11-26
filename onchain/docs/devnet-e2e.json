@@ -1,0 +1,391 @@
+{
+ "at": "2026-11-26T02:41:09.677Z",
+ "program": "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r",
+ "season": 1655434639,
+ "runs": [
+  {
+   "fights": 9,
+   "replayOk": 9,
+   "rolls": 5,
+   "wins": 1,
+   "day": 9,
+   "phase": "dead",
+   "vrfMs": 353
+  }
+ ],
+ "latency": {
+  "init": {
+   "n": 2,
+   "mean": 906,
+   "p95": 998,
+   "max": 998
+  },
+  "delegate": {
+   "n": 1,
+   "mean": 13458,
+   "p95": 13458,
+   "max": 13458
+  },
+  "permission": {
+   "n": 1,
+   "mean": 366,
+   "p95": 366,
+   "max": 366
+  },
+  "season_secret": {
+   "n": 1,
+   "mean": 161,
+   "p95": 161,
+   "max": 161
+  },
+  "fund": {
+   "n": 1,
+   "mean": 2597,
+   "p95": 2597,
+   "max": 2597
+  },
+  "stranger": {
+   "n": 1,
+   "mean": 129,
+   "p95": 129,
+   "max": 129
+  },
+  "season_end": {
+   "n": 1,
+   "mean": 1204,
+   "p95": 1204,
+   "max": 1204
+  },
+  "close": {
+   "n": 7,
+   "mean": 543,
+   "p95": 1710,
+   "max": 1710
+  },
+  "proof": {
+   "n": 1,
+   "mean": 122,
+   "p95": 122,
+   "max": 122
+  },
+  "finalize": {
+   "n": 1,
+   "mean": 150,
+   "p95": 150,
+   "max": 150
+  },
+  "publish": {
+   "n": 1,
+   "mean": 137,
+   "p95": 137,
+   "max": 137
+  },
+  "clear": {
+   "n": 1,
+   "mean": 142,
+   "p95": 142,
+   "max": 142
+  },
+  "claim": {
+   "n": 3,
+   "mean": 5621,
+   "p95": 14925,
+   "max": 14925
+  }
+ },
+ "results": [
+  {
+   "name": "admin: season (+ season secret commitment), season secret, ranking, pool on Solana",
+   "ok": true,
+   "ms": 1986,
+   "detail": "ok"
+  },
+  {
+   "name": "admin: `delegate` kinds 2 (season secret), 3 (pool), 4 (ranking) → TEE",
+   "ok": true,
+   "ms": 13521,
+   "detail": "2GwLuMVGTPXhpNzQ2BwkV3ykyfKHMdf2ciW74W3kt9s4ytPs4zdhBpD69VsjqPvesD9QWn72b8zF8XUDoAZmUFDZ"
+  },
+  {
+   "name": "admin: `set_permission` kinds 2/3/4 on the TEE (no members) + set_season_secret",
+   "ok": true,
+   "ms": 887,
+   "detail": "ok"
+  },
+  {
+   "name": "fund the burner owner (0.08 devnet SOL)",
+   "ok": true,
+   "ms": 2740,
+   "detail": "9JcJdWr4KJzBEoNxjiAbYucNvwyDtBwRMPvbcjVnjRR3"
+  },
+  {
+   "name": "player: connect = init_player + `delegate` kinds 0/1 (Solana), `set_permission` kinds 0/1 + join_pool (TEE)",
+   "ok": true,
+   "ms": 6137,
+   "detail": "status idle, seat taken"
+  },
+  {
+   "name": "player: run 1 on the TEE (real VRF for the run + every random action and fight)",
+   "ok": true,
+   "ms": 11533,
+   "detail": {
+    "fights": 9,
+    "replayOk": 9,
+    "rolls": 5,
+    "wins": 1,
+    "day": 9,
+    "phase": "dead",
+    "vrfMs": 353
+   }
+  },
+  {
+   "name": "privacy: owner reads its Player; RunSecret / SeasonSecret / Pool / Ranking unreadable to owner, stranger, admin",
+   "ok": true,
+   "ms": 958,
+   "detail": {
+    "admin": {
+     "player": false,
+     "runSecret": false,
+     "seasonSecret": false,
+     "pool": false,
+     "ranking": false
+    },
+    "stranger": {
+     "player": false,
+     "runSecret": false,
+     "seasonSecret": false,
+     "pool": false,
+     "ranking": false
+    },
+    "owner": {
+     "player": true,
+     "runSecret": false,
+     "seasonSecret": false,
+     "pool": false,
+     "ranking": false
+    }
+   }
+  },
+  {
+   "name": "privacy: a stranger cannot play on the player (signer check)",
+   "ok": true,
+   "ms": 287,
+   "detail": "refused"
+  },
+  {
+   "name": "season end: set_season_end (now + 30 s)",
+   "ok": true,
+   "ms": 1376,
+   "detail": "4xiM8psCACp8ZyyHSJYNKyPst9mSFoM99xXmYbodiUXPcwNEE381jqUHavwbervu3SjUvCitULzi26uPmtd8dNHa"
+  },
+  {
+   "name": "season end: close_season on the TEE after the end (Merkle root)",
+   "ok": true,
+   "ms": 30083,
+   "detail": "2WAwSFS6zNRC3j7FwjMdmqbNC5SM51X4vHo1dRd8PMRSxZc3iCMC1wfS3U4uTrBHok6eHyb2a3oxf2tFy6chJHsq"
+  },
+  {
+   "name": "season end: issue_proof → the player reads it privately (owner token)",
+   "ok": true,
+   "ms": 306,
+   "detail": {
+    "rank": 0,
+    "reward": 1000
+   }
+  },
+  {
+   "name": "season end: finalize_player (scrub, commit + undelegate Player + RunSecret)",
+   "ok": true,
+   "ms": 202,
+   "detail": "5GECpHPepTzrPZiUyCAjCxujefYV6WgQrzQHBVKEYmtZCkswSBPxyWVWLR1hgUjZ5fR3DybmhzL1a3GKctsRCouG"
+  },
+  {
+   "name": "season end: publish_root (scrub ranking, commit + undelegate)",
+   "ok": true,
+   "ms": 216,
+   "detail": "62LuTEFEf1DAQApj755u9o5Mti4fRnN4wH5qt1Px3BswfTS6NGcGLbTB9ggdxfc2yw33Hhm25CTbh4SQ4TtTXzNM"
+  },
+  {
+   "name": "season end: clear_pool (delete ghosts, commit + undelegate)",
+   "ok": true,
+   "ms": 200,
+   "detail": "SZPuoYm2nd8wAvfvKyqzcwCQmGSCpegZQxcrNaxb2pWyCnsC8iA9PoVW5tbm2UvcxMTPrUePEx2UWg47XxShfgi"
+  },
+  {
+   "name": "season end: Player, RunSecret, Ranking, Pool back on Solana (owned by the program again)",
+   "ok": true,
+   "ms": 3695,
+   "detail": "yes"
+  },
+  {
+   "name": "season end: the Solana copies hold no secret (run secret, VRF, run state, proof, ranking entries, ghosts)",
+   "ok": true,
+   "ms": 282,
+   "detail": {
+    "playerStatus": 4,
+    "rankingClosed": 1,
+    "published": 1,
+    "root": "3aad731f15751d57…"
+   }
+  },
+  {
+   "name": "claim: forged reward rejected",
+   "ok": true,
+   "ms": 1200,
+   "detail": "rejected"
+  },
+  {
+   "name": "claim: own proof accepted on Solana",
+   "ok": true,
+   "ms": 925,
+   "detail": {
+    "rank": 0,
+    "reward": 1000,
+    "proof": [
+     [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ],
+     [
+      245,
+      165,
+      253,
+      66,
+      209,
+      106,
+      32,
+      48,
+      39,
+      152,
+      239,
+      110,
+      211,
+      9,
+      151,
+      155,
+      67,
+      0,
+      61,
+      35,
+      32,
+      217,
+      240,
+      232,
+      234,
+      152,
+      49,
+      169,
+      39,
+      89,
+      251,
+      75
+     ],
+     [
+      219,
+      86,
+      17,
+      78,
+      0,
+      253,
+      212,
+      193,
+      248,
+      92,
+      137,
+      43,
+      243,
+      90,
+      201,
+      168,
+      146,
+      137,
+      170,
+      236,
+      177,
+      235,
+      208,
+      169,
+      108,
+      222,
+      96,
+      106,
+      116,
+      139,
+      93,
+      113
+     ],
+     [
+      199,
+      128,
+      9,
+      253,
+      240,
+      127,
+      197,
+      106,
+      17,
+      241,
+      34,
+      55,
+      6,
+      88,
+      163,
+      83,
+      170,
+      165,
+      66,
+      237,
+      99,
+      228,
+      76,
+      75,
+      193,
+      95,
+      244,
+      205,
+      16,
+      90,
+      179,
+      60
+     ]
+    ]
+   }
+  },
+  {
+   "name": "claim: second claim rejected",
+   "ok": true,
+   "ms": 15070,
+   "detail": "rejected"
+  }
+ ]
+}

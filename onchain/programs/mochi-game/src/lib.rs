@@ -35,7 +35,7 @@ use mochi_engine::run::{hero_choices, RunState, PHASE_DEAD, PHASE_LASTCHANCE, PH
 use mochi_engine::types::Build;
 use solana_sha256_hasher::hashv;
 
-declare_id!("Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh");
+declare_id!("7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r");
 
 pub const PLAYER_MAGIC: u32 = 0x4D50_4C31; // "MPL1"
 pub const POOL_MAGIC: u32 = 0x4D50_4F31; // "MPO1"
@@ -85,11 +85,11 @@ pub const OPP_BOT: u8 = 2;
 
 /// This program's VRF identity PDA (["identity"], this program): signs our VRF requests. Constant (+ bump) so no
 /// request derives it at run time; test `vrf_constants` checks both against the derivation.
-pub const VRF_IDENTITY: Pubkey = pubkey!("9guCY5B9iURNtft4vjdBP1VjgesggV6jXNnpHaATzmxD");
-pub const VRF_IDENTITY_BUMP: u8 = 253;
+pub const VRF_IDENTITY: Pubkey = pubkey!("Hmy9b3w8RTiXEjdBPTYZKR2cWR7JLLxLjvje4Mp2QrAB");
+pub const VRF_IDENTITY_BUMP: u8 = 255;
 /// The VRF program's scoped identity for this program (["identity", this program], VRF program): the only signer
 /// our VRF callbacks accept. The SDK's `#[vrf_callback]` derives it on every callback; here it is a constant.
-pub const VRF_SCOPED_IDENTITY: Pubkey = pubkey!("6vjJmkDkxtFRxYr8qYUHzZRcA7eL1eNJH2RPk4GrBWNr");
+pub const VRF_SCOPED_IDENTITY: Pubkey = pubkey!("Ca8vDCEQQmG1EsPLNDrZr9SZCzyEoaQcdM6Es7XLmtUh");
 
 #[ephemeral]
 #[program]

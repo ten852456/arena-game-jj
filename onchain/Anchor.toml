@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-mochi_game = "Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh"
+mochi_game = "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r"
 
 [programs.localnet]
-mochi_game = "Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh"
+mochi_game = "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r"
 
 [provider]
 cluster = "devnet"

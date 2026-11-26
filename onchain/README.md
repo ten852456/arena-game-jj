@@ -6,7 +6,7 @@ MagicBlock's production terms first.
 
 | | |
 |---|---|
-| Program (devnet) | `Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh` |
+| Program (devnet) | `7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r` |
 | TEE validator | `MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo` (`https://devnet-tee.magicblock.app`) |
 | Season the client plays | `../src/client/public/chain.json` |
 | Toolchain | Anchor 1.0.2, ephemeral-rollups-sdk 0.16.2, Rust stable |
