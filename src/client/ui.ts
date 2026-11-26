@@ -90,6 +90,8 @@ let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connect
 let chainChoices: string[] | null = null;
 /** their day-1 shops (published by the program with the choices) */
 let chainPreview: Record<string, (R.Offer | null)[]> | null = null;
+/** the coming run's cosmetic seed (chain): the offered heroes are shown with the look the run will have */
+let chainLook = 0;
 let chainStarting = false;
 let last: FightResponse | null = null;
 let lastDay = 0;
@@ -627,7 +629,7 @@ function heroOffer(): string[] {
   if (!chainChoices && chainConn === 'ready' && !chainStarting && !runActive()) {
     chainStarting = true;
     void C.chainBeginRun().then(
-      (c) => { chainChoices = c.choices; chainPreview = c.preview; chainStarting = false; render(); },
+      (c) => { chainChoices = c.choices; chainPreview = c.preview; chainLook = c.lookSeed; chainStarting = false; render(); },
       (e) => { chainStarting = false; toast = (e as Error).message; render(); },
     );
   }
@@ -649,8 +651,8 @@ function day1HTML(id: string) {
   const row = (o: R.Offer) => `<span class="d1-card"><img class="skill-icon" src="${skillIcon(o.id)}" alt=""><b>${esc(nodeOf({ id: o.id, v: o.v }).name)}</b>${(o.bonus ?? []).map(bon).join('')}</span>`;
   return `<span class="hero-day1"><small class="muted">${L('ร้านวันแรก (โบนัสต่อสาย)', 'Day-1 shop (connect bonuses)')}</small>${shop.map(row).join('')}</span>`;
 }
-/** cosmetic look of an offered hero (on chain the run's cosmetic seed is known once the run starts) */
-const offerLook = (id: string) => (C.chainOn() ? 0 : R.lookFor(nextSeed!, id));
+/** cosmetic look of an offered hero = the look its run will have (on chain: from the run's published cosmetic seed) */
+const offerLook = (id: string) => (C.chainOn() ? (chainLook ? R.lookFor(chainLook, id) : 0) : R.lookFor(nextSeed!, id));
 
 function renderTitle() {
   const offered = runActive() ? [] : heroOffer().map((id) => HEROES_BY_ID[id]);
@@ -2464,7 +2466,9 @@ async function chainFightUi(r: R.RunState, build: Build) {
   }
   // replay what the chain fought: its build of the day (the local one can be stale, e.g. another device acted)
   if (JSON.stringify(f.build.skills) !== JSON.stringify(build.skills)) console.warn('[chain] the chain fought with another build than shown here (state changed elsewhere): replaying the chain build');
-  build = f.build;
+  // the chain's build has no cosmetic look (never stored on chain): keep the run's, so the battle shows the same
+  // hero art as the shop
+  build = { ...f.build, look: R.lookOf(r) };
   lastBuild = build;
   const result = simulate(build, f.opp, f.seed, f.day);
   if ((result.winner === 0) !== f.won) console.error('[chain] TS replay winner differs from the chain');
@@ -2525,6 +2529,7 @@ async function chainBoot(interactive = false, take = false) {
     if (st.run) adoptChain(st.run);
     chainChoices = st.choices;
     chainPreview = st.preview;
+    chainLook = st.lookSeed;
     chainConn = 'ready';
     toast = L('เชื่อมต่อ chain แล้ว', 'Connected to the chain');
     if (st.pending) void chainPendingUi();
@@ -2575,6 +2580,7 @@ async function chainResync() {
     else if (run && run.phase !== 'won' && run.phase !== 'dead') run = null;
     chainChoices = st?.choices ?? null;
     chainPreview = st?.preview ?? null;
+    chainLook = st?.lookSeed ?? 0;
     if (st?.pending) {
       view = run ? phaseView(run) : 'title';
       void chainPendingUi();

@@ -302,7 +302,7 @@ async function teeToken(url: string): Promise<string> {
 /** Player account offsets (8-byte discriminator + mochi-game Player, layout 4) */
 const OFF = {
   vrfSlot: 8, pendSlot: 8 + 8, sessionExpiry: 8 + 32, sessionKey: 8 + 72, runNo: 8 + 208, bestScore: 8 + 216, lastSeed: 8 + 224,
-  revealedRun: 8 + 232, pendReq: 8 + 236, seat: 8 + 252, status: 8 + 253, lastDay: 8 + 255, lastResult: 8 + 256, lastKind: 8 + 257,
+  lookSeed: 8 + 220, revealedRun: 8 + 232, pendReq: 8 + 236, seat: 8 + 252, status: 8 + 253, lastDay: 8 + 255, lastResult: 8 + 256, lastKind: 8 + 257,
   pendState: 8 + 263, choices: 8 + 264, run: 8 + 268, prev: 8 + 268 + 184, lastOpp: 8 + 268 + 184 + 93,
   /** after run, prev, last_opp, journal (1323), claim_proof (128): the day-1 shop of each offered hero */
   preview: 8 + 268 + 184 + 93 + 93 + 1323 + 128,
@@ -349,6 +349,8 @@ export interface ChainStart {
   preview: Record<string, (Offer | null)[]> | null;
   /** a random action was requested and waits for its VRF answer (e.g. the page was reloaded meanwhile) */
   pending: boolean;
+  /** the run's cosmetic seed (public, set with the hero choices): the offered heroes' looks = the run's look */
+  lookSeed: number;
 }
 /** the day-1 shop of each offered hero, published by the program with the hero choices */
 const previewOf = (p: Uint8Array): Record<string, (Offer | null)[]> =>
@@ -356,7 +358,7 @@ const previewOf = (p: Uint8Array): Record<string, (Offer | null)[]> =>
 const choicesOf = (p: Uint8Array) => [...p.subarray(OFF.choices, OFF.choices + 3)].map((h) => HEROES[h].id);
 const startOf = (p: Uint8Array): ChainStart => {
   const st = p[OFF.status];
-  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null, preview: st === ST.PICK ? previewOf(p) : null, pending: p[OFF.pendState] === 1 };
+  return { status: st, run: st === ST.RUN || st === ST.ENDED ? p.slice(OFF.run, OFF.run + 184) : null, choices: st === ST.PICK ? choicesOf(p) : null, preview: st === ST.PICK ? previewOf(p) : null, pending: p[OFF.pendState] === 1, lookSeed: dvOf(p).getUint32(OFF.lookSeed, true) };
 };
 
 /**
@@ -458,7 +460,7 @@ export async function chainConnect(onStatus: (s: string) => void = () => {}, sil
 }
 
 /** Start a run: one VRF request; returns the hero choices (+ their day-1 shops) once the program's callback answered. */
-export async function chainBeginRun(): Promise<{ choices: string[]; preview: Record<string, (Offer | null)[]> }> {
+export async function chainBeginRun(): Promise<{ choices: string[]; preview: Record<string, (Offer | null)[]>; lookSeed: number }> {
   let p = (await player())!;
   if (p[OFF.status] === ST.IDLE) {
     setChainStatus('sending', 'rolling your run on chain…');
@@ -466,7 +468,7 @@ export async function chainBeginRun(): Promise<{ choices: string[]; preview: Rec
   }
   p = await waitRandom((q) => q[OFF.status] === ST.PICK, () => ix('retry_vrf', [], keysBegin()), 'run start');
   setChainStatus('ready');
-  return { choices: choicesOf(p), preview: previewOf(p) };
+  return { choices: choicesOf(p), preview: previewOf(p), lookSeed: dvOf(p).getUint32(OFF.lookSeed, true) };
 }
 
 /** Pick offered hero `choice` (index); returns the new run's state. */
