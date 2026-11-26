@@ -79,7 +79,8 @@ function oppLabel(o: { name: string; ai: boolean; tier?: unknown }) {
 const $panel = document.getElementById('panel') as HTMLElement;
 let scene!: CombatScene;
 let stage!: Stage;
-let selected: string | null = 'arena';
+/** the building whose window is open in town (null = just the map) */
+let selected: string | null = null;
 let run: R.RunState | null = null;
 let view: View = 'title';
 /** seed of the next run: it also decides which heroes are offered. Kept until a run starts, so leaving the screen does not re-roll. */
@@ -628,20 +629,16 @@ function renderTown() {
     } else if (b.future) {
       body += `<p class="muted">${L('เร็วๆ นี้:', 'Coming soon:')} ${b.future}</p>`;
     }
-    detail = `<div class="bcard"><h3>${b.name}${b.open ? '' : ` <span class="mark">${L('เร็วๆ นี้', 'soon')}</span>`}</h3>${body}</div>`;
+    // v0.0.1 UI cleanup: a building's details open in a window over the map (the left panel is gone)
+    detail = `<div class="modal town-modal" data-a="townClose" role="dialog" aria-modal="true" aria-label="${esc(b.name)}">
+      <div class="town-box bcard"><div class="town-box-h"><h3>${b.name}${b.open ? '' : ` <span class="mark">${L('เร็วๆ นี้', 'soon')}</span>`}</h3>
+      <button class="ghost small" data-a="townClose">${L('ปิด ✕', 'Close ✕')}</button></div>${body}</div></div>`;
   }
-  return `${stageSlot(false, 'town-slot')}
-  <section class="town-card glass">
-    <h2 class="town-h">${L('เมืองของคุณ', 'Your town')}</h2>
-    <p class="town-hint">${L(
-      'แตะฟองบนอาคารเพื่อเก็บของ · แตะอาคารเพื่อดูฮีโร่ที่ทำงาน · แตะสนามประลองเพื่อต่อสู้',
-      'Tap a bubble on a building to collect · tap a building to see its workers · tap the arena to battle',
-    )}</p>
-    ${FU.farmBarHTML()}
-    ${townActionsHTML()}
-    <div class="chips">${chips}</div>
-    ${detail}
-  </section>`;
+  void chips;
+  // the whole town on screen; one slim bar over it: resources + collect all + fill jobs + battle
+  return `<div class="town-hud glass">${FU.farmBarHTML()}${townActionsHTML()}</div>
+  ${stageSlot(false, 'town-slot')}
+  ${detail}`;
 }
 
 function renderTitle() {
@@ -1989,7 +1986,7 @@ function onClick(ev: Event) {
     return;
   }
   // the tree window closes from its button or a click on the dark backdrop, not from clicks inside it
-  if ((a === 'treeClose' || a === 'branchClose') && el.classList.contains('modal') && ev.target !== el) return;
+  if ((a === 'treeClose' || a === 'branchClose' || a === 'townClose') && el.classList.contains('modal') && ev.target !== el) return;
   const arg = el.dataset.i ?? '';
   const n = Number(arg);
   let err: string | null = null;
@@ -2028,7 +2025,11 @@ function onClick(ev: Event) {
     case 'town':
       if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
       farmAsked = false; // fresh farm numbers on every visit
+      selected = null;
       view = 'town';
+      break;
+    case 'townClose':
+      selected = null;
       break;
     case 'goto':
       selected = arg;
@@ -2384,6 +2385,9 @@ export function startUI(st: Stage) {
     if (e.key === 'Escape' && treeOpen) {
       treeOpen = null;
       render();
+    } else if (e.key === 'Escape' && view === 'town' && selected) {
+      selected = null;
+      render();
     } else if (e.key === 'Escape' && picked >= 0) {
       clearPick($panel);
       showHints($panel, run, -1);
@@ -2460,10 +2464,9 @@ export const guideHooks = {
     if (seed !== undefined && !runActive()) nextSeed = seed;
     if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
     treeOpen = null;
-    selected = 'arena';
+    selected = null; // back to the map (the arena is on it; a window would cover it)
     view = 'town';
     render();
-    stage.town.focus('arena');
   },
   town: () => stage.town,
 };

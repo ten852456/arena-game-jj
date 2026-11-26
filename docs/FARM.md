@@ -366,6 +366,24 @@ Plan + formulas + growth chart: claude.ai doc "Mochi Moon idle town: summary and
 - Open (meeting decisions): pass-slot output out of the monument and 5 picks Casual-only; season-end auto-pour above
   the warehouse cap; layer gating; relic offers with one fitting slot + a free daily reroll; mint/burn ledger in /admin.
 
+## v0.0.1 (2026-11-26): what shipped from the design meeting
+
+- Version from `package.json` (0.0.1), in-game "What's new" (`src/client/releaseNotes.ts`, add a NOTES entry with
+  every bump), `GET /api/version` and a "new version" banner in open tabs.
+- Run: 1 of 3 relics fits the build (`RELIC_LUCK`, line weight still off), first shop reroll each day free, days 1–2
+  losses cost 1 HP, win-streak gold capped at +2. **Balance effect (bot sim, 150 runs/hero):** reach-10-wins 32% →
+  42% on average, hero spread 20 → 34 points (Ice Witch, Wind Mage, Berserker lowest; Lucky Cat, Pyro, Sage highest).
+  A tuning pass (`npm run tune`) is still to do.
+- Incremental core: endless levels and mastery; Lv2–5 costs smoothed and the warehouse always fits the next level
+  (`npm run farm-sim` found a wall at Lv4); Fill jobs spreads heroes across landmarks. Sim: ~Lv12 by week 6,
+  ~19 h per level, wood burn/mint ~0.8.
+- Season rollover in `seasonRollover()` (tested): excess over the warehouse pours, tickets expire, head start,
+  calamity, a one-time note. Mint/burn ledger + /admin Economy tab.
+- UI: the town map fills the screen; one bar (resources, Collect all, Fill jobs, BATTLE); building details open as
+  a window; taps through a window no longer reach the map.
+- Not done (need things that don't exist yet): daily line rotation, pass-perk fences (no pass yet), sybil gate
+  (no prizes yet), Tower research, Moon Festival, louder scout / top-3 contributors.
+
 ## Open questions
 
 1. Bot quota (vision: resources also pay for bot runs) — later, when bots ship.

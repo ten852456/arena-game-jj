@@ -26,6 +26,11 @@ const RES_KEY = { wood: 'resWood', ore: 'resOre', crystal: 'resCrystal' } as con
 const NEST: [number, number] = [0.5, 0.75];
 
 const at = (fx: number, fy: number): [number, number] => [MAP_X + fx * MAP_W, fy * MAP_H];
+/**
+ * A tap counts on the map only when it landed on the canvas itself: Phaser also hears pointer-ups over HTML laid on
+ * top (a building window), and a click on its Upgrade button would otherwise tap the arena underneath.
+ */
+const onCanvas = (p: Phaser.Input.Pointer) => (p.event?.target as Element | null)?.tagName === 'CANVAS';
 
 /**
  * Top-down town (sim farm, 2026-11-26): the ground map with every landmark on its plot, all on one screen.
@@ -74,7 +79,7 @@ export class TownScene extends Phaser.Scene {
       if (!b.open) img.setAlpha(0.55);
       img.on('pointerover', () => img.setTint(0xfff1c8));
       img.on('pointerout', () => img.clearTint());
-      img.on('pointerup', () => this.tapBuilding(b.id));
+      img.on('pointerup', (p: Phaser.Input.Pointer) => onCanvas(p) && this.tapBuilding(b.id));
       const label = this.add
         .text(x, y + 16, b.name, { fontFamily: FONT, fontSize: '11px', color: '#ffffff', stroke: '#1d1612', strokeThickness: 4 })
         .setOrigin(0.5, 0)
@@ -93,7 +98,7 @@ export class TownScene extends Phaser.Scene {
     const [nx, ny] = at(NEST[0], NEST[1]);
     this.nest = this.add.image(nx, ny, 'tdNest').setDepth(3).setInteractive({ useHandCursor: true });
     this.nest.setScale(40 / this.nest.width);
-    this.nest.on('pointerup', () => this.tapBuilding('hall'));
+    this.nest.on('pointerup', (p: Phaser.Input.Pointer) => onCanvas(p) && this.tapBuilding('hall'));
     this.makeBadge('nest', nx + 14, ny - 12, '!', 0xff7a93);
     const hall = this.images.get('hall')!;
     this.makeBadge('hall', hall.x + 30, hall.y - hall.displayHeight * 0.8, '↑', 0x8fdcb0);
@@ -108,7 +113,7 @@ export class TownScene extends Phaser.Scene {
     const text = this.add.text(-3, 0, '', { fontFamily: FONT, fontSize: '11px', color: '#3a2b48', fontStyle: 'bold' }).setOrigin(0, 0.5);
     const box = this.add.container(x, y, [bg, icon, text]).setDepth(8).setVisible(false);
     box.setSize(56, 20).setInteractive({ useHandCursor: true });
-    box.on('pointerup', () => this.onCollect?.(id));
+    box.on('pointerup', (p: Phaser.Input.Pointer) => onCanvas(p) && this.onCollect?.(id));
     this.tweens.add({ targets: box, y: y - 3, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.bubbles.set(id, { box, bg, icon, text });
   }
