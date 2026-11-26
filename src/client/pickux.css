@@ -1,0 +1,196 @@
+/* ===== Hero select: the arena fills the screen, 3 cards are dealt over it, tap one to flip it open ===== */
+body[data-view='title'] #panel { padding: 0; }
+.pickv {
+  --pa: var(--p-none);
+  --cw: clamp(168px, 18vw, 228px); --ch: min(340px, 60vh); --gap: clamp(12px, 2vw, 26px);
+  position: absolute; inset: 0; overflow: hidden; perspective: 1400px;
+}
+/* the arena camera looks a little lower on this screen (combatScene setPodium), so the hero stands clear of Start */
+.pick-stage { position: absolute; inset: 0; }
+
+/* dim veil over the arena: strong while choosing, lifts when a hero steps in */
+.pk-veil {
+  position: absolute; inset: 0; pointer-events: none; transition: opacity 0.5s ease;
+  background: radial-gradient(ellipse at 50% 60%, rgba(16, 10, 40, 0.35), rgba(10, 6, 28, 0.82) 75%);
+}
+.pickv.has-focus .pk-veil { opacity: 0.35; }
+
+/* top bar: back + name */
+.pk-top { position: absolute; top: 12px; left: 14px; right: 14px; display: flex; justify-content: space-between; align-items: center; z-index: 5; }
+.pk-top .back { width: 44px; min-width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 18px; background: rgba(20, 14, 50, 0.6); }
+.pk-top .name { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 4px 6px 4px 14px; border-radius: 999px;
+  background: rgba(20, 14, 50, 0.6); border: 1px solid var(--moon-line); color: var(--lav); }
+.pk-top .name input { width: 150px; border: 0; background: transparent; color: var(--cream); padding: 6px 4px; }
+.pk-top .name input:focus { outline: none; }
+
+/* title */
+.pk-head { position: absolute; top: 4%; left: 50%; transform: translateX(-50%); text-align: center; z-index: 4; transition: opacity 0.35s, transform 0.45s; pointer-events: none; }
+.pk-title { margin: 0; font-size: clamp(24px, 3.4vw, 40px); color: var(--moon); letter-spacing: 0.02em;
+  text-shadow: 0 2px 0 #3a2b48, 0 0 24px rgba(255, 217, 138, 0.45); }
+.pk-rules { margin: 4px 0 0; display: inline-block; padding: 3px 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
+  background: rgba(20, 14, 50, 0.6); border: 1px solid var(--moon-line); color: var(--cream); pointer-events: auto; }
+.pk-rules .sep { color: var(--lav); margin: 0 4px; }
+.pk-rules-full { margin: 6px auto 0; max-width: 560px; font-size: 12.5px; color: var(--lav); }
+.pickv.has-focus .pk-head { opacity: 0; transform: translate(-50%, -20px); }
+.pk-resume { position: absolute; left: 50%; bottom: 12%; transform: translateX(-50%); z-index: 4; }
+.pk-resume .primary { font-size: 18px; padding: 12px 26px; }
+
+/* ---- the cards ---- */
+.pk-cards { position: absolute; left: 0; right: 0; top: 54%; transform: translateY(-50%); display: flex; justify-content: center; gap: var(--gap); z-index: 3; pointer-events: none; }
+.pk-card {
+  position: relative; width: var(--cw); height: var(--ch); flex: none; cursor: pointer; pointer-events: auto; outline: none;
+  transition: transform 0.6s cubic-bezier(0.22, 1.2, 0.36, 1), opacity 0.4s ease, visibility 0s linear 0.6s;
+  will-change: transform, opacity;
+  --fan: calc((var(--i) - 1) * 4deg);
+  transform: rotate(var(--fan)) translateY(calc(var(--i) * 0px + (var(--i) - 1) * (var(--i) - 1) * 10px));
+}
+.pk-inner { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 0.7s cubic-bezier(0.3, 1.25, 0.4, 1); }
+.pk-face {
+  position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 24px; overflow: hidden;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--pa) 30%, #2c2368) 0%, #241d58 55%, #1a1444 100%);
+  border: 2px solid color-mix(in srgb, var(--pa) 70%, transparent);
+  box-shadow: 0 14px 34px rgba(6, 3, 24, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+.pk-front { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 14px; }
+.pk-front::before { /* soft spotlight behind the hero */
+  content: ''; position: absolute; left: 50%; top: 40%; width: 160%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--pa) 45%, transparent), transparent 55%); opacity: 0.55; pointer-events: none;
+}
+.pk-front .hero-art { --s: 4.4; position: relative; background: none; margin: 0; animation: pk-float 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * -1.1s); will-change: transform; }
+.pk-card .hero-art svg { animation: none; }
+.pickv.has-focus .pk-front .hero-art { animation: none; }
+.pk-nm { position: relative; font-size: 20px; color: var(--cream); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35); }
+.pk-tag { position: relative; padding: 2px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #241d58; background: var(--pa); }
+.pk-shine { position: absolute; inset: 0; pointer-events: none; z-index: 2;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.28) 50%, transparent 65%); transform: translateX(-120%); }
+.pk-card:hover .pk-shine, .deal .pk-shine { animation: pk-shine 0.9s ease-out; }
+.deal .pk-shine { animation-delay: calc(0.75s + var(--i) * 0.14s); animation-fill-mode: backwards; }
+
+/* hover: lift and glow */
+.pickv:not(.has-focus) .pk-card:hover, .pickv:not(.has-focus) .pk-card:focus-visible { transform: translateY(-14px) scale(1.04); z-index: 2; }
+.pickv:not(.has-focus) .pk-card:hover .pk-face, .pk-card:focus-visible .pk-face { box-shadow: 0 0 0 2px var(--pa), 0 0 34px color-mix(in srgb, var(--pa) 60%, transparent), 0 18px 40px rgba(6, 3, 24, 0.6); }
+
+/* back face: the details */
+.pk-back { transform: rotateY(180deg); display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 14px 16px; text-align: left;
+  overflow: hidden auto; scrollbar-width: none; }
+.pk-back::-webkit-scrollbar { display: none; }
+body.info-detail .pk-back { justify-content: flex-start; }
+/* the open card is a bit wider than a dealt card: room for the ultimate and the unique skill */
+.pickv.has-focus .pk-card.focused { width: calc(var(--cw) * 1.22); }
+.pk-bh { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pk-back .pk-nm { font-size: 21px; }
+.pk-style { margin: 0; font-size: 13.5px; line-height: 1.4; color: var(--cream); }
+.pk-passive { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--lav); padding: 7px 10px; border-radius: 14px; background: rgba(10, 6, 30, 0.35); }
+.pk-ult { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35; padding: 7px 10px; border-radius: 14px;
+  background: linear-gradient(90deg, rgba(255, 209, 102, 0.16), rgba(10, 6, 30, 0.35)); border: 1px solid rgba(255, 209, 102, 0.45); color: var(--cream); }
+.pk-ult b { color: #ffd166; font-size: 13px; }
+.pk-uniq { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12.5px; padding: 7px 10px; border-radius: 14px; background: rgba(10, 6, 30, 0.35); border: 1px dashed color-mix(in srgb, var(--pa) 55%, transparent); }
+.pk-uniq .skill-icon { width: 26px; height: 26px; }
+.pk-uniq b { color: var(--pa); }
+.pk-uniq .chips-row, .pk-uniq .kw { font-size: 12px; }
+
+/* ---- left: the hero's strengths as a radar ---- */
+.pk-stats {
+  position: absolute; left: clamp(12px, 4vw, 64px); top: 52%; z-index: 4; width: clamp(220px, 22vw, 300px); padding: 12px 14px 6px; border-radius: 24px;
+  opacity: 0; transform: translate(-60px, -50%); pointer-events: none; transition: opacity 0.35s, transform 0.55s cubic-bezier(0.22, 1.2, 0.36, 1);
+  border: 1px solid color-mix(in srgb, var(--pa) 55%, transparent); box-shadow: 0 0 30px color-mix(in srgb, var(--pa) 25%, transparent);
+}
+.pickv.has-focus .pk-stats { opacity: 1; transform: translate(0, -50%); pointer-events: auto; transition-delay: 0.15s; }
+.pk-sh { margin: 0; font-size: 15px; color: var(--pa); text-align: center; letter-spacing: 0.06em; }
+.radar { display: block; width: 100%; height: auto; overflow: visible; }
+.rd-ring { fill: none; stroke: rgba(255, 255, 255, 0.13); stroke-width: 1; }
+.rd-ring:last-of-type { stroke: rgba(255, 255, 255, 0.28); }
+.rd-spoke { stroke: rgba(255, 255, 255, 0.12); stroke-width: 1; }
+.rd-shape { fill: color-mix(in srgb, var(--pa) 42%, transparent); stroke: var(--pa); stroke-width: 2.5; stroke-linejoin: round;
+  transform-box: view-box; transform-origin: 110px 110px; animation: rd-grow 0.7s cubic-bezier(0.2, 1.5, 0.4, 1) 0.25s backwards;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--pa) 70%, transparent)); }
+.rd-dot { fill: #fff; stroke: var(--pa); stroke-width: 2; transform-box: fill-box; transform-origin: center; animation: rd-pop 0.35s ease-out backwards; animation-delay: calc(0.55s + var(--k) * 0.06s); }
+.rd-lbl { fill: var(--cream); font-size: 13px; font-weight: 600; }
+
+/* ---- centre bottom: the one big Start, under the hero ---- */
+.pk-start {
+  position: absolute; left: 50%; bottom: 4%; z-index: 6; min-width: 220px; min-height: 56px; padding: 0 34px; border-radius: 999px;
+  font-size: 22px; font-weight: 800; letter-spacing: 0.06em; opacity: 0; pointer-events: none; transform: translate(-50%, 40px) scale(0.8);
+  transition: opacity 0.3s, transform 0.5s cubic-bezier(0.22, 1.5, 0.36, 1);
+}
+.pickv.has-focus .pk-start { opacity: 1; pointer-events: auto; transform: translate(-50%, 0); transition-delay: 0.3s; }
+.pk-start::after { content: ''; position: absolute; inset: -6px; border-radius: inherit; pointer-events: none; opacity: 0;
+  box-shadow: 0 0 0 4px rgba(255, 217, 138, 0.3), 0 0 24px rgba(255, 217, 138, 0.55); will-change: opacity, transform; }
+.pickv.has-focus .pk-start::after { animation: pk-pulse 1.4s ease-in-out 0.9s infinite; }
+/* Start stays put on hover / press (the theme lifts every #panel button with its own transform, which would drop
+   the translate(-50%) centring and make it jump): feedback is a brighter glow instead */
+#panel .pickv.has-focus .pk-start:hover:not(:disabled),
+#panel .pickv.has-focus .pk-start:active:not(:disabled) { transform: translate(-50%, 0); }
+#panel .pickv.has-focus .pk-start:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 0 0 3px rgba(255, 217, 138, 0.35), 0 0 26px rgba(255, 217, 138, 0.55); }
+
+/* ---- focus: the chosen card slides to the right and flips; the others drop away; the hero is in the arena ---- */
+/* (visibility goes hidden only after the fly-off, and comes back at once when the cards return) */
+.pickv:not(.has-focus) .pk-card { transition-delay: 0s; }
+.pickv.has-focus .pk-card { opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(70vh) rotate(calc((var(--i) - 1) * 18deg)) scale(0.7); }
+.pickv.has-focus .pk-card.focused { opacity: 1; visibility: visible; transition-delay: 0s; pointer-events: auto; z-index: 3; cursor: default;
+  transform: translateX(calc(30vw - (var(--i) - 1) * (var(--cw) + var(--gap)))) scale(1.1); }
+.pk-card.focused .pk-inner { transform: rotateY(180deg); }
+.pk-card.focused .pk-face { box-shadow: 0 0 0 2px var(--pa), 0 0 40px color-mix(in srgb, var(--pa) 55%, transparent), 0 20px 44px rgba(6, 3, 24, 0.6); }
+
+.pk-back { pointer-events: none; }
+.pk-card.focused .pk-back { pointer-events: auto; }
+.pickv > .pk-return { position: absolute; left: 16px; bottom: 16px; z-index: 5; pointer-events: none; opacity: 0; transform: translateY(20px);
+  transition: opacity 0.3s, transform 0.4s; background: rgba(20, 14, 50, 0.7); border-radius: 999px; padding: 8px 18px; }
+.pickv.has-focus > .pk-return { opacity: 1; transform: none; pointer-events: auto; transition-delay: 0.25s; }
+
+/* ---- deal-in (once per visit) ---- */
+.deal .pk-card { animation: pk-deal 0.75s cubic-bezier(0.2, 1.3, 0.4, 1) backwards; animation-delay: calc(0.15s + var(--i) * 0.14s); }
+.deal .pk-head { animation: pk-drop 0.6s cubic-bezier(0.2, 1.4, 0.4, 1) backwards; }
+.deal .pk-veil { animation: pk-fade 0.5s ease-out backwards; }
+
+/* ---- launch: the chosen card bursts into the arena, a flash, then the shop ---- */
+.pickv.launch .pk-card.focused { transition: transform 0.55s cubic-bezier(0.5, -0.3, 0.7, 0.4), opacity 0.5s ease-in;
+  transform: translateX(calc(0vw - (var(--i) - 1) * (var(--cw) + var(--gap)))) scale(1.8); opacity: 0; }
+.pickv.launch::after { content: ''; position: absolute; inset: 0; z-index: 9; pointer-events: none; background: radial-gradient(circle, #fff7e0, rgba(255, 217, 138, 0.6) 40%, transparent 75%);
+  animation: pk-flash 0.65s ease-out forwards; }
+.pickv.launch > .pk-return, .pickv.launch .pk-top, .pickv.launch .pk-stats, .pickv.launch .pk-start { opacity: 0; transition: opacity 0.2s; }
+.pickv.launch .pk-start::after { animation: none; }
+
+@keyframes pk-deal {
+  0% { opacity: 0; transform: translateY(75vh) rotate(calc((var(--i) - 1) * -28deg)) scale(0.55); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: rotate(var(--fan)) translateY(calc((var(--i) - 1) * (var(--i) - 1) * 10px)); }
+}
+@keyframes pk-drop { from { opacity: 0; transform: translate(-50%, -60px) scale(0.8); } }
+@keyframes pk-fade { from { opacity: 0; } }
+@keyframes pk-float { 50% { transform: translateY(-7px); } }
+@keyframes pk-shine { from { transform: translateX(-120%); } to { transform: translateX(120%); } }
+@keyframes pk-pulse { 0%, 100% { opacity: 0; transform: scale(0.96); } 50% { opacity: 1; transform: scale(1.02); } }
+@keyframes rd-grow { from { transform: scale(0); opacity: 0; } }
+@keyframes rd-pop { from { transform: scale(0); } }
+@keyframes pk-flash { 0% { opacity: 0; } 45% { opacity: 1; } 100% { opacity: 0.9; background: #fff7e0; } }
+
+/* ---- small screens ---- */
+@media (max-height: 520px) {
+  .pickv { --ch: min(290px, 70vh); --cw: clamp(150px, 17vw, 200px); }
+  .pk-front .hero-art { --s: 3.4; }
+  .pk-head { top: 2%; } .pk-title { font-size: 22px; } .pk-rules { font-size: 12px; }
+  .pk-cards { top: 58%; }
+}
+@media (max-width: 640px) {
+  .pickv { --cw: 30vw; --ch: min(250px, 46vh); --gap: 8px; }
+  .pk-front .hero-art { --s: 2.6; }
+  .pk-nm { font-size: 15px; } .pk-tag { font-size: 11px; padding: 1px 8px; }
+  /* upright phone: the open card rises to the lower half, centred, wider */
+  .pickv.has-focus .pk-card.focused { width: min(88vw, 360px); transform: translateX(calc(-1 * (var(--i) - 1) * (var(--cw) + var(--gap)) - (min(88vw, 360px) - var(--cw)) / 2)) translateY(12vh); }
+  .pk-top .name input { width: 110px; }
+  .pk-stats { top: 64px; width: 46vw; transform: translate(-60px, 0); }
+  .pickv.has-focus .pk-stats { transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pk-card, .pk-inner, .pk-veil, .pk-head { transition-duration: 0.01s !important; }
+  .deal .pk-card, .deal .pk-head, .deal .pk-veil, .pk-shine, .pk-front .hero-art, .pk-start::after, .rd-shape, .rd-dot { animation: none !important; }
+  .pk-stats, .pk-start { transition-duration: 0.01s !important; }
+}
+
+/* low graphics tier (perf.ts): no blur, no sweeping shine, no glow filter */
+html[data-perf='low'] .pk-shine { display: none; }
+html[data-perf='low'] .rd-shape { filter: none; }
+html[data-perf='low'] .pk-front .hero-art { animation: none; }

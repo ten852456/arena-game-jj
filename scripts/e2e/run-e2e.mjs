@@ -62,8 +62,9 @@ async function play(label, ctxOpts, runs = 1) {
   for (let run = 0; run < runs; run++) {
     await tap('[data-a="goto"][data-i="arena"]');
     await tap('[data-a="enterArena"]', 700);
-    ok(`${label} run${run}: hero pick shows logo + 3 heroes`, (await has('.brand-logo')) && (await p.locator('[data-a="start"]').count()) === 3);
-    await tap('[data-a="start"]', 900);
+    ok(`${label} run${run}: hero pick deals 3 hero cards`, (await p.locator('.pk-card').count()) === 3);
+    await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+    await tap('.pk-start', 900);
     ok(`${label} run${run}: shop opens`, await has('.shopv'));
     ok(`${label} run${run}: shop has no horizontal scroll`, await noHScroll());
     if (run === 0) {
@@ -140,7 +141,7 @@ async function play(label, ctxOpts, runs = 1) {
           await p.locator('.ult-chk').first().click().catch(() => {}); await p.waitForTimeout(500);
           ok(`${label} run${run}: tapping the ult checklist opens its codex entry`, await has('.cx-modal:not([hidden]) .cx-entry.cx-hit'));
           await p.keyboard.press('Escape'); await p.waitForTimeout(300);
-          if (await tap('[data-a="tree"]', 500)) { ok(`${label} run${run}: skill tree window opens`, await has('button[data-a="treeClose"]')); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
+          if (await has('.skillrow[data-sheet]')) { await p.locator('.skillrow[data-sheet]').first().click({ button: 'right', position: { x: 60, y: 12 } }).catch(() => {}); await p.waitForTimeout(500); ok(`${label} run${run}: skill tree window opens (detail sheet, right-click)`, (await has('button[data-a="treeClose"]')) && (await has('.sheet-acts [data-a="sheetSell"]'))); await tap('button[data-a="treeClose"]'); ok(`${label} run${run}: skill tree window closes`, !(await has('.modal'))); }
           // shop HUD + coin pill on the shop panel
           ok(`${label} run${run}: HUD shows HP, day and 10 win stars`, (await has('[data-hud="hp"]')) && (await has('[data-hud="day"]')) && (await p.locator('.hud-star').count()) === 10);
           ok(`${label} run${run}: gold coin pill sits on the shop panel`, await has('.sv-shop .gold-pill .gold-n'));
@@ -334,8 +335,9 @@ async function layout(label, ctxOpts, portrait = false) {
   await fits('town', '.town-card');
   await tap('[data-a="goto"][data-i="arena"]');
   await tap('[data-a="enterArena"]', 900);
-  await fits('hero pick', '[data-a="start"]');
-  await tap('[data-a="start"]', 1000);
+  await fits('hero pick', '.pk-card');
+  await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+  await tap('.pk-start', 1000);
   if (!portrait) await fits('shop', '.shopv');
   for (let i = 0; i < 4; i++) await tap('[data-a="buy"]:not([disabled])', 250);
   await tap('[data-a="fight"]', 1200);

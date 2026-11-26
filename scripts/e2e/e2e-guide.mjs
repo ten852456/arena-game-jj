@@ -101,11 +101,13 @@ async function playGuide(label, ctxOpts, lang = 'th-TH') {
   await shot('3-hero');
   ok(`${label}: hero spotlight clear of the bubble`, await bubbleClear(p));
   {
-    // tap the card's "start with this hero" button: on a portrait phone the sticky arena strip can cover the card's top
-    const go = p.locator('[data-a="start"]').first().locator('.hero-go');
-    await go.scrollIntoViewIfNeeded();
-    await p.waitForTimeout(300);
-    const b = await go.boundingBox();
+    // card hero select: tap a card (it flips open, the guide moves its spotlight to the card + Start), then Start
+    await p.waitForTimeout(1300); // the cards are dealt in
+    const card = p.locator('.pk-card').first();
+    const c = await card.boundingBox();
+    await tapAt(p, touch, c.x + c.width / 2, c.y + c.height / 2);
+    await p.waitForTimeout(900);
+    const b = await p.locator('.pk-start').boundingBox();
     await tapAt(p, touch, b.x + b.width / 2, b.y + b.height / 2);
   }
   ok(`${label}: step buy1 (shop)`, await waitStep(p, 'buy1'));
@@ -216,7 +218,7 @@ async function townMap(label, ctxOpts) {
   await p.screenshot({ path: path.join(OUT, `town-${label}-arena-bubble.png`) });
   c = await canvas();
   await tapAt(p, touch, c.x + c.width / 2, c.y + c.height * 0.7); await p.waitForTimeout(800);
-  ok(`${label}: tapping the selected arena enters it (hero pick)`, (await p.locator('[data-a="start"]').count()) === 3);
+  ok(`${label}: tapping the selected arena enters it (hero pick)`, (await p.locator('.pk-card').count()) === 3);
   ok(`${label}: no page/console errors`, errs.length === 0, errs.slice(0, 3).join(' | '));
   await browser.close();
 }

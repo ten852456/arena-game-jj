@@ -53,7 +53,8 @@ async function open(name, ctxOpts, initScript) {
   const tap = async (sel, wait = 500) => { const l = r.p.locator(sel).first(); if (!(await l.count())) return false; await l.click({ timeout: 4000 }).catch(() => {}); await r.p.waitForTimeout(wait); return true; };
   await tap('.gd-skip');
   await tap('[data-a="goto"][data-i="arena"]'); await tap('[data-a="enterArena"]', 900);
-  await tap('[data-a="start"]', 1000);
+  await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+  await tap('.pk-start', 1000);
   for (let i = 0; i < 3; i++) await tap('[data-a="buy"]:not([disabled])', 250);
   await r.p.screenshot({ path: path.join(OUT, 'desktop-low-shop.png') });
   await tap('[data-a="fight"]', 3000); await r.p.screenshot({ path: path.join(OUT, 'desktop-low-fight.png') });

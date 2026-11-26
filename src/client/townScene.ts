@@ -9,16 +9,20 @@ import { L } from '../i18n';
 let resolveTown!: (s: TownScene) => void;
 export const townReady = new Promise<TownScene>((r) => (resolveTown = r));
 
-const W = 640;
-const H = 300;
-const GROUND = 258;
+// The town is zoomed out from the arena's 640×300: the camera shows W×H world units (same canvas, smaller zoom),
+// so more of the street fits on screen. Ground, minimap and labels are laid out in that bigger view.
+const TOWN_K = 0.65; // < 1 = zoomed out (0.65 → ~54% more town in view)
+const W = 640 / TOWN_K;
+const H = 300 / TOWN_K;
+const Z = ZOOM * TOWN_K; // camera zoom; canvas pixels / Z = view units
+const GROUND = H - 90; // high enough that the bunnies (feet at GROUND+22) walk above the minimap strip
 const FONT = 'Kanit, sans-serif';
 const TAP_SLOP = 8; // px a pointer may move and still count as a tap
-// minimap bar
-const MX = 170;
-const MW = 300;
-const MH = 14;
-const MY = 300 - MH - 4; // bottom strip, below the road, so tall buildings' labels never collide
+// minimap bar (sized in view units, so ÷TOWN_K keeps it the same size on screen)
+const MW = Math.round(300 / TOWN_K);
+const MH = Math.round(14 / TOWN_K);
+const MX = Math.round((W - MW) / 2);
+const MY = H - MH - 34; // bottom strip, below the road, so tall buildings' labels never collide
 
 /** Side-scrolling town: drag left/right, tap a landmark. */
 export class TownScene extends Phaser.Scene {
@@ -59,7 +63,7 @@ export class TownScene extends Phaser.Scene {
   create() {
     makeTownArt(this);
     const cam = this.cameras.main;
-    cam.setOrigin(0, 0).setZoom(ZOOM); // scroll is clamped by hand, see clamp()
+    cam.setOrigin(0, 0).setZoom(Z); // scroll is clamped by hand, see clamp()
 
     const bd = drawTownBackdrop(this, WORLD_W, W, H, GROUND);
     this.clouds = bd.clouds;
@@ -85,7 +89,7 @@ export class TownScene extends Phaser.Scene {
       });
       const label = this.add
         .text(b.x, img.y - img.displayHeight - 6, b.name, {
-          fontFamily: FONT, fontSize: '16px', color: '#ffffff', stroke: '#1d1612', strokeThickness: 5,
+          fontFamily: FONT, fontSize: `${Math.round(16 / TOWN_K)}px`, color: '#ffffff', stroke: '#1d1612', strokeThickness: Math.round(5 / TOWN_K),
         })
         .setOrigin(0.5, 1)
         .setDepth(6);
@@ -107,6 +111,7 @@ export class TownScene extends Phaser.Scene {
 
     this.arrow = this.add.graphics().setDepth(8);
     this.arrow.fillStyle(0xffd56b).fillTriangle(-8, 0, 8, 0, 0, 10);
+    this.arrow.setScale(1 / TOWN_K);
     this.arrow.lineStyle(1.5, 0x2f2538).strokeTriangle(-8, 0, 8, 0, 0, 10);
     this.arrow.setVisible(false);
 
@@ -114,16 +119,16 @@ export class TownScene extends Phaser.Scene {
 
     this.bubbleBg = this.add.graphics();
     this.bubbleText = this.add
-      .text(0, 0, '', { fontFamily: FONT, fontSize: '17px', color: '#2a1a08', fontStyle: 'bold' })
+      .text(0, 0, '', { fontFamily: FONT, fontSize: `${Math.round(17 / TOWN_K)}px`, color: '#2a1a08', fontStyle: 'bold' })
       .setOrigin(0.5, 0.5);
     this.bubble = this.add.container(0, 0, [this.bubbleBg, this.bubbleText]).setDepth(9).setVisible(false);
     this.paintBubble();
     this.tweens.add({ targets: this.bubble, scale: 1.07, duration: 520, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // ---- input: drag to scroll, tap to select, minimap to jump ----
-    // pointer x/y are canvas pixels; divide by ZOOM to get view units
+    // pointer x/y are canvas pixels; divide by Z to get view units
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      const px = p.x / ZOOM;
+      const px = p.x / Z;
       if (this.inMini(p)) {
         this.onMini = true;
         this.jumpMini(px);
@@ -138,7 +143,7 @@ export class TownScene extends Phaser.Scene {
       this.lastT = this.time.now;
     });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
-      const px = p.x / ZOOM;
+      const px = p.x / Z;
       if (this.onMini && p.isDown) return this.jumpMini(px);
       if (!this.dragging) return;
       cam.scrollX = this.clamp(this.downScroll - (px - this.downX));
@@ -168,7 +173,7 @@ export class TownScene extends Phaser.Scene {
     this.input.on('wheel', (_p: unknown, _o: unknown, dx: number, dy: number) => {
       this.tweens.killTweensOf(cam);
       this.vel = 0;
-      cam.scrollX = this.clamp(cam.scrollX + (dx + dy) / ZOOM);
+      cam.scrollX = this.clamp(cam.scrollX + (dx + dy) / Z);
     });
     this.cursors = this.input.keyboard?.createCursorKeys();
 
@@ -224,8 +229,8 @@ export class TownScene extends Phaser.Scene {
   }
 
   private inMini(p: Phaser.Input.Pointer) {
-    const x = p.x / ZOOM;
-    const y = p.y / ZOOM;
+    const x = p.x / Z;
+    const y = p.y / Z;
     return y >= MY - 6 && x >= MX - 4 && x <= MX + MW + 4;
   }
 
@@ -253,8 +258,8 @@ export class TownScene extends Phaser.Scene {
 
   private paintBubble() {
     this.bubbleText.setText(L('เข้าอารีน่า ▶', 'Enter arena ▶'));
-    const w = Math.ceil(this.bubbleText.width) + 28;
-    const h = 34;
+    const w = Math.ceil(this.bubbleText.width) + Math.round(28 / TOWN_K);
+    const h = Math.round(34 / TOWN_K); // the label font is ÷TOWN_K too (town zoom)
     this.bubbleBg
       .clear()
       .fillStyle(0x1d1612, 0.35)
@@ -342,7 +347,7 @@ export class TownScene extends Phaser.Scene {
     const g = this.mini.clear();
     const sx = this.cameras.main.scrollX;
     g.fillStyle(0x000000, 0.45).fillRect(MX - 4, MY - 2, MW + 8, MH + 4);
-    g.fillStyle(0xd3c9ee, 0.9).fillRect(MX, MY + MH - 3, MW, 3);
+    g.fillStyle(0xd3c9ee, 0.9).fillRect(MX, MY + MH - 4, MW, 4);
     for (const b of BUILDINGS) {
       const x = Math.round(MX + (b.x / WORLD_W) * MW);
       const color = b.id === 'arena' ? 0xffd56b : b.open ? 0xffffff : 0x9aa4ad;

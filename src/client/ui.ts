@@ -41,6 +41,9 @@ import { skillBlurb } from './skillBlurb';
 import { askAfterRun } from './feedback';
 import { icon } from './icons';
 import { track } from './track';
+import { reducedMotion } from './fx';
+import { radarHTML } from './heroStats';
+import { coachDone, coachHTML as coachLine, seen as coachSeen, type CoachKey } from './shop/coach';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
 
 export interface Stage {
@@ -146,7 +149,7 @@ let namesFn: () => [string, string] = () => names;
 let seedNames: [string, string] = ['', ''];
 let confirmConcede = false;
 /** skill tree window: which skill, the variant you own (null = not owned) and the variant the shop offers */
-let treeOpen: { id: string; cur: string | null; offer: string | null } | null = null;
+let treeOpen: { id: string; cur: string | null; offer: string | null; own?: number; shop?: number } | null = null;
 
 // ---------- storage (per-browser convenience only; may be unavailable) ----------
 const RUN_KEY = 'arena.run.v7';
@@ -345,7 +348,60 @@ function treeHTML() {
       <div class="troot">${treeNode(id, '', cur, offer)}</div>
       <div class="tbranches">${branch('a')}${branch('b')}</div>
     </div>
+    ${sheetActions()}
   </div></div>`;
+}
+
+/** The detail sheet's action bar (hold / right-click a card or a row): the buttons simple mode keeps off the card. */
+function sheetActions() {
+  const r = run;
+  if (!r || view !== 'shop' || !treeOpen) return '';
+  const { own, shop } = treeOpen;
+  if (own !== undefined && r.skills[own]) {
+    const k = r.skills[own];
+    const nm = nodeOf(k).name;
+    const drop = sellDrop(r, own);
+    return `<div class="sheet-acts">
+      <button class="ghost" data-a="sheetMove" data-i="-1" ${own === 0 ? 'disabled' : ''} aria-label="${esc(L(`เลื่อน ${nm} ขึ้น`, `Move ${nm} up`))}">▲</button>
+      <button class="ghost" data-a="sheetMove" data-i="1" ${own === r.skills.length - 1 ? 'disabled' : ''} aria-label="${esc(L(`เลื่อน ${nm} ลง`, `Move ${nm} down`))}">▼</button>
+      <button class="sell${drop ? ' sell-warn' : ''}" data-a="sheetSell" data-i="${own}">${L('ขาย', 'Sell')} +${R.sellPrice(k)} ${COIN_I}${drop ? ` <small>${esc(drop)}</small>` : ''}</button>
+    </div>`;
+  }
+  if (shop !== undefined && r.shop[shop]) {
+    const o = r.shop[shop]!;
+    const locked = R.isLocked(r, shop);
+    const why = offerWhy(r, shop);
+    const up = R.upgradeOf(r, o);
+    const pick = !!up && R.offerChoices(r, o).length > 1; // two branches: the branch picker decides
+    const verb = pick ? L('เลือกทาง ▸', 'Pick a branch ▸') : o.star && up ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : up ? L('อัปเกรด', 'Upgrade') : L('ซื้อ', 'Buy');
+    return `<div class="sheet-acts">
+      <button class="ghost lock${locked ? ' on' : ''}" data-a="lock" data-i="${shop}" aria-pressed="${locked}">${locked ? L('🔒 ล็อกอยู่', '🔒 Locked') : L('🔓 เก็บไว้พรุ่งนี้', '🔓 Keep for tomorrow')}</button>
+      <button class="primary" data-a="${pick ? 'sheetBranch' : 'sheetBuy'}" data-i="${shop}" ${why ? 'disabled' : ''}>${buyLabel(why, verb, R.priceOf(o), r.gold < R.priceOf(o))}</button>
+    </div>`;
+  }
+  return '';
+}
+
+/** Open the detail sheet for a shop card ("s:i") or a list row ("g:i"). */
+function openSheet(key: string) {
+  const r = run;
+  if (!r || view !== 'shop') return;
+  const i = Number(key.slice(2));
+  if (key.startsWith('s:')) {
+    const o = r.shop[i];
+    if (!o) return;
+    const up = R.upgradeOf(r, o);
+    treeOpen = { id: o.id, cur: up ? up.v : null, offer: o.v, shop: i };
+  } else {
+    const k = r.skills[i];
+    if (!k) return;
+    treeOpen = { id: k.id, cur: k.v, offer: null, own: i };
+  }
+  coachDone('detail');
+  clearPick($panel);
+  hideTip();
+  sfx('click');
+  render();
 }
 /** ⓘ button that opens the skill tree. cur = variant you own (null = not owned), offer = variant in the shop */
 const treeBtn = (id: string, cur: string | null, offer: string | null) =>
@@ -492,9 +548,19 @@ function streakText(s: number) {
 const stageSlot = (cover = false, cls = '') => `<div class="stage-slot ${cls}"${cover ? ' data-stage="cover"' : ''} aria-hidden="true"></div>`;
 /** hero shown in the arena on the hero-pick screen (hover / focus a hero card to preview it) */
 let previewHero: string | null = null;
+/** hero select: the card flipped open (null = the 3 cards side by side) */
+let pickFocus: string | null = null;
+/** hero select: the cards were already dealt in (the deal animation plays once per visit) */
+let pickDealt = false;
 const runActive = () => !!run && (run.phase === 'shop' || run.phase === 'relic' || run.phase === 'lastchance' || run.phase === 'mark');
 
 function render() {
+  // leaving the hero select resets it: the next visit deals the 3 cards again, nothing open
+  if (view !== 'title') {
+    pickDealt = false;
+    pickFocus = null;
+  }
+  scene?.setPodium(view === 'title'); // hero select: the hero stands forward on a platform
   if (view !== shownView) {
     shownView = view;
     onEnterView(view);
@@ -615,48 +681,121 @@ function renderTown() {
 
 function renderTitle() {
   const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
-  if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
-  if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : R.lookFor(nextSeed!, previewHero));
+  const look = (id: string) => (nextSeed != null ? R.lookFor(nextSeed, id) : 0);
+  // the arena fills the screen; 3 cards are dealt over it. Tap one → it flips to its details and slides aside while
+  // that hero steps onto a platform in the arena, the radar slides in on the left and Start waits under the hero.
+  // Focus / back are DOM class swaps (pickFocusDom), so the motion is never cut by a re-render; pickFocus only
+  // restores the state if something else re-renders the page (a language switch, the info-mode toggle).
+  if (pickFocus && !offered.some((h) => h.id === pickFocus)) pickFocus = null;
+  const deal = !pickDealt && !!offered.length;
+  pickDealt = true;
+  if (scene) scene.idle(runActive() ? run!.hero : pickFocus, runActive() ? R.lookOf(run!) : pickFocus ? look(pickFocus) : 0);
   const resume = runActive()
     ? `<button class="primary" data-a="resume">${L(
         `เล่นต่อ: ${HEROES_BY_ID[run!.hero].name} วันที่ ${run!.day} (ชนะ ${run!.wins})`,
         `Continue: ${HEROES_BY_ID[run!.hero].name}, day ${run!.day} (${run!.wins} wins)`,
       )}</button>`
     : '';
-  return `<div class="pick">
-  <div class="pick-side">
-    <div class="pick-brand"><button class="ghost back" data-a="town">${L('← กลับเมือง', '← Back to town')}</button>
-      <img class="brand-logo" src="${IMAGES.logo}" alt="Mochi Moon" width="320" height="120"></div>
-    ${stageSlot(true, 'pick-slot')}
-    <p class="pick-rules">${L(
-      `ชนะ ${R.WIN_TARGET} ครั้งก่อนเลือด ${R.START_HP} หมด · แพ้เสียเลือด ${R.damageFor(1)}–${R.LOSS_CAP} ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
-      `Win ${R.WIN_TARGET} times before your ${R.START_HP} HP runs out · a loss costs ${R.damageFor(1)}–${R.LOSS_CAP} HP depending on the day · fight other players' builds from the same day`,
-    )}</p>
+  const cards = offered.map(
+    (h, n) => `<div class="pk-card${h.id === pickFocus ? ' focused' : ''}" style="--i:${n};--pa:var(--p-${h.line})" data-a="heroFocus" data-i="${h.id}" role="button" tabindex="0"
+        aria-label="${esc(h.name)}" aria-expanded="${h.id === pickFocus}">
+      <div class="pk-inner">
+        <div class="pk-face pk-front">
+          <span class="pk-shine" aria-hidden="true"></span>
+          ${heroArt(h.id, '', look(h.id))}
+          <b class="pk-nm">${h.name}</b>
+          <span class="pk-tag">${lineLabel(h.line)}</span>
+        </div>
+        <div class="pk-face pk-back">
+          <div class="pk-bh"><b class="pk-nm">${h.name}</b><span class="pk-tag">${lineLabel(h.line)}</span></div>
+          <p class="pk-style">${h.style}</p>
+          <div class="pk-ult"><b>★ ${L('ท่าไม้ตาย', 'Ultimate')} ${esc(h.ult.name)}</b>
+            <span class="info-simp">${L(`ซื้อ skill ${LINE_ICON[h.line]} สาย${LINE_NAME[h.line]} 3 ใบ เพื่อปลดท่าไม้ตาย`, `buy 3 ${LINE_ICON[h.line]} ${LINE_NAME[h.line]} skills to unlock it`)}</span>
+            <span class="info-det">${h.ult.trigger} → ${h.ult.effect}</span></div>
+          <p class="pk-passive info-det"><span aria-hidden="true">✨</span> ${h.passive}</p>
+          <div class="pk-uniq"><img class="skill-icon" src="${skillIcon(h.unique)}" alt=""><b>${SKILLS[h.unique].name}</b>${chipsHTML({ id: h.unique, v: '' })}</div>
+        </div>
+      </div>
+    </div>`,
+  ).join('');
+  const fh = pickFocus ? HEROES_BY_ID[pickFocus] : null;
+  const rules = L(
+    `แพ้เสียเลือด ${R.damageFor(1)}–${R.LOSS_CAP} ตามวัน · สู้กับ build ของผู้เล่นอื่นในวันเดียวกัน`,
+    `a loss costs ${R.damageFor(1)}–${R.LOSS_CAP} HP depending on the day · you fight other players’ builds from the same day`,
+  );
+  return `<div class="pickv${pickFocus ? ' has-focus' : ''}${deal ? ' deal' : ''}">
+  ${stageSlot(true, 'pick-stage bleed')}
+  <div class="pk-veil" aria-hidden="true"></div>
+  <div class="pk-top">
+    <button class="ghost back" data-a="town" aria-label="${esc(L('กลับเมือง', 'Back to town'))}">←</button>
+    <label class="name"><span aria-hidden="true">✏</span> <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ชื่อของคุณ', 'Your name')}" aria-label="${esc(L('ชื่อของคุณ', 'Your name'))}"></label>
   </div>
-  <section class="pick-main glass">
-    <div class="pick-head">
-      <h2>${L('เลือกฮีโร่', 'Choose your hero')}</h2>
-      <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
-    </div>
-    ${resume}
-    ${runActive() ? '' : `<p class="pick-note">${L(
-      `รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย · แตะการ์ดเพื่อเริ่ม (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`,
-      `This run offers ${R.HERO_CHOICES} heroes from different styles · tap a card to start (see every hero in the Hero Hall in town)`,
-    )}</p>`}
-    <div class="heroes pick3">${offered.map(
-      (h) => `<button class="hero line-${h.line}${h.id === previewHero ? ' previewing' : ''}" data-a="start" data-i="${h.id}">
-        ${heroArt(h.id, '', R.lookFor(nextSeed!, h.id))}
-        <b class="hero-nm">${h.name}</b><span class="tag">${lineLabel(h.line)}</span>
-        <span class="hero-style">${h.style}</span>
-        <span class="hero-ult-how info-simp">★ ${esc(h.ult.name)}: ${L(`ซื้อ skill ${LINE_ICON[h.line]} สาย${LINE_NAME[h.line]} 3 ใบ เพื่อปลดท่าไม้ตาย`, `buy 3 ${LINE_ICON[h.line]} ${LINE_NAME[h.line]} skills to unlock the ultimate`)}</span>
-        <span class="hero-passive info-det">${h.passive}</span>
-        <span class="hero-ult small info-det">${ultHTML(h)}</span>
-        <span class="muted hero-uniq info-det">${L('skill เฉพาะ:', 'Unique skill:')} ${SKILLS[h.unique].name} ${chipsHTML({ id: h.unique, v: '' })}</span>
-        <span class="hero-go">${L('เริ่มด้วยตัวนี้ ▶', 'Start with this hero ▶')}</span>
-      </button>`,
-    ).join('')}</div>
-  </section>
+  <div class="pk-head">
+    <h2 class="pk-title">${runActive() ? L('รอบที่เล่นค้างไว้', 'Run in progress') : L('เลือกฮีโร่', 'Choose your hero')}</h2>
+    <p class="pk-rules" title="${esc(rules)}">🏆 ${L(`ชนะ ${R.WIN_TARGET}`, `${R.WIN_TARGET} wins`)} <span class="sep">·</span> ❤ ${R.START_HP} HP</p>
+    <p class="pk-rules-full info-det">${esc(rules)}</p>
+  </div>
+  ${resume ? `<div class="pk-resume">${resume}</div>` : ''}
+  <div class="pk-cards">${cards}</div>
+  ${offered.length ? `<aside class="pk-stats glass"${fh ? ` style="--pa:var(--p-${fh.line})"` : ''}>${fh ? statsHTML(fh.id) : ''}</aside>
+  <button class="primary pk-start" data-a="start" data-i="${pickFocus ?? ''}">${L('เริ่ม!', 'Start!')} ▶</button>
+  <button class="ghost pk-return" data-a="heroBack">← ${L('ดูตัวอื่น', 'Other heroes')}</button>` : ''}
   </div>`;
+}
+
+/** Hero select: the left panel, a radar of the hero's strengths. */
+const statsHTML = (id: string) => `<h3 class="pk-sh">${L('จุดเด่น', 'Strengths')}</h3>${radarHTML(id)}`;
+
+/** Hero select: flip a card open (or close it with null) without re-rendering, so the transitions play out. */
+function pickFocusDom(id: string | null) {
+  const root = $panel.querySelector<HTMLElement>('.pickv');
+  if (!root || root.classList.contains('launch')) return;
+  pickFocus = id;
+  root.classList.remove('deal');
+  root.classList.toggle('has-focus', !!id);
+  root.querySelectorAll<HTMLElement>('.pk-card').forEach((c) => {
+    const on = c.dataset.i === id;
+    c.classList.toggle('focused', on);
+    c.setAttribute('aria-expanded', String(on));
+  });
+  scene.idle(id, id && nextSeed != null ? R.lookFor(nextSeed, id) : 0);
+  const stats = root.querySelector<HTMLElement>('.pk-stats');
+  const start = root.querySelector<HTMLElement>('.pk-start');
+  if (id) {
+    // a fresh SVG each time, so the radar grows in again for every hero
+    if (stats) {
+      stats.style.setProperty('--pa', `var(--p-${HEROES_BY_ID[id].line})`);
+      stats.innerHTML = statsHTML(id);
+    }
+    if (start) start.dataset.i = id;
+    scene.react('pick');
+    sfx('pickup');
+    start?.focus({ preventScroll: true });
+  } else sfx('drop');
+}
+
+/** Hero select: the chosen card bursts into the arena, then the run starts (same start as before: seed, track, voice). */
+function startHero(id: string) {
+  const seed = nextSeed ?? randSeed();
+  if (!R.heroChoices(seed).includes(id)) return; // only an offered hero can start a run
+  const go = () => {
+    nextSeed = null;
+    pickFocus = null;
+    pickDealt = false;
+    run = R.newRun(id, seed, uid());
+    track('run_start', { hero: id });
+    heroVoice(id, 'pick', true); // the hero greets you in its own voice (sim v21)
+    view = 'shop';
+    saveRun();
+    render();
+  };
+  const root = $panel.querySelector<HTMLElement>('.pickv');
+  if (!root || reducedMotion()) return go();
+  if (root.classList.contains('launch')) return;
+  root.classList.add('launch');
+  sfx('fight_start', { force: true });
+  scene.react('buy');
+  setTimeout(go, 650);
 }
 
 /** Buy-button label: "Buy (coin) 3"; when it can't be bought, the reason, plus the price in red if gold is short. */
@@ -753,6 +892,7 @@ function buyOffer(i: number, pos: number | null, pick?: string): string | null {
   const err = R.buy(r, i, pick);
   if (err) return err;
   if (o.v === '') for (let k = r.skills.length - 1; k > at; k--) R.moveSkill(r, k, -1);
+  coachDone('buy');
   afterRender = () => {
     coinFly(goldPillRect(), from);
     popRow($panel.querySelector<HTMLElement>(`.skillrow[data-i="${at}"]`), upIdx >= 0);
@@ -765,6 +905,7 @@ function sellSkill(i: number, from: DOMRect | null) {
   const r = run;
   if (!r || view !== 'shop' || !r.skills[i]) return;
   R.sell(r, i);
+  coachDone('sell');
   afterRender = () => coinFly(from, goldPillRect());
   sfx('sell');
   saveRun();
@@ -778,6 +919,7 @@ function dropSkill(from: number, to: number) {
   if (!r || view !== 'shop' || !r.skills[from]) return;
   const [k] = r.skills.splice(from, 1);
   r.skills.splice(to, 0, k);
+  if (from !== to) coachDone('order');
   saveRun();
   render();
 }
@@ -884,10 +1026,11 @@ function renderShop() {
         ? `<span class="up-badge" aria-label="${L(`อัปเกรดเป็น Lv${lvOf(o.v)}`, `Upgrades to Lv${lvOf(o.v)}`)}">▲ Lv${lvOf(o.v)}</span><span class="up-shine" aria-hidden="true"></span>`
         : '';
       const tipped = tipIds.includes(o.id);
-      return `<div class="card offer line-${d.line}${tipped ? ' tip-pick' : ''}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}">
-        ${badge}${tipped ? `<span class="tip-badge">💡 ${L('ไฟต์ที่แล้วแนะนำ', 'Last fight’s tip')}</span>` : ''}<div class="offer-top">${lockBtn}<span class="offer-lv">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span>${treeBtn(o.id, up ? up.v : null, o.v)}</div>
+      // simple mode: the level line and ⓘ step back (the ▲ badge, the star pips and the detail sheet carry them)
+      return `<div class="card offer line-${d.line}${tipped ? ' tip-pick' : ''}${d.hero ? ' uniq' : ''}${o.v ? ' upgrade' : ''}${o.star ? ' star-card' : ''}${isUp ? ' can-up' : ''}${locked ? ' locked' : ''}${poor ? ' poor' : ''}${why ? ' nobuy' : ''}" data-tip="s:${i}" data-sheet="s:${i}">
+        ${badge}${tipped ? `<span class="tip-badge">💡 ${L('ไฟต์ที่แล้วแนะนำ', 'Last fight’s tip')}</span>` : ''}<div class="offer-top">${lockBtn}<span class="offer-lv${o.star && up ? '' : ' info-det'}">${o.star && up ? `<span class="sc-head">${D.starPips(up.star ?? 0, true)} <b>+★</b></span>` : isUp ? `Lv${lvOf(up.v)} → <b>Lv${lvOf(o.v)}</b>` : `Lv${lvOf(o.v)}`}</span><span class="info-det">${treeBtn(o.id, up ? up.v : null, o.v)}</span></div>
         <div class="offer-name"><img class="skill-icon" src="${skillIcon(o.id)}" alt="" draggable="false">${o.star ? `${node.name}` : up && R.offerChoices(r, o).length > 1 ? nodeOf(up).name : node.name}</div>
-        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : `<span class="info-det">${rarityTag(o.v ? o : null)}</span>`}${o.star ? '' : uniqUltTag(d.hero, ultTagHTML(r, o))}</div>
+        <div class="offer-meta">${o.star ? '' : o.v ? `<span class="up">▲ ${L('อัปเกรด', 'Upgrade')} ${d.name}${branch ? ` · ${branch}` : ''}</span>` : `<span class="arch-name info-det">${lineLabel(d.line)}</span>`}${d.hero ? `<span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}${o.star || R.offerChoices(r, o).length > 1 ? '' : `<span class="info-det">${rarityTag(o.v ? o : null)}</span>`}${o.star ? '' : uniqUltTag(d.hero, ultTagHTML(r, o))}</div>
         ${choiceHTML(r, o, i, why, price, poor) || `${up ? (o.star ? starDiff(o.star) : upDiffHTML(up, o)) : ''}
         <div class="offer-desc">${chipsHTML({ id: o.id, v: o.v })}${offerPairsHTML(r, o, (b) => offerTip(b, can.has((o.bonus ?? []).indexOf(b))))}</div>
         <button class="buy" data-a="buy" data-i="${i}" ${why ? 'disabled' : ''}>${buyLabel(why, isUp ? (o.star ? L(`เพิ่มดาว ★${o.star}`, `Add star ★${o.star}`) : L('อัปเกรด', 'Upgrade')) : L('ซื้อ', 'Buy'), price, poor)}</button>`}
@@ -898,11 +1041,11 @@ function renderShop() {
   const rows = r.skills
     .map((k, i) => {
       const t = bonusTotals(r.skills, i, act);
-      const row = `<li class="skillrow line-${SKILLS[k.id].line}${rarityOf(k.id, k.v) === 'epic' ? ' row-epic' : ''}${(k.star ?? 0) >= 3 ? ' row-star3' : ''}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}">
+      const row = `<li class="skillrow line-${SKILLS[k.id].line}${rarityOf(k.id, k.v) === 'epic' ? ' row-epic' : ''}${(k.star ?? 0) >= 3 ? ' row-star3' : ''}" data-tip="g:${i}" data-i="${i}" data-sell="${R.sellPrice(k)}" data-sheet="g:${i}" tabindex="0">
         <span class="grip" data-drag="${i}" title="${L('ลากเพื่อย้าย', 'Drag to move')}" aria-hidden="true">⠿</span>
         <span class="sk-no" aria-hidden="true">${i + 1}</span>
         <img class="skill-icon" src="${skillIcon(k.id)}" alt=""><div class="sk-text">${skillLine(k, t.on, t.haste, chainDirs(r.skills, i, act))}<span class="sk-tags">${SKILLS[k.id].hero ? ` <span class="mark uniq-tag">★ ${L('สกิลประจำตัว', 'UNIQUE')}</span>` : ''}<span class="info-det">${rarityTag(k.v ? { id: k.id, v: k.v } : null)}</span>${inLine(r.hero, k.id) ? ` <span class="mark ult-aff info-det" title="${esc(L(`skill สายหลักของฮีโร่: ตัวเลขทุกตัว (ตี โล่ ฟื้น ไฟ พิษ ฯลฯ) ×${lineAffinity(r.hero).toFixed(2)}`, `a skill of your hero’s main line: every number (hits, shield, heal, burn, poison …) ×${lineAffinity(r.hero).toFixed(2)}`))}">${L('ถนัด', 'mastery')} +${Math.round((lineAffinity(r.hero) - 1) * 100)}%</span>` : ''}</span></div>
-        <div class="sk-btns">
+        <div class="sk-btns info-det">
           ${treeBtn(k.id, k.v, null)}
           <button class="ghost mv" data-a="up" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ขึ้น`, `Move ${nodeOf(k).name} up`)}">▲</button>
           <button class="ghost mv" data-a="down" data-i="${i}" ${i === r.skills.length - 1 ? 'disabled' : ''} aria-label="${L(`เลื่อน ${nodeOf(k).name} ลง`, `Move ${nodeOf(k).name} down`)}">▼</button>
@@ -936,6 +1079,8 @@ function renderShop() {
       '<b>ลากการ์ด</b>ไปวางในรายการ skill ของคุณ (หรือแตะการ์ด แล้วแตะ <b>+</b> ตรงที่อยากวาง) · การ์ด <b>▲</b> = อัปเกรด skill ที่มีอยู่',
       '<b>Drag a card</b> into your skill list (or tap a card, then tap <b>+</b> where you want it) · a <b>▲</b> card levels up a skill you own',
     )} · 🔓 ${L('ล็อกการ์ดไว้ถึงพรุ่งนี้ได้ฟรี', 'lock a card until tomorrow for free')}${nLocked ? L(` (ล็อกอยู่ ${nLocked})`, ` (${nLocked} locked)`) : ''}</p>
+    ${coachLine('buy', '👆', L('<b>ลากการ์ด</b>ลงรายการ skill (หรือแตะการ์ด แล้วแตะ <b>+</b>)', '<b>Drag a card</b> into your list (or tap it, then tap <b>+</b>)'))}
+    ${coachSeen('buy') ? coachLine('detail', '✋', L('<b>กดค้าง</b> (หรือคลิกขวา) ที่การ์ดหรือ skill เพื่อดูต้นไม้ skill ล็อก หรือขาย', '<b>Hold</b> (or right-click) a card or skill for its skill tree, lock and sell')) : ''}
     ${tipLineHTML(r)}
     <div class="shop">${shop}${slotCard(r)}${wishCard(r)}</div>
     <div class="sell-jar" aria-label="${L('โหลขาย: ลาก skill มาวางที่นี่เพื่อขาย', 'Sell jar: drag a skill here to sell it')}">
@@ -948,6 +1093,7 @@ function renderShop() {
     <div class="sv-h"><h3>${L('skill ของคุณ', 'Your skills')} <span class="sv-count">${r.skills.length}/${slots}</span></h3>
       <span class="sv-hint">${L(`โบนัสเชื่อมต่อทำงาน ${act.length} อัน`, `${act.length} connect bonuses active`)}</span></div>
     ${chainPanelHTML(r.skills, act)}
+    ${r.skills.length >= 2 ? coachLine('order', '↕', L('<b>ลาก ⠿</b> สลับลำดับ: skill ที่อยู่ติดกันเปิด 🔗 โบนัสให้กัน', '<b>Drag ⠿</b> to reorder: neighbours switch on each other’s 🔗 bonus')) : ''}
     <p class="sv-note info-det">${L(
       'ลาก <b>⠿</b> เพื่อจัดลำดับ (หรือกด ▲▼): skill ที่อยู่ติดกัน (บน/ล่าง) เปิด 🔗 โบนัสเชื่อมต่อของกันและกัน · ถ้าครบเวลาพร้อมกัน ตัวบนทำงานก่อน',
       'Drag <b>⠿</b> to reorder (or press ▲▼): skills next to each other (above/below) switch on each other’s 🔗 connect bonuses · when two are ready at once, the upper one goes first',
@@ -967,8 +1113,8 @@ function renderShop() {
   </section>
 
   <div class="sv-fight">
-    <span class="pill gold"><small>${L('เงินเหลือ', 'Gold left')}</small> ${COIN_I}<b class="gold-n">${r.gold}</b></span>
-    <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ ${L('สู้วันที่', 'Fight day')} ${r.day} <small>${L('แพ้เสียเลือด', 'a loss costs')} ${R.damageFor(r.day)}${L('', ' HP')}</small>${r.skills.length < R.slotsOf(r) && !(r.relics ?? []).includes('lonewolf') ? `<small class="warn-empty">${L(`ช่อง skill ว่าง ${R.slotsOf(r) - r.skills.length} ช่อง`, `${R.slotsOf(r) - r.skills.length} empty skill slot(s)`)}${r.gold >= 3 ? L(` · ยังมีเงิน ${r.gold}`, ` · ${r.gold} gold left`) : ''}</small>` : ''}${R.slotsFor(r.day) > R.slotsFor(r.day - 1) && r.day > 1 ? `<small class="slot-up">${L('วันนี้ได้ช่อง skill +1', 'New today: +1 skill slot')}</small>` : ''}</button>
+    <span class="pill gold info-det"><small>${L('เงินเหลือ', 'Gold left')}</small> ${COIN_I}<b class="gold-n">${r.gold}</b></span>
+    <button class="primary fightbtn" data-a="fight" ${busy || !r.skills.length ? 'disabled' : ''}>⚔ <span class="info-det">${L('สู้วันที่', 'Fight day')} ${r.day}</span><span class="info-simp fb-word">${L('สู้!', 'FIGHT')}</span> <small class="info-det">${L('แพ้เสียเลือด', 'a loss costs')} ${R.damageFor(r.day)}${L('', ' HP')}</small><span class="info-simp fb-risk" title="${esc(L(`วันที่ ${r.day} · แพ้เสียเลือด ${R.damageFor(r.day)}`, `Day ${r.day} · a loss costs ${R.damageFor(r.day)} HP`))}">−${R.damageFor(r.day)}❤</span>${r.skills.length < R.slotsOf(r) && !(r.relics ?? []).includes('lonewolf') ? `<small class="warn-empty">${L(`ช่อง skill ว่าง ${R.slotsOf(r) - r.skills.length} ช่อง`, `${R.slotsOf(r) - r.skills.length} empty skill slot(s)`)}${r.gold >= 3 ? L(` · ยังมีเงิน ${r.gold}`, ` · ${r.gold} gold left`) : ''}</small>` : ''}${R.slotsFor(r.day) > R.slotsFor(r.day - 1) && r.day > 1 ? `<small class="slot-up">${L('วันนี้ได้ช่อง skill +1', 'New today: +1 skill slot')}</small>` : ''}</button>
     <button class="ghost" data-a="town" aria-label="${L('กลับเมือง', 'Back to town')}" title="${L('กลับเมือง', 'Back to town')}">🏠</button>
   </div>
   </div>`;
@@ -1049,8 +1195,8 @@ function renderFighting() {
   <aside class="fv-side glass">
   <p class="mm-versus"><span class="who s0">${esc(names[0])}</span> <span class="muted">vs</span> <span class="who s1">${esc(names[1])}</span> ${view === 'fighting' ? `<span class="stats-right">${concedeHTML()}</span>` : ''}</p>
   <div class="actions mm-speed">
-    ${[1, 2, 4].map((s) => `<button class="small ${scene.speed === s ? 'on' : ''}" data-a="speed" data-i="${s}">${s}x</button>`).join('')}
-    <button class="small" data-a="skip">${L('ข้าม ⏭', 'Skip ⏭')}</button>
+    <button class="small speed-cycle" data-a="speed" data-i="${scene.speed}" aria-label="${esc(L(`ความเร็ว ${scene.speed}x (กดเพื่อเปลี่ยน)`, `Speed ${scene.speed}x (press to change)`))}">▶ ${scene.speed}x</button>
+    <button class="small" data-a="skip">⏭ ${L('ข้าม', 'Skip')}</button>
   </div>
   <div id="fv-dots" class="fv-dots" aria-live="off"></div>
   <div class="fv-logh info-det">${L('📜 บันทึกการสู้ (ล่าสุดอยู่บน)', '📜 Fight log (newest on top)')}</div>
@@ -1908,6 +2054,10 @@ function playReplay() {
 }
 
 function onClick(ev: Event) {
+  if (swallowClick) {
+    swallowClick = false;
+    return;
+  }
   const el = (ev.target as HTMLElement).closest<HTMLElement>('[data-a]');
   // shop: tap (or click) a card to select it → ghost + "+" targets in the list; tap elsewhere to let go
   if (view === 'shop' && run && !el) {
@@ -1939,16 +2089,14 @@ function onClick(ev: Event) {
   let err: string | null = null;
   switch (a) {
     case 'start':
-      {
-        const seed = nextSeed ?? randSeed();
-        if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
-        nextSeed = null;
-        run = R.newRun(arg, seed, uid());
-        track('run_start', { hero: arg });
-        heroVoice(arg, 'pick', true); // the hero greets you in its own voice (sim v21)
-      }
-      view = 'shop';
-      break;
+      startHero(arg);
+      return;
+    case 'heroFocus':
+      if (pickFocus !== arg) pickFocusDom(arg);
+      return;
+    case 'heroBack':
+      pickFocusDom(null);
+      return;
     case 'resume':
       view = phaseView(run!);
       break;
@@ -2005,6 +2153,35 @@ function onClick(ev: Event) {
       break;
     case 'sell':
       sellSkill(n, el.getBoundingClientRect());
+      return;
+    case 'sheetMove': {
+      const from = treeOpen?.own;
+      if (from === undefined || !run) return;
+      R.moveSkill(run, from, n < 0 ? -1 : 1);
+      treeOpen!.own = Math.max(0, Math.min(run.skills.length - 1, from + n));
+      coachDone('order');
+      break;
+    }
+    case 'sheetSell': {
+      treeOpen = null;
+      const row = $panel.querySelector(`.skillrow[data-i="${n}"]`);
+      sellSkill(n, (row ?? el).getBoundingClientRect());
+      return;
+    }
+    case 'sheetBuy':
+      treeOpen = null;
+      err = buyOffer(n, null);
+      if (!err) sfx('buy');
+      break;
+    case 'sheetBranch':
+      treeOpen = null;
+      if (!run?.shop[n]) return;
+      branchOpen = n;
+      render();
+      return;
+    case 'coachX':
+      coachDone(arg as CoachKey);
+      el.closest('.coach')?.remove();
       return;
     case 'up':
     case 'down':
@@ -2072,15 +2249,22 @@ function onClick(ev: Event) {
       main?.classList.add('more');
       return;
     }
-    case 'speed':
-      scene.speed = n;
+    case 'speed': {
+      // one button cycles 1x → 2x → 4x → 1x (still remembered for the next visit)
+      const next = n >= 4 ? 1 : n * 2;
+      scene.speed = next;
       try {
-        localStorage.setItem(SPEED_KEY, String(n));
+        localStorage.setItem(SPEED_KEY, String(next));
       } catch {
         /* private mode: this visit only */
       }
-      document.querySelectorAll('[data-a="speed"]').forEach((b) => b.classList.toggle('on', (b as HTMLElement).dataset.i === arg));
+      document.querySelectorAll<HTMLElement>('[data-a="speed"]').forEach((b) => {
+        b.dataset.i = String(next);
+        b.textContent = `▶ ${next}x`;
+        b.setAttribute('aria-label', L(`ความเร็ว ${next}x (กดเพื่อเปลี่ยน)`, `Speed ${next}x (press to change)`));
+      });
       return;
+    }
     case 'skip':
       scene.skip();
       return;
@@ -2194,7 +2378,7 @@ function onClick(ev: Event) {
 
 /** Hero pick: pointing at (or focusing) a hero card shows that hero in the arena. */
 function onPreview(ev: Event) {
-  if (view !== 'title') return;
+  if (view !== 'title' || $panel.querySelector('.pickv')) return; // the card hero select previews on tap instead
   const card = (ev.target as Element).closest?.<HTMLElement>('[data-a="start"]');
   const id = card?.dataset.i;
   if (!id || id === previewHero) return;
@@ -2267,6 +2451,62 @@ function onPointerDown(ev: PointerEvent) {
   hideTip();
 }
 
+/** true right after a long-press opened the sheet: the click that follows the finger lifting is swallowed */
+let swallowClick = false;
+const sheetTarget = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  if (!el?.closest || el.closest('button, a, input, [data-drag], .pchip, [data-kw]')) return null;
+  return el.closest<HTMLElement>('[data-sheet]');
+};
+
+/** Detail sheet: long-press (touch / pen), right-click (mouse) or Enter / Space (keyboard) on a card or a row. */
+function bindSheetGestures() {
+  let timer = 0;
+  let x0 = 0;
+  let y0 = 0;
+  const cancel = () => {
+    clearTimeout(timer);
+    timer = 0;
+  };
+  $panel.addEventListener('pointerdown', (ev) => {
+    swallowClick = false; // a new gesture: an old long-press never got its click
+    if (ev.pointerType === 'mouse') return;
+    const t = sheetTarget(ev.target);
+    if (!t) return;
+    x0 = ev.clientX;
+    y0 = ev.clientY;
+    cancel();
+    timer = window.setTimeout(() => {
+      timer = 0;
+      swallowClick = true;
+      navigator.vibrate?.(15);
+      openSheet(t.dataset.sheet!);
+    }, 450);
+  });
+  $panel.addEventListener('pointermove', (ev) => {
+    if (timer && Math.hypot(ev.clientX - x0, ev.clientY - y0) > 10) cancel();
+  });
+  for (const e of ['pointerup', 'pointercancel', 'scroll'] as const) $panel.addEventListener(e, cancel, { capture: true });
+  $panel.addEventListener('contextmenu', (ev) => {
+    const t = sheetTarget(ev.target);
+    if (!t) return;
+    ev.preventDefault();
+    if (!treeOpen) openSheet(t.dataset.sheet!);
+  });
+  $panel.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const t = ev.target as HTMLElement;
+    if (t.matches?.('.pk-card')) {
+      ev.preventDefault();
+      pickFocusDom(t.dataset.i!);
+      return;
+    }
+    if (!t.matches?.('.skillrow[data-sheet]')) return;
+    ev.preventDefault();
+    openSheet(t.dataset.sheet!);
+  });
+}
+
 export function startUI(st: Stage) {
   stage = st;
   scene = st.combat;
@@ -2301,7 +2541,9 @@ export function startUI(st: Stage) {
   };
   $panel.addEventListener('click', onClick);
   window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && treeOpen) {
+    if (e.key === 'Escape' && view === 'title' && pickFocus) {
+      pickFocusDom(null);
+    } else if (e.key === 'Escape' && treeOpen) {
       treeOpen = null;
       render();
     } else if (e.key === 'Escape' && picked >= 0) {
@@ -2310,6 +2552,7 @@ export function startUI(st: Stage) {
     }
   });
   $panel.addEventListener('pointerdown', onPointerDown);
+  bindSheetGestures();
   $panel.addEventListener('pointerover', onPreview);
   $panel.addEventListener('focusin', onPreview);
   initDrag($panel, {

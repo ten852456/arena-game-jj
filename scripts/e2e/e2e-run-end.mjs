@@ -29,7 +29,8 @@ async function finishedRun(p, won, lang) {
   if (lang === 'en') await tap('[data-lang="en"]', 400);
   await tap('[data-a="goto"][data-i="arena"]');
   await tap('[data-a="enterArena"]', 900);
-  await tap('[data-a="start"]', 900);
+  await tap('.pk-card', 900); // open a hero card (it flips, the hero steps onto the platform)
+  await tap('.pk-start', 900);
   await p.evaluate(({ won }) => {
     const k = 'arena.run.v7';
     const r = JSON.parse(localStorage.getItem(k));
@@ -159,7 +160,7 @@ async function scenario(view, lang, won, opts = {}) {
     const key = view === 'pc' && lang === 'en' && won ? 'r' : 'Enter';
     await p.keyboard.press(key);
     await p.waitForTimeout(700);
-    ok(`${label}: ${key} goes straight to a fresh hero pick`, (await p.locator('.pick [data-a="start"]').count()) === 3);
+    ok(`${label}: ${key} goes straight to a fresh hero pick`, (await p.locator('.pickv .pk-card').count()) === 3);
   } else if (!opts.reduced) {
     const id = await p.locator('.re-hero').first().getAttribute('data-i');
     await p.locator('.re-hero').first().click();

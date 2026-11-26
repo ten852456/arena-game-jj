@@ -1,0 +1,54 @@
+/* ===== Arena UX pass: fewer things on screen in SIMPLE mode (body:not(.info-detail)), plus the detail sheet ===== */
+/* Detailed mode keeps every button and line; simple mode drops the per-card / per-row buttons (they wait in the
+   detail sheet: hold / right-click / Enter) and leaves art, name, effect, ult and price. */
+
+/* ---- shop card (simple): no level row, the lock is a faint corner icon ---- */
+body:not(.info-detail) .shopv .card.offer:not(.star-card) .offer-top { position: absolute; top: 4px; left: 4px; z-index: 2; }
+body:not(.info-detail) #panel .shopv .card.offer:not(.star-card) .offer-top .lock {
+  width: 30px; min-width: 30px; height: 30px; min-height: 30px; font-size: 14px; border: 0; opacity: 0.45;
+}
+body:not(.info-detail) #panel .shopv .card.offer .offer-top .lock:hover,
+body:not(.info-detail) #panel .shopv .card.offer .offer-top .lock:focus-visible,
+body:not(.info-detail) #panel .shopv .card.offer .offer-top .lock.on { opacity: 1; }
+body:not(.info-detail) .shopv .card.offer:not(.star-card) .offer-name { margin-top: 10px; }
+.shopv .card.offer, .shopv .skillrow { -webkit-touch-callout: none; }
+.shopv .skillrow:focus-visible { outline: 2px solid var(--mn-moon, #ffe2a0); outline-offset: 2px; }
+
+/* ---- fight button (simple): one word + a risk badge ---- */
+.sv-fight .fightbtn .fb-word { font-weight: 800; letter-spacing: 0.04em; }
+.sv-fight .fightbtn .fb-risk { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; background: rgba(10, 6, 30, 0.3); }
+
+/* ---- one-time coach bubble: a single line, a bobbing icon, a ✕ ---- */
+.coach {
+  display: flex; align-items: center; gap: 8px; margin: 6px 0 8px; padding: 5px 6px 5px 12px; border-radius: 999px;
+  background: rgba(255, 226, 160, 0.12); border: 1px solid rgba(255, 226, 160, 0.45); color: var(--mn-cream, #fff3e2); font-size: 13px;
+  animation: coach-in 0.35s ease-out both;
+}
+.coach b { color: var(--mn-moon, #ffe2a0); }
+.coach-ico { font-size: 18px; animation: coach-bob 1.2s ease-in-out infinite; }
+.coach-t { flex: 1 1 auto; min-width: 0; }
+#panel .coach-x { flex: none; width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; border-radius: 50%; background: transparent; border: 0; color: var(--mn-mute, #aaa4d6); }
+@keyframes coach-in { from { opacity: 0; transform: translateY(-4px); } }
+@keyframes coach-bob { 50% { transform: translateY(-3px) scale(1.08); } }
+
+/* ---- detail sheet actions (bottom of the skill tree window) ---- */
+.sheet-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 226, 160, 0.25); }
+#panel .sheet-acts button { min-height: 42px; padding: 0 14px; display: inline-flex; align-items: center; gap: 6px; }
+.sheet-acts .sell { color: var(--mn-pink, #ffb7c9); margin-left: auto; }
+.sheet-acts .sell small { color: #ffcf6b; }
+.sheet-acts .lock { margin-right: auto; }
+.sheet-acts .lock.on { border-color: var(--mn-moon, #ffe2a0); box-shadow: 0 0 10px rgba(255, 226, 160, 0.35); }
+
+/* ---- fight: one speed button; in simple mode (no log) the arena takes the full width ---- */
+.mm-speed .speed-cycle { min-width: 64px; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (min-aspect-ratio: 1/1) { /* sideways: the upright layout (layout.css, max-aspect-ratio 1/1) stacks the arena over the side */
+  body:not(.info-detail) .fightv { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  body:not(.info-detail) .fightv .fv-side { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; padding: 8px 14px; }
+  body:not(.info-detail) .fightv .fv-side .fv-dots { margin: 0; }
+  body:not(.info-detail) .fightv .fv-side .fv-watch { margin: 0; font-size: 13px; }
+  body:not(.info-detail) .fightv .fv-slot { aspect-ratio: auto; height: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach, .coach-ico { animation: none !important; }
+}
