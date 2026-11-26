@@ -199,9 +199,8 @@ export interface RunStart { mode: F.Mode; shiny: boolean; casualNth?: number }
  */
 export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string, mode: F.Mode): Res | RunStart {
   if (!HEROES_BY_ID[hero]) return bad('bad hero');
-  const shiny = rng() < F.SHINY_ODDS;
-  // gate off: nothing to count, so no town record is made here
-  if (!RUN_LIMIT) return { mode, shiny };
+  // gate off: nothing to count (and no town to cap shiny rolls on), so no town record and no shiny roll
+  if (!RUN_LIMIT) return { mode, shiny: false };
   const now = Date.now();
   // same per-IP limit as POST /api/farm before a new town record is made (security review: sibling-path parity)
   if (!Object.hasOwn(db.farms, playerId) && !newTownAllowed(ip)) return bad('too many new players from here, try again later', 429);
@@ -220,6 +219,10 @@ export function startRunGate(playerId: string, hero: string, tutorial: boolean, 
     F.collect(f, at, now, FARM_TIME_SCALE);
     f.jobs[at] = f.jobs[at].filter((j) => j.hero !== hero);
   }
+  // one shiny roll per run, at most SHINY_ROLLS_PER_DAY a day (casual runs are free: no unlimited rolls)
+  const canRoll = (f.shinyRolls ?? 0) < F.SHINY_ROLLS_PER_DAY;
+  if (canRoll) f.shinyRolls = (f.shinyRolls ?? 0) + 1;
+  const shiny = canRoll && rng() < F.SHINY_ODDS;
   if (shiny) {
     if (!(f.shinies ??= []).includes(hero)) f.shinies.push(hero);
     feedPush(playerId, 'shiny', hero);

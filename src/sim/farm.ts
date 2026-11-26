@@ -76,6 +76,8 @@ export const FIND_POINTS: Record<string, number> = { moon_pearl: 150, relic_shar
 
 /** Moonlit (shiny) hero: each run rolls once when it starts; the look is kept for good. */
 export const SHINY_ODDS = 1 / 1024;
+/** casual runs are free, so the shiny roll is capped per day (security review: no free unlimited rolls) */
+export const SHINY_ROLLS_PER_DAY = 5;
 export const TICKET_COST: Partial<Record<Res, number>> = { wood: 30, ore: 20 };
 export const TICKET_CRAFT_CAP = 4;
 export const TICKET_HOLD = 8;
@@ -152,8 +154,9 @@ export interface FarmState {
   finds?: Record<string, number>;
   findRolls?: number;
   findCarry?: number;
-  /** moonlit (shiny) heroes this player has rolled */
+  /** moonlit (shiny) heroes this player has rolled, and today's shiny rolls */
   shinies?: string[];
+  shinyRolls?: number;
   /** finds since the last time the server read them (for the town feed), cleared by the server */
   newFinds?: string[];
   /** free runs banked (FREE_RUNS added each new day, up to FREE_BANK) */
@@ -214,7 +217,7 @@ export function rollDay(f: FarmState, now: number) {
   const d = bkDay(now);
   if (f.day === d) return;
   const days = Math.max(1, dayNum(d) - dayNum(f.day));
-  Object.assign(f, { day: d, free: Math.min(FREE_BANK, f.free + FREE_RUNS * days), crafted: 0, casualRuns: 0, findRolls: 0 });
+  Object.assign(f, { day: d, free: Math.min(FREE_BANK, f.free + FREE_RUNS * days), crafted: 0, casualRuns: 0, findRolls: 0, shinyRolls: 0 });
   delete f.casualTicket;
   delete f.casualEgg;
 }
