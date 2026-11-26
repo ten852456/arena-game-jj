@@ -79,7 +79,14 @@ export function farmBarHTML(): string {
       ? `<span class="fpill boost" title="${L('ผลผลิตเพิ่ม', 'production boost')}">⬆ +${Math.round((f.newbie + f.headStart) * 100)}%</span>`
       : '';
   const stamps = `<span class="fpill stamps" title="${L(`การ์ดสะสมวัน: เข้าเล่นวันไหนก็ได้ ${F.STAMPS} วัน (ไม่ต้องติดกัน) ได้คริสตัล ${F.STAMP_REWARD.crystal} + ฟักไข่เร็วขึ้น`, `Day card: play any ${F.STAMPS} days (not in a row) for ${F.STAMP_REWARD.crystal} crystal + egg hours`)}">📅<b>${f.stamps}/${F.STAMPS}</b>${f.stampedToday ? '✓' : ''}</span>`;
-  return `<div class="farm-bar">${pill('wood')}${pill('ore')}${pill('crystal')}<span class="fpill">${resIcon('stardust')}<b>${f.stardust}</b></span>${runs}${stamps}${boost}</div>`;
+  const ro = f.rollover;
+  const note = ro
+    ? `<p class="fwarn">${L(
+        `ซีซั่น ${esc(ro.from)} จบแล้ว: ของเกินคลังกลายเป็นแต้มอนุสาวรีย์ ${ro.excess} · ตั๋วหมดอายุ ${ro.tickets} ใบ${ro.head ? ` · เริ่มซีซั่นใหม่ผลผลิต +${Math.round(ro.head * 100)}%` : ''}${ro.damaged ? ' · ภัยพิบัติทำให้อาคารเสียหาย 1 แห่ง' : ''}`,
+        `Season ${esc(ro.from)} ended: resources over the warehouse became ${ro.excess} monument points · ${ro.tickets} tickets expired${ro.head ? ` · head start +${Math.round(ro.head * 100)}% output` : ''}${ro.damaged ? ' · the calamity damaged one landmark' : ''}`,
+      )}</p>`
+    : '';
+  return `${note}<div class="farm-bar">${pill('wood')}${pill('ore')}${pill('crystal')}<span class="fpill">${resIcon('stardust')}<b>${f.stardust}</b></span>${runs}${stamps}${boost}</div>`;
 }
 
 // ---------- landmarks ----------

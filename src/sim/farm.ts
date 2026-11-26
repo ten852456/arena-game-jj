@@ -215,6 +215,10 @@ export interface FarmState {
   /** stamp card (total days, not consecutive) and the last day stamped */
   stamps: number;
   stampDay?: string;
+  /** the season this farm last lived in (the rollover runs when it changes) */
+  season?: string;
+  /** what the last season rollover did, shown to the player once */
+  rollover?: { from: string; to: string; excess: number; tickets: number; head: number; damaged?: Building };
   /** mastery XP per `hero@building` (masteryKey) */
   mastery?: Record<string, number>;
   /** a landmark damaged by last season's calamity: half output until repaired */
@@ -601,6 +605,37 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
     default:
       return 'bad op';
   }
+}
+
+/**
+ * A new season (design meeting 2026-11-26): the town never resets, but the hoard does not carry over either.
+ * - wood, ore and crystal above the warehouse cap auto-pour into last season's monument share (status + head start)
+ * - unused tickets expire
+ * - last season's pour becomes a fading head start (√-scaled, capped)
+ * - a missed community goal damages one landmark, never a contributor's
+ * Buildings, levels, mastery, heroes, eggs and cosmetics stay. `goalMet` null = no monument record for last season.
+ */
+export function seasonRollover(f: FarmState, season: string, goalMet: boolean | null, now: number, pick: () => Building) {
+  const from = f.season ?? f.pouredSeason ?? '';
+  if (f.season === season) return null;
+  f.season = season;
+  if (!from || from === season) return null; // a new farm, or one from before this field: nothing to roll over
+  let excess = 0;
+  for (const r of ['wood', 'ore', 'crystal'] as const) {
+    const over = Math.max(0, f.res[r] - capOf(f, r));
+    f.res[r] -= over;
+    excess += over * MONUMENT_POINTS[r];
+  }
+  const poured = (f.pouredSeason === from ? f.poured : 0) + excess;
+  const tickets = f.tickets;
+  f.tickets = 0;
+  const head = poured > 0 ? headStartFor(poured) : 0;
+  if (head > 0) f.head = { mult: head, from: now };
+  else delete f.head;
+  if (goalMet === false && poured < MONUMENT_MIN_PERSONAL) f.damaged = pick();
+  Object.assign(f, { poured: 0, pouredSeason: season });
+  f.rollover = { from, to: season, excess: Math.round(excess), tickets, head: Math.round(head * 1000) / 1000, ...(f.damaged ? { damaged: f.damaged } : {}) };
+  return f.rollover;
 }
 
 /** Next season's head start from this season's pour: √-scaled, capped (10× the points ≈ 3× the boost). */

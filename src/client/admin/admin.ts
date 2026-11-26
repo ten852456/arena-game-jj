@@ -6,7 +6,7 @@ import './admin.css';
 const KEY = 'mochi.admin';
 const root = document.getElementById('admin')!;
 let token = sessionStorage.getItem(KEY) ?? '';
-let tab: 'overview' | 'feedback' | 'waitlist' | 'runs' | 'announce' = 'overview';
+let tab: 'overview' | 'economy' | 'feedback' | 'waitlist' | 'runs' | 'announce' = 'overview';
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const when = (t: number) => new Date(t).toLocaleString();
@@ -35,7 +35,7 @@ function login(err = '') {
 }
 
 function shell(body: string) {
-  const tabs = ['overview', 'feedback', 'waitlist', 'runs', 'announce'] as const;
+  const tabs = ['overview', 'economy', 'feedback', 'waitlist', 'runs', 'announce'] as const;
   root.innerHTML = `<nav class="bar"><img src="/assets/img/logo.webp" alt="" width="110"><b>Admin</b>
     ${tabs.map((t) => `<button data-tab="${t}" aria-pressed="${t === tab}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}
     <span class="sp"></span><a href="/" target="_blank">Site ↗</a><a href="/play" target="_blank">Game ↗</a><button data-out>Log out</button></nav>
@@ -109,6 +109,32 @@ async function overview() {
 }
 
 interface Fb { id: string; rating?: number; text: string; screen: string; hero?: string; wins?: number; lang: string; device: string; ver: string; at: number; done?: boolean }
+interface Economy {
+  days: number;
+  rows: ({ day: string } & Record<string, { mint: number; burn: number }>)[];
+  total: Record<string, { mint: number; burn: number; ratio: number | null }>;
+  target: Record<string, [number, number]>;
+}
+/** Mint / burn per resource (server ledger.ts): is anything piling up? Wood and ore aim for burn/mint 0.8–1.0. */
+async function economy() {
+  const o = await call<Economy>('/api/admin/economy?days=30');
+  const RES = ['wood', 'ore', 'crystal', 'stardust', 'tickets'];
+  const flag = (r: string) => {
+    const t = o.target[r];
+    const x = o.total[r]?.ratio;
+    return t && x !== null && x !== undefined && (x < t[0] || x > t[1]) ? ' class="warn"' : '';
+  };
+  return `<section class="card"><h2>Economy · mint and burn, last ${o.days} days</h2>
+    <p class="note">Mint = what the game created (collects, rewards, crafted tickets). Burn = what players spent (upgrades, tickets, unlocks, the monument). Target for wood and ore: burn/mint 0.8–1.0; below that, resources pile up.</p>
+    <table><thead><tr><th>Resource</th><th>Mint</th><th>Burn</th><th>Burn/mint</th></tr></thead><tbody>${RES.map(
+      (r) => `<tr${flag(r)}><td>${esc(r)}</td><td>${o.total[r]?.mint ?? 0}</td><td>${o.total[r]?.burn ?? 0}</td><td>${o.total[r]?.ratio ?? '–'}</td></tr>`,
+    ).join('')}</tbody></table></section>
+    <section class="card"><h2>Per day</h2><table><thead><tr><th>Day</th>${RES.map((r) => `<th>${esc(r)} +/−</th>`).join('')}</tr></thead><tbody>${[...o.rows]
+      .reverse()
+      .map((row) => `<tr><td>${esc(row.day)}</td>${RES.map((r) => `<td>${row[r]?.mint ?? 0} / ${row[r]?.burn ?? 0}</td>`).join('')}</tr>`)
+      .join('')}</tbody></table></section>`;
+}
+
 async function feedback() {
   const { rows } = await call<{ rows: Fb[] }>('/api/admin/feedback');
   if (!rows.length) return '<p class="note">No feedback yet.</p>';
@@ -151,7 +177,7 @@ async function announce() {
 async function show() {
   if (!token) return login();
   try {
-    const body = await { overview, feedback, waitlist, runs, announce }[tab]();
+    const body = await { overview, economy, feedback, waitlist, runs, announce }[tab]();
     shell(body);
     bindTab();
   } catch (e) {

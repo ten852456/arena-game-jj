@@ -8,6 +8,7 @@ import { handleFight, handleScout, type Res } from './fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
 import { ROOT, db } from './store';
 import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './farm';
+import { adminEconomy } from './ledger';
 import { WIN_TARGET } from '../sim/run';
 import { cleanName, isDefaultName } from './validate';
 import {
@@ -118,6 +119,7 @@ const adminRoutes: Record<string, Route> = {
   'POST /api/admin/feedback/done': async (req) => adminFeedbackDone(await readBody(req)),
   'GET /api/admin/waitlist': () => adminWaitlist(),
   'GET /api/admin/runs': () => adminRuns(),
+  'GET /api/admin/economy': (_req, q) => adminEconomy(q),
   'POST /api/admin/announce': async (req) => adminAnnounce(await readBody(req)),
 };
 

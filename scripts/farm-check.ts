@@ -146,6 +146,28 @@ const veteran = () => {
   check('mastery raises output +1% per level above 1', Math.abs(F.rateOf(g, 'mine', 'knight', T0 + 40 * 24 * H) / (4 * 1.25) - (1 + 0.01 * (ml - 1))) < 1e-9);
 }
 
+// season rollover: the town stays, the hoard and tickets do not
+{
+  const f = veteran();
+  F.seasonRollover(f, 's1', null, T0, () => 'mine');
+  check('a farm first seen in s1: no rollover', !f.rollover && f.season === 's1');
+  f.lv.mine = 7; // before the cap: the warehouse grows with the next level's cost
+  f.res.wood = F.capOf(f, 'wood') + 500;
+  f.tickets = 3;
+  f.poured = 100;
+  f.pouredSeason = 's1';
+  const r = F.seasonRollover(f, 's2', false, T0, () => 'mine');
+  check('rollover: wood over the cap pours (500 points)', !!r && r.excess === 500 && f.res.wood === F.capOf(f, 'wood'));
+  check('rollover: tickets expire, buildings stay', f.tickets === 0 && r!.tickets === 3 && f.lv.mine === 7);
+  check('rollover: pour + excess (600) became a head start', !!f.head && Math.abs(f.head.mult - F.headStartFor(600)) < 1e-9);
+  check('rollover: 600 points ≥ the personal minimum, so no calamity', !f.damaged);
+  check('rollover runs once per season', F.seasonRollover(f, 's2', false, T0, () => 'mine') === null);
+  const g = veteran();
+  g.season = 's1';
+  F.seasonRollover(g, 's2', false, T0, () => 'shrine');
+  check('a missed goal damages a non-contributor', g.damaged === 'shrine' && !g.head);
+}
+
 // eggs: hatch by work-hours, odds shown, no duplicates, pity
 {
   const f = veteran();

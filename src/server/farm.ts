@@ -10,6 +10,7 @@ import { cleanId, cleanName } from './validate';
 import { FEED_CAP, SEASON, db, save, type MonumentRec } from './store';
 import { allow } from './site';
 import type { Res } from './fight';
+import { ledgerAdd } from './ledger';
 
 export const FARM_TIME_SCALE = Math.max(1, Math.min(3600, Number(process.env.FARM_TIME_SCALE ?? 1) || 1));
 /**
@@ -57,11 +58,10 @@ export const monumentPoints = (m: MonumentRec) => Math.round(m.points + F.MONUME
  * of a player who poured at least MONUMENT_MIN_PERSONAL. Nothing is wiped.
  */
 function seasonTurn(f: F.FarmState, now: number) {
-  if (!f.pouredSeason || f.pouredSeason === SEASON) return;
-  const last = db.monuments[f.pouredSeason];
-  if (f.poured > 0) f.head = { mult: F.headStartFor(f.poured), from: now };
-  if (last && monumentPoints(last) < monumentGoal(last) && f.poured < F.MONUMENT_MIN_PERSONAL) f.damaged = F.BUILDING_IDS[randomInt(0, F.BUILDING_IDS.length)];
-  Object.assign(f, { poured: 0, pouredSeason: SEASON });
+  const from = f.season ?? f.pouredSeason;
+  const last = from ? db.monuments[from] : undefined;
+  const goalMet = last ? monumentPoints(last) >= monumentGoal(last) : null;
+  F.seasonRollover(f, SEASON, goalMet, now, () => F.BUILDING_IDS[randomInt(0, F.BUILDING_IDS.length)]);
 }
 
 /** Heroes in this player's unfinished runs (they cannot go to work). */
@@ -98,6 +98,7 @@ export function farmView(f: F.FarmState, playerId: string, now: number) {
     eggs: f.eggs.map((e) => ({ h: Math.round(e.h * 10) / 10, need: e.need })), odds: F.eggOdds(f), cosmetics: f.cosmetics, pity: f.pity,
     headStart: Math.round(F.headStart(f, now) * 1000) / 1000,
     newbie: Math.round(F.newbieBoost(f, now) * 100) / 100,
+    ...(f.rollover ? { rollover: f.rollover } : {}),
     monument: {
       season: SEASON, mine: f.pouredSeason === SEASON ? f.poured : 0, points: monumentPoints(m), goal: monumentGoal(m), players: m.players,
       tiers: F.MONUMENT_TIERS.map((x) => Math.round(x * monumentGoal(m))), minPersonal: F.MONUMENT_MIN_PERSONAL,
@@ -129,10 +130,21 @@ export function handleFarmOps(body: any, ip: string): Res {
   let stardust = player?.stardust ?? 0;
   const ctx: F.OpCtx = { now, scale: FARM_TIME_SCALE, stardust, inRun: heroesInRun(playerId), season: SEASON, rng };
   const poured0 = copy.pouredSeason === SEASON ? copy.poured : 0;
+  // mint/burn of this visit (ledger.ts): what collects made, what everything else spent
+  const flow: Record<'wood' | 'ore' | 'crystal' | 'tickets', { mint: number; burn: number }> = {
+    wood: { mint: 0, burn: 0 }, ore: { mint: 0, burn: 0 }, crystal: { mint: 0, burn: 0 }, tickets: { mint: 0, burn: 0 },
+  };
   for (let i = 0; i < ops.length; i++) {
+    const before = { ...copy.res, tickets: copy.tickets };
     const r = F.applyOp(copy, ops[i], { ...ctx, stardust });
     if (typeof r === 'string') return { status: 409, json: { error: r, at: i } };
     stardust -= r.stardust;
+    const after = { ...copy.res, tickets: copy.tickets };
+    for (const k of ['wood', 'ore', 'crystal', 'tickets'] as const) {
+      const d = after[k] - before[k];
+      if (d > 0) flow[k].mint += d;
+      else flow[k].burn -= d;
+    }
   }
   if (stardust !== (player?.stardust ?? 0)) {
     if (!player) return bad('not enough resources', 409);
@@ -149,7 +161,13 @@ export function handleFarmOps(body: any, ip: string): Res {
     if (poured0 < F.MONUMENT_MIN_PERSONAL && total >= F.MONUMENT_MIN_PERSONAL) m.players++;
     m.points += poured;
   }
+  for (const k of ['wood', 'ore', 'crystal', 'tickets'] as const) {
+    ledgerAdd(k, 'mint', flow[k].mint);
+    ledgerAdd(k, 'burn', flow[k].burn);
+  }
+  ledgerAdd('stardust', 'burn', (player?.stardust ?? 0) - stardust);
   copy.updatedAt = now;
+  delete copy.rollover; // the "season ended" note is shown until the player's next action
   // lucky finds of this visit: to the town feed, and back to the client once
   const found = copy.newFinds ?? [];
   delete copy.newFinds;
@@ -210,8 +228,11 @@ export function startRunGate(playerId: string, hero: string, tutorial: boolean, 
   if (!F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
   let casualNth: number | undefined;
   if (mode === 'ranked') {
+    // the day's free ticket is minted as it is used, so mint and burn stay comparable
+    if (f.free > 0) ledgerAdd('tickets', 'mint', 1);
     const err = F.spendRun(f, now);
     if (err) return { status: 409, json: { error: err, code: 'no_tickets' } };
+    ledgerAdd('tickets', 'burn', 1);
   } else {
     F.startCasual(f, now);
     casualNth = f.casualRuns;
@@ -239,6 +260,7 @@ export function onRunFinished(playerId: string, wins: number, mode: F.Mode): { e
   const f = farmOf(playerId, now, false);
   if (!f) return { eggs: 0, ticket: false };
   const r = F.runEnded(f, mode, wins, now);
+  if (r.ticket) ledgerAdd('tickets', 'mint', 1);
   if (r.eggs || r.ticket) save();
   return r;
 }

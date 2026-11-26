@@ -160,6 +160,8 @@ export interface FarmView {
   findRolls: number;
   casualRuns: number;
   casualTicket: boolean;
+  /** what the last season rollover did (until the next action) */
+  rollover?: { from: string; to: string; excess: number; tickets: number; head: number; damaged?: FarmBuilding };
   /** lucky finds of this action (POST answers only) */
   found?: string[];
 }

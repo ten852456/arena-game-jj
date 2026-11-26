@@ -9,6 +9,7 @@ import { recordOf } from './fight';
 import type { Res } from './fight';
 import { allow } from './site';
 import { onRunFinished } from './farm';
+import { ledgerAdd } from './ledger';
 import { stardustMult } from '../sim/farm';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
@@ -100,6 +101,7 @@ export function handleFinish(body: any): Res {
 
   player.name = name;
   player.stardust += reward.stardust;
+  ledgerAdd('stardust', 'mint', reward.stardust);
   const { eggs, ticket } = onRunFinished(playerId, countedWins, mode);
   player.runs++;
   player.wins += countedWins;

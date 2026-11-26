@@ -142,6 +142,8 @@ export interface Db {
   monuments: Record<string, MonumentRec>;
   /** town feed: rare finds and moonlit heroes, newest last (capped) */
   feed: FeedItem[];
+  /** mint/burn ledger: Bangkok day → "<resource>:mint|burn" → amount (ledger.ts) */
+  ledger: Record<string, Record<string, number>>;
 }
 export interface FeedItem {
   t: number;
@@ -179,6 +181,7 @@ function loadDb(): Db {
     farms: Object.assign(Object.create(null), isObj(d.farms) ? d.farms : {}),
     monuments: Object.assign(Object.create(null), isObj(d.monuments) ? d.monuments : {}),
     feed: Array.isArray(d.feed) ? d.feed.slice(-FEED_CAP) : [],
+    ledger: Object.assign(Object.create(null), isObj(d.ledger) ? d.ledger : {}),
   };
 }
 
