@@ -501,11 +501,13 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
       return { stardust: 0 };
     }
     case 'pourFind': {
-      const pts = FIND_POINTS[o.id];
-      if (!pts || !(f.finds?.[o.id] ?? 0)) return 'not enough resources';
+      // only ids of real finds (never a prototype key like "__proto__"), and a positive count (security review)
+      if (typeof o.id !== 'string' || !Object.hasOwn(FIND_POINTS, o.id)) return 'bad op';
+      const have = f.finds && Object.hasOwn(f.finds, o.id) ? f.finds[o.id] : 0;
+      if (!(typeof have === 'number' && have > 0)) return 'not enough resources';
       if (f.pouredSeason !== c.season) Object.assign(f, { poured: 0, pouredSeason: c.season });
-      f.finds![o.id]--;
-      f.poured += pts;
+      f.finds![o.id] = have - 1;
+      f.poured += FIND_POINTS[o.id];
       return { stardust: 0 };
     }
     case 'repair': {

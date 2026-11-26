@@ -105,6 +105,7 @@ const veteran = () => {
   f.res.ore = 0;
   op(f, { op: 'pourFind', id: 'moon_pearl' }, T0);
   check('a find poured into the monument', f.poured === F.FIND_POINTS.moon_pearl && f.finds!.moon_pearl === 2);
+  check('pourFind: a prototype key is not a find', op(f, { op: 'pourFind', id: '__proto__' }, T0) === 'bad op' && op(f, { op: 'pourFind', id: 'constructor' }, T0) === 'bad op');
 }
 
 // unlock and upgrade
