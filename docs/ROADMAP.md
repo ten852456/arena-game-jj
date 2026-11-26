@@ -125,7 +125,7 @@ Exit: run of 10–15 min measured on real devices; "lost first 3 days" group doe
 - [ ] Link opens the game with that bot ready (new player onboarding)
 - [ ] Separate leaderboards: manual vs bot
 
-## Phase 5 — Town & idle
+## Phase 5 — Town & idle (design draft: `docs/FARM.md`)
 
 - [ ] Heroes not in the arena go gathering (wood, ore, scarce goods) while offline
 - [ ] Buildings + research; town never resets
@@ -141,11 +141,11 @@ Exit: run of 10–15 min measured on real devices; "lost first 3 days" group doe
 ## Phase 7 — Economy ⚠ decide "real money out" first
 
 - [ ] Diamonds (buy only, game never pays out — principle 4)
-- [ ] Monthly pass: 5 choices instead of 3 in normal mode, boxes, skins
+- [ ] Monthly pass: 5 choices instead of 3 in normal mode, skins, faster egg hatching (never eggs or boxes: owner 2026-11-26, see docs/FARM.md)
 - [ ] Skins, server-wide name/status, duplicate hero → cosmetic
 - [ ] Marketplace: listings only, fee on every trade, history, account age/progress gate,
   unused heroes only and after tickets
-- [ ] Whale perks: roster width, 2–3× gathering (not tickets), bot runs/rules, early season access
+- [ ] Whale perks: roster width, bot runs/rules, early season access (no paid gathering boost: owner 2026-11-26, see docs/FARM.md)
 
 ## Phase 8 — Seasons & live ops
 
