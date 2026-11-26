@@ -6,6 +6,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
+import { startRunGate } from './farm';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, relicOfferCheck, serverRelicOffer, spendCheck, validateBuild, type RunRecord } from './validate';
 
 export interface Res {
@@ -155,6 +156,12 @@ export function handleFight(body: any): Res {
   // Guided tutorial: the very first fight of a brand-new run, once per player, is against a training AI
   // (an easy bot with one skill, a fight the player wins). The server decides everything; the client only asks.
   const tutorial = body?.tutorial === true && day === 1 && !prev && !Object.hasOwn(db.tutorials, playerId);
+  // Farm (docs/FARM.md): day 1 of a new run uses a free run or a ticket, and the hero must be owned or in today's
+  // rotation. The tutorial run is free. Nothing is spent when the gate says no.
+  if (!prev && day === 1) {
+    const gate = startRunGate(playerId, build.hero, tutorial);
+    if (gate) return gate;
+  }
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
   const { pool, window } = tutorial ? { pool: [] as Snapshot[], window: null } : candidates({ day, rating, runId, playerId, track: prev });
   let seed = randomInt(0, 2 ** 32 - 1);

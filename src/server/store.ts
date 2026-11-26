@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
 import type { LastChoice } from './validate';
+import type { FarmState } from '../sim/farm';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 export const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -125,6 +126,14 @@ export interface Db {
   players: Record<string, Player>;
   /** playerId → time it used its one guided-tutorial fight (day 1 vs a training AI) */
   tutorials: Record<string, number>;
+  /** playerId → idle town (src/sim/farm.ts, docs/FARM.md) */
+  farms: Record<string, FarmState>;
+  /** season → monument totals */
+  monuments: Record<string, MonumentRec>;
+}
+export interface MonumentRec {
+  points: number;
+  players: number;
 }
 
 const isObj = (x: unknown): x is Record<string, any> => !!x && typeof x === 'object' && !Array.isArray(x);
@@ -145,6 +154,8 @@ function loadDb(): Db {
     runs: Array.isArray(d.runs) ? d.runs : [],
     players: Object.assign(Object.create(null), isObj(d.players) ? d.players : {}),
     tutorials: Object.assign(Object.create(null), isObj(d.tutorials) ? d.tutorials : {}),
+    farms: Object.assign(Object.create(null), isObj(d.farms) ? d.farms : {}),
+    monuments: Object.assign(Object.create(null), isObj(d.monuments) ? d.monuments : {}),
   };
 }
 
@@ -164,6 +175,7 @@ export function enforceCaps() {
   capRecord(db.tracks, TRACK_CAP, (x) => x.t);
   capRecord(db.players, PLAYER_CAP, (x) => x.updatedAt);
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
+  capRecord(db.farms, PLAYER_CAP, (x) => x.updatedAt);
 }
 
 let saveTimer: NodeJS.Timeout | null = null;

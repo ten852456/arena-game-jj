@@ -1,0 +1,197 @@
+// Farm (idle town) API. Rules and numbers: src/sim/farm.ts; design: docs/FARM.md.
+//   GET  /api/farm?playerId=…        the farm as of now (pending output, runs left, rotation, egg odds)
+//   POST /api/farm {playerId, ops}    one visit: a batch of ops, applied in order, all-or-nothing
+//   POST /api/farm/hatch {playerId}   hatch the first egg if it has its work-hours
+// The server's clock is the only clock. FARM_TIME_SCALE (playtests only) speeds production up.
+import { randomInt } from 'node:crypto';
+import * as F from '../sim/farm';
+import { HEROES_BY_ID } from '../sim/heroes';
+import { cleanId } from './validate';
+import { SEASON, db, save, type MonumentRec } from './store';
+import { allow } from './site';
+import type { Res } from './fight';
+
+export const FARM_TIME_SCALE = Math.max(1, Math.min(3600, Number(process.env.FARM_TIME_SCALE ?? 1) || 1));
+/**
+ * FARM_GATE=off turns the arena gate off: any hero may start a run and runs are not counted (the farm itself still
+ * works). For a playtest that should not change how the arena plays, and for the legacy security checks.
+ */
+export const RUN_LIMIT = process.env.FARM_GATE !== 'off';
+/** Players the server knew before the farm existed own every hero (owner 2026-11-26). */
+const FARM_LAUNCH = Number(process.env.FARM_LAUNCH ?? Date.parse('2026-11-27T00:00:00+07:00'));
+const MAX_OPS = 32;
+
+const bad = (error: string, status = 400): Res => ({ status, json: { error } });
+
+function knownBeforeLaunch(playerId: string): boolean {
+  const p = db.players[playerId];
+  if (p && p.createdAt < FARM_LAUNCH) return true;
+  return Object.values(db.tracks).some((t) => t.playerId === playerId && t.t < FARM_LAUNCH);
+}
+
+/** A player's farm; `create` makes one (callers rate-limit creation by IP). */
+export function farmOf(playerId: string, now: number, create = true): F.FarmState | null {
+  let f = Object.hasOwn(db.farms, playerId) ? db.farms[playerId] : undefined;
+  if (!f) {
+    if (!create) return null;
+    f = db.farms[playerId] = F.newFarm(now, knownBeforeLaunch(playerId));
+  }
+  seasonTurn(f, now);
+  F.rollDay(f, now);
+  return f;
+}
+
+function monument(season: string): MonumentRec {
+  return (db.monuments[season] ??= { points: 0, players: 0 });
+}
+export const monumentGoal = (m: MonumentRec) => Math.max(F.MONUMENT_GOAL_PER_PLAYER * 10, m.players * F.MONUMENT_GOAL_PER_PLAYER);
+/** points counted toward the goal: the ruler's gift (20% of the goal) plus what players poured */
+export const monumentPoints = (m: MonumentRec) => Math.round(m.points + F.MONUMENT_SEED * monumentGoal(m));
+
+/**
+ * First visit in a new season: last season's pour becomes a fading head start (√-scaled); if the community missed
+ * last season's monument goal, the calamity damages one landmark (half output until repaired) — but never the town
+ * of a player who poured at least MONUMENT_MIN_PERSONAL. Nothing is wiped.
+ */
+function seasonTurn(f: F.FarmState, now: number) {
+  if (!f.pouredSeason || f.pouredSeason === SEASON) return;
+  const last = db.monuments[f.pouredSeason];
+  if (f.poured > 0) f.head = { mult: F.headStartFor(f.poured), from: now };
+  if (last && monumentPoints(last) < monumentGoal(last) && f.poured < F.MONUMENT_MIN_PERSONAL) f.damaged = F.BUILDING_IDS[randomInt(0, F.BUILDING_IDS.length)];
+  Object.assign(f, { poured: 0, pouredSeason: SEASON });
+}
+
+/** Heroes in this player's unfinished runs (they cannot go to work). */
+function heroesInRun(playerId: string): string[] {
+  const out = new Set<string>();
+  for (const t of Object.values(db.tracks)) if (t.playerId === playerId && !t.finished && !t.over && t.hero) out.add(t.hero);
+  return [...out];
+}
+
+/** The farm as the client sees it: stored state plus what is ready to collect right now. */
+export function farmView(f: F.FarmState, playerId: string, now: number) {
+  const jobs = Object.fromEntries(
+    F.BUILDING_IDS.map((b) => [
+      b,
+      f.jobs[b].map((j) => {
+        const p = F.pending(f, b, j, now, FARM_TIME_SCALE);
+        // ms of real time until this job's storage is full (0 = full now)
+        const fullIn = p.full ? 0 : Math.ceil((F.storageMs(f, b) - p.used) / p.speed);
+        return { hero: j.hero, ready: p.n, fill: Math.round(p.fill * 1000) / 1000, fullIn, fits: F.fits(j.hero, b), ...(j.fast ? { fast: true } : {}) };
+      }),
+    ]),
+  );
+  const m = monument(SEASON);
+  return {
+    v: f.v, now, scale: FARM_TIME_SCALE, runLimit: RUN_LIMIT,
+    owned: f.owned, usable: F.usableHeroes(f, now), rotation: F.todaysRotation(f, now), inRun: heroesInRun(playerId),
+    res: f.res, caps: { wood: F.capOf(f, 'wood'), ore: F.capOf(f, 'ore'), crystal: F.capOf(f, 'crystal') },
+    lv: f.lv, slots: Object.fromEntries(F.BUILDING_IDS.map((b) => [b, F.slotsOf(f, b)])), jobs,
+    ...(f.damaged ? { damaged: f.damaged } : {}),
+    tickets: f.tickets, free: f.free, crafted: f.crafted, runsLeft: F.runsLeft(f), stamps: f.stamps, stampedToday: f.stampDay === F.bkDay(now),
+    stardust: db.players[playerId]?.stardust ?? 0, pass: !!f.pass,
+    eggs: f.eggs.map((e) => ({ h: Math.round(e.h * 10) / 10, need: e.need })), odds: F.eggOdds(f), cosmetics: f.cosmetics, pity: f.pity,
+    headStart: Math.round(F.headStart(f, now) * 1000) / 1000,
+    newbie: Math.round(F.newbieBoost(f, now) * 100) / 100,
+    monument: {
+      season: SEASON, mine: f.pouredSeason === SEASON ? f.poured : 0, points: monumentPoints(m), goal: monumentGoal(m), players: m.players,
+      tiers: F.MONUMENT_TIERS.map((x) => Math.round(x * monumentGoal(m))), minPersonal: F.MONUMENT_MIN_PERSONAL,
+    },
+  };
+}
+
+export function handleFarmGet(q: URLSearchParams): Res {
+  const playerId = cleanId(q.get('playerId'));
+  if (!playerId) return bad('bad request');
+  const now = Date.now();
+  // a look never creates a record: an unknown player sees the farm they would start with
+  const f = farmOf(playerId, now, false) ?? F.newFarm(now, knownBeforeLaunch(playerId));
+  return { status: 200, json: { ...farmView(f, playerId, now), stored: Object.hasOwn(db.farms, playerId) } };
+}
+
+export function handleFarmOps(body: any, ip: string): Res {
+  const playerId = cleanId(body?.playerId);
+  const ops = body?.ops;
+  if (!playerId || !Array.isArray(ops) || !ops.length || ops.length > MAX_OPS) return bad('bad request');
+  if (!allow('farm:' + playerId, 120, 3_600_000)) return bad('too many farm actions, try again later', 429);
+  // a new farm record: the IP limit first, so random ids from one IP cannot flood the db
+  if (!Object.hasOwn(db.farms, playerId) && !allow('farmnew:' + ip, 10, 3_600_000)) return bad('too many new towns from here, try again later', 429);
+  const now = Date.now();
+  const f = farmOf(playerId, now)!;
+  // all-or-nothing: run the batch on a copy, keep it only if every op worked
+  const copy: F.FarmState = structuredClone(f);
+  const player = db.players[playerId];
+  let stardust = player?.stardust ?? 0;
+  const ctx: F.OpCtx = { now, scale: FARM_TIME_SCALE, stardust, inRun: heroesInRun(playerId), season: SEASON };
+  const poured0 = copy.pouredSeason === SEASON ? copy.poured : 0;
+  for (let i = 0; i < ops.length; i++) {
+    const r = F.applyOp(copy, ops[i], { ...ctx, stardust });
+    if (typeof r === 'string') return { status: 409, json: { error: r, at: i } };
+    stardust -= r.stardust;
+  }
+  if (stardust !== (player?.stardust ?? 0)) {
+    if (!player) return bad('not enough resources', 409);
+    player.stardust = stardust;
+    player.updatedAt = now;
+  }
+  // season monument totals
+  const poured = (copy.pouredSeason === SEASON ? copy.poured : 0) - poured0;
+  if (poured > 0) {
+    const m = monument(SEASON);
+    if (poured0 === 0) m.players++;
+    m.points += poured;
+  }
+  copy.updatedAt = now;
+  db.farms[playerId] = copy;
+  save();
+  return { status: 200, json: farmView(copy, playerId, now) };
+}
+
+export function handleHatch(body: any): Res {
+  const playerId = cleanId(body?.playerId);
+  if (!playerId) return bad('bad request');
+  if (!allow('hatch:' + playerId, 30, 3_600_000)) return bad('too many requests', 429);
+  const now = Date.now();
+  const f = farmOf(playerId, now, false);
+  if (!f) return bad('no egg', 409);
+  F.collect(f, 'lumber', now, FARM_TIME_SCALE); // bring work-hours up to date
+  F.collect(f, 'mine', now, FARM_TIME_SCALE);
+  F.collect(f, 'shrine', now, FARM_TIME_SCALE);
+  const r = F.hatch(f, randomInt(0, 1_000_000) / 1_000_000);
+  if (typeof r === 'string') return bad(r, 409);
+  save();
+  return { status: 200, json: { got: r.got, farm: farmView(f, playerId, now) } };
+}
+
+/**
+ * Day 1 of a new run (the server first sees it then): the hero must be one this player may use today, and the run
+ * costs a free run or a ticket. A hero at work is called back (it keeps what it made). The tutorial run is free.
+ * Returns an error response or null.
+ */
+export function startRunGate(playerId: string, hero: string, tutorial: boolean): Res | null {
+  if (!HEROES_BY_ID[hero]) return bad('bad hero');
+  const now = Date.now();
+  const f = farmOf(playerId, now)!;
+  if (RUN_LIMIT && !F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
+  if (RUN_LIMIT && !tutorial) {
+    const err = F.spendRun(f, now);
+    if (err) return { status: 409, json: { error: err, code: 'no_runs' } };
+  }
+  const at = F.heroBusy(f, hero);
+  if (at) {
+    F.collect(f, at, now, FARM_TIME_SCALE);
+    f.jobs[at] = f.jobs[at].filter((j) => j.hero !== hero);
+  }
+  save();
+  return null;
+}
+
+/** A run ended: eggs for its win marks. */
+export function onRunFinished(playerId: string, wins: number): number {
+  const now = Date.now();
+  const f = farmOf(playerId, now, false);
+  if (!f) return 0;
+  const n = F.eggsFor(f, wins, now);
+  if (n) save();
+  return n;
+}

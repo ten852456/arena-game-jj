@@ -7,6 +7,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 process.env.DATA_DIR = mkdtempSync(join(tmpdir(), 'fight-check-'));
+// this check is about fight validation, not the farm's arena gate (hero lock, run limit): scripts/farm-api-check.ts
+process.env.FARM_GATE = 'off';
 const { handleFight } = await import('../src/server/fight');
 const { db } = await import('../src/server/store');
 const { botDay, botRules } = await import('../src/sim/bot');

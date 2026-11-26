@@ -7,6 +7,7 @@ import { extname, join, normalize } from 'node:path';
 import { handleFight, handleScout, type Res } from './fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
 import { ROOT, db } from './store';
+import { handleFarmGet, handleFarmOps, handleHatch } from './farm';
 import { WIN_TARGET } from '../sim/run';
 import { cleanName, isDefaultName } from './validate';
 import {
@@ -97,6 +98,9 @@ const routes: Record<string, Route> = {
   'GET /api/profile': (_req, q) => handleProfile(q),
   'POST /api/profile/name': async (req) => handleRename(await readBody(req), ipOf(req)),
   'GET /api/leaderboard': (_req, q) => handleLeaderboard(q),
+  'GET /api/farm': (_req, q) => handleFarmGet(q),
+  'POST /api/farm': async (req) => handleFarmOps(await readBody(req), ipOf(req)),
+  'POST /api/farm/hatch': async (req) => handleHatch(await readBody(req)),
   'GET /api/stats': () => ({
     status: 200,
     json: { snapshots: db.snapshots.length, fights: db.fights.length, runs: db.runs.length, players: Object.keys(db.players).length },

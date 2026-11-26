@@ -8,6 +8,7 @@ import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, spendCheck, valida
 import { recordOf } from './fight';
 import type { Res } from './fight';
 import { allow } from './site';
+import { onRunFinished } from './farm';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
@@ -94,6 +95,7 @@ export function handleFinish(body: any): Res {
 
   player.name = name;
   player.stardust += reward.stardust;
+  const eggs = onRunFinished(playerId, countedWins);
   player.runs++;
   player.wins += countedWins;
   player.losses += countedLosses;
@@ -102,7 +104,7 @@ export function handleFinish(body: any): Res {
     player.best = { runId, hero, wins: run.wins, losses: run.losses, day, finishedAt: run.finishedAt };
   }
   save();
-  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped }, run: runRow(run), player: publicPlayer(player) } };
+  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, ...(eggs ? { eggs } : {}) }, run: runRow(run), player: publicPlayer(player) } };
 }
 
 export function handleProfile(q: URLSearchParams): Res {
