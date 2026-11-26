@@ -1,7 +1,7 @@
 // Abuse cases for the server (run against a live server): npm run security  (BASE=http://host:port)
 import { aiBuild, botDay, botRules, botShopTurn } from '../src/sim/bot';
 import { HEROES_BY_ID } from '../src/sim/heroes';
-import { RELICS } from '../src/sim/relics';
+import { RELICS, RELIC_DAYS } from '../src/sim/relics';
 import { newRun, recordResult, toBuild, chooseLastChance, applyMark, sell, wish, wishKind, wishPrice } from '../src/sim/run';
 import { lvOf } from '../src/sim/skills';
 const BASE = process.env.BASE ?? 'http://localhost:8787';
@@ -116,7 +116,7 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const relicsOwned = toBuild(h.s).relics ?? [];
   const stars = h.s.skills.reduce((n, k) => n + (k.star ?? 0), 0);
   check('honest run with relics, branch choice and stars: every day accepted', h.res.every((r) => r.status === 200), `days ${h.res.length} · relics ${relicsOwned.join(',') || '-'} · ★${stars} · ${h.res.find((r) => r.status !== 200)?.err ?? ''}`);
-  check('the server sent the relic offers (picked relics came from them)', relicsOwned.length > 0 && h.res.filter((r) => [4, 7, 10].includes(r.day)).every((r) => !r.offer || r.offer.length === 3), relicsOwned.join(','));
+  check('the server sent the relic offers (picked relics came from them)', relicsOwned.length > 0 && h.res.filter((r) => RELIC_DAYS.includes(r.day)).every((r) => !r.offer || r.offer.length === 3), relicsOwned.join(','));
   // off-offer: on day 4 take a relic the server did not offer
   const off = await play(t + '-o', 'pyro', 4, (day, b, offer, st) => {
     if (day !== 4) return null;
@@ -130,13 +130,15 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   // a relic added on a non-relic day (day 5)
   // skip the relic on day 4, then add one of day 4's offer on day 5 (still within the count cap)
   let offer4: string[] = [];
-  const late = await play(t + '-l', 'pyro', 5, (day, b, offer) => {
-    if (day === 4) { offer4 = offer; return { ...b, relics: [] }; }
-    if (day === 5) return { ...b, relics: [offer4[0]] };
+  // (sim v22: relic days 2, 4, 6 — skip on the first one, add on the day after)
+  const R0 = RELIC_DAYS[0];
+  const late = await play(t + '-l', 'pyro', R0 + 1, (day, b, offer) => {
+    if (day === R0) { offer4 = offer; return { ...b, relics: [] }; }
+    if (day === R0 + 1) return { ...b, relics: [offer4[0]] };
     return null;
   });
-  const d5 = late.res.find((r) => r.day === 5);
-  check('forge: a relic added on a non-relic day (skipped on day 4, added day 5) → 400', late.res.find((r) => r.day === 4)?.status === 200 && d5?.status === 400, `status ${d5?.status} ${d5?.err ?? ''}`);
+  const d5 = late.res.find((r) => r.day === R0 + 1);
+  check(`forge: a relic added on a non-relic day (skipped on day ${R0}, added day ${R0 + 1}) → 400`, late.res.find((r) => r.day === R0)?.status === 200 && d5?.status === 400, `status ${d5?.status} ${d5?.err ?? ''}`);
   // a relic dropped / swapped later
   const swap = await play(t + '-s', 'pyro', 5, (day, b) => (day === 5 && b.relics?.length ? { ...b, relics: [] } : null));
   const d5s = swap.res.find((r) => r.day === 5);

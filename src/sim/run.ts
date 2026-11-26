@@ -265,16 +265,10 @@ export function upgradeOf(s: RunState, o: Offer): SkillInstance | null {
 const upOffer = (k: SkillInstance): Offer => (lvOf(k.v) >= MAX_LV ? { id: k.id, v: k.v, star: (k.star ?? 0) + 1 } : { id: k.id, v: nextVariants(k.v)[0] });
 
 /**
- * Day 1: the hero's fixed shop (same every run). Day 2+: 5 random offers, a mix of new Lv1 skills and upgrades
+ * Every day (sim v22: day 1 too, it was the hero's fixed shop): 5 random offers, a mix of new Lv1 skills and upgrades
  * (one random next variant per owned skill below Lv3; about half the offers are upgrades when there are some).
  */
 function rollShop(s: RunState) {
-  if (s.day <= 1) {
-    // same skills every run; their connect bonuses are rolled per run
-    s.shop = (HEROES_BY_ID[s.hero]?.day1 ?? []).slice(0, SHOP_SIZE).map((id) => ({ id, v: '', bonus: bonusOf(s, id) }));
-    s.locks = [];
-    return;
-  }
   // locked offers stay in their place (unless they no longer apply); the other places are rolled fresh.
   // With no locks this is exactly the old roll, so bots and old runs are unchanged.
   const kept: (Offer | null)[] = Array.from({ length: SHOP_SIZE }, (_, i) => {
@@ -443,7 +437,6 @@ export function wish(s: RunState): WishResult {
 }
 
 export function reroll(s: RunState): string | null {
-  if (s.day <= 1) return 'วันแรกเป็นร้านประจำฮีโร่ สุ่มใหม่ได้ตั้งแต่วันที่ 2';
   if (s.phase === 'relic') return 'เลือกของวิเศษก่อน';
   if (s.gold < REROLL) return 'เงินไม่พอ';
   s.gold -= REROLL;

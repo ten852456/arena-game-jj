@@ -159,8 +159,8 @@ function build(): Entry[] {
 
   // ---------- 6. relics ----------
   add('relics', 'about', L('ของวิเศษประจำรอบ', 'Run relics'),
-    p(L(`วันที่ ${RELIC_DAYS.join(', ')} ก่อนเปิดร้าน เลือก 1 จาก ${RELIC_OFFER} (หรือข้าม) ใช้ได้ทั้งรอบ มีได้ ${MAX_RELICS} ชิ้น · ข้อเสนอมีอย่างน้อย 1 ชิ้นที่เข้ากับสิ่งที่ build คุณทำ`,
-      `On days ${RELIC_DAYS.join(', ')}, before the shop, pick 1 of ${RELIC_OFFER} (or skip); it lasts the whole run, ${MAX_RELICS} at most · each offer has at least 1 that fits what your build does`)) +
+    p(L(`วันที่ ${RELIC_DAYS.join(', ')} ก่อนเปิดร้าน เลือก 1 จาก ${RELIC_OFFER} (หรือข้าม) ใช้ได้ทั้งรอบ มีได้ ${MAX_RELICS} ชิ้น · ข้อเสนอสุ่มล้วน อาจไม่มีชิ้นที่เข้ากับ build คุณ`,
+      `On days ${RELIC_DAYS.join(', ')}, before the shop, pick 1 of ${RELIC_OFFER} (or skip); it lasts the whole run, ${MAX_RELICS} at most · offers are fully random: none may fit your build`)) +
     p(L('<b>"เข้ากับ build คุณ"</b> = มี skill อย่างน้อย 2 ตัวที่ทำสิ่งที่ของชิ้นนั้นต้องการ · ของ ✦ ทั่วไปใช้ได้ทุก build · ของ ☢ เสี่ยงแรงเฉพาะเมื่อประกอบได้ และมีข้อเสีย', '<b>"Fits your build"</b> = at least 2 of your skills do what it needs · ✦ any-build relics work for everyone · ☢ risky relics only pay off with their setup and have a downside')), 'relic fits risky day');
   const NEED_NAME: Record<string, string> = {
     'line:hit': L('skill สายตี', 'hit-line skills'), charge: L('รวมพลัง', 'charge'), exec: L('ประหาร', 'execute'), dodge: L('หลบ', 'dodge'), shield: L('โล่', 'shield'), heal: L('ฟื้น', 'healing'),
@@ -196,7 +196,7 @@ function build(): Entry[] {
       L('การ์ดพรบอกไว้ก่อนซื้อเสมอว่าจะให้อะไร', 'The wish card always says which one you get before you buy'),
     ]), 'wish mark upgrade');
   add('shop', 'reroll', L('🎲 สุ่มใหม่ และ 🔒 ล็อก', '🎲 Reroll and 🔒 lock'),
-    p(L(`สุ่มการ์ดใหม่ ${R.REROLL} เงิน (วันแรกเป็นร้านประจำฮีโร่ สุ่มไม่ได้) · ล็อกการ์ดได้ฟรี การ์ดที่ล็อกอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน`, `New cards for ${R.REROLL} gold (day 1 is your hero's fixed shop) · locking is free: a locked card stays through rerolls and into the next day`)), 'reroll lock');
+    p(L(`สุ่มการ์ดใหม่ ${R.REROLL} เงิน · ล็อกการ์ดได้ฟรี การ์ดที่ล็อกอยู่ต่อแม้สุ่มใหม่หรือข้ามวัน`, `New cards for ${R.REROLL} gold · locking is free: a locked card stays through rerolls and into the next day`)), 'reroll lock');
   add('shop', 'slot', L('＋ ช่อง skill', '＋ Skill slot'),
     p(L(`ช่องถาวรทั้งรอบ ราคา ${R.slotPrice({ slotBuys: 0 } as R.RunState)}, ${R.slotPrice({ slotBuys: 1 } as R.RunState)}, ${R.slotPrice({ slotBuys: 2 } as R.RunState)} … (สูงสุด ${R.MAX_SLOTS} ช่อง) · ซื้อได้เมื่อช่องเต็มแล้วเท่านั้น`, `A slot for the whole run: ${R.slotPrice({ slotBuys: 0 } as R.RunState)}, ${R.slotPrice({ slotBuys: 1 } as R.RunState)}, ${R.slotPrice({ slotBuys: 2 } as R.RunState)} … (up to ${R.MAX_SLOTS}) · only when every slot is filled`)), 'slot');
   add('shop', 'sell', L('ขาย', 'Selling'),

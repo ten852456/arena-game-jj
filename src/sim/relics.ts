@@ -23,7 +23,7 @@ export interface RelicDef {
 }
 
 const pc = (x: number) => Math.round(x * 100);
-export const RELIC_DAYS = [4, 7, 10];
+export const RELIC_DAYS = [2, 4, 6];
 export const MAX_RELICS = RELIC_DAYS.length;
 export const RELIC_OFFER = 3;
 /** free rerolls of a relic offer per relic day (tuning.ts relic.rerolls; 0 = none) */
@@ -33,6 +33,8 @@ export const relicOffersAll = (seed: number, hero: string, day: number, owned: s
   Array.from({ length: 1 + relicRerolls() }, (_, r) => rollRelicOffer(seed, hero, day, owned, skills, r));
 /** a relic of the hero's line is this many times as likely as any other in the offer (after the first one is owned) */
 const LINE_W = 1.3;
+/** sim v22: false = relic offers are fully random (no guaranteed fit, no line weight) */
+const RELIC_LUCK = false;
 
 export const RELICS: RelicDef[] = [
   // ⚔ hit
@@ -185,16 +187,17 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line
   const fits = (id: string) => (skills.length ? relicFitsBuild(id, skills) : relicFits(id, line));
   // lone wolf only from day 7 (sim v20)
-  const pool = RELICS.filter((r) => !owned.includes(r.id) && !first.includes(r.id) && (r.id !== 'lonewolf' || day >= 7));
+  const pool = RELICS.filter((r) => !owned.includes(r.id) && !first.includes(r.id) && (r.id !== 'lonewolf' || day >= RELIC_DAYS[1]));
   const out: string[] = [];
-  // always at least one that fits the build (sim v18: a line it owns skills of, not only the hero's nominal line);
-  // the hero's own line is weighted ×LINE_W in the rest
-  const mine = pool.filter((r) => fits(r.id));
-  if (mine.length) out.push(rng.pick(mine).id);
+  // sim v22: fully random (playtest: harder, truly random). Before: one that fits the build was guaranteed and the
+  // hero's line weighted ×LINE_W; RELIC_LUCK brings that back
+  if (RELIC_LUCK) {
+    const mine = pool.filter((r) => fits(r.id));
+    if (mine.length) out.push(rng.pick(mine).id);
+  }
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
-    // the hero's line weighted ×LINE_W; risky relics ×1.5 (sim v19: lone wolf showed in 26% of runs, sigil never)
-    const w = rest.map((r) => (relicFits(r.id, line) ? LINE_W : 1));
+    const w = rest.map((r) => (RELIC_LUCK && relicFits(r.id, line) ? LINE_W : 1));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;

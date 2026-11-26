@@ -272,10 +272,8 @@ export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?:
   // plausibility for this day, from the run's record (sim v15: exact caps, see runMax / allowances)
   const lvs = skills.map((s) => lvOf(s.v));
   if (day <= 1) {
-    // day 1 is the hero's fixed shop: Lv1 only, only those cards, and at most the day's slots
-    const shop = HEROES_BY_ID[b.hero].day1;
+    // day 1 (sim v22: a random shop, no longer the hero's fixed one): Lv1 only
     if (lvs.some((l) => l > 1)) return 'implausible: upgrades on day 1';
-    if (skills.some((s) => !shop.includes(s.id))) return 'implausible: not in the day-1 shop';
   }
   if (day < LV3_DAY && lvs.some((l) => l >= 3)) return 'implausible: Lv3 before day ' + LV3_DAY;
   if (skills.some((s) => (s.bonus?.length ?? 0) > 2)) return 'implausible: too many bonuses';

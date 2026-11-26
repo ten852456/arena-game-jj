@@ -314,10 +314,10 @@ export const SLIDES_EN: { title: string; body: string[] }[] = [
     ],
   },
   {
-    title: 'Day 1: your hero’s shop',
+    title: 'Day 1: a random shop',
     body: [
-      'On day 1 the shop sells 5 skills that suit your hero (the same every run), and you have <b>7</b> gold: enough for <b>2</b>',
-      'From day 2 the shop offers 5 random skills every day; press <b>Reroll</b> (1 gold) · Found a good card but short on gold? Press <b>🔓 Lock</b> (free): the card stays through rerolls and comes back tomorrow',
+      'From day 1 the shop offers 5 random skills every day (different every run); on day 1 you have <b>7</b> gold: enough for <b>2</b>',
+      'Press <b>Reroll</b> (1 gold) · Found a good card but short on gold? Press <b>🔓 Lock</b> (free): the card stays through rerolls and comes back tomorrow',
       'Point at or tap a shop card, and the skills in your list that would switch on a 🔗 bonus with it light up',
       'You get gold every day, with a bonus for win streaks · Spare gold? Use the <b>🌙 Moon Wish</b>: it upgrades a random skill that is not Lv3 yet (once all are Lv3, it adds a random mark instead)',
     ],
@@ -384,7 +384,6 @@ export const RUN_ERRORS_EN: Record<string, string> = {
   'ไม่มีของวิเศษให้เลือก': 'No relic to pick',
   'ไม่มีของชิ้นนี้': 'No such relic',
   'ทุก skill เต็มขั้นและมีตราแล้ว': 'Every skill is max level and has a mark',
-  'วันแรกเป็นร้านประจำฮีโร่ สุ่มใหม่ได้ตั้งแต่วันที่ 2': 'Day 1 is your hero’s shop: you can reroll from day 2',
   'มี skill นี้แล้ว': 'You already have this skill',
   'ช่อง skill เต็ม ขาย skill หรือซื้อช่องเพิ่มก่อน': 'Skill slots are full: sell a skill or buy a slot first',
   'อัปเกรดนี้ใช้กับ skill ที่มีอยู่ไม่ได้แล้ว': 'This upgrade no longer fits a skill you own',
