@@ -117,6 +117,50 @@ export interface LeaderboardResponse {
   rows: (RunRow & { rank: number; you?: true })[];
 }
 
+/** GET /api/farm and the answer of every farm action (src/server/farm.ts farmView) */
+export type FarmBuilding = 'lumber' | 'mine' | 'shrine';
+export interface FarmJobView { hero: string; ready: number; fill: number; fullIn: number; fits: boolean; fast?: true }
+export interface FarmView {
+  now: number;
+  scale: number;
+  runLimit: boolean;
+  owned: string[];
+  usable: string[];
+  rotation: string[];
+  inRun: string[];
+  res: { wood: number; ore: number; crystal: number };
+  caps: { wood: number; ore: number; crystal: number };
+  lv: Record<FarmBuilding, number>;
+  slots: Record<FarmBuilding, number>;
+  jobs: Record<FarmBuilding, FarmJobView[]>;
+  damaged?: FarmBuilding;
+  tickets: number;
+  free: number;
+  crafted: number;
+  runsLeft: number;
+  stamps: number;
+  stampedToday: boolean;
+  stardust: number;
+  pass: boolean;
+  eggs: { h: number; need: number }[];
+  odds: { id: string; p: number }[];
+  cosmetics: string[];
+  pity: number;
+  headStart: number;
+  newbie: number;
+  monument: { season: string; mine: number; points: number; goal: number; players: number; tiers: number[]; minPersonal: number };
+  stored?: boolean;
+}
+export type FarmOpReq =
+  | { op: 'send'; b: FarmBuilding; hero: string }
+  | { op: 'recall'; hero: string }
+  | { op: 'collect'; b?: FarmBuilding }
+  | { op: 'craft'; n?: number }
+  | { op: 'upgrade'; b: FarmBuilding }
+  | { op: 'unlock'; hero: string }
+  | { op: 'pour'; res: 'wood' | 'ore' | 'crystal'; n: number }
+  | { op: 'repair' };
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, { ...init, headers: { 'content-type': 'application/json' } });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
@@ -135,6 +179,10 @@ export const api = {
   /** record a finished run once (idempotent per runId) and get the ผงดาว reward + totals */
   finishRun: (body: FinishRunRequest) => req<FinishRunResponse>('/api/run/finish', { method: 'POST', body: JSON.stringify(body) }),
   profile: (playerId: string) => req<ProfileResponse>('/api/profile?' + qs({ playerId })),
+  farm: (playerId: string) => req<FarmView>('/api/farm?' + qs({ playerId })),
+  /** one visit: ops applied in order, all-or-nothing */
+  farmOps: (playerId: string, ops: FarmOpReq[]) => req<FarmView>('/api/farm', { method: 'POST', body: JSON.stringify({ playerId, ops }) }),
+  hatch: (playerId: string) => req<{ got: string; farm: FarmView }>('/api/farm/hatch', { method: 'POST', body: JSON.stringify({ playerId }) }),
   leaderboard: (period: 'season' | 'day' = 'season', playerId?: string) =>
     req<LeaderboardResponse>('/api/leaderboard?' + qs({ period, playerId })),
 };

@@ -42,6 +42,7 @@ import { askAfterRun } from './feedback';
 import { icon } from './icons';
 import { track } from './track';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
+import * as FU from './farmUI';
 
 export interface Stage {
   town: TownScene;
@@ -560,8 +561,16 @@ function render() {
   }
 }
 
+/** the farm is fetched once per town visit (a failed fetch is not retried in a loop) */
+let farmAsked = false;
 function renderTown() {
   stage.town.setSelected(selected);
+  if (!farmAsked) {
+    farmAsked = true;
+    void FU.loadFarm(() => {
+      if (view === 'town') render();
+    });
+  }
   const b = selected ? BUILDING_BY_ID[selected] : null;
   const chips = BUILDINGS.map(
     (x) => `<button class="chip ${x.id === selected ? 'on' : ''}" data-a="goto" data-i="${x.id}">${x.name}${x.open ? '' : ` <small class="muted">${L('เร็วๆ นี้', 'soon')}</small>`}</button>`,
@@ -569,7 +578,9 @@ function renderTown() {
   let detail = '';
   if (b) {
     let body = `<p>${b.desc}</p>`;
+    if (b.id === 'lumber' || b.id === 'mine' || b.id === 'shrine') body += FU.landmarkHTML(b.id, (h) => heroArt(h, 'small'));
     if (b.id === 'arena') {
+      body += FU.arenaGateHTML();
       if (runActive()) {
         const r = run!;
         body += L(
@@ -583,9 +594,11 @@ function renderTown() {
         done ? `<button data-a="lastResults">${L('ผลรอบล่าสุด', 'Last run results')}</button>` : ''
       }<button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
     } else if (b.id === 'board') {
+      body += FU.monumentHTML();
       body += `<div class="actions"><button class="primary" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
       body += `<div class="actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button><button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
+      body += FU.eggHTML() + FU.hallFarmHTML();
       body += `<p class="muted">${L(
         `ฮีโร่ทั้งหมด ${HEROES.length} ตัว · แต่ละรอบสุ่มให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย`,
         `${HEROES.length} heroes · each run offers ${R.HERO_CHOICES} at random, from different styles`,
@@ -608,13 +621,15 @@ function renderTown() {
       'ลากซ้ายขวาเพื่อเดินดูเมือง (ใช้ล้อเมาส์หรือปุ่มลูกศรก็ได้) · แตะอาคารเพื่อดูรายละเอียด · แตะแผนที่ย่อด้านล่างเพื่อกระโดดไปจุดนั้น',
       'Drag left and right to walk around town (the mouse wheel or arrow keys work too) · tap a building for details · tap the mini map below to jump there',
     )}</p>
+    ${FU.farmBarHTML()}
     <div class="chips">${chips}</div>
     ${detail}
   </section>`;
 }
 
 function renderTitle() {
-  const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed())).map((id) => HEROES_BY_ID[id]);
+  const offered = runActive() ? [] : R.heroChoices((nextSeed ??= randSeed()), R.HERO_CHOICES, FU.usablePool() ?? undefined).map((id) => HEROES_BY_ID[id]);
+  const noRuns = !runActive() && FU.outOfRuns();
   if (!previewHero || (offered.length && !offered.some((h) => h.id === previewHero))) previewHero = offered[0]?.id ?? run?.hero ?? null;
   if (scene && previewHero) scene.idle(previewHero, runActive() ? R.lookOf(run!) : R.lookFor(nextSeed!, previewHero));
   const resume = runActive()
@@ -639,6 +654,7 @@ function renderTitle() {
       <label class="name">${L('ชื่อของคุณ', 'Your name')} <input id="name" maxlength="24" value="${esc(fetchStore(NAME_KEY) ?? '')}" placeholder="${L('ผู้เล่น', 'Player')}"></label>
     </div>
     ${resume}
+    ${noRuns ? `<p class="toast">${L('วันนี้รอบฟรีหมดแล้ว · ทำตั๋วจากไม้และแร่ได้ที่สนามประลองในเมือง หรือรอพรุ่งนี้ (รอบที่ไม่ได้ใช้สะสมได้)', 'No free runs left today · craft a ticket from wood and ore at the arena in town, or come back tomorrow (unused runs bank up)')} <button data-a="town">${L('ไปเมือง', 'Go to town')}</button></p>` : ''}
     ${runActive() ? '' : `<p class="pick-note">${L(
       `รอบนี้มีให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย · แตะการ์ดเพื่อเริ่ม (ดูฮีโร่ทั้งหมดได้ที่หอฮีโร่ในเมือง)`,
       `This run offers ${R.HERO_CHOICES} heroes from different styles · tap a card to start (see every hero in the Hero Hall in town)`,
@@ -1209,6 +1225,7 @@ function claimReward(r: R.RunState) {
     rating: r.rating, conceded: !!r.conceded, won: r.phase === 'won', build: R.toBuild(r),
   }).then((res) => {
     pendingClaim.delete(r.id);
+    farmAsked = false; // eggs from this run, stardust for unlocks
     if (res) {
       // the stardust sound plays when the reveal shows the reward (runEndFx)
       M.rememberClaim(r.id, res);
@@ -1932,6 +1949,16 @@ function onClick(ev: Event) {
   }
   if (!el || (el as HTMLButtonElement).disabled) return;
   const a = el.dataset.a!;
+  // farm buttons talk to the server, then redraw with the answer
+  if (a.startsWith('farm')) {
+    (el as HTMLButtonElement).disabled = true;
+    void FU.farmAction(a, el).then((msg) => {
+      if (msg) toast = msg;
+      if (a === 'farmCollect') sfx('reroll');
+      render();
+    });
+    return;
+  }
   // the tree window closes from its button or a click on the dark backdrop, not from clicks inside it
   if ((a === 'treeClose' || a === 'branchClose') && el.classList.contains('modal') && ev.target !== el) return;
   const arg = el.dataset.i ?? '';
@@ -1941,7 +1968,11 @@ function onClick(ev: Event) {
     case 'start':
       {
         const seed = nextSeed ?? randSeed();
-        if (!R.heroChoices(seed).includes(arg)) break; // only an offered hero can start a run
+        if (!R.heroChoices(seed, R.HERO_CHOICES, FU.usablePool() ?? undefined).includes(arg)) break; // only an offered hero can start a run
+        if (FU.outOfRuns()) {
+          toast = L('รอบฟรีหมดแล้ว: ทำตั๋วที่สนามประลองในเมือง', 'No runs left: craft a ticket at the arena in town');
+          break;
+        }
         nextSeed = null;
         run = R.newRun(arg, seed, uid());
         track('run_start', { hero: arg });
@@ -1962,6 +1993,7 @@ function onClick(ev: Event) {
       break;
     case 'town':
       if (run && (run.phase === 'won' || run.phase === 'dead')) run = null;
+      farmAsked = false; // fresh farm numbers on every visit
       view = 'town';
       break;
     case 'goto':
@@ -2300,6 +2332,10 @@ export function startUI(st: Stage) {
     if (view === 'town') render();
   };
   $panel.addEventListener('click', onClick);
+  // farm countdowns ("full in 3h 20m") tick between visits
+  setInterval(() => {
+    if (view === 'town') FU.tickFarm($panel);
+  }, 20_000);
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && treeOpen) {
       treeOpen = null;

@@ -69,7 +69,7 @@ export class TownScene extends Phaser.Scene {
 
     for (const b of BUILDINGS) {
       const img = this.add
-        .image(b.x, GROUND + 4, 'bld_' + b.id)
+        .image(b.x, GROUND + 4, this.textures.exists('bld_' + b.id) ? 'bld_' + b.id : 'bld_tower') // new landmark before its art
         .setOrigin(0.5, 1)
         .setScale(1 / R)
         .setDepth(2)

@@ -67,9 +67,10 @@ export const HERO_CHOICES = 3;
  * The heroes a run may start with: `n` different heroes (so `n` different lines), rolled from the seed.
  * Same seed → same choices, so the server can check the pick later (Phase 2).
  */
-export function heroChoices(seed: number, n = HERO_CHOICES): string[] {
+export function heroChoices(seed: number, n = HERO_CHOICES, from?: string[]): string[] {
   const rng = new Rng(hashSeed(seed, 'heroes'));
-  const pool = HEROES.map((h) => h.id);
+  // the farm (docs/FARM.md): only heroes the player owns or today's free rotation
+  const pool = HEROES.map((h) => h.id).filter((h) => !from || from.includes(h));
   const out: string[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(rng.int(pool.length), 1)[0]);
   return out;

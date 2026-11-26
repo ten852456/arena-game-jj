@@ -263,13 +263,15 @@ export const MARKS_EN: Record<string, { name: string; desc: string }> = {
 export const BUILDINGS_EN: Record<string, { name: string; desc: string; future?: string }> = {
   mine: {
     name: 'Mine',
-    desc: 'Heroes who are not fighting dig here for ore and rare crystals',
-    future: 'Send idle heroes to mine resources for building the town, unlocking heroes and bot rounds',
+    desc: 'Send idle heroes to dig ore; it keeps coming while the game is closed · ore makes tickets, town upgrades and monument gifts',
+  },
+  shrine: {
+    name: 'Shrine',
+    desc: 'Idle heroes pray here for moon crystals (one every 12 h) · crystals unlock heroes and high upgrades',
   },
   lumber: {
     name: 'Lumber Yard',
-    desc: 'Wood for building and growing the town',
-    future: 'Idle heroes go out to cut wood, collecting it even while the game is closed',
+    desc: 'Send idle heroes to cut wood; it keeps coming while the game is closed · wood makes tickets, town upgrades and monument gifts',
   },
   tower: {
     name: 'Magic Tower',
