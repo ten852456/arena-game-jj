@@ -124,7 +124,7 @@ export interface LeaderboardResponse {
 
 /** GET /api/farm and the answer of every farm action (src/server/farm.ts farmView) */
 export type FarmBuilding = 'lumber' | 'mine' | 'shrine';
-export interface FarmJobView { hero: string; ready: number; fill: number; fullIn: number; fits: boolean; fast?: true }
+export interface FarmJobView { hero: string; ready: number; fill: number; fullIn: number; fits: boolean; mastery: number; fast?: true }
 export interface FarmView {
   now: number;
   scale: number;

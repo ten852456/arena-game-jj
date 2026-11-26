@@ -35,8 +35,9 @@ const veteran = () => {
   check('mine 1.5 h: knight (shield, fits the mine) makes 4 × 1.25 × 1.5 = 7 ore', f.res.ore === 7, `ore ${f.res.ore}`);
   F.collect(f, 'mine', T0 + 3 * H);
   check('the part-unit carries over: 3 h total = 15 ore', f.res.ore === 15, `ore ${f.res.ore}`);
+  const rate = F.rateOf(f, 'mine', 'knight', T0 + 40 * H); // includes the mastery the knight earned so far
   F.collect(f, 'mine', T0 + 40 * H);
-  check('storage stops at 12 h: +60 at most', f.res.ore === 15 + 60, `ore ${f.res.ore}`);
+  check('storage stops at 12 h of output', f.res.ore === 15 + Math.floor(12 * rate + 1e-9), `ore ${f.res.ore}, rate ${rate.toFixed(2)}/h`);
   check('send the same hero twice → error', op(f, { op: 'send', b: 'lumber', hero: 'knight' }, T0) === 'hero already working');
   check('a second hero at Lv1 (1 slot) → no free slot', op(f, { op: 'send', b: 'mine', hero: 'pyro' }, T0) === 'no free slot');
   check('a hero in a run cannot work', F.applyOp(f, { op: 'send', b: 'lumber', hero: 'pyro' }, { ...ctx(T0), inRun: ['pyro'] }) === 'hero is in a run');
@@ -121,6 +122,28 @@ const veteran = () => {
   check('upgrade lumber to Lv2', typeof op(f, { op: 'upgrade', b: 'lumber' }, T0) !== 'string' && f.lv.lumber === 2 && F.slotsOf(f, 'lumber') === 2);
   f.pass = true;
   check('the pass adds a work slot', F.slotsOf(f, 'lumber') === 3);
+}
+
+// incremental layer: endless levels past Lv5, worker mastery
+{
+  const f = veteran();
+  f.lv.lumber = 5;
+  f.res.wood = 1e6;
+  f.res.ore = 1e6;
+  f.res.crystal = 100;
+  check('Lv5 → Lv6 costs 400 wood + 267 ore', JSON.stringify(F.upgradeCost(5)) === JSON.stringify({ wood: 400, ore: 267 }));
+  for (let i = 0; i < 20; i++) op(f, { op: 'upgrade', b: 'lumber' }, T0);
+  check('levels never end: Lv25 reached', f.lv.lumber === 25, `lv ${f.lv.lumber}`);
+  check('Lv15 = ×(1 + 0.15·10)·2 = ×5 output; Lv25 = ×4·4 = ×16', F.levelMult(15) === 5 && F.levelMult(25) === 16);
+  check('slots and storage stay at the Lv5 values', F.slotsOf(f, 'lumber') === F.SLOTS[4] && F.storageMs(f, 'lumber') === F.STORAGE_H[4] * H);
+  check('the warehouse grows with the level', F.capOf(f, 'wood') > 16 * 6 * 4 * 72);
+  check('mastery curve: Lv50 = 10,133 XP, Lv99 = 1,303,443 XP', F.XP_TABLE[50] === 10133 && F.XP_TABLE[99] === 1303443);
+  const g = veteran();
+  op(g, { op: 'send', b: 'mine', hero: 'knight' }, T0);
+  F.collect(g, 'mine', T0 + 12 * H);
+  const ml = F.masteryOf(g, 'knight', 'mine');
+  check('12 work-hours = 1,200 mastery XP: early levels come fast (28)', Math.round(g.mastery![F.masteryKey('knight', 'mine')]) === 1200 && ml === 28, `lv ${ml}`);
+  check('mastery raises output +1% per level above 1', Math.abs(F.rateOf(g, 'mine', 'knight', T0 + 40 * 24 * H) / (4 * 1.25) - (1 + 0.01 * (ml - 1))) < 1e-9);
 }
 
 // eggs: hatch by work-hours, odds shown, no duplicates, pity

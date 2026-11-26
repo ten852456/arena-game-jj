@@ -26,7 +26,55 @@ export const AFFINITY: Record<Building, Line[]> = {
 };
 
 /** Per building level (index = level − 1). */
-export const MAX_LV = 5;
+/** Lv1–Lv5 come from the tables below (slots, storage). Past Lv5 levels never end (the incremental layer). */
+export const TABLE_LV = 5;
+/** @deprecated kept for old callers: the last table level */
+export const MAX_LV = TABLE_LV;
+/**
+ * Incremental layer (owner, 2026-11-26; formulas in docs/FARM.md "Incremental layer"): past Lv5 each level adds
+ * +15% output and every 10th level doubles it; a level costs 400 wood × 1.13^(n−6) (ore 2/3 of that, crystal one
+ * per 10 levels). Slots and storage stay at the Lv5 values.
+ */
+export const LEVEL_STEP = 0.15;
+export const LEVEL_COST_BASE = 400;
+export const LEVEL_COST_GROWTH = 1.13;
+export const levelMult = (lv: number) => {
+  const k = Math.max(0, lv - TABLE_LV);
+  return (1 + LEVEL_STEP * k) * 2 ** Math.floor(k / 10);
+};
+/** what it costs to go from `lv` to lv + 1 */
+export function upgradeCost(lv: number): Partial<Record<Res | 'stardust', number>> {
+  if (lv < TABLE_LV) return UPGRADE_COST[lv - 1];
+  const n = lv + 1;
+  const wood = Math.round(LEVEL_COST_BASE * LEVEL_COST_GROWTH ** (n - 6));
+  const crystal = Math.floor(n / 10);
+  return { wood, ore: Math.round((wood * 2) / 3), ...(crystal ? { crystal } : {}) };
+}
+
+/**
+ * Worker mastery (owner, 2026-11-26): each hero earns mastery at each landmark from its work-hours, levels 1–99,
+ * +1% output there per level. XP curve: the RuneScape / Melvor curve divided by 10, 100 XP per work-hour
+ * (level 50 ≈ 100 work-hours, 99 ≈ 13,000).
+ */
+export const MASTERY_XP_PER_HOUR = 100;
+export const MASTERY_MAX = 99;
+export const MASTERY_STEP = 0.01;
+/** XP_TABLE[l] = XP needed for level l (l = 1..99) */
+export const XP_TABLE: number[] = (() => {
+  const t = [0, 0];
+  let acc = 0;
+  for (let l = 2; l <= MASTERY_MAX; l++) {
+    acc += Math.floor(l - 1 + 300 * 2 ** ((l - 1) / 7));
+    t.push(Math.floor(acc / 4 / 10));
+  }
+  return t;
+})();
+export function masteryLevel(xp: number): number {
+  let l = 1;
+  while (l < MASTERY_MAX && xp >= XP_TABLE.at(l + 1)!) l++;
+  return l;
+}
+export const masteryKey = (hero: string, b: Building) => `${hero}@${b}`;
 export const SLOTS = [1, 2, 3, 3, 4];
 /**
  * hours a job's storage holds before it stops. 12 h at Lv1 covers the night gap of a 2-collects-a-day player (8 h
@@ -35,10 +83,12 @@ export const SLOTS = [1, 2, 3, 3, 4];
 export const STORAGE_H = [12, 14, 16, 20, 24];
 /** cost to go from level i+1 to i+2 */
 export const UPGRADE_COST: Partial<Record<Res | 'stardust', number>>[] = [
+  // farm-sim (v0.0.1): the old Lv4/Lv5 costs (1,200 / 3,000 wood) were a wall above the warehouse cap and far above
+  // the endless curve that starts at 400; these lead smoothly into it
   { wood: 60, ore: 40 }, // Lv2 is cheap on purpose: the day-1 hook (the first shift pays for it)
-  { wood: 250, ore: 150, crystal: 2 }, // ~day 3
-  { wood: 1200, ore: 800, crystal: 6 }, // ~day 8
-  { wood: 3000, ore: 2000, crystal: 15 }, // ~day 15
+  { wood: 150, ore: 100, crystal: 1 },
+  { wood: 250, ore: 170, crystal: 2 },
+  { wood: 330, ore: 220, crystal: 3 },
 ];
 /** the battle pass adds one work slot at every landmark (production only: supplies and tickets stay capped) */
 export const PASS_SLOTS = 1;
@@ -165,6 +215,8 @@ export interface FarmState {
   /** stamp card (total days, not consecutive) and the last day stamped */
   stamps: number;
   stampDay?: string;
+  /** mastery XP per `hero@building` (masteryKey) */
+  mastery?: Record<string, number>;
   /** a landmark damaged by last season's calamity: half output until repaired */
   damaged?: Building;
   createdAt: number;
@@ -234,17 +286,23 @@ export function stamp(f: FarmState, now: number): boolean {
   return true;
 }
 
-export const slotsOf = (f: FarmState, b: Building) => SLOTS[f.lv[b] - 1] + (f.pass ? PASS_SLOTS : 0);
+const tableIdx = (lv: number) => Math.min(lv, TABLE_LV) - 1;
+export const slotsOf = (f: FarmState, b: Building) => SLOTS[tableIdx(f.lv[b])] + (f.pass ? PASS_SLOTS : 0);
+export const masteryOf = (f: FarmState, hero: string, b: Building) => masteryLevel(f.mastery?.[masteryKey(hero, b)] ?? 0);
 export const fits = (hero: string, b: Building) => AFFINITY[b].includes(HEROES_BY_ID[hero]?.line as Line);
 export const newbieBoost = (f: FarmState, now: number) =>
   NEWBIE_BOOST * Math.max(0, 1 - (now - (f.createdAt ?? 0)) / (NEWBIE_DAYS * 24 * H));
 export const rateOf = (f: FarmState, b: Building, hero: string, now: number) =>
-  RATE[RES_OF[b]] * (fits(hero, b) ? 1 + AFFINITY_BONUS : 1) * (1 + headStart(f, now) + newbieBoost(f, now)) * (f.damaged === b ? 0.5 : 1);
-export const storageMs = (f: FarmState, b: Building) => STORAGE_H[f.lv[b] - 1] * H;
+  RATE[RES_OF[b]] * (fits(hero, b) ? 1 + AFFINITY_BONUS : 1) * levelMult(f.lv[b]) * (1 + MASTERY_STEP * (masteryOf(f, hero, b) - 1)) *
+  (1 + headStart(f, now) + newbieBoost(f, now)) * (f.damaged === b ? 0.5 : 1);
+export const storageMs = (f: FarmState, b: Building) => STORAGE_H[tableIdx(f.lv[b])] * H;
 /** the most of a resource the warehouse holds: WAREHOUSE_H of the landmark's full output at its level */
 export function capOf(f: FarmState, r: Res): number {
   const b = BUILDING_IDS.find((x) => RES_OF[x] === r)!;
-  return Math.max(10, Math.ceil(RATE[r] * (1 + AFFINITY_BONUS) * slotsOf(f, b) * WAREHOUSE_H));
+  const output = RATE[r] * (1 + AFFINITY_BONUS) * levelMult(f.lv[b]) * slotsOf(f, b) * WAREHOUSE_H;
+  // never below 1.5× what the next level of any landmark costs in this resource (farm-sim: a cap under the cost is a wall)
+  const need = Math.max(...BUILDING_IDS.map((x) => upgradeCost(f.lv[x])[r] ?? 0)) * 1.5;
+  return Math.max(10, Math.ceil(Math.max(output, need)));
 }
 
 /** The fading head start from last season's monument (0 after HEADSTART_DAYS). */
@@ -283,6 +341,8 @@ export function collect(f: FarmState, b: Building, now: number, scale = 1, rng?:
     // work-hours hatch eggs: only the game hours this collect used up (a part-unit carried over counts next time)
     const hours = lost ? p.used / H : p.rate > 0 ? take / p.rate : 0;
     hatchHours(f, hours);
+    const mk = masteryKey(j.hero, b);
+    (f.mastery ??= {})[mk] = Math.min(XP_TABLE.at(MASTERY_MAX)!, (f.mastery[mk] ?? 0) + hours * MASTERY_XP_PER_HOUR);
     if (rng) rollFinds(f, b, hours, rng);
     if (lost) j.since = now; // full storage or a full warehouse: the rest is lost
     else j.since += p.rate > 0 ? ((take / p.rate) * H) / p.speed : 0; // keep the part-unit already made
@@ -315,6 +375,26 @@ export function rollFinds(f: FarmState, b: Building, hours: number, rng: () => n
 function hatchHours(f: FarmState, h: number, bonus = false) {
   const egg = f.eggs[0];
   if (egg) egg.h = Math.min(egg.need, egg.h + h * (f.pass && !bonus ? EGG_PASS_SPEED : 1));
+}
+
+/**
+ * "Fill jobs": every idle hero to a free slot, spreading them so every landmark works (farm-sim: filling one
+ * landmark first left the shrine empty, no crystal, upgrades stuck). Each hero goes to the free landmark with the
+ * fewest workers, a landmark its line fits winning a tie. Returns the send ops.
+ */
+export function fillPlan(f: FarmState, idle: string[]): { b: Building; hero: string }[] {
+  const count: Record<Building, number> = { lumber: f.jobs.lumber.length, mine: f.jobs.mine.length, shrine: f.jobs.shrine.length };
+  const out: { b: Building; hero: string }[] = [];
+  // heroes that fit somewhere first, so they get their landmark
+  const order = [...idle].sort((a, c) => Number(BUILDING_IDS.some((x) => fits(c, x))) - Number(BUILDING_IDS.some((x) => fits(a, x))));
+  for (const hero of order) {
+    const free = BUILDING_IDS.filter((x) => count[x] < slotsOf(f, x));
+    if (!free.length) break;
+    free.sort((x, y) => count[x] - count[y] || Number(fits(hero, y)) - Number(fits(hero, x)));
+    count[free[0]]++;
+    out.push({ b: free[0], hero });
+  }
+  return out;
 }
 
 export function heroBusy(f: FarmState, hero: string): Building | null {
@@ -475,8 +555,8 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
     }
     case 'upgrade': {
       if (!isB(o.b)) return 'bad op';
-      if (f.lv[o.b] >= MAX_LV) return 'max level';
-      const cost = UPGRADE_COST[f.lv[o.b] - 1];
+      if (f.lv[o.b] >= 999) return 'max level';
+      const cost = upgradeCost(f.lv[o.b]);
       if (!canPay(f, c.stardust, cost)) return 'not enough resources';
       collect(f, o.b, c.now, c.scale, c.rng); // jobs keep what they made at the old rate
       pay(f, cost);

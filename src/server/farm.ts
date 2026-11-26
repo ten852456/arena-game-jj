@@ -80,7 +80,7 @@ export function farmView(f: F.FarmState, playerId: string, now: number) {
         const p = F.pending(f, b, j, now, FARM_TIME_SCALE);
         // ms of real time until this job's storage is full (0 = full now)
         const fullIn = p.full ? 0 : Math.ceil((F.storageMs(f, b) - p.used) / p.speed);
-        return { hero: j.hero, ready: p.n, fill: Math.round(p.fill * 1000) / 1000, fullIn, fits: F.fits(j.hero, b), ...(j.fast ? { fast: true } : {}) };
+        return { hero: j.hero, ready: p.n, fill: Math.round(p.fill * 1000) / 1000, fullIn, fits: F.fits(j.hero, b), mastery: F.masteryOf(f, j.hero, b), ...(j.fast ? { fast: true } : {}) };
       }),
     ]),
   );

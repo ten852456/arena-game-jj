@@ -108,7 +108,7 @@ export function landmarkHTML(b: FarmBuilding, heroArt: (id: string) => string): 
     .map((j) => {
       const fullAt = gotAt + j.fullIn;
       return `<div class="fjob${j.fill >= 1 ? ' full' : ''}">${heroArt(j.hero)}<div class="fjob-main">
-        <b>${esc(name(j.hero))}</b>${j.fits ? ` <span class="ffit" title="${L('ถนัดงานนี้ +25%', 'fits this job +25%')}">★ +25%</span>` : ''}${j.fast ? ` <span class="ffit">${L('กะแรกเร็วพิเศษ!', 'speedy first shift!')}</span>` : ''}
+        <b>${esc(name(j.hero))}</b> <span class="fmastery" title="${L('ความชำนาญงานนี้: +1% ต่อเลเวล', 'Mastery at this job: +1% per level')}">${L('ชำนาญ', 'mastery')} ${j.mastery}</span>${j.fits ? ` <span class="ffit" title="${L('ถนัดงานนี้ +25%', 'fits this job +25%')}">★ +25%</span>` : ''}${j.fast ? ` <span class="ffit">${L('กะแรกเร็วพิเศษ!', 'speedy first shift!')}</span>` : ''}
         <div class="fbar"><i style="width:${Math.round(j.fill * 100)}%"></i></div>
         <small>${resIcon(res)} ${j.ready} · <span data-full-at="${fullAt}">${fmtLeft(j.fullIn)}</span></small></div>
         <button class="ghost small" data-a="farmRecall" data-i="${j.hero}">${L('เรียกกลับ', 'Recall')}</button></div>`;
@@ -125,19 +125,24 @@ export function landmarkHTML(b: FarmBuilding, heroArt: (id: string) => string): 
     : free > 0
       ? `<p class="muted">${L('ไม่มีฮีโร่ว่าง', 'No free hero')}</p>`
       : '';
-  const cost = lv < F.MAX_LV ? F.UPGRADE_COST[lv - 1] : null;
-  const next = lv < F.MAX_LV ? L(`Lv${lv + 1}: ${F.SLOTS[lv]} ช่อง · เก็บได้ ${F.STORAGE_H[lv]} ชม.`, `Lv${lv + 1}: ${F.SLOTS[lv]} slots · holds ${F.STORAGE_H[lv]} h`) : '';
+  // levels never end (incremental layer): Lv2–5 add slots and storage, Lv6+ add +15% output, ×2 every 10th level
+  const cost = F.upgradeCost(lv);
+  const multNow = F.levelMult(lv);
+  const multNext = F.levelMult(lv + 1);
+  const next = lv < F.TABLE_LV
+    ? L(`Lv${lv + 1}: ${F.SLOTS[lv]} ช่อง · เก็บได้ ${F.STORAGE_H[lv]} ชม.`, `Lv${lv + 1}: ${F.SLOTS[lv]} slots · holds ${F.STORAGE_H[lv]} h`)
+    : L(`Lv${lv + 1}: ผลผลิต ×${multNext.toFixed(2)} (ตอนนี้ ×${multNow.toFixed(2)})${(lv + 1 - F.TABLE_LV) % 10 === 0 ? ' · เลเวลสำคัญ: ×2!' : ''}`, `Lv${lv + 1}: output ×${multNext.toFixed(2)} (now ×${multNow.toFixed(2)})${(lv + 1 - F.TABLE_LV) % 10 === 0 ? ' · milestone: ×2!' : ''}`);
   const dmg = f.damaged === b
     ? `<p class="fwarn">${L('ภัยพิบัติจากซีซั่นก่อน: ผลิตได้ครึ่งเดียวจนกว่าจะซ่อม', "Last season's calamity: half output until repaired")} <button class="small" data-a="farmRepair">${L('ซ่อม', 'Repair')} ${costHTML(F.REPAIR_COST, have(f))}</button></p>`
     : '';
   return `<div class="flandmark">
-    <p class="muted">Lv${lv} · ${L(`${f.slots[b]} ช่อง · เก็บได้ ${F.STORAGE_H[lv - 1]} ชม. · ถนัด`, `${f.slots[b]} slot${f.slots[b] > 1 ? 's' : ''} · holds ${F.STORAGE_H[lv - 1]} h · suits`)} ${fitsLines} · ${L('คลัง', 'warehouse')} ${f.res[res]}/${f.caps[res]}</p>
+    <p class="muted">Lv${lv}${multNow > 1 ? ` · ×${multNow.toFixed(2)}` : ''} · ${L(`${f.slots[b]} ช่อง · เก็บได้ ${F.STORAGE_H[Math.min(lv, F.TABLE_LV) - 1]} ชม. · ถนัด`, `${f.slots[b]} slot${f.slots[b] > 1 ? 's' : ''} · holds ${F.STORAGE_H[Math.min(lv, F.TABLE_LV) - 1]} h · suits`)} ${fitsLines} · ${L('คลัง', 'warehouse')} ${f.res[res]}/${f.caps[res]}</p>
     ${dmg}${rows}${send}
     <div class="actions">
       <button class="primary" data-a="farmCollect" data-i="${b}" ${ready ? '' : 'disabled'}>${L('เก็บ', 'Collect')} ${resIcon(res)} ${ready}</button>
-      ${cost ? `<button data-a="farmUpgrade" data-i="${b}" title="${next}">${L('อัปเกรด', 'Upgrade')} ${costHTML(cost, have(f))}</button>` : `<span class="muted">${L('เลเวลสูงสุด', 'Max level')}</span>`}
+      <button data-a="farmUpgrade" data-i="${b}" title="${next}">${L('อัปเกรด', 'Upgrade')} ${costHTML(cost, have(f))}</button>
     </div>
-    ${cost ? `<p class="muted small">${next}</p>` : ''}
+    <p class="muted small">${next}</p>
   </div>`;
 }
 
@@ -278,19 +283,10 @@ export async function farmAction(a: string, el: HTMLElement): Promise<string> {
 export function fillOps(): FarmOpReq[] {
   const f = farm;
   if (!f) return [];
-  const free: Record<FarmBuilding, number> = { lumber: 0, mine: 0, shrine: 0 };
-  for (const b of F.BUILDING_IDS) free[b] = f.slots[b] - f.jobs[b].length;
   const idle = f.usable.filter((h) => !f.inRun.includes(h) && !F.BUILDING_IDS.some((x) => f.jobs[x].some((j) => j.hero === h)));
-  const ops: FarmOpReq[] = [];
-  // heroes that fit somewhere go first, to the landmark they fit
-  idle.sort((a, b) => Number(F.BUILDING_IDS.some((x) => F.fits(b, x))) - Number(F.BUILDING_IDS.some((x) => F.fits(a, x))));
-  for (const h of idle) {
-    const b = F.BUILDING_IDS.find((x) => free[x] > 0 && F.fits(h, x)) ?? F.BUILDING_IDS.find((x) => free[x] > 0);
-    if (!b) break;
-    free[b]--;
-    ops.push({ op: 'send', b, hero: h });
-  }
-  return ops;
+  // the same spread as the farm sim: every landmark works (sim/farm.ts fillPlan)
+  const plan = F.fillPlan({ ...(F.newFarm(Date.now())), lv: f.lv, pass: f.pass, jobs: f.jobs as unknown as F.FarmState['jobs'] }, idle);
+  return plan.map((p) => ({ op: 'send' as const, b: p.b, hero: p.hero }));
 }
 export const readyTotal = () => {
   const f = farm;

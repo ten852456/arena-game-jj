@@ -70,3 +70,4 @@ button.small { padding: 3px 10px; font-size: 0.88em; }
 .ver-chip { font-size: 12px; padding: 2px 9px; opacity: 0.85; }
 .ver-banner { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 14px; background: var(--m-moon); color: var(--ink); font-weight: 700; box-shadow: 0 5px 0 var(--ink-deep); }
 .free-tag { color: var(--m-mint); font-weight: 800; margin-left: 2px; }
+.fmastery { font-size: 0.78em; padding: 0 6px; border-radius: 999px; background: rgba(212, 200, 247, 0.18); color: var(--m-lav); }
