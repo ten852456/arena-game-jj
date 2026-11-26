@@ -27,7 +27,7 @@ branch on the fork and its OWN Railway service. Never push this branch to `ten85
    `npm run security` (all ✔) · `dist/chain.json` has the direct TEE URL.
    Browser e2e (`scripts/e2e/e2e.mjs`): 93/110. The 17 failures are known: the script does not handle the day-4
    relic pick and some layout checks; the live list branch (062ada7) scores 86/110 with the same failures.
-2. Push to a new fork branch, e.g. `git push origin mochi-list-v2-onchain:ten852456/mochi-onchain` (name to confirm).
+2. Pushed 2026-11-26: `ten852456/mochi-onchain` (c2c9cfd). Later pushes: `git push origin mochi-list-v2-onchain:ten852456/mochi-onchain` (= deploy once the service exists).
 3. Railway (project `arena-ab-test`): New service → GitHub repo `ten852456/arena-game-jj`, branch from step 2,
    builder = Dockerfile. Attach a volume at `/app/data`. Variables: none required (`PORT` is set by Railway).
    Generate a domain, e.g. `mochi-onchain-production.up.railway.app`.
