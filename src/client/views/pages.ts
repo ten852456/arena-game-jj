@@ -12,9 +12,9 @@ import { HEROES_BY_ID } from '../../sim/heroes';
 import { LINE_NAME, lineLabel } from '../../sim/skills';
 import { LINES } from '../../sim/types';
 import { noteText, runBestText, type FinishRunResult, type FightNote, type Leaderboard, type Period, type Profile, type RunSummary, type Scout } from './meta';
+import { esc } from '../html';
 
-export const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export { esc } from '../html';
 
 const heroName = (id: string) => HEROES_BY_ID[id]?.name ?? id;
 const replayHref = (id: string) => `?replay=${encodeURIComponent(id)}`;

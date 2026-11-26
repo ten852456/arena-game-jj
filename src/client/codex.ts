@@ -14,7 +14,7 @@ import { EPIC, KEYWORDS, LINE_ICON, LINE_NAME, RARE, ROLE_NAME, SKILLS, SKILL_LI
 import { T } from '../sim/tuning';
 import { LINES, type Line, type Mark } from '../sim/types';
 import { skillIcon } from './assets';
-import { MARK_MAX, LONE_MAX, esc, groupLabel, relicMedal, relicRisk, starGain } from './depthUI';
+import { MARK_MAX, esc, groupLabel, relicMedal, relicRisk, starGain } from './depthUI';
 import { onLang } from './lang';
 import { simpleText } from './skillText';
 

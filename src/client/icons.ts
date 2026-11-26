@@ -1,3 +1,4 @@
+import { esc } from './html';
 /**
  * Mochi Moon icon set: small hand-drawn SVG icons in the chibi style of the heroes (thick plum outline,
  * flat pastel fill, a soft white highlight, sleepy little faces on some). Used instead of emoji.
@@ -169,7 +170,6 @@ export const IMG: Partial<Record<string, string>> = {
 
 const has = (n: string | undefined) => !!n && (!!ICONS[n] || !!IMG[n]);
 const resolve = (name: string) => (has(name) ? name : has(ALIAS[name]) ? ALIAS[name] : 'sparkle');
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /** An icon as inline SVG (or <img> when IMG has art for it). size in px (default 1em: follows the text). label → role=img with that name. */
 export function icon(name: string, size?: number, label?: string): string {

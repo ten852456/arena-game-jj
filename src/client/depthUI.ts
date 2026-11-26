@@ -14,9 +14,9 @@ import { starPower } from '../sim/combat';
 import type { Mark, SkillInstance } from '../sim/types';
 import { LINE_COLORS, skillIcon } from './assets';
 import { DEPTH_FILES, artOr } from './depthArt';
+import { esc } from './html';
 
-export const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export { esc } from './html';
 const pc = (x: number) => Math.round(x * 100);
 const th = () => getLang() !== 'en';
 

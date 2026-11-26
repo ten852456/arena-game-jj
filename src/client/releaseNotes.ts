@@ -2,6 +2,7 @@
 // the server answers GET /api/version with the version it is running, so an open tab learns about a deploy.
 // Add a NOTES entry (newest first) with every version bump: it is what players see in "What's new".
 import { L, getLang } from '../i18n';
+import { esc } from './html';
 
 declare const __APP_VERSION__: string;
 export const VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0';
@@ -50,7 +51,6 @@ export const newer = (a: string, b: string) => {
   return false;
 };
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export function openNotes(onlySince?: string) {
   const list = NOTES.filter((n) => !onlySince || newer(n.v, onlySince));

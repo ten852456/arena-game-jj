@@ -9,11 +9,8 @@ import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type
 import { startRunGate, type RunStart } from './farm';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, relicOfferCheck, serverRelicOffer, spendCheck, validateBuild, type RunRecord } from './validate';
 
-export interface Res {
-  status: number;
-  json: unknown;
-}
-const bad = (error: string): Res => ({ status: 400, json: { error } });
+import { bad, type Res } from './http';
+export type { Res } from './http';
 
 const expected = (ra: number, rb: number) => 1 / (1 + Math.pow(10, (rb - ra) / 400));
 

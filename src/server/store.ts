@@ -1,6 +1,7 @@
 // JSON-file store (data/db.json). Fine for one Railway replica; swap for Postgres/Redis later.
 // Every collection has a cap so the file cannot grow without bound, and a failed write never stops the server.
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
@@ -221,20 +222,62 @@ export function enforceCaps() {
   if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
 }
 
+/**
+ * Saving (perf pass, v0.0.1): the db is one JSON file, and at the caps it is ~17 MB, whose stringify blocks the
+ * server for ~70 ms (npm run bench). Saves were debounced to 300 ms, so steady play paid that several times a
+ * second. Now: at most one save every SAVE_EVERY_MS, the file is written without blocking, and the server saves
+ * once more on shutdown (a Railway deploy sends SIGTERM) so nothing in the window is lost.
+ */
+const SAVE_EVERY_MS = Math.max(50, Number(process.env.SAVE_EVERY_MS ?? 2000) || 2000);
 let saveTimer: NodeJS.Timeout | null = null;
+let writing = false;
+let dirtyWhileWriting = false;
+
+function snapshot(): string {
+  enforceCaps();
+  return JSON.stringify(db);
+}
+
+async function flush() {
+  saveTimer = null;
+  if (writing) {
+    dirtyWhileWriting = true;
+    return;
+  }
+  writing = true;
+  // a failed write (no volume, no permission, disk full) must not take the server down: log it and keep playing
+  try {
+    const json = snapshot();
+    mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = DB_FILE + '.tmp';
+    await writeFile(tmp, json);
+    renameSync(tmp, DB_FILE); // a crash mid-write never leaves a half-written db.json
+  } catch (e) {
+    console.error('could not save', DB_FILE, (e as Error).message);
+  } finally {
+    writing = false;
+    if (dirtyWhileWriting) {
+      dirtyWhileWriting = false;
+      save();
+    }
+  }
+}
+
 export function save() {
   if (saveTimer) return;
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    enforceCaps();
-    // a failed write (no volume, no permission, disk full) must not take the server down: log it and keep playing
-    try {
-      mkdirSync(DATA_DIR, { recursive: true });
-      const tmp = DB_FILE + '.tmp';
-      writeFileSync(tmp, JSON.stringify(db));
-      renameSync(tmp, DB_FILE); // a crash mid-write never leaves a half-written db.json
-    } catch (e) {
-      console.error('could not save', DB_FILE, (e as Error).message);
-    }
-  }, 300);
+  saveTimer = setTimeout(() => void flush(), SAVE_EVERY_MS);
+}
+
+/** Write now, synchronously (shutdown). */
+export function saveNow() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = null;
+  try {
+    mkdirSync(DATA_DIR, { recursive: true });
+    const tmp = DB_FILE + '.tmp';
+    writeFileSync(tmp, snapshot());
+    renameSync(tmp, DB_FILE);
+  } catch (e) {
+    console.error('could not save', DB_FILE, (e as Error).message);
+  }
 }

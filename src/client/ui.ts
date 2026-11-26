@@ -1,6 +1,6 @@
 import { randomAiBuild } from '../sim/bot';
-import { SIM_VERSION, cdTicks, simulate, starPower } from '../sim/combat';
-import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultProgressText, ultRuleText } from '../sim/heroes';
+import { SIM_VERSION, cdTicks, simulate } from '../sim/combat';
+import { HEROES, HEROES_BY_ID, inLine, lineAffinity, ultGain, ultLevel, ultRuleText } from '../sim/heroes';
 import { explain, reflectEvents, skillDamage, type Explanation } from '../sim/explain';
 import { explainView } from './explainView';
 import { fatigueStart } from '../sim/combat';
@@ -11,15 +11,14 @@ import * as RF from './runEndFx';
 import { cardBlob, saveCard, shareCard, type CardData } from './shareCard';
 import { hashSeed } from '../sim/rng';
 import * as R from '../sim/run';
-import { GROUP_ICON, RELICS_BY_ID, relicFitsBuild, relicHint, relicText } from '../sim/relics';
-import { T } from '../sim/tuning';
+import { RELICS_BY_ID } from '../sim/relics';
 import { HASTE_BONUS, POWER_BONUS, activeBonuses, bonusTotals, bonusValue, matches } from '../sim/links';
 import { KEYWORDS, LINE_ICON, LINE_NAME, ROLE_NAME, SKILLS, SKILL_ROLE, TIME_CAP_S, worthOf, chipsOf, lineLabel, lvOf, nextVariants, nodeOf, epicAfter, rarityOf, upgradeDiff, type Keyword, type Variant } from '../sim/skills';
 import type { BlockStat, Bonus, Build, CombatEvent, CombatResult, Mark, SkillInstance } from '../sim/types';
 import { renderChibi, rollLook } from './chibi';
 import { api, type FightResponse, type ReplayRecord } from './api';
 import { SPEED_KEY, type CombatScene } from './combatScene';
-import { BUILDINGS, BUILDING_BY_ID } from './townData';
+import { BUILDING_BY_ID } from './townData';
 import type { TownScene } from './townScene';
 import { dragging, initDrag } from './shop/drag';
 import { resetHints, showHints } from './shop/hints';
@@ -27,9 +26,9 @@ import { TIMELINE_SECS, timelineHTML } from './shop/timeline';
 import { bindChainResize, chainDirs, chainPanelHTML, defaultSlot, dragPreview, gapHTML, offerPairsHTML, partnerChip, resetChains, syncChains, type Dir } from './shop/chains';
 import { COIN as COIN_I, coinFly, coinHTML, goldPillHTML, hudAfterRender, hudHTML, popRow } from './shop/hud';
 import { initShopDrag, shopDragging } from './shop/shopdrag';
-import { clearPick, goToPick, picked, setPick } from './shop/pick';
+import { clearPick, goToPick, picked } from './shop/pick';
 import { heroVoice, music, setVoiceHero, sfx, voice } from './audio';
-import { IMAGES, skillIcon, lineIcon } from './assets';
+import { skillIcon } from './assets';
 import { L, getLang } from '../i18n';
 import { MARKS_EN } from './i18n_en';
 import { chipText, displayName, onLang, runErr, withLang } from './lang';
@@ -43,9 +42,10 @@ import { icon } from './icons';
 import { track } from './track';
 import { reducedMotion } from './fx';
 import { radarHTML } from './heroStats';
-import { coachDone, coachHTML as coachLine, seen as coachSeen, type CoachKey } from './shop/coach';
+import { coachDone, coachHTML as coachLine, type CoachKey } from './shop/coach';
 import { saveBuildCard, type BuildCardImage } from './shareCard';
 import * as FU from './farmUI';
+import { esc } from './html';
 
 export interface Stage {
   town: TownScene;
@@ -245,8 +245,6 @@ function uniqUltTag(unique: boolean | string | undefined, tag: string) {
 function ultProgressHTML(r: R.RunState) {
   return D.ultChecklistHTML(r.hero, R.toBuild(r).skills);
 }
-const esc = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
 const randSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
 
@@ -657,9 +655,6 @@ function renderTown() {
     });
   }
   const b = selected ? BUILDING_BY_ID[selected] : null;
-  const chips = BUILDINGS.map(
-    (x) => `<button class="chip ${x.id === selected ? 'on' : ''}" data-a="goto" data-i="${x.id}">${x.name}${x.open ? '' : ` <small class="muted">${L('เร็วๆ นี้', 'soon')}</small>`}</button>`,
-  ).join('');
   let detail = '';
   if (b) {
     let body = `<p>${b.desc}</p>`;
@@ -702,7 +697,6 @@ function renderTown() {
       <div class="town-box bcard"><div class="town-box-h"><h3>${b.name}${b.open ? '' : ` <span class="mark">${L('เร็วๆ นี้', 'soon')}</span>`}</h3>
       <button class="ghost small" data-a="townClose">${L('ปิด ✕', 'Close ✕')}</button></div>${body}</div></div>`;
   }
-  void chips;
   // the whole town on screen; one slim bar over it: resources + collect all + fill jobs + battle
   return `<div class="town-hud glass">${FU.farmBarHTML()}${townActionsHTML()}</div>
   ${stageSlot(false, 'town-slot')}

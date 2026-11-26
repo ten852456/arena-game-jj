@@ -51,7 +51,6 @@ export class TownScene extends Phaser.Scene {
   private badges = new Map<string, Phaser.GameObjects.Container>();
   private ring!: Phaser.GameObjects.Graphics;
   private nest!: Phaser.GameObjects.Image;
-  private selected: string | null = null;
 
   constructor() {
     super({ key: 'town', active: true });
@@ -180,7 +179,6 @@ export class TownScene extends Phaser.Scene {
   }
 
   setSelected(id: string | null) {
-    this.selected = id;
     this.ring.clear();
     const img = id ? this.images.get(id) : null;
     if (!img) return;

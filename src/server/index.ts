@@ -2,11 +2,12 @@
 // tiered AI fallback), runs the fight, keeps fights so replays can be shared by link, and records finished runs
 // for the stardust reward, profiles and leaderboards. API: docs/API.md. Storage: ./store.ts (data/db.json).
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { serveStatic } from './static';
 import { handleFight, handleScout, type Res } from './fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
-import { ROOT, db } from './store';
+import { ROOT, db, saveNow } from './store';
 import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './farm';
 import { adminEconomy } from './ledger';
 import { WIN_TARGET } from '../sim/run';
@@ -48,22 +49,6 @@ function readBody(req: IncomingMessage): Promise<unknown> {
       }
     });
   });
-}
-
-const MIME: Record<string, string> = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
-  '.png': 'image/png', '.svg': 'image/svg+xml', '.json': 'application/json',
-  '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ogg': 'audio/ogg', '.mp3': 'audio/mpeg',
-};
-function serveStatic(url: string, res: ServerResponse) {
-  if (!existsSync(DIST)) return send(res, 404, { error: 'not found (run `npm run build` or use `npm run dev`)' });
-  let p = normalize(join(DIST, decodeURIComponent(url.split('?')[0])));
-  if (!p.startsWith(DIST)) return send(res, 403, { error: 'forbidden' });
-  // /play and /admin are their own pages (dist/play/index.html …); anything else unknown gets the landing page
-  if (existsSync(p) && statSync(p).isDirectory() && existsSync(join(p, 'index.html'))) p = join(p, 'index.html');
-  else if (!existsSync(p) || statSync(p).isDirectory()) p = join(DIST, 'index.html');
-  res.writeHead(200, { 'content-type': MIME[extname(p)] ?? 'application/octet-stream' });
-  createReadStream(p).pipe(res);
 }
 
 /**
@@ -150,8 +135,15 @@ createServer(async (req, res) => {
       return f ? send(res, 200, f) : send(res, 404, { error: 'replay not found' });
     }
     if (url.pathname.startsWith('/api/')) return send(res, 404, { error: 'not found' });
-    serveStatic(req.url ?? '/', res);
+    await serveStatic(DIST, req, res, req.url ?? '/', () => send(res, 404, { error: 'not found (run `npm run build` or use `npm run dev`)' }));
   } catch (e) {
     send(res, 400, { error: String((e as Error).message ?? e) });
   }
 }).listen(PORT, () => console.log(`arena server on http://localhost:${PORT}`));
+
+// a deploy or Ctrl+C: write the db once more before going (saves are throttled, see store.ts)
+for (const sig of ['SIGTERM', 'SIGINT'] as const)
+  process.on(sig, () => {
+    saveNow();
+    process.exit(0);
+  });

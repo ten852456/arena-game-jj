@@ -16,6 +16,7 @@
     "security": "tsx scripts/security-check.ts",
     "farm-api": "tsx scripts/farm-api-check.ts",
     "farm-sim": "tsx scripts/farm-sim.ts",
+    "bench": "tsx scripts/bench-server.ts",
     "runs": "tsx scripts/runs.ts",
     "sim": "tsx scripts/sim.ts",
     "exploit": "tsx scripts/exploit.ts",

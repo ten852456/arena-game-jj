@@ -2,13 +2,13 @@
 // Overview (players, funnel, retention, heroes from real runs), feedback inbox, waitlist (+ CSV), recent runs, banner.
 import { HEROES_EN } from '../i18n_en';
 import './admin.css';
+import { esc } from '../html';
 
 const KEY = 'mochi.admin';
 const root = document.getElementById('admin')!;
 let token = sessionStorage.getItem(KEY) ?? '';
 let tab: 'overview' | 'economy' | 'feedback' | 'waitlist' | 'runs' | 'announce' = 'overview';
 
-const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const when = (t: number) => new Date(t).toLocaleString();
 const pct = (a: number, b: number) => (b ? Math.round((100 * a) / b) + '%' : '–');
 

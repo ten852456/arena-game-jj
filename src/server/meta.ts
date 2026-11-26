@@ -6,13 +6,12 @@ import { lineOf } from './match';
 import { SEASON, db, save, type FinishedRun, type Player } from './store';
 import { MAX_DAY, cleanId, cleanName, intIn, relicOfferCheck, spendCheck, validateBuild } from './validate';
 import { recordOf } from './fight';
-import type { Res } from './fight';
+import { bad, type Res } from './http';
 import { allow } from './site';
 import { onRunFinished } from './farm';
 import { ledgerAdd } from './ledger';
-import { stardustMult } from '../sim/farm';
+import { bkDay, stardustMult } from '../sim/farm';
 
-const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
 /** ผงดาว by wins (index = wins); a flawless 8–0 run adds FLAWLESS_BONUS. */
 /** ผงดาว by wins, index 0..WIN_TARGET (10). Keep one entry per possible win count. */
@@ -123,7 +122,8 @@ export function handleProfile(q: URLSearchParams): Res {
 }
 
 /** Calendar day in Thailand (UTC+7), e.g. "2026-11-19". */
-export const bangkokDate = (t: number) => new Date(t + 7 * 3600_000).toISOString().slice(0, 10);
+/** Calendar day in Thailand (UTC+7): the same day key as the farm's free tickets and caps */
+export const bangkokDate = bkDay;
 
 export function handleLeaderboard(q: URLSearchParams): Res {
   const period = q.get('period') ?? 'season';

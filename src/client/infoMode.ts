@@ -18,12 +18,12 @@ import { onLang } from './lang';
 import { targetIcon, targetWords } from './shop/chains';
 import { detailBonus, detailLines, simpleBonus, simpleParts, simpleText } from './skillText';
 import './infomode.css';
+import { esc } from './html';
 
 type K = Pick<SkillInstance, 'id' | 'v' | 'mark'>;
 
 const KEY = 'mochi.infoDetail';
 const HINT_KEY = 'mochi.altHint';
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 const read = (k: string) => {
   try {

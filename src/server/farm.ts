@@ -9,7 +9,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { cleanId, cleanName } from './validate';
 import { FEED_CAP, SEASON, db, save, type MonumentRec } from './store';
 import { allow } from './site';
-import type { Res } from './fight';
+import { bad, type Res } from './http';
 import { ledgerAdd } from './ledger';
 
 export const FARM_TIME_SCALE = Math.max(1, Math.min(3600, Number(process.env.FARM_TIME_SCALE ?? 1) || 1));
@@ -25,7 +25,6 @@ const MAX_OPS = 32;
 const NEW_TOWNS_PER_IP = 30;
 const newTownAllowed = (ip: string) => allow('farmnew:' + ip, NEW_TOWNS_PER_IP, 3_600_000);
 
-const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
 function knownBeforeLaunch(playerId: string): boolean {
   const p = db.players[playerId];

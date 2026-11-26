@@ -9,6 +9,7 @@ import { WIN_TARGET } from '../sim/run';
 import { openFeedback } from './feedback';
 import { track, visitorId } from './track';
 import './landing.css';
+import { esc } from './html';
 
 // old share links (/?replay=…, /?chain=1 …) belong to the game: send them there untouched
 if (location.search) location.replace('/play' + location.search + location.hash);
@@ -22,7 +23,6 @@ let lang: Lang = (() => {
   }
 })();
 const t = (en: string, th: string) => (lang === 'th' ? th : en);
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
 const IMG = '/assets/img/site/';
 const LINKS = {

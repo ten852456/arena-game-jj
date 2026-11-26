@@ -6,7 +6,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeF
 import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
 import { DATA_DIR, db } from './store';
-import type { Res } from './fight';
+import { bad, type Res } from './http';
 import { HEROES_BY_ID } from '../sim/heroes';
 
 const SITE_FILE = join(DATA_DIR, 'site.json');
@@ -132,7 +132,6 @@ function admFail(key: string, now: number) {
 }
 
 // ---------- helpers ----------
-const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 const str = (x: unknown, max: number) => (typeof x === 'string' ? x.trim().slice(0, max) : '');
 const lang = (x: unknown): 'th' | 'en' => (x === 'th' ? 'th' : 'en');
 /** a short, case-insensitive key: one person, one entry */

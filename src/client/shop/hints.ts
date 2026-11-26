@@ -10,6 +10,7 @@ import type { Offer, RunState } from '../../sim/run';
 import { upgradeOf } from '../../sim/run';
 import type { Bonus } from '../../sim/types';
 import { showPutHere } from './chains';
+import { esc } from '../html';
 
 const ICON: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '✦', trigger: '⚡' };
 
@@ -32,7 +33,6 @@ export function hintsFor(r: RunState, o: Offer): Map<number, string[]> {
   return out;
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 let shown = -1;
 

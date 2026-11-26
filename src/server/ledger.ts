@@ -3,7 +3,7 @@
 // a burn/mint ratio of 0.8–1.0. Kept in db.json, last LEDGER_DAYS days.
 import { bkDay } from '../sim/farm';
 import { db, save } from './store';
-import type { Res } from './fight';
+import type { Res } from './http';
 
 export type LedgerRes = 'wood' | 'ore' | 'crystal' | 'stardust' | 'tickets';
 const LEDGER_DAYS = 120;

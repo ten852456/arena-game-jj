@@ -9,6 +9,7 @@ import { TPS, simulate } from '../../sim/combat';
 import { SKILLS, nodeOf } from '../../sim/skills';
 import type { Build, SkillInstance } from '../../sim/types';
 import { skillIcon } from '../assets';
+import { esc } from '../html';
 
 export const TIMELINE_SECS = 12;
 /** a hero id with no passive, and a late day so the dummy's HP lasts well past the preview */
@@ -37,7 +38,6 @@ export function firesOf(b: Build, secs = TIMELINE_SECS): Fire[] {
   return out;
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const sec = (t: number) => (t / TPS).toFixed(1);
 
 /** Lanes (one per skill, list order) with a dot per fire, an axis, then the first fires in order. */

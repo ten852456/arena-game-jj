@@ -5,6 +5,7 @@
 import { L, getLang } from '../i18n';
 import { onLang, setLang } from './lang';
 import { SLIDES, TUTORIAL_KEY, type Slide } from './tutorialSlides';
+import { esc } from './html';
 
 let open = false;
 /** re-draws the open tutorial (language change) */
@@ -26,7 +27,6 @@ function markSeen() {
   }
 }
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 function slideHTML(s: Slide) {
   return `<div class="tut-art" aria-hidden="true">${s.art}</div>

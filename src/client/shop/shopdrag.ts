@@ -12,6 +12,7 @@ import { priceOf, upgradeOf, type RunState } from '../../sim/run';
 import { skillIcon } from '../assets';
 import { ghostLi, insertAtRow } from './chains';
 import { COIN } from './hud';
+import { esc } from '../html';
 
 export interface ShopDragHooks {
   run(): RunState | null;
@@ -28,7 +29,6 @@ export let shopDragging = false;
 
 const START_PX = 6;
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 export function initShopDrag(root: HTMLElement, hooks: ShopDragHooks) {
   root.addEventListener('pointerdown', (ev) => {

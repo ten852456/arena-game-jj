@@ -15,13 +15,13 @@ import { slotsOf, type Offer, type RunState } from '../../sim/run';
 import type { Bonus, SkillInstance } from '../../sim/types';
 import { LINE_COLORS, lineIcon, skillIcon, type LineIconId } from '../assets';
 import { linkChime } from '../audio';
+import { esc } from '../html';
 
 /** where the partner sits: above, below, both, or not placed yet (either works) */
 export type Dir = 'up' | 'down' | 'both' | 'any';
 
 export const BONUS_GLYPH: Record<Bonus['e'], string> = { dmg: '⚔', shield: '⛨', haste: '»', power: '✦', trigger: '⚡' };
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const isArch = (t: string) => t.startsWith('line:');

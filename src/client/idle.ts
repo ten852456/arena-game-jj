@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ensureChibiExtras } from './chibi';
 import { onPerf } from './perf';
 import { ARENA_LANTERNS, ARENA_STANDS, FOLK_COLORS, R, makeArenaLifeArt } from './townArt';
+import { reducedMotion } from './fx';
 
 /**
  * Life in the combat arena while nothing is fighting (shop, hero pick, menus):
@@ -13,7 +14,6 @@ import { ARENA_LANTERNS, ARENA_STANDS, FOLK_COLORS, R, makeArenaLifeArt } from '
  * prefers-reduced-motion: everything stands still (no petals, no hops), only the lantern glow stays.
  */
 
-const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 const rand = (a: number, b: number) => a + Math.random() * (b - a);
 
 const PETALS = 12;

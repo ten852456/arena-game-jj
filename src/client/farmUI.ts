@@ -8,6 +8,7 @@ import { HEROES, HEROES_BY_ID } from '../sim/heroes';
 import { LINE_ICON } from '../sim/skills';
 import * as F from '../sim/farm';
 import * as M from './views/meta';
+import { esc } from './html';
 
 export let farm: FarmView | null = null;
 export let feed: FeedRow[] = [];
@@ -15,7 +16,6 @@ export let feed: FeedRow[] = [];
 let gotAt = 0;
 let loading: Promise<void> | null = null;
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const name = (h: string) => HEROES_BY_ID[h]?.name ?? h;
 
 /** Fetch the farm (the town calls this on entry and the timer refreshes it). */

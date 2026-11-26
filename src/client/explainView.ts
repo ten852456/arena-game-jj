@@ -8,8 +8,8 @@ import { SKILLS } from '../sim/skills';
 import type { Explanation, LineKind } from '../sim/explain';
 import { SKILL_ICON_IDS, skillIcon } from './assets';
 import './explain.css';
+import { esc } from './html';
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const KIND_ICON: Record<LineKind, string> = {

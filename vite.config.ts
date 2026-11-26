@@ -19,6 +19,11 @@ export default defineConfig({
     outDir: '../../dist',
     emptyOutDir: true,
     // three pages: the landing page (/), the game (/play) and the back office (/admin)
-    rollupOptions: { input: { main: page('index.html'), play: page('play/index.html'), admin: page('admin/index.html') } },
+    rollupOptions: {
+      input: { main: page('index.html'), play: page('play/index.html'), admin: page('admin/index.html') },
+      // perf pass: Phaser (~1.2 MB) in its own file, so a deploy only re-downloads the game's own code
+      output: { manualChunks: (id) => (id.includes('node_modules/phaser') ? 'phaser' : undefined) },
+    },
+    chunkSizeWarningLimit: 1600,
   },
 });
