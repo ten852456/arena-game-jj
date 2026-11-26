@@ -6,7 +6,7 @@ import { HEROES_BY_ID } from '../sim/heroes';
 import { LINES, type Build, type Line } from '../sim/types';
 import { aiBuildFor, avoidMirror, candidates, lineOf, closest, streakOf, tierFor, tutorialOpponent } from './match';
 import { PER_DAY_CAP, db, save, type BotTier, type FightRec, type RunTrack, type Snapshot } from './store';
-import { startRunGate } from './farm';
+import { startRunGate, type RunStart } from './farm';
 import { MAX_DAY, cleanId, cleanName, cleanRating, intIn, relicOfferCheck, serverRelicOffer, spendCheck, validateBuild, type RunRecord } from './validate';
 
 export interface Res {
@@ -158,9 +158,12 @@ export function handleFight(body: any, ip = '?'): Res {
   const tutorial = body?.tutorial === true && day === 1 && !prev && !Object.hasOwn(db.tutorials, playerId);
   // Farm (docs/FARM.md): day 1 of a new run uses a free run or a ticket, and the hero must be owned or in today's
   // rotation. The tutorial run is free. Nothing is spent when the gate says no.
+  // Arena modes: Casual is free, Ranked costs a ticket (body.mode === 'ranked'; anything else is casual).
+  let start: RunStart | null = null;
   if (!prev && day === 1) {
-    const gate = startRunGate(playerId, build.hero, tutorial, ip);
-    if (gate) return gate;
+    const gate = startRunGate(playerId, build.hero, tutorial, ip, body?.mode === 'ranked' ? 'ranked' : 'casual');
+    if ('status' in gate) return gate;
+    start = gate;
   }
   // Matchmaking: same day, closest rating, widening window, never the same opponent twice in a run. No counter-picking.
   const { pool, window } = tutorial ? { pool: [] as Snapshot[], window: null } : candidates({ day, rating, runId, playerId, track: prev });
@@ -200,6 +203,11 @@ export function handleFight(body: any, ip = '?'): Res {
   // What this run has met and how each day went (no repeats, streak for the AI tier, verified wins at run end).
   const track = trackOf(runId, playerId, name);
   track.hero ??= build.hero;
+  if (start) {
+    track.mode = start.mode;
+    if (start.shiny) track.shiny = true;
+    if (start.casualNth) track.casualNth = start.casualNth;
+  }
   track.build = build;
   track.spent = way.spent;
   track.paidSlots = way.paidSlots;
@@ -235,7 +243,7 @@ export function handleFight(body: any, ip = '?'): Res {
   const existing = db.snapshots.findIndex((s) => s.runId === runId && s.day === day);
   const snap: Snapshot = {
     id: randomUUID(), runId, ...(playerId ? { playerId } : {}), name, day, build, rating: newRating, v: SIM_VERSION,
-    defWins: 0, defLosses: 0, createdAt: Date.now(),
+    defWins: 0, defLosses: 0, createdAt: Date.now(), ...(track.shiny ? { shiny: true as const } : {}),
   };
   if (existing >= 0) db.snapshots[existing] = snap;
   else db.snapshots.push(snap);
@@ -261,8 +269,9 @@ export function handleFight(body: any, ip = '?'): Res {
       name,
       opponent: {
         name: opp.name, ai: opp.ai, ...(opp.tier ? { tier: opp.tier } : {}),
-        line: lineOf(opp.build), build: opp.build, rating: opp.rating,
+        line: lineOf(opp.build), build: opp.build, rating: opp.rating, ...(opp.snap?.shiny ? { shiny: true } : {}),
       },
+      mode: track.mode ?? 'ranked', ...(track.shiny ? { shiny: true } : {}),
       match: { window, pool: pool.length },
       ...(tutorial ? { tutorial: true } : {}),
       // hidden marks this fight revealed: list index → kind (the server's roll)

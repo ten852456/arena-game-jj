@@ -6,8 +6,8 @@
 import { randomInt } from 'node:crypto';
 import * as F from '../sim/farm';
 import { HEROES_BY_ID } from '../sim/heroes';
-import { cleanId } from './validate';
-import { SEASON, db, save, type MonumentRec } from './store';
+import { cleanId, cleanName } from './validate';
+import { FEED_CAP, SEASON, db, save, type MonumentRec } from './store';
 import { allow } from './site';
 import type { Res } from './fight';
 
@@ -93,6 +93,8 @@ export function farmView(f: F.FarmState, playerId: string, now: number) {
     ...(f.damaged ? { damaged: f.damaged } : {}),
     tickets: f.tickets, free: f.free, crafted: f.crafted, runsLeft: F.runsLeft(f), stamps: f.stamps, stampedToday: f.stampDay === F.bkDay(now),
     stardust: db.players[playerId]?.stardust ?? 0, pass: !!f.pass,
+    finds: f.finds ?? {}, shinies: f.shinies ?? [], findRolls: f.findRolls ?? 0,
+    casualRuns: f.casualRuns ?? 0, casualTicket: !!f.casualTicket,
     eggs: f.eggs.map((e) => ({ h: Math.round(e.h * 10) / 10, need: e.need })), odds: F.eggOdds(f), cosmetics: f.cosmetics, pity: f.pity,
     headStart: Math.round(F.headStart(f, now) * 1000) / 1000,
     newbie: Math.round(F.newbieBoost(f, now) * 100) / 100,
@@ -125,7 +127,7 @@ export function handleFarmOps(body: any, ip: string): Res {
   const copy: F.FarmState = structuredClone(f);
   const player = db.players[playerId];
   let stardust = player?.stardust ?? 0;
-  const ctx: F.OpCtx = { now, scale: FARM_TIME_SCALE, stardust, inRun: heroesInRun(playerId), season: SEASON };
+  const ctx: F.OpCtx = { now, scale: FARM_TIME_SCALE, stardust, inRun: heroesInRun(playerId), season: SEASON, rng };
   const poured0 = copy.pouredSeason === SEASON ? copy.poured : 0;
   for (let i = 0; i < ops.length; i++) {
     const r = F.applyOp(copy, ops[i], { ...ctx, stardust });
@@ -148,9 +150,13 @@ export function handleFarmOps(body: any, ip: string): Res {
     m.points += poured;
   }
   copy.updatedAt = now;
+  // lucky finds of this visit: to the town feed, and back to the client once
+  const found = copy.newFinds ?? [];
+  delete copy.newFinds;
+  for (const id of found) feedPush(playerId, 'find', id);
   db.farms[playerId] = copy;
   save();
-  return { status: 200, json: farmView(copy, playerId, now) };
+  return { status: 200, json: { ...farmView(copy, playerId, now), ...(found.length ? { found } : {}) } };
 }
 
 export function handleHatch(body: any): Res {
@@ -169,39 +175,65 @@ export function handleHatch(body: any): Res {
   return { status: 200, json: { got: r.got, farm: farmView(f, playerId, now) } };
 }
 
+const rng = () => randomInt(0, 2 ** 31) / 2 ** 31;
+
+/** Town feed: rare finds and moonlit heroes (newest last). A find is a "world first" the first time this season. */
+export function feedPush(playerId: string, kind: 'find' | 'shiny', id: string) {
+  const name = db.players[playerId]?.name ?? cleanName('', playerId);
+  const first = kind === 'find' && !db.feed.some((x) => x.kind === 'find' && x.id === id && x.season === SEASON);
+  db.feed.push({ t: Date.now(), name, kind, id, season: SEASON, ...(first ? { first: true as const } : {}) });
+  if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
+}
+
+export function handleFeed(): Res {
+  return { status: 200, json: { rows: db.feed.slice(-30).reverse() } };
+}
+
+/** what a new run gets from the gate */
+export interface RunStart { mode: F.Mode; shiny: boolean; casualNth?: number }
+
 /**
- * Day 1 of a new run (the server first sees it then): the hero must be one this player may use today, and the run
- * costs a free run or a ticket. A hero at work is called back (it keeps what it made). The tutorial run is free.
- * Returns an error response or null.
+ * Day 1 of a new run (the server first sees it then). Casual is free; Ranked costs a ticket (the day's free one
+ * first). The hero must be one this player may use today. A hero at work is called back (it keeps what it made).
+ * The run rolls once for a moonlit (shiny) hero. The tutorial run is free. Returns an error response or the start.
  */
-export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string): Res | null {
+export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string, mode: F.Mode): Res | RunStart {
   if (!HEROES_BY_ID[hero]) return bad('bad hero');
+  const shiny = rng() < F.SHINY_ODDS;
   // gate off: nothing to count, so no town record is made here
-  if (!RUN_LIMIT) return null;
+  if (!RUN_LIMIT) return { mode, shiny };
   const now = Date.now();
   // same per-IP limit as POST /api/farm before a new town record is made (security review: sibling-path parity)
   if (!Object.hasOwn(db.farms, playerId) && !newTownAllowed(ip)) return bad('too many new players from here, try again later', 429);
   const f = farmOf(playerId, now)!;
-  if (RUN_LIMIT && !F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
-  if (RUN_LIMIT && !tutorial) {
+  if (!F.usableHeroes(f, now).includes(hero)) return { status: 409, json: { error: 'hero locked: unlock it in the Hero Hall or wait for the free rotation', code: 'hero_locked' } };
+  let casualNth: number | undefined;
+  if (mode === 'ranked' && !tutorial) {
     const err = F.spendRun(f, now);
-    if (err) return { status: 409, json: { error: err, code: 'no_runs' } };
+    if (err) return { status: 409, json: { error: err, code: 'no_tickets' } };
+  } else {
+    F.startCasual(f, now);
+    casualNth = f.casualRuns;
   }
   const at = F.heroBusy(f, hero);
   if (at) {
     F.collect(f, at, now, FARM_TIME_SCALE);
     f.jobs[at] = f.jobs[at].filter((j) => j.hero !== hero);
   }
+  if (shiny) {
+    if (!(f.shinies ??= []).includes(hero)) f.shinies.push(hero);
+    feedPush(playerId, 'shiny', hero);
+  }
   save();
-  return null;
+  return { mode, shiny, ...(casualNth ? { casualNth } : {}) };
 }
 
-/** A run ended: eggs for its win marks. */
-export function onRunFinished(playerId: string, wins: number): number {
+/** A run ended: eggs and tickets by mode. */
+export function onRunFinished(playerId: string, wins: number, mode: F.Mode): { eggs: number; ticket: boolean } {
   const now = Date.now();
   const f = farmOf(playerId, now, false);
-  if (!f) return 0;
-  const n = F.eggsFor(f, wins, now);
-  if (n) save();
-  return n;
+  if (!f) return { eggs: 0, ticket: false };
+  const r = F.runEnded(f, mode, wins, now);
+  if (r.eggs || r.ticket) save();
+  return r;
 }

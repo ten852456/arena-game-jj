@@ -36,6 +36,8 @@ export interface Snapshot {
   defWins: number;
   defLosses: number;
   createdAt: number;
+  /** the build's hero is moonlit (shiny): opponents see it */
+  shiny?: true;
 }
 export interface FightRec {
   id: string;
@@ -71,6 +73,12 @@ export interface RunTrack {
   opps: string[];
   /** day → 1 won, 0 lost/draw (a retried fight on the same day overwrites) */
   days: Record<string, 0 | 1 | 2>;
+  /** 'casual' (free) or 'ranked' (a ticket); runs from before the modes have none and count as ranked */
+  mode?: 'casual' | 'ranked';
+  /** this run's hero is moonlit (shiny): rolled by the server when the run started */
+  shiny?: true;
+  /** which casual run of the day this was (stardust tapers) */
+  casualNth?: number;
   /** day 1 was the guided-tutorial fight (a training bot): it counts for the run, but earns no stardust or rating */
   tutorial?: true;
   /** run state mirrored on the server with the game's own rules (run.ts): HP, last chance used, run over */
@@ -103,6 +111,8 @@ export interface FinishedRun {
   stardust: number;
   /** wins the client claimed were more than the server saw */
   capped?: boolean;
+  /** casual runs stay off the leaderboard; none = ranked (runs from before the modes) */
+  mode?: 'casual' | 'ranked';
   season: string;
   finishedAt: number;
 }
@@ -130,7 +140,19 @@ export interface Db {
   farms: Record<string, FarmState>;
   /** season → monument totals */
   monuments: Record<string, MonumentRec>;
+  /** town feed: rare finds and moonlit heroes, newest last (capped) */
+  feed: FeedItem[];
 }
+export interface FeedItem {
+  t: number;
+  name: string;
+  kind: 'find' | 'shiny';
+  id: string;
+  season: string;
+  /** the first of this find this season */
+  first?: true;
+}
+export const FEED_CAP = 200;
 export interface MonumentRec {
   points: number;
   players: number;
@@ -156,6 +178,7 @@ function loadDb(): Db {
     tutorials: Object.assign(Object.create(null), isObj(d.tutorials) ? d.tutorials : {}),
     farms: Object.assign(Object.create(null), isObj(d.farms) ? d.farms : {}),
     monuments: Object.assign(Object.create(null), isObj(d.monuments) ? d.monuments : {}),
+    feed: Array.isArray(d.feed) ? d.feed.slice(-FEED_CAP) : [],
   };
 }
 
@@ -192,6 +215,7 @@ export function enforceCaps() {
   capRecord(db.players, PLAYER_CAP, (x) => x.updatedAt);
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
   capFarms();
+  if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
 }
 
 let saveTimer: NodeJS.Timeout | null = null;

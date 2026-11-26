@@ -45,9 +45,37 @@ export const PASS_SLOTS = 1;
 /** warehouse: at most this many hours of a landmark's full output can be held (3 days: covers a weekend away) */
 export const WAREHOUSE_H = 72;
 
-/** Arena tickets. Free runs: 3 a day, and unused ones are banked up to FREE_BANK (a missed day is not lost). */
-export const FREE_RUNS = 3;
-export const FREE_BANK = 6;
+/**
+ * Arena modes (owner 2026-11-26): Casual is free and unlimited; Ranked costs a ticket. Every day brings FREE_RUNS
+ * free ranked tickets, banked up to FREE_BANK (a missed day is not lost); more are crafted from wood + ore.
+ * A ranked run with RANKED_REFUND_WINS+ wins gives its ticket back; the first CASUAL_TICKET_WINS-win casual run of
+ * a day earns one. Casual pays less stardust (CASUAL_STARDUST, lower after CASUAL_FULL_RUNS runs a day), ranked a bonus.
+ */
+export type Mode = 'casual' | 'ranked';
+export const FREE_RUNS = 1;
+export const FREE_BANK = 3;
+export const RANKED_REFUND_WINS = 7;
+export const CASUAL_TICKET_WINS = 10;
+export const CASUAL_FULL_RUNS = 3;
+export const CASUAL_STARDUST = [0.5, 0.25];
+export const RANKED_STARDUST = 1.2;
+
+/**
+ * Lucky finds (owner 2026-11-26): every whole hero-hour of work rolls once, at collect time, for a rare find.
+ * Width and looks only (crafts cosmetics, feeds the monument, fills the collection log), never a fight bonus.
+ * A daily roll cap keeps a bot that never sleeps level with a person who collects twice a day.
+ */
+export const FINDS: { id: string; at: Building[]; odds: number; th: string; en: string; golden?: true }[] = [
+  { id: 'moon_pearl', at: ['lumber', 'mine'], odds: 1 / 400, th: 'ไข่มุกจันทร์', en: 'Moon Pearl' },
+  { id: 'relic_shard', at: ['shrine'], odds: 1 / 600, th: 'เศษวัตถุโบราณ', en: 'Shrine Relic Shard' },
+  { id: 'golden_pearl', at: ['lumber', 'mine', 'shrine'], odds: 1 / 8000, th: 'ไข่มุกทองคำ', en: 'Golden Moon Pearl', golden: true },
+];
+export const FIND_ROLLS_PER_DAY = 24;
+/** a find poured into the monument */
+export const FIND_POINTS: Record<string, number> = { moon_pearl: 150, relic_shard: 200, golden_pearl: 2000 };
+
+/** Moonlit (shiny) hero: each run rolls once when it starts; the look is kept for good. */
+export const SHINY_ODDS = 1 / 1024;
 export const TICKET_COST: Partial<Record<Res, number>> = { wood: 30, ore: 20 };
 export const TICKET_CRAFT_CAP = 4;
 export const TICKET_HOLD = 8;
@@ -116,6 +144,18 @@ export interface FarmState {
   tickets: number;
   /** Bangkok day key of the counters below */
   day: string;
+  /** casual runs started today, and today's casual ticket / egg already earned */
+  casualRuns?: number;
+  casualTicket?: true;
+  casualEgg?: true;
+  /** lucky finds: count per find id, find rolls used today, part of an hour carried to the next collect */
+  finds?: Record<string, number>;
+  findRolls?: number;
+  findCarry?: number;
+  /** moonlit (shiny) heroes this player has rolled */
+  shinies?: string[];
+  /** finds since the last time the server read them (for the town feed), cleared by the server */
+  newFinds?: string[];
   /** free runs banked (FREE_RUNS added each new day, up to FREE_BANK) */
   free: number;
   crafted: number;
@@ -154,6 +194,8 @@ export function newFarm(now: number, allHeroes = false): FarmState {
     tickets: 0,
     day: bkDay(now),
     free: FREE_RUNS,
+    finds: {},
+    shinies: [],
     crafted: 0,
     stamps: STAMPS_NEW,
     createdAt: now,
@@ -172,7 +214,9 @@ export function rollDay(f: FarmState, now: number) {
   const d = bkDay(now);
   if (f.day === d) return;
   const days = Math.max(1, dayNum(d) - dayNum(f.day));
-  Object.assign(f, { day: d, free: Math.min(FREE_BANK, f.free + FREE_RUNS * days), crafted: 0 });
+  Object.assign(f, { day: d, free: Math.min(FREE_BANK, f.free + FREE_RUNS * days), crafted: 0, casualRuns: 0, findRolls: 0 });
+  delete f.casualTicket;
+  delete f.casualEgg;
 }
 
 /** Any collect or run stamps today once. A full card pays out and starts a new one. Returns true on a payout. */
@@ -223,7 +267,7 @@ export function pending(f: FarmState, b: Building, j: Job, now: number, scale = 
 }
 
 /** Collect one landmark: add what its jobs made (up to the warehouse cap), restart their clocks. */
-export function collect(f: FarmState, b: Building, now: number, scale = 1): number {
+export function collect(f: FarmState, b: Building, now: number, scale = 1, rng?: () => number): number {
   const r = RES_OF[b];
   let got = 0;
   for (const j of f.jobs[b]) {
@@ -234,12 +278,34 @@ export function collect(f: FarmState, b: Building, now: number, scale = 1): numb
     got += take;
     const lost = p.full || take < p.n;
     // work-hours hatch eggs: only the game hours this collect used up (a part-unit carried over counts next time)
-    hatchHours(f, lost ? p.used / H : p.rate > 0 ? take / p.rate : 0);
+    const hours = lost ? p.used / H : p.rate > 0 ? take / p.rate : 0;
+    hatchHours(f, hours);
+    if (rng) rollFinds(f, b, hours, rng);
     if (lost) j.since = now; // full storage or a full warehouse: the rest is lost
     else j.since += p.rate > 0 ? ((take / p.rate) * H) / p.speed : 0; // keep the part-unit already made
     if (j.fast) delete j.fast;
   }
   f.updatedAt = now;
+  return got;
+}
+
+/** Lucky-find rolls for `hours` of work at `b` (whole hours only; the rest carries over; capped per day). */
+export function rollFinds(f: FarmState, b: Building, hours: number, rng: () => number): string[] {
+  const got: string[] = [];
+  const total = (f.findCarry ?? 0) + hours;
+  let n = Math.floor(total);
+  f.findCarry = total - n;
+  n = Math.min(n, FIND_ROLLS_PER_DAY - (f.findRolls ?? 0));
+  if (n <= 0) return got;
+  f.findRolls = (f.findRolls ?? 0) + n;
+  const here = FINDS.filter((x) => x.at.includes(b));
+  for (let i = 0; i < n; i++)
+    for (const x of here)
+      if (rng() < x.odds) {
+        (f.finds ??= {})[x.id] = (f.finds[x.id] ?? 0) + 1;
+        (f.newFinds ??= []).push(x.id);
+        got.push(x.id);
+      }
   return got;
 }
 
@@ -280,10 +346,49 @@ export function spendRun(f: FarmState, now: number): string | null {
   rollDay(f, now);
   if (f.free > 0) f.free--;
   else if (f.tickets > 0) f.tickets--;
-  else return 'no runs left today: craft a ticket at the arena gate';
+  else return 'no ranked tickets: play Casual for free, or craft a ticket at the arena gate';
   stamp(f, now);
   f.updatedAt = now;
   return null;
+}
+
+/** A casual run starts: free; counted so stardust and eggs taper after CASUAL_FULL_RUNS a day. */
+export function startCasual(f: FarmState, now: number) {
+  rollDay(f, now);
+  f.casualRuns = (f.casualRuns ?? 0) + 1;
+  stamp(f, now);
+  f.updatedAt = now;
+}
+
+/** Stardust multiplier for a finished run of this mode (`nth` = which casual run of the day it was, 1-based). */
+export const stardustMult = (mode: Mode, nth: number) =>
+  mode === 'ranked' ? RANKED_STARDUST : nth <= CASUAL_FULL_RUNS ? CASUAL_STARDUST[0] : CASUAL_STARDUST[1];
+
+/**
+ * A run ended: tickets and eggs by mode. Ranked: eggs at the 3 and 10 win marks, the ticket back at 7+ wins.
+ * Casual: an egg only for a 10-win run, once a day; the first 10-win casual run of the day earns a ticket.
+ */
+export function runEnded(f: FarmState, mode: Mode, wins: number, now: number): { eggs: number; ticket: boolean } {
+  rollDay(f, now);
+  let ticket = false;
+  let eggs = 0;
+  if (mode === 'ranked') {
+    eggs = eggsFor(f, wins, now);
+    if (wins >= RANKED_REFUND_WINS && f.tickets < TICKET_HOLD) (f.tickets++, (ticket = true));
+  } else if (wins >= CASUAL_TICKET_WINS) {
+    if (!f.casualEgg && f.eggs.length < NEST) {
+      f.eggs.push({ h: 0, need: EGG_HOURS[10], from: now });
+      f.casualEgg = true;
+      eggs = 1;
+    }
+    if (!f.casualTicket && f.tickets < TICKET_HOLD) {
+      f.tickets++;
+      f.casualTicket = true;
+      ticket = true;
+    }
+  }
+  f.updatedAt = now;
+  return { eggs, ticket };
 }
 
 const canPay = (f: FarmState, stardust: number, cost: Partial<Record<Res | 'stardust', number>>) =>
@@ -302,6 +407,7 @@ export type FarmOp =
   | { op: 'upgrade'; b: Building }
   | { op: 'unlock'; hero: string }
   | { op: 'pour'; res: Res; n: number }
+  | { op: 'pourFind'; id: string }
   | { op: 'repair' };
 
 /** repairing last season's calamity damage */
@@ -315,6 +421,8 @@ export interface OpCtx {
   /** heroes in an unfinished run: they cannot work */
   inRun: string[];
   season: string;
+  /** randomness for lucky finds (server only; VRF onchain later) */
+  rng?: () => number;
 }
 
 /** Apply one op. Returns an error string (nothing changed for that op) or the stardust it spent. */
@@ -340,13 +448,13 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
     case 'recall': {
       const b = heroBusy(f, o.hero);
       if (!b) return 'hero not working';
-      collect(f, b, c.now, c.scale); // keeps what it made
+      collect(f, b, c.now, c.scale, c.rng); // keeps what it made
       f.jobs[b] = f.jobs[b].filter((j) => j.hero !== o.hero);
       return { stardust: 0 };
     }
     case 'collect': {
       if (o.b !== undefined && !isB(o.b)) return 'bad op';
-      for (const b of o.b ? [o.b] : BUILDING_IDS) collect(f, b, c.now, c.scale);
+      for (const b of o.b ? [o.b] : BUILDING_IDS) collect(f, b, c.now, c.scale, c.rng);
       stamp(f, c.now);
       return { stardust: 0 };
     }
@@ -367,7 +475,7 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
       if (f.lv[o.b] >= MAX_LV) return 'max level';
       const cost = UPGRADE_COST[f.lv[o.b] - 1];
       if (!canPay(f, c.stardust, cost)) return 'not enough resources';
-      collect(f, o.b, c.now, c.scale); // jobs keep what they made at the old rate
+      collect(f, o.b, c.now, c.scale, c.rng); // jobs keep what they made at the old rate
       pay(f, cost);
       f.lv[o.b]++;
       return { stardust: cost.stardust ?? 0 };
@@ -387,6 +495,14 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
       if (f.pouredSeason !== c.season) Object.assign(f, { poured: 0, pouredSeason: c.season });
       f.res[o.res] -= n;
       f.poured += n * MONUMENT_POINTS[o.res];
+      return { stardust: 0 };
+    }
+    case 'pourFind': {
+      const pts = FIND_POINTS[o.id];
+      if (!pts || !(f.finds?.[o.id] ?? 0)) return 'not enough resources';
+      if (f.pouredSeason !== c.season) Object.assign(f, { poured: 0, pouredSeason: c.season });
+      f.finds![o.id]--;
+      f.poured += pts;
       return { stardust: 0 };
     }
     case 'repair': {

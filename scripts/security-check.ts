@@ -54,7 +54,8 @@ check('honest run gets its reward', fin[0] === 200 && fin[1].reward.stardust > 0
   const [, jf] = await post('/api/fight', { runId: fresh + '-r', playerId: fresh, day: 1, rating: 1000, build, tutorial: true });
   check('tutorial fight: rating unchanged', jf.tutorial === true && jf.rating === 1000, `rating ${jf.rating}`);
   const [, fin] = await post('/api/run/finish', { runId: fresh + '-r', playerId: fresh, name: '', hero: 'knight', wins: jf.won ? 1 : 0, losses: jf.won ? 0 : 1, day: 1, build });
-  check('tutorial fight: its win earns no stardust (same as a 0-win run: 5)', !jf.won || fin?.reward?.stardust === 5, `stardust ${fin?.reward?.stardust}`);
+  // the same as a 0-win run: 5 stardust, at the casual rate (×0.5, rounded) since sim farm modes
+  check('tutorial fight: its win earns no stardust (same as a 0-win casual run: 3)', !jf.won || fin?.reward?.stardust === Math.round(5 * 0.5), `stardust ${fin?.reward?.stardust}`);
 }
 // sim v14: implausible builds are rejected (and so never enter the snapshot pool)
 {

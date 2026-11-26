@@ -9,6 +9,7 @@ import { recordOf } from './fight';
 import type { Res } from './fight';
 import { allow } from './site';
 import { onRunFinished } from './farm';
+import { stardustMult } from '../sim/farm';
 
 const bad = (error: string, status = 400): Res => ({ status, json: { error } });
 
@@ -82,29 +83,33 @@ export function handleFinish(body: any): Res {
   const capped = countedWins < wins;
   // a guided-tutorial win (day 1 against a training bot) earns no stardust: player ids are free to make, so it must not be farmable
   const tutorialWin = track.tutorial && track.days[1] === 1 ? 1 : 0;
-  const reward = rewardFor(countedWins - tutorialWin, countedLosses);
+  const base = rewardFor(countedWins - tutorialWin, countedLosses);
+  // arena modes: casual pays less (and less again after a few casual runs a day), ranked a bonus
+  const mode = track.mode ?? 'ranked';
+  const mult = stardustMult(mode, track.casualNth ?? 1);
+  const reward = { ...base, stardust: Math.round(base.stardust * mult), mult };
 
   const name = cleanName(body?.name, playerId);
   const player = (db.players[playerId] ??= newPlayer(playerId, name));
   const run: FinishedRun = {
     runId, playerId, name, hero, line: lineOf(build), wins: countedWins, losses: countedLosses, day, build,
-    stardust: reward.stardust, ...(capped ? { capped } : {}), season: SEASON, finishedAt: Date.now(),
+    stardust: reward.stardust, ...(capped ? { capped } : {}), mode, season: SEASON, finishedAt: Date.now(),
   };
   db.runs.push(run);
   if (track) track.finished = run.finishedAt;
 
   player.name = name;
   player.stardust += reward.stardust;
-  const eggs = onRunFinished(playerId, countedWins);
+  const { eggs, ticket } = onRunFinished(playerId, countedWins, mode);
   player.runs++;
   player.wins += countedWins;
   player.losses += countedLosses;
   player.updatedAt = run.finishedAt;
-  if (!player.best || better(run, player.best) < 0) {
+  if (mode === 'ranked' && (!player.best || better(run, player.best) < 0)) {
     player.best = { runId, hero, wins: run.wins, losses: run.losses, day, finishedAt: run.finishedAt };
   }
   save();
-  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, ...(eggs ? { eggs } : {}) }, run: runRow(run), player: publicPlayer(player) } };
+  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}) }, run: runRow(run), player: publicPlayer(player) } };
 }
 
 export function handleProfile(q: URLSearchParams): Res {
@@ -126,7 +131,8 @@ export function handleLeaderboard(q: URLSearchParams): Res {
   // one row per player: their best run in the period (a player's other runs would only push others down)
   const best = new Map<string, FinishedRun>();
   for (const r of db.runs) {
-    if (r.season !== SEASON || (period === 'day' && bangkokDate(r.finishedAt) !== today)) continue;
+    // the leaderboard is Ranked only (casual runs are practice)
+    if (r.mode === 'casual' || r.season !== SEASON || (period === 'day' && bangkokDate(r.finishedAt) !== today)) continue;
     const cur = best.get(r.playerId);
     if (!cur || better(r, cur) < 0 || (better(r, cur) === 0 && r.finishedAt < cur.finishedAt)) best.set(r.playerId, r);
   }

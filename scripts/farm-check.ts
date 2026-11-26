@@ -63,24 +63,48 @@ const veteran = () => {
   check('warehouse cap holds', f.res.wood === F.capOf(f, 'wood'), `${f.res.wood}/${F.capOf(f, 'wood')}`);
 }
 
-// free runs bank, tickets
+// ranked tickets: 1 free a day banked up to 3, crafted tickets, refunds; casual is free
 {
   const f = veteran();
   f.day = F.bkDay(T0);
-  f.free = 3;
-  for (let i = 0; i < 3; i++) F.spendRun(f, T0);
-  check('3 free runs, then none', F.spendRun(f, T0) !== null && f.free === 0);
+  f.free = 1;
+  check('1 free ranked ticket, then none', F.spendRun(f, T0) === null && F.spendRun(f, T0) !== null && f.free === 0);
   F.rollDay(f, T0 + 24 * H);
-  check('next day: +3 free', f.free === 3);
-  F.rollDay(f, T0 + 4 * 24 * H);
-  check('missed days bank up to 6', f.free === F.FREE_BANK, `free ${f.free}`);
+  check('next day: +1 free ranked ticket', f.free === 1);
+  F.rollDay(f, T0 + 6 * 24 * H);
+  check('missed days bank up to 3', f.free === F.FREE_BANK, `free ${f.free}`);
   f.res.wood = 1000;
   f.res.ore = 1000;
-  check('craft 4 tickets', typeof op(f, { op: 'craft', n: 4 }, T0 + 4 * 24 * H) !== 'string' && f.tickets === 4);
-  check('5th craft today → limit', op(f, { op: 'craft' }, T0 + 4 * 24 * H) === 'craft limit reached today');
-  op(f, { op: 'craft', n: 4 }, T0 + 5 * 24 * H);
-  check('ticket bag holds 8 at most', op(f, { op: 'craft' }, T0 + 6 * 24 * H) === 'ticket bag full' && f.tickets === 8);
+  check('craft 4 tickets', typeof op(f, { op: 'craft', n: 4 }, T0 + 6 * 24 * H) !== 'string' && f.tickets === 4);
+  check('5th craft today → limit', op(f, { op: 'craft' }, T0 + 6 * 24 * H) === 'craft limit reached today');
+  op(f, { op: 'craft', n: 4 }, T0 + 7 * 24 * H);
+  check('ticket bag holds 8 at most', op(f, { op: 'craft' }, T0 + 8 * 24 * H) === 'ticket bag full' && f.tickets === 8);
   check('ticket cost paid', f.res.wood === 1000 - 8 * 30 && f.res.ore === 1000 - 8 * 20);
+  const g = veteran();
+  F.startCasual(g, T0);
+  F.startCasual(g, T0);
+  check('casual runs are free and counted', g.casualRuns === 2 && g.tickets === 0);
+  check('casual stardust: half for the first 3 a day, then a quarter; ranked +20%', F.stardustMult('casual', 3) === 0.5 && F.stardustMult('casual', 4) === 0.25 && F.stardustMult('ranked', 1) === 1.2);
+  const r7 = F.runEnded(g, 'ranked', 7, T0);
+  check('ranked 7+ wins: ticket back, an egg at 3 wins', r7.ticket && r7.eggs === 1 && g.tickets === 1);
+  check('ranked 6 wins: no ticket back', !F.runEnded(g, 'ranked', 6, T0).ticket);
+  const c1 = F.runEnded(g, 'casual', 10, T0);
+  const c2 = F.runEnded(g, 'casual', 10, T0);
+  check('casual: the first 10-win run of the day earns a ticket and an egg, the second nothing', c1.ticket && c1.eggs === 1 && !c2.ticket && !c2.eggs);
+  check('casual 9 wins: nothing', !F.runEnded(g, 'casual', 9, T0 + 24 * H).ticket);
+}
+
+// lucky finds: one roll per whole hero-hour, capped per day
+{
+  const f = veteran();
+  const always = () => 0; // every roll hits
+  const got = F.rollFinds(f, 'mine', 3.5, always);
+  check('3.5 hours at the mine: 3 rolls, the half hour carries', f.findRolls === 3 && Math.abs((f.findCarry ?? 0) - 0.5) < 1e-9 && got.length === 6, got.join());
+  F.rollFinds(f, 'shrine', 100, () => 0.999);
+  check('daily roll cap', f.findRolls === F.FIND_ROLLS_PER_DAY);
+  f.res.ore = 0;
+  op(f, { op: 'pourFind', id: 'moon_pearl' }, T0);
+  check('a find poured into the monument', f.poured === F.FIND_POINTS.moon_pearl && f.finds!.moon_pearl === 2);
 }
 
 // unlock and upgrade

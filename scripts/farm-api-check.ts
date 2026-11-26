@@ -19,10 +19,10 @@ const check = (name: string, ok: boolean, info = '') => {
 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const P = 'farm-' + Date.now();
-const fight = (pid: string, runId: string, hero: string) => post('/api/fight', { runId, playerId: pid, day: 1, rating: 1000, build: aiBuild(hero, 1, [], 7) });
+const fight = (pid: string, runId: string, hero: string, mode?: 'ranked') => post('/api/fight', { runId, playerId: pid, day: 1, rating: 1000, build: aiBuild(hero, 1, [], 7), ...(mode ? { mode } : {}) });
 
 const [, g0] = await get('/api/farm?playerId=' + P);
-check('GET an unknown player: a fresh farm, nothing stored', g0.stored === false && g0.owned.length === 4 && g0.runsLeft === 3, JSON.stringify({ owned: g0.owned, runsLeft: g0.runsLeft }));
+check('GET an unknown player: a fresh farm, nothing stored', g0.stored === false && g0.owned.length === 4 && g0.runsLeft === 1, JSON.stringify({ owned: g0.owned, runsLeft: g0.runsLeft }));
 if (g0.scale < 600 || !g0.runLimit) {
   console.log(`\nstart the server with FARM_TIME_SCALE=3600 and the gate on (scale ${g0.scale}, gate ${g0.runLimit})`);
   process.exit(1);
@@ -62,18 +62,23 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
   const [, g] = await get('/api/farm?playerId=' + P);
   check('starting a run calls the working hero back', s1 === 200 && g.jobs.mine.length === 0 && g.inRun.includes('knight'));
   check('a hero in a run cannot go to work', (await post('/api/farm', { playerId: P, ops: [{ op: 'send', b: 'mine', hero: 'knight' }] }))[0] === 409);
-  await fight(P, P + '-r2', 'pyro');
-  await fight(P, P + '-r3', 'assassin');
-  const [s4, j4] = await fight(P, P + '-r4', 'assassin');
-  check('3 free runs, the 4th needs a ticket', s4 === 409 && j4.code === 'no_runs', JSON.stringify(j4));
+  const [s2, j2] = await fight(P, P + '-r2', 'pyro');
+  const [s3] = await fight(P, P + '-r3', 'assassin');
+  check('casual runs are free (no ticket needed)', s2 === 200 && s3 === 200 && j2.mode === 'casual');
+  const [s4, j4] = await fight(P, P + '-k1', 'duelist', 'ranked');
+  check('ranked uses the free daily ticket', s4 === 200 && j4.mode === 'ranked');
+  const [s5, j5] = await fight(P, P + '-k2', 'duelist', 'ranked');
+  check('…then ranked needs a ticket', s5 === 409 && j5.code === 'no_tickets', JSON.stringify(j5));
   const [sc, jc] = await post('/api/farm', { playerId: P, ops: [{ op: 'collect' }, { op: 'craft', n: 1 }] });
   check('craft a ticket (30 wood + 20 ore)', sc === 200 && jc.tickets === 1, JSON.stringify(jc.error ?? jc.res));
-  const [s5] = await fight(P, P + '-r4', 'assassin');
-  check('the ticket starts the 4th run', s5 === 200);
-  const [, g5] = await get('/api/farm?playerId=' + P);
-  check('the ticket was spent', g5.tickets === 0 && g5.runsLeft === 0);
-  const [, j6] = await post('/api/fight', { runId: P + '-r1', playerId: P, day: 2, rating: 1000, build: aiBuild('knight', 2, [], 7) });
-  check('day 2 of a run is never stopped by the run limit', j6?.code !== 'no_runs');
+  const [s6] = await fight(P, P + '-k2', 'duelist', 'ranked');
+  check('the ticket starts a ranked run', s6 === 200);
+  const [, g6] = await get('/api/farm?playerId=' + P);
+  check('the ticket was spent', g6.tickets === 0 && g6.runsLeft === 0);
+  const [, j7] = await post('/api/fight', { runId: P + '-k1', playerId: P, day: 2, rating: 1000, build: aiBuild('duelist', 2, [], 7), mode: 'ranked' });
+  check('day 2 of a ranked run costs nothing more', j7?.code !== 'no_tickets');
+  const [, feed] = await get('/api/feed');
+  check('the town feed answers', Array.isArray(feed.rows));
 }
 
 // eggs and the monument
