@@ -4,18 +4,18 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { serveStatic } from './static';
-import { handleFight, handleScout, type Res } from './fight';
-import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './meta';
+import { serveStatic } from './http/static';
+import { handleFight, handleScout, type Res } from './routes/fight';
+import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './routes/meta';
 import { ROOT, db, saveNow } from './store';
-import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './farm';
-import { adminEconomy } from './ledger';
+import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './routes/farm';
+import { adminEconomy } from './game/ledger';
 import { WIN_TARGET } from '../sim/run';
-import { cleanName, isDefaultName } from './validate';
+import { cleanName, isDefaultName } from './game/validate';
 import {
   adminAnnounce, adminFeedback, adminFeedbackDone, adminGate, adminOverview, adminRuns, adminWaitlist, handleAnnounce,
   handleEvents, handleFeedback, handleWaitlist, logEvent, waitlistCsv,
-} from './site';
+} from './routes/site';
 
 const PORT = Number(process.env.PORT ?? 8787);
 /** the running game version (package.json): open tabs compare it with theirs and offer a reload */

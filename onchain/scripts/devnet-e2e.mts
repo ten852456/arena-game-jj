@@ -1,7 +1,7 @@
 // mochi-game (sim v22) on devnet + the MagicBlock TEE, end to end, with the REAL VRF oracle:
 //   admin: season (+ committed season secret), season secret, ranking, pool → `delegate` kinds 2/3/4 → TEE:
 //          `set_permission` kinds 2/3/4 (no members) → set_season_secret
-//   player: the UI's own client (src/client/chain.ts, burner wallet = owner + session key): init + `delegate` kinds
+//   player: the UI's own client (src/web/features/chain/chain.ts, burner wallet = owner + session key): init + `delegate` kinds
 //          0/1, `set_permission` kinds 0/1, join_pool, runs with every random action through request + VRF callback
 //   privacy: who can read Player / RunSecret / SeasonSecret / Pool / Ranking on the TEE
 //   season end: set_season_end → close_season → issue_proof (read privately) → finalize_player / publish_root /
@@ -9,7 +9,7 @@
 // Keys: admin = WSL ~/.config/solana/id.json; throwaway keys are SAVED to DEVNET_KEYS before any SOL moves.
 //   DEVNET_KEYS=<file> npx tsx onchain/scripts/devnet-e2e.mts          → full test, result in onchain/docs/devnet-e2e.json
 //   DEVNET_KEYS=<file> npx tsx onchain/scripts/devnet-e2e.mts --ui     → only a 30-day season for the UI (writes
-//                                                                         src/client/public/chain.json)
+//                                                                         src/web/public/chain.json)
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import bs58 from 'bs58';
@@ -156,9 +156,9 @@ await step('admin: `set_permission` kinds 2/3/4 on the TEE (no members) + set_se
   return 'ok';
 }, 180_000, 4000));
 if (UI) {
-  const cfgPath = new URL('../../src/client/public/chain.json', import.meta.url);
+  const cfgPath = new URL('../../src/web/public/chain.json', import.meta.url);
   fs.writeFileSync(cfgPath, JSON.stringify({ mode: 'tee', rpc: BASE, tee: TEE, validator: VALIDATOR.toBase58(), program: PROGRAM.toBase58(), season: SEASON, shard: SHARD }, null, 2) + '\n');
-  console.log('UI season', SEASON, 'until', new Date(end * 1000).toISOString(), '→ src/client/public/chain.json');
+  console.log('UI season', SEASON, 'until', new Date(end * 1000).toISOString(), '→ src/web/public/chain.json');
   process.exit(results.every((r) => r.ok) ? 0 : 1);
 }
 
@@ -173,8 +173,8 @@ g.window = globalThis;
 const realFetch = globalThis.fetch;
 const uiCfg = { mode: 'tee', rpc: BASE, tee: TEE, validator: VALIDATOR.toBase58(), program: PROGRAM.toBase58(), season: SEASON, shard: SHARD };
 g.fetch = (u: string, o?: RequestInit) => (String(u).endsWith('/chain.json') ? Promise.resolve(new Response(JSON.stringify(uiCfg))) : realFetch(u, o));
-const C = await import('../../src/client/chain');
-const Rn = await import('../../src/client/runChain');
+const C = await import('../../src/web/features/chain/chain');
+const Rn = await import('../../src/web/features/chain/runChain');
 const { simulate } = await import('../../src/sim/combat');
 type RS = import('../../src/sim/run').RunState;
 

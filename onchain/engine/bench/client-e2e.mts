@@ -1,4 +1,4 @@
-// The UI's chain client (src/client/chain.ts + runChain.ts, the code the browser runs) against a LOCAL validator:
+// The UI's chain client (src/web/features/chain/chain.ts + runChain.ts, the code the browser runs) against a LOCAL validator:
 // burner wallet, `?chain=1&net=local`. Browser APIs are stubbed (location, localStorage, fetch of /chain-local.json).
 // Needs: validator with mochi-game (--features local), `node onchain/scripts/chain-setup.mjs`, and the responder
 // `node onchain/scripts/local-vrf.mjs` (started here as a child process).
@@ -19,11 +19,11 @@ Object.defineProperty(g.localStorage, 'keys', { value: () => [...store.keys()] }
 g.window = globalThis;
 const realFetch = globalThis.fetch;
 g.fetch = (u: string, o?: RequestInit) => (String(u).endsWith('/chain-local.json')
-  ? Promise.resolve(new Response(fs.readFileSync(new URL('../../../src/client/public/chain-local.json', import.meta.url))))
+  ? Promise.resolve(new Response(fs.readFileSync(new URL('../../../src/web/public/chain-local.json', import.meta.url))))
   : realFetch(u, o));
 
-const C = await import('../../../src/client/chain');
-const R = await import('../../../src/client/runChain');
+const C = await import('../../../src/web/features/chain/chain');
+const R = await import('../../../src/web/features/chain/runChain');
 const { simulate } = await import('../../../src/sim/combat');
 type RS = import('../../../src/sim/run').RunState;
 

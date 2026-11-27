@@ -1,7 +1,7 @@
-# Arena game server + web client in one image.
+# Mochi Moon: game server + web client in one image.
 # The Node server (src/server) runs the fights and also serves the built client (dist/).
-# Build:  docker build -t arena-list .        (on the branch you want to package)
-# Run:    docker run -p 8788:8787 -v arena-list-data:/app/data arena-list
+# Build:  docker build -t mochi-moon .
+# Run:    docker run -p 8787:8787 -v mochi-data:/app/data mochi-moon
 
 # ---- build the web client ----
 FROM node:22-alpine AS build

@@ -1,5 +1,5 @@
 // Farm (idle town): heroes work at landmarks, resources pay for arena tickets, hero unlocks, town upgrades and the
-// season monument. Design: docs/FARM.md. Pure and deterministic: every function takes `now` (ms) and a time scale,
+// season monument. Design: docs/design/FARM.md. Pure and deterministic: every function takes `now` (ms) and a time scale,
 // so the server (authoritative clock), the client (display) and later the onchain program share one rulebook.
 // Numbers are starting values, tuned later; this file owns them (like tuning.ts for fights).
 import { HEROES, HEROES_BY_ID } from './heroes';
@@ -17,7 +17,7 @@ const H = 3_600_000;
 
 /** Output per working hero per hour, before line affinity. Crystal: one per 12 h (one per collect). */
 export const RATE: Record<Res, number> = { wood: 6, ore: 4, crystal: 1 / 12 };
-/** +25% when the hero's skill line fits the landmark (docs/FARM.md; tower research = burn/poison, later). */
+/** +25% when the hero's skill line fits the landmark (docs/design/FARM.md; tower research = burn/poison, later). */
 export const AFFINITY_BONUS = 0.25;
 export const AFFINITY: Record<Building, Line[]> = {
   lumber: ['hit', 'dodge', 'wind'],
@@ -31,7 +31,7 @@ export const TABLE_LV = 5;
 /** @deprecated kept for old callers: the last table level */
 export const MAX_LV = TABLE_LV;
 /**
- * Incremental layer (owner, 2026-11-26; formulas in docs/FARM.md "Incremental layer"): past Lv5 each level adds
+ * Incremental layer (owner, 2026-11-26; formulas in docs/design/FARM.md "Incremental layer"): past Lv5 each level adds
  * +15% output and every 10th level doubles it; a level costs 400 wood × 1.13^(n−6) (ore 2/3 of that, crystal one
  * per 10 levels). Slots and storage stay at the Lv5 values.
  */
@@ -78,7 +78,7 @@ export const masteryKey = (hero: string, b: Building) => `${hero}@${b}`;
 export const SLOTS = [1, 2, 3, 3, 4];
 /**
  * hours a job's storage holds before it stops. 12 h at Lv1 covers the night gap of a 2-collects-a-day player (8 h
- * lost a third of the day); Lv5's 24 h makes one visit a day full play (research: docs/FARM.md "Fair timers").
+ * lost a third of the day); Lv5's 24 h makes one visit a day full play (research: docs/design/FARM.md "Fair timers").
  */
 export const STORAGE_H = [12, 14, 16, 20, 24];
 /** cost to go from level i+1 to i+2 */

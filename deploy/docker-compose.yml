@@ -1,26 +1,16 @@
-# Runs both game versions side by side on one server.
-#   grid version (shaped blocks on a grid):   http://<server>:8787
-#   list version (vertical skill list):       http://<server>:8788
-# Build the two images first (see deploy/DEPLOY.md), then:  docker compose -f deploy/docker-compose.yml up -d
+# Mochi Moon on one server: http://<server>:8787
+# Build the image first (deploy/DEPLOY.md), then:  docker compose -f deploy/docker-compose.yml up -d
 services:
-  arena-grid:
-    image: arena-grid:latest
-    container_name: arena-grid
+  mochi-moon:
+    image: mochi-moon:latest
+    container_name: mochi-moon
     restart: unless-stopped
     ports:
       - "8787:8787"
+    environment:
+      - ADMIN_TOKEN=${ADMIN_TOKEN:-}
     volumes:
-      - arena-grid-data:/app/data
-
-  arena-list:
-    image: arena-list:latest
-    container_name: arena-list
-    restart: unless-stopped
-    ports:
-      - "8788:8787"
-    volumes:
-      - arena-list-data:/app/data
+      - mochi-data:/app/data
 
 volumes:
-  arena-grid-data:
-  arena-list-data:
+  mochi-data:

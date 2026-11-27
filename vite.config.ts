@@ -5,10 +5,10 @@ import { readFileSync } from 'node:fs';
 /** the game version (package.json) for the client: release notes and the "new version" banner */
 const VERSION = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf8')).version as string;
 
-const page = (p: string) => resolve(import.meta.dirname, 'src/client', p);
+const page = (p: string) => resolve(import.meta.dirname, 'src/web', p);
 
 export default defineConfig({
-  root: 'src/client',
+  root: 'src/web',
   define: { __APP_VERSION__: JSON.stringify(VERSION) },
   plugins: [
     {

@@ -1,35 +1,23 @@
 # Hosting on Railway
 
-Railway builds each version straight from GitHub using the repo's `Dockerfile`. Make **one Railway service per
-version**, each pointing at its own branch.
+Railway project `arena-ab-test` builds the repo's `Dockerfile` straight from GitHub (`ten852456/mochi-moon`).
+Branch flow and releases: [`docs/ops/WORKFLOW.md`](../docs/ops/WORKFLOW.md).
 
-| Service | Branch | What it is |
-|---|---|---|
-| `arena-grid` | `phase1-combat-character` | grid version |
-| `arena-list` | `skill-list` | list version |
+| Service | Branch | URL | Volume (`/app/data`) |
+|---|---|---|---|
+| `mochi-list` (live) | `release` | https://mochi-list-production.up.railway.app | `mochi-list-volume` |
+| `mochi-staging` | `main` | https://mochi-staging-production.up.railway.app | `mochi-staging-volume` |
 
-## Steps (do this once per version)
-
-1. https://railway.com → **New Project → Deploy from GitHub repo** → pick `JaJoJi/arena-game`.
-2. Open the new service → **Settings → Source → Branch**: choose the branch from the table above
-   (for this branch: `skill-list`). Railway finds the `Dockerfile` and builds it.
-3. **Settings → Networking → Generate Domain**. If Railway asks for a port, enter **8787**
-   (the server listens on Railway's `PORT` variable, which Railway sets for you).
-4. *(Recommended)* keep saved builds and replays across redeploys:
-   - **Add a Volume** to the service with mount path **`/app/data`**.
-   - **Variables → add `RAILWAY_RUN_UID` = `0`**. Railway volumes belong to root and the image runs as the
-     `node` user, so without this the game can't write its save file. It still runs, but it logs
-     `could not save …` and forgets saved builds on every redeploy.
-5. *(Optional)* **Settings → Deploy → Healthcheck Path**: `/`.
-
-For the second version, add another service to the same project (**+ Create → GitHub Repo**, same repo) and pick
-the other branch.
+Both services: variable `RAILWAY_RUN_UID` = `0` (Railway volumes belong to root and the image runs as `node`;
+without it the game logs `could not save …`). `ADMIN_TOKEN` (16+ characters) opens `/admin`; without it `/admin`
+answers 503. Keep each service at **1 replica**: one server process holds all data in memory.
 
 ## Good to know
 
-- **Every push to a branch redeploys that service.** Push to `skill-list` → the list version updates.
-- Without a volume the game still works. Opponents' saved builds and replay links just reset on each deploy;
-  players' own runs are saved in their browser either way.
-- One server process holds all data in memory. Keep the service at **1 replica** (don't scale out), or
-  players on different replicas won't see each other's builds.
-- Railway gives HTTPS on the generated domain, so no extra proxy is needed.
+- A push to `main` redeploys staging; moving `release` redeploys live.
+- **The source branch is set per service, not per environment.** Duplicating an environment shares the service's
+  source, so staging is its own service (tried 2026-11-27: switching the duplicate's branch switched live too).
+- CLI: `npx -y @railway/cli@4` (in Git Bash set `MSYS_NO_PATHCONV=1`). Set a service's branch with
+  `railway service source connect --repo ten852456/mochi-moon --branch <branch> --service <service>`.
+- Volume backups (`railway volume files download`) need an SSH key registered with `railway ssh keys add`.
+- Railway gives HTTPS on the generated domain; no proxy needed.

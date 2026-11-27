@@ -5,7 +5,7 @@ import { T } from './tuning';
 import type { Line } from './types';
 
 /**
- * Run relics (sim v17, docs/DESIGN_LINES_ULT.md §11): run-long rule tweaks picked 1 of 3 (or skipped) before the shop
+ * Run relics (sim v17, docs/design/DESIGN_LINES_ULT.md §11): run-long rule tweaks picked 1 of 3 (or skipped) before the shop
  * on RELIC_DAYS. About two per line, a few generic / hybrid enablers that pull a hero toward a second line, and three
  * risky "cheese" relics that only pay off with a rare setup. Pure data + text; combat.ts reads the numbers from
  * tuning.ts `relic.*` and applies the effect. A relic belongs to the run (and its Build), at most MAX_RELICS.
@@ -138,7 +138,7 @@ export const NEEDS: Record<string, string[]> = {
 export function buildEffects(skills: { id: string; v: string }[]) {
   const out = new Set<string>();
   for (const k of skills) {
-    let n;
+    let n: ReturnType<typeof nodeOf>;
     try { n = nodeOf(k); } catch { continue; }
     const line = SKILLS[k.id]?.line;
     if (line) out.add(`line:${line}`);

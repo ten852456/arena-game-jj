@@ -5,7 +5,7 @@ import { writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
-import type { LastChoice } from './validate';
+import type { LastChoice } from './game/validate';
 import type { FarmState } from '../sim/farm';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
@@ -93,7 +93,7 @@ export interface RunTrack {
   /**
    * Server-only seed of the run's relic offers (sim v17, security review): crypto random, made on the run's first fight,
    * never sent. Each relic day's 3 offers are rollRelicOffer(relicSeed, hero, day, owned); the client only gets the
-   * offer itself (fight response `nextRelics`). First step of docs/SERVER_RUN.md (the server owns the run's seed).
+   * offer itself (fight response `nextRelics`). First step of docs/ops/SERVER_RUN.md (the server owns the run's seed).
    */
   relicSeed?: number;
   t: number;
@@ -137,7 +137,7 @@ export interface Db {
   players: Record<string, Player>;
   /** playerId → time it used its one guided-tutorial fight (day 1 vs a training AI) */
   tutorials: Record<string, number>;
-  /** playerId → idle town (src/sim/farm.ts, docs/FARM.md) */
+  /** playerId → idle town (src/sim/farm.ts, docs/design/FARM.md) */
   farms: Record<string, FarmState>;
   /** season → monument totals */
   monuments: Record<string, MonumentRec>;

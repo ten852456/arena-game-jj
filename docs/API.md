@@ -3,7 +3,7 @@
 Node `http` server, JSON in and out, storage in `data/db.json` (`DATA_DIR` env overrides the folder).
 Code: `src/server/` (`index.ts` routes · `fight.ts` fight + scout · `match.ts` matchmaking + AI tier ·
 `meta.ts` run finish / profile / leaderboard · `store.ts` db + caps · `validate.ts` input checks).
-Typed client: `src/client/api.ts` (`api.fight`, `api.replay`, `api.scout`, `api.finishRun`, `api.profile`, `api.leaderboard`).
+Typed client: `src/web/app/api.ts` (`api.fight`, `api.replay`, `api.scout`, `api.finishRun`, `api.profile`, `api.leaderboard`).
 
 Errors are `{"error": "..."}` with status 400 (bad input), 403 (run belongs to another player), 404, 409.
 
@@ -157,11 +157,11 @@ keeps the name and sends it with its next fight. 20 renames per IP per hour, che
 
 ## Pages
 
-The server serves three pages from `dist/`: the landing page `/` (`src/client/index.html`, `landing.ts`), the game
-`/play` (`src/client/play/index.html`) and the back office `/admin` (`src/client/admin/`). An old share link
+The server serves three pages from `dist/`: the landing page `/` (`src/web/index.html`, `landing.ts`), the game
+`/play` (`src/web/play/index.html`) and the back office `/admin` (`src/web/admin/`). An old share link
 `/?replay=…` (any `/` with a query) is forwarded to `/play` with the same query.
 
-## Public site (src/server/site.ts)
+## Public site (src/server/routes/site.ts)
 
 Stored apart from the game: `data/site.json` (waitlist, feedback, banner) and `data/events/YYYY-MM-DD.ndjson`
 (one usage event per line). No raw IPs are written; IPs are kept in memory for rate limits only.
@@ -191,7 +191,7 @@ admin answers 503). Ten wrong tokens from one IP, or 50 in total, within 10 minu
 
 ## Farm (idle town)
 
-Rules and numbers: `src/sim/farm.ts`; design: `docs/FARM.md`. The server's clock is the only clock.
+Rules and numbers: `src/sim/farm.ts`; design: `docs/design/FARM.md`. The server's clock is the only clock.
 
 - `GET /api/farm?playerId=…` → the farm as of now: `res`, `caps`, `lv`, `slots`, `jobs` (per landmark: `hero`,
   `ready`, `fill`, `fullIn` ms), `free` (banked free runs), `tickets`, `runsLeft`, `owned`, `rotation`, `usable`,

@@ -923,7 +923,7 @@ export function fmtField(key: string, v: number, th = true) {
 }
 export interface DiffRow { key: string; label: string; from: number; to: number; worse: boolean; fromText: string; toText: string; text: string }
 /**
- * Before → after of an upgrade, in short words: every number that changes (scripts/upgrade-check.ts proves none is
+ * Before → after of an upgrade, in short words: every number that changes (tests/upgrade-check.ts proves none is
  * missing and that ▼ only marks what really gets worse). An effect the new level adds is one "+…" row, one it drops is
  * one "−…" row (worse); otherwise one row per changed number.
  */

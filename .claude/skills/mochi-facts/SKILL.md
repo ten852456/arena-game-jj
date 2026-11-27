@@ -13,7 +13,7 @@ after changing anything it covers.
 1. Run `npm run facts` so the generated block (heroes, skills, relics, lines, HP, wins, versions, commits)
    matches the code.
 2. Read `docs/FACTS.md` and take every number and claim from it. If something you need is missing, find it in the
-   code or ask the user. Never take numbers from the PDFs in `docs/hackathon/`: they are old.
+   code or ask the user. Never take numbers from the PDFs in `docs/archive/hackathon/`: they are old.
 3. Keep its rules:
    - newest source wins, and an owner ruling beats documents
    - the money model is the newest decision only
