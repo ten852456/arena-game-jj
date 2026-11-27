@@ -31,12 +31,15 @@ export const relicRerolls = () => T['relic.rerolls'];
 /** every relic a relic day can show: the offer and each reroll after it (what the server accepts) */
 export const relicOffersAll = (seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []) =>
   Array.from({ length: 1 + relicRerolls() }, (_, r) => rollRelicOffer(seed, hero, day, owned, skills, r));
-/** a relic of the hero's line is this many times as likely as any other in the offer (after the first one is owned) */
-const LINE_W = 1.3;
 /**
+ * A relic of the hero's line is LINE_W / OTHER_W (1.3x) as likely as any other in the offer (after the first one is
+ * owned). Integer weights (sim v22): the weighted pick is exact in the on-chain Rust engine too.
  * v0.0.1 (design meeting 2026-11-26): offers stay random, but 1 of the 3 always fits the build (RELIC_LUCK); the
  * hero-line weight on the other two stays off (RELIC_WEIGHT), so the offer is still a surprise. sim v22 had both off.
+ * The on-chain Rust engine (onchain/engine) still weights the line and has no RELIC_LUCK: see onchain/README.md.
  */
+export const LINE_W = 13;
+export const OTHER_W = 10;
 const RELIC_LUCK = true;
 const RELIC_WEIGHT = false;
 
@@ -183,9 +186,11 @@ export const GROUP_ICON: Record<RelicGroup, string> = {
  * line while the run owns none of its line's relics (then line relics are only weighted ×1.3), the rest from everything
  * else (other lines, generic and cheese relics).
  */
-export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = [], roll = 0): string[] {
-  // roll 1 = the reroll (RELIC_REROLLS): 3 new relics, none of the first offer's
-  const first = roll > 0 ? rollRelicOffer(seed, hero, day, owned, skills, roll - 1) : [];
+export function rollRelicOffer(seed: number, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = [], roll = 0, prev?: string[]): string[] {
+  // roll 1 = the reroll (RELIC_REROLLS): 3 new relics, none of the offer before it. `prev` = that offer as shown
+  // (on chain each reroll has its own seed, so the offer before can't be re-derived from this one); without it, the
+  // offer before is re-rolled from the same seed (offline and the server: the same relics)
+  const first = roll > 0 ? prev ?? rollRelicOffer(seed, hero, day, owned, skills, roll - 1) : [];
   const rng = new Rng(roll > 0 ? hashSeed(seed, 'relic', day, 're', roll) : hashSeed(seed, 'relic', day));
   const line = HEROES_BY_ID[hero]?.line;
   // sim v19: "fits" = what the build's skills actually do (their effects); with no skills yet, the hero's line
@@ -201,7 +206,7 @@ export function rollRelicOffer(seed: number, hero: string, day: number, owned: s
   }
   const rest = pool.filter((r) => !out.includes(r.id));
   while (out.length < RELIC_OFFER && rest.length) {
-    const w = rest.map((r) => (RELIC_WEIGHT && relicFits(r.id, line) ? LINE_W : 1));
+    const w = rest.map((r) => (RELIC_WEIGHT && relicFits(r.id, line) ? LINE_W : OTHER_W));
     let x = rng.next() * w.reduce((a, b) => a + b, 0);
     let i = 0;
     while (i < w.length - 1 && (x -= w[i]) >= 0) i++;

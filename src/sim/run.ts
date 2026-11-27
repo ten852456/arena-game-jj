@@ -96,7 +96,7 @@ export interface LogEntry {
 }
 
 /** Saved-run format version: runs saved with another version are dropped by the client (v9 = sim v13 lines r2). */
-export const RUN_VERSION = 13;
+export const RUN_VERSION = 14;
 
 export interface RunState {
   v: typeof RUN_VERSION;
@@ -152,7 +152,21 @@ export interface RunState {
   relicRolls?: number;
   /** the server's rerolled offers for today (from relicNext.re), used in order */
   relicRe?: string[][];
+  /**
+   * On-chain run (sim v22): the program's secret seed (from VRF, never readable by the player). It does what the
+   * server's seed does for a ranked run: relic offers and their rerolls, and the kind of every mark (wish marks and
+   * the last chance's mark), rolled when the mark is carved/placed, so the player never sees a kind before it is final.
+   */
+  secret?: number;
 }
+// RUN_VERSION 14 (sim v22): integer relic weights + the on-chain secret seed; v13 saves are dropped by the client
+
+/**
+ * The seed every run roll comes from (sim v22): the on-chain secret when the run has one (shop, rerolls, card bonuses,
+ * star cards, wishes, awaken, relic offers, marks), else the public run seed (offline runs, unchanged). `seed` itself
+ * only picks the cosmetic look.
+ */
+export const rollSeed = (s: RunState) => s.secret ?? s.seed;
 
 /** Skill slots on a day: 3 on days 1–3, 4 on 4–6, 5 on 7–9, 6 from day 10, plus bonus slots (max MAX_SLOTS). */
 export function slotsFor(day: number, bonus = 0) {
@@ -195,11 +209,13 @@ export function incomeFor(day: number, streak: number, hero?: string) {
   return { base, bonus };
 }
 
-export function newRun(hero: string, seed: number, id: string): RunState {
+/** secret: an on-chain run's secret seed (it rolls the day-1 card bonuses too, so it is set before the first shop) */
+export function newRun(hero: string, seed: number, id: string, secret?: number): RunState {
   const s: RunState = {
     v: RUN_VERSION, id, seed, hero, day: 1, hp: T['run.startHp'], wins: 0, losses: 0, gold: 0, streak: 0,
     lastIncome: { base: 0, bonus: 0 }, bonusSlots: 0, slotBuys: 0, skills: [], shop: [], rolls: 0,
     ghost: false, pendingMark: null, phase: 'shop', rating: 1000, log: [],
+    ...(secret !== undefined ? { secret } : {}),
   };
   beginDay(s);
   return s;
@@ -217,8 +233,8 @@ export function beginDay(s: RunState) {
   if (RELIC_DAYS.includes(s.day) && !(s.relicDays ?? []).includes(s.day) && (s.relics ?? []).length < MAX_RELICS) {
     s.relicDays = [...(s.relicDays ?? []), s.day];
     // a ranked run uses the offer the server sent (its seed is server-only); an offline run rolls its own
-    const srv = s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
-    s.relicOffer = srv?.length ? srv : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
+    const srv = s.secret === undefined && s.relicNext?.day === s.day ? s.relicNext.ids.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)) : null;
+    s.relicOffer = srv?.length ? srv : rollRelicOffer(rollSeed(s), s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)));
     s.relicRolls = 0;
     if (srv?.length) s.relicRe = (s.relicNext?.re ?? []).map((o) => o.filter((id) => isRelic(id) && !(s.relics ?? []).includes(id)));
     else delete s.relicRe;
@@ -235,7 +251,7 @@ export function rerollRelic(s: RunState): string | null {
   if (!relicRerollsLeft(s)) return 'สุ่มใหม่ครบแล้ว';
   const n = (s.relicRolls ?? 0) + 1;
   // a ranked run uses the server's reroll (sent with the offer); an offline run rolls its own
-  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(s.seed, s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n);
+  const next = s.relicRe ? s.relicRe[n - 1] ?? [] : rollRelicOffer(rollSeed(s), s.hero, s.day, s.relics ?? [], s.skills.slice(0, slotsOf(s)), n, s.secret !== undefined ? s.relicOffer ?? [] : undefined);
   if (!next.length) return 'ไม่มีของวิเศษให้สุ่มเพิ่ม';
   s.relicRolls = n;
   s.relicOffer = next;
@@ -260,7 +276,7 @@ export function pickRelic(s: RunState, i: number): string | null {
  * same bonuses on every day and every reroll (before, each roll re-rolled them and the text seemed to change).
  * Selling and buying the skill again gives the same bonuses back.
  */
-export const bonusOf = (s: RunState, id: string) => rollBonuses(new Rng(hashSeed(s.seed, 'bonus', id)), id, s.hero);
+export const bonusOf = (s: RunState, id: string) => rollBonuses(new Rng(hashSeed(rollSeed(s), 'bonus', id)), id, s.hero);
 
 /** Is this offer an upgrade that still applies to what you own? */
 export function upgradeOf(s: RunState, o: Offer): SkillInstance | null {
@@ -284,7 +300,7 @@ function rollShop(s: RunState) {
     return o && offerStillValid(s, o) ? o : null;
   });
   const keptIds = new Set(kept.filter((o): o is Offer => !!o).map((o) => o.id));
-  const rng = new Rng(hashSeed(s.seed, s.day, s.rolls));
+  const rng = new Rng(hashSeed(rollSeed(s), s.day, s.rolls));
   const owned = new Set(s.skills.map((k) => k.id));
   const fresh = SKILL_LIST.filter((d) => (!d.hero || d.hero === s.hero) && !owned.has(d.id) && !keptIds.has(d.id)).map((d) => d.id);
   const ups = s.skills.filter((k) => canUpgrade(k.v, s.day) && !keptIds.has(k.id)).map((k) => k.id);
@@ -421,7 +437,7 @@ export function wish(s: RunState): WishResult {
   if (!kind) return { err: 'พรจันทร์ใช้ไม่ได้ตอนนี้' };
   const price = wishPrice(s);
   if (s.gold < price) return { err: 'เงินไม่พอ' };
-  const rng = new Rng(hashSeed(s.seed, 'wish', s.day, s.wishes ?? 0));
+  const rng = new Rng(hashSeed(rollSeed(s), 'wish', s.day, s.wishes ?? 0));
   const pool = s.skills.map((k, i) => ({ k, i })).filter(({ k }) => (kind === 'upgrade' ? canUpgrade(k.v, s.day) : !k.mark));
   const { k, i } = rng.pick(pool);
   const from = k.v;
@@ -438,7 +454,8 @@ export function wish(s: RunState): WishResult {
     return { idx: i, from, v: k.v };
   }
   // a ranked run's mark kind is the server's roll, revealed in the next fight's response (sim v20); offline: rolled here
-  if (s.online) k.markHidden = 'wish';
+  if (s.secret !== undefined) k.mark = markKindFor(s.secret, s.wishMarks ?? 0);
+  else if (s.online) k.markHidden = 'wish';
   else k.mark = rng.pick(MARKS);
   s.wishMarks = (s.wishMarks ?? 0) + 1;
   return { idx: i, from, mark: k.mark };
@@ -547,7 +564,7 @@ export function recordResult(s: RunState, won: boolean, info: Omit<LogEntry, 'da
 
 /** What Awaken would do, per skill: the Lv2 variant a Lv1 skill becomes (null = not Lv1). Same rolls as Awaken itself. */
 export function awakenPreview(s: RunState): (Variant | null)[] {
-  const rng = new Rng(hashSeed(s.seed, 'awaken', s.day));
+  const rng = new Rng(hashSeed(rollSeed(s), 'awaken', s.day));
   return s.skills.map((k) => (k.v === '' ? rng.pick(nextVariants('')) : null));
 }
 
@@ -568,7 +585,9 @@ export function chooseLastChance(s: RunState, opt: LastChanceOption) {
     }
   }
   if (opt === 'mark') {
-    s.pendingMark = new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+    // on chain the kind comes from the secret seed (the program keeps it hidden until the mark is placed)
+    s.pendingMark = s.secret !== undefined ? markKindFor(s.secret, 'last') : new Rng(hashSeed(s.seed, 'mark', s.day)).pick(MARKS);
+
     s.pendingHidden = !!s.online;
     s.phase = 'mark';
     return;
@@ -594,7 +613,8 @@ export function applyMark(s: RunState, idx: number): string | null {
     k.markHidden = 'last';
   } else if (k) {
     delete k.markHidden;
-    k.mark = s.pendingMark;
+    // on chain the kind is rolled now, with this action's seed (it stays unknown until the mark is placed)
+    k.mark = s.secret !== undefined ? markKindFor(s.secret, 'last') : s.pendingMark;
   }
   s.pendingHidden = false;
   s.pendingMark = null;

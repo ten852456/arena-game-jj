@@ -1,9 +1,10 @@
+import { ONE, P, mulP, rdiv } from './fixed';
 import { T } from './tuning';
 import { SKILLS, lvOf } from './skills';
-import type { Build, Line, StatusKind } from './types';
+import type { Build, DamageKind, Line, StatusKind } from './types';
 
 /** HP multiplier of a hero (tuning.ts) */
-const hpOf = (id: string) => (hp: number) => Math.round(hp * T[`hp.${id}` as keyof typeof T]);
+const hpOf = (id: string) => (hp: number) => mulP(hp, P(T[`hp.${id}` as keyof typeof T]));
 /** +N% text from a multiplier or share */
 const pc = (x: number) => Math.round(x * 100);
 /** 'เลือดสูงสุด ±N% · ' for heroes whose base passive has no HP part (empty at ×1) */
@@ -46,21 +47,22 @@ export interface CombatHooks {
   maxHp?(hp: number): number;
   startShield?(n: number, maxHp: number): number;
   onStart?(me: HookFighter): void;
-  onDamaged?(me: HookFighter, amount: number, src: string): void;
-  /** multiplier given by a charge skill this fighter casts */
+  /** kind = what dealt the damage (sim v22: not the skill id, see types.ts DamageKind) */
+  onDamaged?(me: HookFighter, amount: number, kind: DamageKind): void;
+  /** multiplier given by a charge skill this fighter casts (ppm) */
   chargeMult?(m: number): number;
-  /** freeze ticks this fighter applies to the enemy, before diminishing returns */
-  freezeTicks?(ticks: number): number;
+  /** freeze this fighter applies to the enemy, in ppm ticks (sim v22), before diminishing returns */
+  freezeTicks?(ticksP: number): number;
   /** thorns damage reflected when this fighter is hit: capped value, total thorns, size of the hit */
   thornsReflect?(capped: number, total: number, hit: number): number;
   /** thorns this fighter gains last this many seconds (default 10); สลายเวท only takes half of a stack */
   thornsSecs?: number;
-  /** damage of each hit this fighter deals (after growth and charge) */
+  /** damage of each hit this fighter deals (after growth and charge); integer in, integer out (sim v22) */
   onHit?(me: HookFighter, dmg: number): number;
-  /** seconds a burn this fighter applies lasts */
-  burnSecs?(secs: number): number;
-  /** slow this fighter applies: [percent 0..1, seconds] */
-  slow?(pct: number, secs: number): [number, number];
+  /** seconds a burn this fighter applies lasts, ppm in and out (sim v22) */
+  burnSecs?(secsP: number): number;
+  /** slow this fighter applies, ppm (sim v22): [share 0..ONE, seconds × ONE] */
+  slow?(pctP: number, secsP: number): [number, number];
   /** this fighter dodged a hit */
   onDodge?(me: HookFighter): void;
   /** a direct hit of this fighter landed (was not dodged) */
@@ -137,7 +139,7 @@ export const HEROES: HeroDef[] = [
       onHit(me, dmg) {
         me.flags.hits = (me.flags.hits ?? 0) + 1;
         const every = T['assassin.every'];
-        return me.flags.hits === 1 || (every > 0 && me.flags.hits % every === 0) ? dmg * T['assassin.first'] : dmg;
+        return me.flags.hits === 1 || (every > 0 && me.flags.hits % every === 0) ? mulP(dmg, P(T['assassin.first'])) : dmg;
       },
       onLanded(me) {
         me.woundFoe(T['assassin.wound'], 2);
@@ -171,7 +173,7 @@ export const HEROES: HeroDef[] = [
       onHit(me, dmg) {
         if (!me.flags.counter) return dmg;
         me.flags.counter = 0;
-        return dmg * T['duelist.counter'];
+        return mulP(dmg, P(T['duelist.counter']));
       },
     },
     botWant: ['jab', 'flurry', 'riposte'],
@@ -186,7 +188,7 @@ export const HEROES: HeroDef[] = [
     id: 'knight', day1: ['bulwark', 'shield', 'stoneskin', 'cleanse', 'strike'], name: 'อัศวิน', line: 'shield', unique: 'bulwark',
     passive: `เลือดสูงสุด +${pc(T['hp.knight'] - 1)}% และเริ่มสู้พร้อมโล่ ${pc(T['knight.shield'])}% ของเลือด`,
     style: 'กำแพงโล่: สะสมโล่ให้หนา แล้วใช้โล่กระแทกตีกลับแรงตามโล่ที่มี',
-    hooks: { maxHp: hpOf('knight'), startShield: (n, max) => n + Math.round(max * T['knight.shield']) },
+    hooks: { maxHp: hpOf('knight'), startShield: (n, max) => n + mulP(max, P(T['knight.shield'])) },
     ult: {
       name: 'ป้อมจันทรา',
       get trigger() { return both((lv) => `ได้โล่รวม (ไม่นับโล่เริ่มต้น) ${pc(ultTrig('knight', lv))}% ของเลือดสูงสุด`); },
@@ -200,8 +202,9 @@ export const HEROES: HeroDef[] = [
     style: 'ดูดเลือดไม่หยุด: ฟื้นและดูดเลือดให้อยู่นาน ยิ่งสู้นานและยิ่งโดนตี ยิ่งตีแรง',
     hooks: {
       maxHp: hpOf('berserker'),
-      onDamaged(me, _n, src) {
-        if (src !== 'burn' && src !== 'poison' && src !== 'fatigue' && src !== 'thorns' && me.hp > 0) {
+      onDamaged(me, _n, kind) {
+        // sim v22: by kind, so hits of the skill เกราะหนาม (id 'thorns') count too
+        if (kind !== 'burn' && kind !== 'poison' && kind !== 'fatigue' && kind !== 'thorns' && me.hp > 0) {
           me.flags.hitsTaken = (me.flags.hitsTaken ?? 0) + 1;
           if (me.flags.hitsTaken % T['berserker.hits'] === 0) me.grow(1);
         }
@@ -224,7 +227,8 @@ export const HEROES: HeroDef[] = [
     id: 'pyro', day1: ['inferno', 'ignite', 'blaze', 'scorch', 'strike'], name: 'นักเวทเพลิง', line: 'burn', unique: 'inferno',
     passive: `${hpTxt('pyro')}ไฟที่คุณจุดติดนานขึ้น ${pc(T['pyro.burn'] - 1)}%`,
     style: 'ไฟซ้อนไฟ: จุดไฟหลายกองให้ซ้อนกัน แล้วระเบิดเพลิงตามไฟที่ยังเหลือ (ไม่สนโล่)',
-    hooks: { maxHp: hpOf('pyro'), burnSecs: (s) => Math.round(s * T['pyro.burn']) },
+    // whole seconds, as v21 (Math.round of the seconds)
+    hooks: { maxHp: hpOf('pyro'), burnSecs: (sP) => rdiv(sP * P(T['pyro.burn']), ONE * ONE) * ONE },
     botWant: ['ignite', 'inferno', 'blaze'],
     ult: {
       name: 'สุริยะดับ',
@@ -238,8 +242,9 @@ export const HEROES: HeroDef[] = [
     passive: `${hpTxt('thornguard')}skill บนสุดเริ่มสู้ด้วยคูลดาวน์ไปแล้ว ${pc(T['thornguard.head'])}% · โดนตีทุก 2 ครั้ง ศัตรูติดพิษ 1/วิ ${T['thornguard.poison']} วิ · หนามของคุณอยู่นาน 13 วิ และสลายเวทลบได้แค่ครึ่งกอง`,
     style: 'พิษซ้อนพิษ: ใครตีเราก็ติดพิษ สะสมพิษให้ซ้อนกันนานๆ แล้วระเบิดพิษปิดเกม (พิษไม่สนโล่และหลบไม่ได้)',
     hooks: {
-      onDamaged(me, _n, src) {
-        if (src === 'burn' || src === 'poison' || src === 'fatigue' || src === 'thorns' || src === 'ult' || me.hp <= 0) return;
+      onDamaged(me, _n, kind) {
+        // sim v22: by kind, so hits of the skill เกราะหนาม (id 'thorns') count too
+        if (kind === 'burn' || kind === 'poison' || kind === 'fatigue' || kind === 'thorns' || kind === 'ult' || me.hp <= 0) return;
         me.flags.hitsTaken = (me.flags.hitsTaken ?? 0) + 1;
         if (me.flags.hitsTaken % 2 === 0) me.poisonFoe(1, T['thornguard.poison']);
       },
@@ -261,7 +266,7 @@ export const HEROES: HeroDef[] = [
     style: 'หยุดเวลา: แช่แข็งศัตรูแล้วทุบน้ำแข็งแรง x3 ระหว่างที่ศัตรูขยับไม่ได้',
     hooks: {
       maxHp: hpOf('witch'),
-      freezeTicks: (t) => t + Math.round(T['witch.freeze'] * 10),
+      freezeTicks: (tP) => tP + rdiv(P(T['witch.freeze']) * 10, ONE) * ONE,
       // น้ำแข็งกัดแผล: a landed hit while the enemy is frozen cuts its healing for 3 s (❄ > ❤)
       onLanded(me) {
         if (me.foeFrozen && T['witch.wound'] > 0) me.woundFoe(T['witch.wound'], 3);
@@ -280,8 +285,9 @@ export const HEROES: HeroDef[] = [
     style: 'ลมพัดเวลา: ทำให้ศัตรูช้า ดึงคูลดาวน์ถอยหลัง เร่งตัวเอง และพัดไฟ/พิษทิ้ง',
     hooks: {
       maxHp: hpOf('chrono'),
-      slow: (p, s) => [p + 0.1, s + 1],
-      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? dmg * (1 + T['chrono.slowHit']) : dmg),
+      slow: (p, s) => [p + 100_000, s + ONE],
+      onHit: (me, dmg) => (me.foeSlowed || me.foeFrozen ? mulP(dmg, ONE + P(T['chrono.slowHit'])) : dmg),
+
     },
     botWant: ['timewarp', 'chill', 'tailwind'],
     ult: {

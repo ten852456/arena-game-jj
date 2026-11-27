@@ -1,0 +1,335 @@
+{
+ "at": "2026-11-25T09:44:07.527Z",
+ "player": "mc27uvKv6cMPs4QEG6ywjQfFPabyq3Ez7hL7ja9G2sk",
+ "probes": [
+  {
+   "probe": "getSignaturesForAddress(player)",
+   "as": "owner",
+   "result": "6 signatures"
+  },
+  {
+   "probe": "getSignaturesForAddress(player)",
+   "as": "session",
+   "result": "0 signatures"
+  },
+  {
+   "probe": "getSignaturesForAddress(player)",
+   "as": "stranger",
+   "result": "0 signatures"
+  },
+  {
+   "probe": "getSignaturesForAddress(player)",
+   "as": "anon",
+   "result": "0 signatures"
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "664Lji8k",
+   "as": "owner",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "664Lji8k",
+   "as": "session",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "664Lji8k",
+   "as": "stranger",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "664Lji8k",
+   "as": "anon",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "4j3nh1y5",
+   "as": "owner",
+   "accountKeys": 5,
+   "instructions": [
+    {
+     "program": "Comput",
+     "data": "02c05c1500"
+    },
+    {
+     "program": "Fu3JUG",
+     "data": "ddaa30542e01659a00"
+    }
+   ],
+   "meta": {
+    "err": null,
+    "logs": 6,
+    "preBalances": 5,
+    "cu": 4125,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "4j3nh1y5",
+   "as": "session",
+   "accountKeys": 5,
+   "instructions": [
+    {
+     "program": "Comput",
+     "data": "02c05c1500"
+    },
+    {
+     "program": "Fu3JUG",
+     "data": "ddaa30542e01659a00"
+    }
+   ],
+   "meta": {
+    "err": null,
+    "logs": 6,
+    "preBalances": 5,
+    "cu": 4125,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "4j3nh1y5",
+   "as": "stranger",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "4j3nh1y5",
+   "as": "anon",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "5RukxmbH",
+   "as": "owner",
+   "accountKeys": 5,
+   "instructions": [
+    {
+     "program": "Comput",
+     "data": "02c05c1500"
+    },
+    {
+     "program": "Fu3JUG",
+     "data": "51ea7760f7e41dbf"
+    }
+   ],
+   "meta": {
+    "err": null,
+    "logs": 6,
+    "preBalances": 5,
+    "cu": 3027,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "5RukxmbH",
+   "as": "session",
+   "accountKeys": 5,
+   "instructions": [
+    {
+     "program": "Comput",
+     "data": "02c05c1500"
+    },
+    {
+     "program": "Fu3JUG",
+     "data": "51ea7760f7e41dbf"
+    }
+   ],
+   "meta": {
+    "err": null,
+    "logs": 6,
+    "preBalances": 5,
+    "cu": 3027,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "5RukxmbH",
+   "as": "stranger",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "getTransaction",
+   "sig": "5RukxmbH",
+   "as": "anon",
+   "accountKeys": 0,
+   "instructions": [],
+   "meta": {
+    "err": null,
+    "logs": 0,
+    "preBalances": 0,
+    "cu": 0,
+    "inner": 0,
+    "returnData": null
+   }
+  },
+  {
+   "probe": "simulate",
+   "what": "act lock (member-only accounts), owner signature NOT given (sigVerify off)",
+   "as": "owner",
+   "error": null,
+   "err": null,
+   "logs": [
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh invoke [1]",
+    "Program log: Instruction: Act",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh consumed 2074 of 1399850 compute units",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh success"
+   ],
+   "units": 2224,
+   "returnData": null,
+   "accounts": [
+    "1688 B",
+    "null"
+   ]
+  },
+  {
+   "probe": "simulate",
+   "what": "act lock (member-only accounts), owner signature NOT given (sigVerify off)",
+   "as": "session",
+   "error": null,
+   "err": null,
+   "logs": [
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh invoke [1]",
+    "Program log: Instruction: Act",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh consumed 2074 of 1399850 compute units",
+    "Program Fu3JUGUS5QYmpyXVGLrD7oKChrAhjZCxEcFK1jTcrSh success"
+   ],
+   "units": 2224,
+   "returnData": null,
+   "accounts": [
+    "1688 B",
+    "null"
+   ]
+  },
+  {
+   "probe": "simulate",
+   "what": "act lock (member-only accounts), owner signature NOT given (sigVerify off)",
+   "as": "stranger",
+   "error": null,
+   "err": null,
+   "logs": [],
+   "units": 0,
+   "returnData": null,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "act lock (member-only accounts), owner signature NOT given (sigVerify off)",
+   "as": "anon",
+   "error": null,
+   "err": null,
+   "logs": [],
+   "units": 0,
+   "returnData": null,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight (reads zero-member pool + ranking), sigVerify off",
+   "as": "owner",
+   "error": null,
+   "err": null,
+   "logs": [],
+   "units": 0,
+   "returnData": null,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight (reads zero-member pool + ranking), sigVerify off",
+   "as": "stranger",
+   "error": null,
+   "err": null,
+   "logs": [],
+   "units": 0,
+   "returnData": null,
+   "accounts": []
+  },
+  {
+   "probe": "simulate",
+   "what": "fight (reads zero-member pool + ranking), sigVerify off",
+   "as": "anon",
+   "error": null,
+   "err": null,
+   "logs": [],
+   "units": 0,
+   "returnData": null,
+   "accounts": []
+  }
+ ]
+}

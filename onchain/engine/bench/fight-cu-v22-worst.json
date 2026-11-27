@@ -1,0 +1,71 @@
+{
+ "baselineCU": 554,
+ "fights": 32,
+ "errors": 0,
+ "mismatch": 0,
+ "bot": {
+  "n": 16,
+  "mean": 631584,
+  "p50": 631513,
+  "p95": 634966,
+  "max": 634966
+ },
+ "chaos": {
+  "n": 16,
+  "mean": 631584,
+  "p50": 631513,
+  "p95": 634966,
+  "max": 634966
+ },
+ "botByDay": {
+  "19": {
+   "n": 16,
+   "mean": 631584,
+   "p50": 631513,
+   "p95": 634966,
+   "max": 634966
+  }
+ },
+ "top": [
+  {
+   "i": 0,
+   "day": 19,
+   "chaos": false,
+   "ticks": 360,
+   "blocks": 16,
+   "cu": 634966
+  },
+  {
+   "i": 1,
+   "day": 19,
+   "chaos": true,
+   "ticks": 360,
+   "blocks": 16,
+   "cu": 634966
+  },
+  {
+   "i": 4,
+   "day": 19,
+   "chaos": false,
+   "ticks": 360,
+   "blocks": 16,
+   "cu": 631513
+  },
+  {
+   "i": 5,
+   "day": 19,
+   "chaos": true,
+   "ticks": 360,
+   "blocks": 16,
+   "cu": 631513
+  },
+  {
+   "i": 6,
+   "day": 19,
+   "chaos": false,
+   "ticks": 360,
+   "blocks": 16,
+   "cu": 631513
+  }
+ ]
+}

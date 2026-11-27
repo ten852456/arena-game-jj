@@ -1,0 +1,34 @@
+[package]
+name = "fight-bench"
+version = "0.1.0"
+description = "CU bench: one mochi-engine fight on SBF (not deployed anywhere but a local validator)"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "fight_bench"
+
+[features]
+default = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+
+[dependencies]
+anchor-lang = "1.0.2"
+mochi-engine = { path = "../../engine/mochi-engine" }
+
+# standalone: not a member of the onchain workspace (the game program waits for the run.rs port)
+[workspace]
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
+codegen-units = 1
+[profile.release.package.mochi-engine]
+overflow-checks = false

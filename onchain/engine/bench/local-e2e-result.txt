@@ -1,0 +1,72 @@
+OK   season secret that does not match the published commitment is refused
+OK   E2E player A run 1: during the run Player holds only the commitment
+OK   E2E player A run 1: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player A run 1: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player A run 1: the day-1 shops shown before the pick = TS newRun(hero, look, rs) for all 3 heroes
+OK   E2E player A run 1: every fight seed = H(secret, r16, req, "fight") · 10 fights, 19 random actions logged
+OK   E2E player A run 1: TS replay from the revealed secret + randomness log = program state (39 actions, day 10, 2 wins)
+OK   E2E player B run 1: during the run Player holds only the commitment
+OK   E2E player B run 1: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player B run 1: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player B run 1: the day-1 shops shown before the pick = TS newRun(hero, look, rs) for all 3 heroes
+OK   E2E player B run 1: every fight seed = H(secret, r16, req, "fight") · 10 fights, 23 random actions logged
+OK   E2E player B run 1: TS replay from the revealed secret + randomness log = program state (40 actions, day 10, 2 wins)
+OK   E2E player A run 2: during the run Player holds only the commitment
+OK   E2E player A run 2: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player A run 2: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player A run 2: the day-1 shops shown before the pick = TS newRun(hero, look, rs) for all 3 heroes
+OK   E2E player A run 2: every fight seed = H(secret, r16, req, "fight") · 10 fights, 15 random actions logged
+OK   E2E player A run 2: TS replay from the revealed secret + randomness log = program state (38 actions, day 10, 10 wins)
+OK   E2E player B run 2: during the run Player holds only the commitment
+OK   E2E player B run 2: revealed secret = H(vrf, season secret, owner, run) and matches the commitment
+OK   E2E player B run 2: hero choices = heroChoices(H(secret, "heroes"))
+OK   E2E player B run 2: the day-1 shops shown before the pick = TS newRun(hero, look, rs) for all 3 heroes
+OK   E2E player B run 2: every fight seed = H(secret, r16, req, "fight") · 9 fights, 18 random actions logged
+OK   E2E player B run 2: TS replay from the revealed secret + randomness log = program state (37 actions, day 9, 1 wins)
+OK   S8 a random action on `act` is refused (needs request_action)
+OK   S8 a random action inside act_batch is refused
+OK   S8 deterministic actions are one transaction (lock = act)
+OK   S1 simulate request fight: succeeds, commits nothing, post-state = same run + "pending" only (no outcome) · logs 6 (no roll in them), return data none
+OK   S1 simulate request reroll: succeeds, commits nothing, post-state = same run + "pending" only (no outcome) · logs 6 (no roll in them), return data none
+OK   S2 forged-callback simulations run (the preview path exists) but each guessed randomness gives another fight; none is the real one · 6 simulated, 6 different outcomes, real one not among them
+OK   S2 a real (non-simulated) callback can not be signed by the player as the VRF identity
+OK   (setup) back in the shop for S3–S5
+OK   S3 a second request while one is pending is refused
+OK   S3 a deterministic action while a request is pending is refused
+OK   S3 act_batch while a request is pending is refused
+OK   S5 duplicate callback of an applied request is refused and changes nothing
+OK   S4 replaying an OLD request id (applied earlier) is refused
+OK   (setup) back in the shop for S6
+OK   S6 retry before the timeout is refused
+OK   S6 after the timeout the SAME action is re-requested (same id, code, args; state otherwise unchanged)
+OK   S6 no instruction cancels or changes a pending request (re-request with another action refused)
+OK   S6 the late answer applies once; a second answer (e.g. the first request's) is refused
+OK   S7 a stranger cannot request on another player's account
+OK   S7 a stranger cannot play deterministic actions on it
+OK   S7 the player cannot answer randomness (local_apply is admin-only, stands in for the VRF identity)
+OK   (setup) back in the shop for the session-key test
+OK   S7 the session key can request + play
+OK   S7 after revoke_session the session key is refused
+
+CU per transaction (local validator, includes the compute-budget instruction):
+  act 0                  n  50  mean    3024  max    3136
+  act 11                 n  11  mean    2883  max    2884
+  act 2                  n  10  mean    2889  max    2889
+  act 5                  n   8  mean    2996  max    3009
+  apply 12               n   1  mean   10558  max   10558
+  apply 3                n  22  mean   10350  max   12987
+  apply 6                n   9  mean    4651  max    4746
+  apply 7                n   3  mean    9237  max   15581
+  apply 8                n   1  mean   10803  max   10803
+  apply fight            n  42  mean   71840  max  149320
+  begin_run (request)    n   5  mean   21466  max   21466
+  pick_hero              n   5  mean    5734  max    5845
+  request 12             n   1  mean   22313  max   22313
+  request 3              n  22  mean   21338  max   23325
+  request 6              n   9  mean   16398  max   16493
+  request 7              n   3  mean   21240  max   28107
+  request 8              n   1  mean   19665  max   19665
+  request fight          n  42  mean   15968  max   16135
+  vrf callback (run)     n   5  mean   18856  max   19428
+
+49/49 checks passed

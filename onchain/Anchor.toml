@@ -1,0 +1,16 @@
+[toolchain]
+anchor_version = "1.0.2"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+mochi_game = "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r"
+
+[programs.localnet]
+mochi_game = "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"

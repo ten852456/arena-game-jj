@@ -1,0 +1,37 @@
+[package]
+name = "mochi-game"
+version = "0.1.0"
+description = "Mochi Moon on-chain game (sim v22): real engine, secret seed (VRF), zero-copy state, phase guards, batching, compressed ghosts"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "mochi_game"
+
+[features]
+default = []
+# bench-only instructions (forced seed / given opponent) for replaying recorded runs exactly; never in production
+bench = []
+# LOCAL VALIDATOR ONLY: no VRF oracle / TEE permissions there, the admin answers VRF requests (local_vrf); never deploy
+local = []
+cpi = ["no-entrypoint"]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+idl-build = ["anchor-lang/idl-build"]
+custom-heap = []
+custom-panic = []
+anchor-debug = []
+
+[dependencies]
+anchor-lang = { version = "1.0.2", features = ["init-if-needed"] }
+bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
+solana-sha256-hasher = "3.1.0"
+mochi-engine = { path = "../../engine/mochi-engine" }
+ephemeral-rollups-sdk = { version = "0.16.2", features = ["anchor", "access-control"] }
+ephemeral-vrf-sdk = { version = "0.17.3", features = ["anchor"] }
+
+[dev-dependencies]
+# tests only: check the hand-built VRF request / commit instruction against the SDKs' own encoders
+bincode = "=1.3.3"
+magicblock-magic-program-api = "=0.10.1"

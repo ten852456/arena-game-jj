@@ -1,0 +1,9 @@
+{
+  "mode": "tee",
+  "rpc": "https://api.devnet.solana.com",
+  "tee": "https://devnet-tee.magicblock.app",
+  "validator": "MTEWGuqxUpYZGFJQcp8tLN7x5v9BSeoFHYWQQ3n3xzo",
+  "program": "7yVgjzySuXwBeRJ18ZhunetqBz8ZTBNGiQVkw1or7w2r",
+  "season": 3241632420,
+  "shard": 0
+}

@@ -1,3 +1,4 @@
+import { ONE, P, mulP, rdiv } from './fixed';
 import { T, onTuning } from './tuning';
 import type { Line, SkillInstance } from './types';
 
@@ -172,8 +173,8 @@ export interface FighterView {
   hero: string;
   /** total thorns right now */
   thorns: number;
-  /** total พลัง right now */
-  growth: number;
+  /** total พลัง right now, ppm (sim v22: part points) */
+  growthP: number;
   /** burn damage still to come from every burn stack on this fighter */
   burnLeft: number;
   /** burn stacks on this fighter */
@@ -185,8 +186,10 @@ export interface FighterView {
 }
 
 export interface Ctx {
-  /** scale a number by the cast power (echo mark casts at 50%) */
+  /** scale a data number by the cast power (echo mark casts at 50%): max(1, round(n × power)) */
   v(n: number): number;
+  /** the same for an amount already in ppm (sim v22 integer maths) */
+  vP(nP: number): number;
   readonly me: FighterView;
   readonly foe: FighterView;
   /** returns damage dealt, or -1 when the enemy dodged it. pierce = share of shield ignored. leech = share healed. sure = can't be dodged */
@@ -203,7 +206,8 @@ export interface Ctx {
   freeze(secs: number): void;
   slow(pct: number, secs: number): void;
   delay(secs: number): void;
-  grow(n: number): void;
+  /** add พลัง, ppm */
+  growP(nP: number): void;
   charge(mult: number, hits: number): void;
   thorns(n: number, perm: boolean, heal?: number): void;
   steadfast(keep: number, ignoreFreeze: boolean): void;
@@ -211,13 +215,13 @@ export interface Ctx {
   cleanse(n: number, dotOnly?: boolean): number;
   /** this skill is one of its owner's line pieces */
   readonly inLine: boolean;
-  /** cast power (engines and echo fire below 1, connect power bonuses above) */
+  /** cast power, ppm (engines and echo fire below ONE, connect power bonuses above) */
   readonly power: number;
   /** returns buffs removed */
   dispel(n: number, shield: number, steal: boolean): number;
   leech(pct: number): void;
-  /** ⏳ seconds of the fight so far, capped at TIME_CAP_S */
-  readonly secs: number;
+  /** ⏳ seconds of the fight so far, capped at TIME_CAP_S, ppm */
+  readonly secsP: number;
   /** 💰 the caster's build worth (hero passives included) */
   readonly worth: number;
   /** ⏫ cut this skill's own cooldown */
@@ -242,27 +246,28 @@ export function execNode(node: SkillNode, c: Ctx) {
         if (e.ifSlowed && !c.foe.slowed) break;
         const times = e.times ?? 1;
         for (let i = 0; i < times; i++) {
-          let n = e.n + (e.perRemoved ?? 0) * removed;
+          // sim v22: integer ppm maths (same formula as v21)
+          let nP = P(e.n) + P(e.perRemoved ?? 0) * removed;
           // a shield bash spends part of the shield it used (sim v15: before, it stayed, so bash after bash scaled forever)
           if (e.shieldPct) {
-            const used = c.me.shield * e.shieldPct;
-            n += used;
-            c.spendShield(used * T['shield.spend']);
+            const usedP = c.me.shield * P(e.shieldPct);
+            nP += usedP;
+            c.spendShield(rdiv(mulP(usedP, P(T['shield.spend'])), ONE));
           }
-          if (e.thornsX) n += c.me.thorns * e.thornsX;
-          if (e.burnPct) n += c.foe.burnLeft * e.burnPct;
-          if (e.poisonPct) n += c.foe.poisonLeft * e.poisonPct;
-          if (e.perBurn) n += c.foe.burnStacks * e.perBurn;
-          if (e.perDodge) n += c.me.dodge * e.perDodge;
-          if (e.perSec) n += c.secs * e.perSec;
-          if (e.perWorth) n += c.worth * e.perWorth;
-          if (n <= 0) break;
-          let mult = 1;
-          if (e.exec && c.foe.hp < c.foe.maxHp * e.exec[0]) mult *= e.exec[1];
-          if (e.frozen && c.foe.frozen) mult *= e.frozen;
-          if (e.noShield && c.foe.shield <= 0) mult *= e.noShield;
+          if (e.thornsX) nP += c.me.thorns * P(e.thornsX);
+          if (e.burnPct) nP += c.foe.burnLeft * P(e.burnPct);
+          if (e.poisonPct) nP += c.foe.poisonLeft * P(e.poisonPct);
+          if (e.perBurn) nP += c.foe.burnStacks * P(e.perBurn);
+          if (e.perDodge) nP += c.me.dodge * P(e.perDodge);
+          if (e.perSec) nP += mulP(c.secsP, P(e.perSec));
+          if (e.perWorth) nP += c.worth * P(e.perWorth);
+          if (nP <= 0) break;
+          let m = ONE;
+          if (e.exec && c.foe.hp * ONE < c.foe.maxHp * P(e.exec[0])) m = mulP(m, P(e.exec[1]));
+          if (e.frozen && c.foe.frozen) m = mulP(m, P(e.frozen));
+          if (e.noShield && c.foe.shield <= 0) m = mulP(m, P(e.noShield));
           hitsTried++;
-          const d = c.hit(c.v(n * mult), { pierce: e.pierce, leech: e.leech, sure: e.sure });
+          const d = c.hit(c.vP(mulP(nP, m)), { pierce: e.pierce, leech: e.leech, sure: e.sure });
           if (d < 0) continue; // dodged: no burn / poison either
           hitsLanded++;
           if (e.burn) c.burn(c.v(e.burn[0]), e.burn[1]);
@@ -270,11 +275,11 @@ export function execNode(node: SkillNode, c: Ctx) {
         }
         break;
       }
-      case 'shield': c.shield(c.v(e.n + (e.perSec ?? 0) * c.secs + (e.perWorth ?? 0) * c.worth)); break;
-      case 'heal': c.heal(c.v(e.n + (e.perSec ?? 0) * c.secs + (e.perWorth ?? 0) * c.worth)); break;
+      case 'shield': c.shield(c.vP(P(e.n) + mulP(c.secsP, P(e.perSec ?? 0)) + P(e.perWorth ?? 0) * c.worth)); break;
+      case 'heal': c.heal(c.vP(P(e.n) + mulP(c.secsP, P(e.perSec ?? 0)) + P(e.perWorth ?? 0) * c.worth)); break;
       case 'accel': c.accel(e.pct, e.min); break;
       case 'burn':
-        for (let i = 0; i < (e.stacks ?? 1); i++) c.burn(c.v(e.dps + (e.growthHalf ? Math.floor(c.me.growth / 2) : 0)), e.secs);
+        for (let i = 0; i < (e.stacks ?? 1); i++) c.burn(c.v(e.dps + (e.growthHalf ? Math.floor(c.me.growthP / (2 * ONE)) : 0)), e.secs);
         break;
       case 'poison':
         for (let i = 0; i < (e.stacks ?? 1); i++) c.poison(c.v(e.dps), e.secs);
@@ -283,7 +288,8 @@ export function execNode(node: SkillNode, c: Ctx) {
       case 'slow': c.slow(e.pct, e.secs); break;
       case 'delay': if (!missed()) c.delay(e.secs); break;
       // พลัง from a part-power fire (engine, echo) is that part, not a whole point (sim v14: before, any fire gave ≥ 1)
-      case 'grow': c.grow(+(e.n * c.power * (c.inLine ? 1 : T['grow.offline'])).toFixed(2)); break;
+      // rounded to 0.01 of a point (v21: toFixed(2)), ppm
+      case 'grow': c.growP(rdiv(mulP(mulP(P(e.n), c.power), c.inLine ? ONE : P(T['grow.offline'])), 10_000) * 10_000); break;
       case 'charge': c.charge(e.mult, e.hits ?? 1); break;
       case 'thorns': c.thorns(c.v(e.n), !!e.perm, e.heal); break;
       case 'steadfast': c.steadfast(e.keep ?? 0.4, !!e.ignoreFreeze); break;
@@ -291,7 +297,8 @@ export function execNode(node: SkillNode, c: Ctx) {
       case 'dispel': removed = c.dispel(e.n, e.shield ?? 0.2, !!e.steal); break;
       case 'leech': c.leech(e.pct); break;
       // a dodge charge only comes from a fire of at least DODGE_MIN_POWER (an engine tick at 55% gives none)
-      case 'dodge': if (c.power >= DODGE_MIN_POWER) c.dodge(Math.max(1, Math.round(e.n * Math.min(1, c.power)))); break;
+      case 'dodge': if (c.power >= P(DODGE_MIN_POWER)) c.dodge(Math.max(1, mulP(e.n, Math.min(ONE, c.power)))); break;
+
       case 'haste': c.haste(e.pct, e.secs); break;
       case 'wound': c.wound(e.pct, e.secs); break;
     }
