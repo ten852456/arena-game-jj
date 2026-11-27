@@ -1,5 +1,5 @@
 /**
- * Balance knobs in one place. The auto-tuner (`npm run tune`, see docs/TUNING.md) searches over these values and
+ * Balance knobs in one place. The auto-tuner (`npm run tune`, see docs/design/TUNING.md) searches over these values and
  * `npm run tune -- --apply` rewrites the numbers between the <tuned> markers below.
  *
  * - skills.ts scales its base numbers (the literals in SKILL_LIST) by the skill multipliers when it loads:

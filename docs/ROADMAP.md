@@ -86,9 +86,9 @@ of them to support daily rules and free rotation later.
 - [x] **Engine skills** — ฟันเฟือง (fires above/below in turns) and เร่งเครื่อง (fires both, restarts their cooldowns), Lv1→3 trees
 - [x] **Fight stats** — `CombatResult.sides[side]`: casts, skills that never fired, frozen / delayed / slowed ticks, total control, resists
 - [x] **Run length** — 10 wins; defeat costs 2/3/4/5 HP by day (cap 5)
-- [x] **Power curves** — heroes peak at different days (burst early, control/tank mid, scaling late): see docs/SKILL_TREE.md
+- [x] **Power curves** — heroes peak at different days (burst early, control/tank mid, scaling late): see docs/design/SKILL_TREE.md
 - [x] **Auto-tuner (sim v11)** — `npm run tune`: CMA-ES over 54 knobs in `src/sim/tuning.ts` towards per-hero power
-  curves, reach-10 15–45%, no hard counters, healthy fights; watch-build penalties for exploits (docs/TUNING.md).
+  curves, reach-10 15–45%, no hard counters, healthy fights; watch-build penalties for exploits (docs/design/TUNING.md).
   First pass + exploit-report fixes applied: 12 → 7 sim targets missed. Open: day-15 burst vs scaling, day-3 pairs
   (see SKILL_TREE.md "Sim v11")
 - [ ] Bot: place engines next to slow heavy skills (bot.ts `arrangeList` does not know engines yet)
@@ -125,7 +125,7 @@ Exit: run of 10–15 min measured on real devices; "lost first 3 days" group doe
 - [ ] Link opens the game with that bot ready (new player onboarding)
 - [ ] Separate leaderboards: manual vs bot
 
-## Phase 5 — Town & idle (design draft: `docs/FARM.md`)
+## Phase 5 — Town & idle (design draft: `docs/design/FARM.md`)
 
 - [ ] Heroes not in the arena go gathering (wood, ore, scarce goods) while offline
 - [ ] Buildings + research; town never resets
@@ -141,11 +141,11 @@ Exit: run of 10–15 min measured on real devices; "lost first 3 days" group doe
 ## Phase 7 — Economy ⚠ decide "real money out" first
 
 - [ ] Diamonds (buy only, game never pays out — principle 4)
-- [ ] Monthly pass: 5 choices instead of 3 in normal mode, skins, faster egg hatching (never eggs or boxes: owner 2026-11-26, see docs/FARM.md)
+- [ ] Monthly pass: 5 choices instead of 3 in normal mode, skins, faster egg hatching (never eggs or boxes: owner 2026-11-26, see docs/design/FARM.md)
 - [ ] Skins, server-wide name/status, duplicate hero → cosmetic
 - [ ] Marketplace: listings only, fee on every trade, history, account age/progress gate,
   unused heroes only and after tickets
-- [ ] Whale perks: roster width, bot runs/rules, early season access (no paid gathering boost: owner 2026-11-26, see docs/FARM.md)
+- [ ] Whale perks: roster width, bot runs/rules, early season access (no paid gathering boost: owner 2026-11-26, see docs/design/FARM.md)
 
 ## Phase 8 — Seasons & live ops
 

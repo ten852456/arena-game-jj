@@ -1,6 +1,6 @@
 // Local on-chain mode for the real UI (sim v22): creates a season (7 days) with its committed season secret, the
 // ranking and pool shard 0 on a LOCAL validator running mochi-game built with `--features local`, and writes
-//   src/client/public/chain-local.json   (rpc, program, season, shard) for the UI (`?chain=1&net=local`)
+//   src/web/public/chain-local.json   (rpc, program, season, shard) for the UI (`?chain=1&net=local`)
 //   onchain/.local-season.json           (admin key + season) for local-vrf.mjs, which answers the randomness
 // Run from arena-game-jj:  node onchain/scripts/chain-setup.mjs [program] [rpc]
 import fs from 'node:fs';
@@ -31,7 +31,7 @@ await send('init_season_secret', [u32(season)], [W(admin.publicKey, true), R(sea
 await send('set_season_secret', [seasonSecret], [W(admin.publicKey, true), R(seasonPda), W(ssPda)]);
 await send('init_ranking', [u32(season)], [W(admin.publicKey, true), W(pda([Buffer.from('ranking'), u32(season)])), sys]);
 await send('init_pool', [u32(season), u16(shard)], [W(admin.publicKey, true), W(pda([Buffer.from('pool'), u32(season), u16(shard)])), sys]);
-const cfgPath = new URL('../../src/client/public/chain-local.json', import.meta.url);
+const cfgPath = new URL('../../src/web/public/chain-local.json', import.meta.url);
 fs.writeFileSync(cfgPath, JSON.stringify({ mode: 'local', rpc, program: programId, season, shard }, null, 2) + '\n');
 fs.writeFileSync(new URL('../.local-season.json', import.meta.url), JSON.stringify({ rpc, program: programId, season, shard, admin: [...admin.secretKey] }));
 console.log('season', season, 'ready · wrote', cfgPath.pathname, '+ onchain/.local-season.json · now run: node onchain/scripts/local-vrf.mjs');

@@ -69,7 +69,7 @@ export const HERO_CHOICES = 3;
  */
 export function heroChoices(seed: number, n = HERO_CHOICES, from?: string[]): string[] {
   const rng = new Rng(hashSeed(seed, 'heroes'));
-  // the farm (docs/FARM.md): only heroes the player owns or today's free rotation
+  // the farm (docs/design/FARM.md): only heroes the player owns or today's free rotation
   const pool = HEROES.map((h) => h.id).filter((h) => !from || from.includes(h));
   const out: string[] = [];
   while (out.length < n && pool.length) out.push(pool.splice(rng.int(pool.length), 1)[0]);

@@ -1,7 +1,7 @@
 /**
  * The 10 lines (สาย; 💰 gold and ⏳ time since sim v21): the identity system of skills and heroes. Each line beats 2 others and loses to 2 (softly,
  * through mechanics: shields block hits, burn/poison ignore shields and cannot be dodged, dodge negates hits,
- * heal out-sustains DoT, wind cleanses DoT, ice stops fast and healing cooldowns). docs/DESIGN_LINES_ULT.md.
+ * heal out-sustains DoT, wind cleanses DoT, ice stops fast and healing cooldowns). docs/design/DESIGN_LINES_ULT.md.
  */
 export type Line = 'hit' | 'dodge' | 'shield' | 'heal' | 'burn' | 'poison' | 'ice' | 'wind' | 'gold' | 'time';
 export const LINES: Line[] = ['hit', 'dodge', 'shield', 'heal', 'burn', 'poison', 'ice', 'wind', 'gold', 'time'];

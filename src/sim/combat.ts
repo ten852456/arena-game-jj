@@ -591,12 +591,13 @@ export function simulate(
         addHaste(f, pow, 3 * ONE);
         addDodge(f, 2);
         break;
-      case 'knight':
+      case 'knight': {
         // sim v18: shield plus a share of max HP (late shields are small next to late HP, so Lv2 did almost nothing)
         // pow × (shield + share × maxHp): ppm × ppm, so compare and round at ONE²
         const raw = pow * (f.shield * ONE + f.maxHp * P(T['ult.knight.hp']));
         deal(foe, Math.max(1, rdiv(Math.min(raw, ultCapP(f, foe) * ONE), ONE * ONE)), true, 'ult', 'ult');
         break;
+      }
       case 'berserker': {
         const h = Math.min(f.maxHp - f.hp, mulP(f.maxHp, pow));
         if (h > 0) {

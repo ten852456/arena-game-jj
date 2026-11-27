@@ -1,4 +1,4 @@
-import { L, getLang } from '../i18n';
+import { L, getLang } from '../shared/i18n';
 import { MAX_TICKS, TPS, cdTicks, fatigueStart } from './combat';
 import { HEROES_BY_ID } from './heroes';
 import { bonusTotals } from './links';

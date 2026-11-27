@@ -11,7 +11,7 @@ import bs58 from 'bs58';
 import { ed25519 } from '@noble/curves/ed25519';
 import { Connection, Keypair, PublicKey, Transaction, TransactionInstruction, ComputeBudgetProgram } from '@solana/web3.js';
 
-const cfg = JSON.parse(fs.readFileSync(new URL('../../src/client/public/chain.json', import.meta.url)));
+const cfg = JSON.parse(fs.readFileSync(new URL('../../src/web/public/chain.json', import.meta.url)));
 const TEE = 'https://devnet-tee.magicblock.app';
 const PROGRAM = new PublicKey(cfg.program);
 const SEASON = cfg.season, SHARD = cfg.shard;

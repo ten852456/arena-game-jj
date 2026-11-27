@@ -1,6 +1,6 @@
 // Practical check of the MagicBlock TEE (devnet) against "simulation peeking" (onchain/docs/RANDOMNESS.md §3).
 // Uses the program ALREADY on devnet (old layout 3; nothing is deployed) and one throwaway test player in the season
-// of src/client/public/chain.json. What it asks the TEE, for owner token, session-key token, stranger token, no token:
+// of src/web/public/chain.json. What it asks the TEE, for owner token, session-key token, stranger token, no token:
 //  - getAccountInfo of the player (owner + session members) and of the pool / ranking (zero members)
 //  - simulateTransaction of `fight` (reads the zero-member pool + ranking, writes the player): error, logs,
 //    return data, post-state of each account (accounts option), with and without signature verification
@@ -13,7 +13,7 @@ import bs58 from 'bs58';
 import { ed25519 } from '@noble/curves/ed25519';
 import { Connection, Keypair, PublicKey, SystemProgram, Transaction, TransactionInstruction, ComputeBudgetProgram, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
-const cfg = JSON.parse(fs.readFileSync(new URL('../../src/client/public/chain.json', import.meta.url)));
+const cfg = JSON.parse(fs.readFileSync(new URL('../../src/web/public/chain.json', import.meta.url)));
 const idl = JSON.parse(fs.readFileSync(new URL('../idl/mochi_game.json', import.meta.url)));
 const BASE = 'https://api.devnet.solana.com', TEE = 'https://devnet-tee.magicblock.app';
 const VALIDATOR = new PublicKey(cfg.validator);
