@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run facts -- --check
+      - run: npm run build
+
+  server:
+    name: server checks (security, town API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: security checks against a fresh server
+        run: |
+          PORT=18790 DATA_DIR=$(mktemp -d) npx tsx src/server/index.ts &
+          for i in $(seq 60); do curl -sf http://localhost:18790/api/version && break; sleep 1; done
+          BASE=http://localhost:18790 npm run security
+      - name: town API checks (fast town clock)
+        run: |
+          PORT=18791 DATA_DIR=$(mktemp -d) FARM_TIME_SCALE=3600 npx tsx src/server/index.ts &
+          for i in $(seq 60); do curl -sf http://localhost:18791/api/version && break; sleep 1; done
+          BASE=http://localhost:18791 npm run farm-api
+
+  parity:
+    name: TS → Rust parity (onchain engine)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: onchain
+      - run: npm ci
+      - name: fights bit-exact (required)
+        run: RUNS=0 npm run ts-to-rust
+      - name: whole runs bit-exact (not required until run.rs is re-ported, see onchain/README.md)
+        continue-on-error: true
+        run: npm run ts-to-rust

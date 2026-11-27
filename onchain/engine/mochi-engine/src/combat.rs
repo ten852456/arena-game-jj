@@ -1600,8 +1600,8 @@ pub fn simulate<P: Probe>(a: &Build, b: &Build, seed: u32, day: usize, probe: &m
         probe.tick(t, &s.f);
         if s.f[0].hp <= 0 || s.f[1].hp <= 0 {
             if s.f[0].hp <= 0 && s.f[1].hp <= 0 {
-                let d = s.f[0].dealt_total - s.f[1].dealt_total;
-                winner = if d.abs() * 20 <= max(s.f[0].dealt_total, s.f[1].dealt_total) { -1 } else if d > 0 { 0 } else { 1 };
+                // double KO (sim v22, combat.ts): side 0 (the challenger) loses: never a draw, never a win
+                winner = 1;
             } else {
                 winner = if s.f[0].hp > 0 { 0 } else { 1 };
             }

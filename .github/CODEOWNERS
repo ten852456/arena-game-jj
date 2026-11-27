@@ -1,0 +1,3 @@
+# The sim and the onchain engine must stay bit-exact (docs/ops/WORKFLOW.md): JJ reviews both.
+/src/sim/   @JaJoJi @ten852456
+/onchain/   @JaJoJi @ten852456

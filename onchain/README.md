@@ -4,11 +4,11 @@ The arena's rules as a Solana program, run inside a MagicBlock private ephemeral
 **Devnet prototype:** not audited; mainnet needs an audit, legal review, a multisig upgrade authority and
 MagicBlock's production terms first.
 
-> **Parity gap (2026-11-27):** this engine was ported from the onchain branch's sim v22. The game's sim has moved on
-> since: double KO = the challenger (side 0) loses (`combat.ts`), relic offers with `RELIC_LUCK` on and the hero-line
-> weight off (`relics.ts`), and the v0.0.1 run changes in `run.ts` (days 1–2 losses cost 1 HP, streak bonus cap +2,
-> first reroll of a day free). Re-port these to `combat.rs` / `run.rs` and re-run the parity tests before chain mode
-> (`/play?chain=1`) is offered to players.
+> **Parity (2026-11-27):** fights are bit-exact again (2,000 / 2,000 cases; the double-KO rule was ported:
+> side 0, the challenger, loses). **Whole runs are not** (0 / 2,000): `run.rs` still has the onchain branch's run
+> rules. Port from `src/sim/run.ts` + `relics.ts`: relic offers with `RELIC_LUCK` on and the line weight off, relic days
+> 2 / 4 / 6, days 1–2 losses cost 1 HP, streak bonus cap +2, first reroll of a day free. Check with `npm run ts-to-rust`
+> (CI runs it; the whole-run step is allowed to fail until then). Chain mode (`/play?chain=1`) waits for this.
 
 | | |
 |---|---|
