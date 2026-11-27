@@ -1,0 +1,168 @@
+
+Fight length per day (random bot builds, 300 fights each)
+
+day   avg    p10    p90   target     fatigue-ended
+  1    9.6s   5.0s  13.0s   7–13s ✔       3% ✔
+  2    9.2s   6.0s  12.0s   7–13s ✔       3% ✔
+  3    8.6s   5.3s  12.0s   7–13s ✔       4% ✔
+  4   11.0s   6.5s  16.0s   10–18s ✔       6% ✔
+  5   10.6s   6.0s  15.1s   10–18s ✔       2% ✔
+  6   11.7s   6.3s  18.0s   10–18s ✔       3% ✔
+  7   11.4s   6.0s  16.7s   10–18s ✔       2% ✔
+  8   15.1s   9.6s  22.1s   15–26s ✔       6% ✔
+  9   15.2s  10.0s  22.0s   15–26s ✔       2% ✔
+ 10   15.1s  10.0s  21.9s   15–26s ✔       3% ✔
+ 11   15.5s  10.0s  22.8s   15–26s ✔       3% ✔
+ 12   15.6s  10.9s  22.4s   15–26s ✔       2% ✔
+ 13   16.0s  10.5s  23.3s   15–26s ✔       2% ✔
+
+=== Day 3 · 40 builds per hero · 10240 fights · avg 8.5s ===
+
+Archetype (row = win rate vs column)
+
+           tank  burstscalingcontrol
+tank        50%    37%    50%    53%
+burst       61%    51%    59%    49%
+scaling     51%    42%    49%    41%
+control     46%    49%    57%    51%
+
+Hero (row = win rate vs column) · all = vs every other hero
+
+           knight thorng assass duelis berser   pyro  witch chrono    all
+knight          -    38%    54%    30%    63%    44%    84%    57%    53%
+thornguard    62%      -    19%    44%    60%    31%    26%    48%    41%
+assassin      47%    78%      -    34%    42%    61%    33%    30%    46%
+duelist       61%    57%    68%      -    54%    81%    73%    61%    65%
+berserker     33%    44%    58%    54%      -    49%    61%    39%    48%
+pyro          58%    69%    43%    13%    48%      -    28%    35%    42%
+witch         16%    73%    68%    29%    38%    71%      -    66%    51%
+chrono        39%    57%    65%    36%    59%    61%    39%      -    51%
+
+Hero spread (best − worst overall): 24 points (target ≤ 15)
+
+Example builds:
+  knight     bulwark.b shield.b ironwill
+  thornguard spikewall.a1 thorns
+  assassin   execute.a2 strike
+  duelist    flurry.a1 jab
+  berserker  rampage.a2 train
+  pyro       inferno.a1 ignite
+  witch      shatter.a2 frost
+  chrono     timewarp.b2 chill
+
+=== Day 5 · 40 builds per hero · 10240 fights · avg 10.7s ===
+
+Archetype (row = win rate vs column)
+
+           tank  burstscalingcontrol
+tank        48%    40%    46%    58%
+burst       59%    50%    60%    55%
+scaling     53%    38%    52%    52%
+control     45%    45%    52%    47%
+
+Hero (row = win rate vs column) · all = vs every other hero
+
+           knight thorng assass duelis berser   pyro  witch chrono    all
+knight          -    38%    45%    42%    51%    39%    46%    73%    48%
+thornguard    62%      -    35%    38%    64%    32%    47%    66%    49%
+assassin      54%    67%      -    49%    57%    57%    54%    59%    57%
+duelist       54%    61%    53%      -    59%    64%    49%    60%    57%
+berserker     47%    33%    33%    39%      -    34%    34%    43%    38%
+pyro          60%    73%    46%    33%    76%      -    58%    73%    60%
+witch         54%    55%    48%    47%    69%    45%      -    50%    53%
+chrono        37%    33%    45%    41%    66%    28%    48%      -    43%
+
+Hero spread (best − worst overall): 22 points (target ≤ 15)
+
+Example builds:
+  knight     overclock shield.a2 bulwark.a2 train
+  thornguard thorns.b2 spikewall.b2 ironwill strike
+  assassin   execute.a1 strike.a1 dispel frost
+  duelist    jab.a2 amplify flurry.b2 shield
+  berserker  rampage.b1 train.b1 overclock feast
+  pyro       inferno.a2 ignite.b2 amplify overclock
+  witch      amplify shatter.b2 frost.b1 heavy
+  chrono     timewarp.a2 chill.b2 stoneskin frost
+
+=== Day 10 · 40 builds per hero · 10240 fights · avg 15.0s ===
+
+Archetype (row = win rate vs column)
+
+           tank  burstscalingcontrol
+tank        51%    47%    42%    58%
+burst       52%    50%    57%    54%
+scaling     56%    43%    51%    51%
+control     45%    50%    47%    51%
+
+Hero (row = win rate vs column) · all = vs every other hero
+
+           knight thorng assass duelis berser   pyro  witch chrono    all
+knight          -    47%    57%    49%    41%    50%    68%    59%    53%
+thornguard    56%      -    37%    47%    34%    44%    62%    44%    46%
+assassin      46%    60%      -    49%    61%    56%    56%    45%    53%
+duelist       49%    52%    49%      -    47%    66%    66%    50%    54%
+berserker     53%    66%    47%    48%      -    49%    59%    40%    52%
+pyro          44%    61%    37%    39%    53%      -    61%    44%    48%
+witch         39%    44%    44%    45%    43%    39%      -    35%    41%
+chrono        42%    55%    61%    51%    52%    53%    66%      -    54%
+
+Hero spread (best − worst overall): 13 points (target ≤ 15)
+
+Example builds:
+  knight     stoneskin.b2 shield.b2 cleanse.b2 bulwark.b2 thorns.b2 ironwill
+  thornguard spikewall.b2 thorns.a1 shield.b1 cleanse.a2 amplify.a1 strike
+  assassin   cleanse.b1 execute.a2 charge.b1 heavy.b1 strike.a1 stoneskin
+  duelist    ignite jab.a2 heavy.a2 charge.b1 thorns.b strike.a flurry.a1
+  berserker  shield stoneskin.b2 train.b1 ignite.a1 rampage.b2 amplify.a1
+  pyro       train.b feast.a2 inferno.b1 amplify.b1 ignite.b1 chill
+  witch      shatter.b1 ironwill thorns.b2 chill.a1 dispel.a1 frost.a2
+  chrono     thorns.a2 chill.a1 timewarp.a1 charge.b1 frost.a1 dispel.a
+
+=== Day 13 · 40 builds per hero · 10240 fights · avg 16.7s ===
+
+Archetype (row = win rate vs column)
+
+           tank  burstscalingcontrol
+tank        50%    53%    41%    56%
+burst       44%    50%    48%    46%
+scaling     55%    52%    51%    50%
+control     43%    53%    50%    49%
+
+Hero (row = win rate vs column) · all = vs every other hero
+
+           knight thorng assass duelis berser   pyro  witch chrono    all
+knight          -    42%    55%    51%    38%    45%    58%    45%    48%
+thornguard    62%      -    55%    51%    34%    47%    68%    54%    53%
+assassin      41%    38%      -    44%    43%    52%    50%    41%    44%
+duelist       50%    46%    55%      -    48%    51%    55%    36%    49%
+berserker     61%    57%    60%    57%      -    49%    66%    48%    57%
+pyro          53%    49%    50%    39%    53%      -    50%    38%    47%
+witch         46%    30%    44%    44%    39%    48%      -    39%    41%
+chrono        53%    45%    60%    66%    53%    60%    58%      -    56%
+
+Hero spread (best − worst overall): 15 points (target ≤ 15)
+
+Example builds:
+  knight     cleanse.b shield.b1 bulwark.a1 stoneskin.a1 thorns.b1 chill.b1 train.b2
+  thornguard heavy.a2 train.a2 dispel spikewall.a2 shield.a1 thorns.a2 cleanse.b1 stoneskin.a
+  assassin   jab.a2 execute.a2 heavy.b1 strike.a1 charge.b2 stoneskin.a2
+  duelist    strike.a2 jab.a2 flurry.b2 amplify.a1 ironwill.b charge.b1 gear.b1 heavy
+  berserker  rampage.b2 feast.a1 train.b1 amplify.a1 strike.b1 ignite.b2 overclock.a2
+  pyro       ignite.a1 amplify.a1 ironwill.b2 inferno.b2 train.b2 heavy.b2 chill.b2
+  witch      amplify.a1 frost.a1 shatter.a2 dispel.b1 cleanse.a1 overclock.a2 chill.a2
+  chrono     strike.b1 feast.a1 amplify.a1 dispel.b1 chill.b1 frost.a1 timewarp.b1
+
+✘ 13 targets missed:
+  day 3: knight beats witch 84%
+  day 3: assassin beats thornguard 78%
+  day 3: duelist beats pyro 81%
+  day 3: duelist beats witch 73%
+  day 3: witch beats thornguard 73%
+  day 3: witch beats pyro 71%
+  day 3: hero spread 24 points
+  day 5: knight beats chrono 73%
+  day 5: pyro beats thornguard 73%
+  day 5: pyro beats berserker 76%
+  day 5: pyro beats chrono 73%
+  day 5: hero spread 22 points
+  day 13: hero spread 15 points
