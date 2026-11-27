@@ -4,6 +4,7 @@
  * (404) or the server is down, so the screens show local data or nothing instead of breaking.
  * Responses are read loosely (several field names accepted) so small shape changes on the server don't break the UI.
  */
+import { L, getLang } from '../../i18n';
 import type { Build } from '../../sim/types';
 
 // ---------- small local store (per-browser convenience; may be unavailable) ----------
@@ -74,16 +75,17 @@ export function rememberFromFight(res: unknown) {
   if (nm) set(SNAME_KEY, nm);
 }
 
-/** Thai label for an AI opponent's tier (strings or numbers). */
+/** Label for an AI opponent's tier (strings or numbers), in the current language. */
 export function tierLabel(tier: unknown): string {
   if (tier === undefined || tier === null || tier === '') return '';
   const t = String(tier).toLowerCase();
   const map: Record<string, string> = {
-    easy: 'ง่าย', normal: 'ปกติ', medium: 'ปกติ', hard: 'ยาก', expert: 'เก่ง', elite: 'ระดับสูง', boss: 'บอส',
-    bronze: 'ทองแดง', silver: 'เงิน', gold: 'ทอง', platinum: 'แพลทินัม', diamond: 'เพชร',
+    easy: L('ง่าย', 'easy'), normal: L('ปกติ', 'normal'), medium: L('ปกติ', 'normal'), hard: L('ยาก', 'hard'), expert: L('เก่ง', 'expert'),
+    elite: L('ระดับสูง', 'elite'), boss: L('บอส', 'boss'), bronze: L('ทองแดง', 'bronze'), silver: L('เงิน', 'silver'), gold: L('ทอง', 'gold'),
+    platinum: L('แพลทินัม', 'platinum'), diamond: L('เพชร', 'diamond'),
   };
   if (map[t]) return map[t];
-  if (/^\d+$/.test(t)) return `ระดับ ${t}`;
+  if (/^\d+$/.test(t)) return L(`ระดับ ${t}`, `level ${t}`);
   return String(tier);
 }
 
@@ -133,6 +135,8 @@ export interface RunSummary {
   /** replay of the best fight of that run */
   bestFightId?: string;
   bestText?: string;
+  /** English version of bestText (stored next to the Thai one so either language can show it) */
+  bestTextEn?: string;
 }
 export interface Profile {
   name?: string;
@@ -157,7 +161,10 @@ const runOf = (x: J): RunSummary => ({
   at: num(x.at, x.endedAt, x.createdAt, x.finishedAt),
   bestFightId: str(x.bestFightId, x.best?.fightId, x.replayId),
   bestText: str(x.bestText, x.best?.text),
+  bestTextEn: str(x.bestTextEn),
 });
+/** A run's best-fight line in the current language. */
+export const runBestText = (r: RunSummary) => (getLang() === 'en' ? r.bestTextEn ?? r.bestText : r.bestText);
 export async function getProfile(id: string): Promise<Profile | null> {
   const j = await call('/api/profile?playerId=' + encodeURIComponent(id));
   if (!j) return null;
@@ -259,8 +266,12 @@ export interface FightNote {
   close: boolean;
   /** how memorable: close wins and comebacks score high */
   score: number;
+  /** Thai (older notes: whatever language they were written in) */
   text: string;
+  textEn?: string;
 }
+/** A fight note in the current language. */
+export const noteText = (n: FightNote) => (getLang() === 'en' ? n.textEn ?? n.text : n.text);
 const notesKey = (runId: string) => `mochi.fights.${runId}`;
 export const fightNotes = (runId: string) => getJSON<FightNote[]>(notesKey(runId), []);
 export function addFightNote(runId: string, n: FightNote) {

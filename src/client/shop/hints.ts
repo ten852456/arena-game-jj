@@ -3,6 +3,7 @@
  * would switch on a connect bonus if the new skill sat next to them light up, with a short label saying which.
  * Works on the rendered DOM (rows carry data-i), so nothing re-renders.
  */
+import { L } from '../../i18n';
 import { matches } from '../../sim/links';
 import { SKILLS, nodeOf } from '../../sim/skills';
 import type { Offer, RunState } from '../../sim/run';
@@ -17,15 +18,15 @@ export function hintsFor(r: RunState, o: Offer): Map<number, string[]> {
   const add = (i: number, s: string) => out.set(i, [...(out.get(i) ?? []), s]);
   const up = upgradeOf(r, o);
   if (o.v !== '') {
-    if (up) add(r.skills.indexOf(up), '⬆ การ์ดนี้อัปเกรดตัวนี้ (ช่องเดิม โบนัสเดิม)');
+    if (up) add(r.skills.indexOf(up), L('⬆ การ์ดนี้อัปเกรดตัวนี้ (ช่องเดิม โบนัสเดิม)', '⬆ This card upgrades this one (same slot, same bonuses)'));
     return out;
   }
   const name = SKILLS[o.id].name;
   r.skills.forEach((k, i) => {
     // the offer's own bonuses that this row satisfies
-    for (const b of o.bonus ?? []) if (matches(b.t, k)) add(i, `วาง ${name} ติดตัวนี้ → 🔗${ICON[b.e]} ของ ${name} ติด`);
+    for (const b of o.bonus ?? []) if (matches(b.t, k)) add(i, L(`วาง ${name} ติดตัวนี้ → 🔗${ICON[b.e]} ของ ${name} ติด`, `Put ${name} next to this → ${name}'s 🔗${ICON[b.e]} turns on`));
     // this row's bonuses that the new skill would satisfy
-    for (const b of k.bonus ?? []) if (matches(b.t, { id: o.id })) add(i, `วาง ${name} ติดตัวนี้ → 🔗${ICON[b.e]} ของ ${nodeOf(k).name} ติด`);
+    for (const b of k.bonus ?? []) if (matches(b.t, { id: o.id })) add(i, L(`วาง ${name} ติดตัวนี้ → 🔗${ICON[b.e]} ของ ${nodeOf(k).name} ติด`, `Put ${name} next to this → ${nodeOf(k).name}'s 🔗${ICON[b.e]} turns on`));
   });
   return out;
 }
