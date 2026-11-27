@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 RAW = Path(ARGS[0]) if ARGS else ROOT / "scripts/assets/.cache/raw"
 OUT = ROOT / "src/client/public/assets/img"
+FARM_IDS = {"res-wood", "res-ore", "res-crystal", "ticket", "egg", "egg-cracking", "monument"}
 
 # out name: (source png, keyed?, max width, crop box as fractions (l, t, r, b) or None, webp quality)
 SOURCES = {
@@ -22,6 +23,13 @@ SOURCES = {
     "banner-victory": ("banner-victory.png", True, 900, "bbox", 82),
     "banner-defeat": ("banner-defeat.png", True, 900, "bbox", 82),
     "stardust": ("stardust.png", True, 256, "bbox", 88),
+    "res-wood": ("res-wood.png", True, 256, "bbox", 88),
+    "res-ore": ("res-ore.png", True, 256, "bbox", 88),
+    "res-crystal": ("res-crystal.png", True, 256, "bbox", 88),
+    "ticket": ("ticket.png", True, 256, "bbox", 88),
+    "egg": ("egg.png", True, 256, "bbox", 88),
+    "egg-cracking": ("egg-cracking.png", True, 256, "bbox", 88),
+    "monument": ("monument.png", True, 512, "bbox", 88),
     "chest": ("chest.png", True, 512, "bbox", 85),
     "header-leaderboard": ("header-leaderboard.png", False, 1200, (0, 0.12, 1, 0.82), 86),
 }
@@ -58,6 +66,8 @@ def save(img, name, q):
 def main():
     made = {}
     for name, (src, keyed, max_w, crop, q) in SOURCES.items():
+        if "--farm" in sys.argv and name not in FARM_IDS:
+            continue
         img = Image.open(RAW / src)
         if keyed:
             img = key_magenta(img)
@@ -69,6 +79,9 @@ def main():
             w, h = img.size
             img = img.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
         made[name] = save(fit(img, max_w), name, q)
+
+    if "--farm" in sys.argv:
+        return
 
     # share / OG image: 1200x630, the arena scene with the logo on the calm sky at the top
     scene = Image.open(RAW / "og-scene.png").convert("RGB")

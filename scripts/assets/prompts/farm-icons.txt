@@ -1,0 +1,9 @@
+Create one centered, isolated game asset for each subject below. Charming hand-drawn 2D Mochi Moon illustration; moon-night lavender and indigo with pastel pink accents, thick dark plum outlines #3a2b33, simple bold silhouettes readable at 20–32 px. No text or border. Flat solid #ff00ff background for chroma key.
+
+res-wood.png: A tied bundle of cut wooden logs.
+res-ore.png: A chunky lavender-gray ore rock with mineral flecks.
+res-crystal.png: A glowing faceted moon crystal.
+ticket.png: A pastel pink arena ticket with a crescent emblem.
+egg.png: A cute cream speckled mochi egg in a woven nest.
+egg-cracking.png: The same cute cream speckled mochi egg in a woven nest, cracking open with golden light.
+monument.png: A wide moon-rabbit stone monument on a city-hall pedestal with a crescent.
