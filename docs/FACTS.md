@@ -145,6 +145,7 @@ fallback if TEE costs do not fit.
 
 ## Change log
 
+- 2026-11-28: v5.1 quick fixes (in a PR): the pass adds no town work slot and no faster egg hatching; the shrine makes crystal without the endless-level multiplier and stops at Lv5.
 - 2026-11-27: JJ's onchain branch merged into the game (`onchain/`, chain mode opt-in with `?chain=1`); Rust engine parity gap noted; grid version removed (Railway service deleted, branches kept as `archive/*` tags); branch plan replaced by trunk-based `main` / `release`.
 - 2026-11-26: v0.0.1 deployed to the live list service; landing page: build depth and earn sections, roadmap weeks 1–2.
 - 2026-11-26: sim v22 (playtest, harder + more random): day-1 shop is random (no fixed hero shop, reroll allowed from day 1); relic offers fully random (no guaranteed fit, no line weight); relic days 2, 4, 6 (was 4, 7, 10).

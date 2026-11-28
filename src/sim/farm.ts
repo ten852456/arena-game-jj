@@ -42,6 +42,12 @@ export const levelMult = (lv: number) => {
   const k = Math.max(0, lv - TABLE_LV);
   return (1 + LEVEL_STEP * k) * 2 ** Math.floor(k / 10);
 };
+/**
+ * v5.1 (2026-11-28): crystal is the scarce key, so the shrine gets no endless-level multiplier (v5 sims reached
+ * 540-620 crystal a season through it) and stops at Lv5. Lumber and mine keep the endless layer.
+ */
+export const maxLvOf = (b: Building) => (b === 'shrine' ? TABLE_LV : 999);
+export const outputMult = (b: Building, lv: number) => (b === 'shrine' ? 1 : levelMult(lv));
 /** what it costs to go from `lv` to lv + 1 */
 export function upgradeCost(lv: number): Partial<Record<Res | 'stardust', number>> {
   if (lv < TABLE_LV) return UPGRADE_COST[lv - 1];
@@ -90,8 +96,8 @@ export const UPGRADE_COST: Partial<Record<Res | 'stardust', number>>[] = [
   { wood: 250, ore: 170, crystal: 2 },
   { wood: 330, ore: 220, crystal: 3 },
 ];
-/** the battle pass adds one work slot at every landmark (production only: supplies and tickets stay capped) */
-export const PASS_SLOTS = 1;
+/** v5.1: the pass sells no production, so it adds no work slot (was 1) */
+export const PASS_SLOTS = 0;
 /** warehouse: at most this many hours of a landmark's full output can be held (3 days: covers a weekend away) */
 export const WAREHOUSE_H = 72;
 
@@ -146,7 +152,8 @@ export const FIRST_SHIFT_MS = 5 * 60_000;
  */
 export const EGG_WINS = [3, 10];
 export const EGG_HOURS: Record<number, number> = { 3: 48, 10: 120 };
-export const EGG_PASS_SPEED = 1.5;
+/** v5.1: the pass no longer hatches eggs faster (was 1.5) */
+export const EGG_PASS_SPEED = 1;
 export const NEST = 4;
 export const EGG_PITY = 10;
 
@@ -297,13 +304,13 @@ export const fits = (hero: string, b: Building) => AFFINITY[b].includes(HEROES_B
 export const newbieBoost = (f: FarmState, now: number) =>
   NEWBIE_BOOST * Math.max(0, 1 - (now - (f.createdAt ?? 0)) / (NEWBIE_DAYS * 24 * H));
 export const rateOf = (f: FarmState, b: Building, hero: string, now: number) =>
-  RATE[RES_OF[b]] * (fits(hero, b) ? 1 + AFFINITY_BONUS : 1) * levelMult(f.lv[b]) * (1 + MASTERY_STEP * (masteryOf(f, hero, b) - 1)) *
+  RATE[RES_OF[b]] * (fits(hero, b) ? 1 + AFFINITY_BONUS : 1) * outputMult(b, f.lv[b]) * (1 + MASTERY_STEP * (masteryOf(f, hero, b) - 1)) *
   (1 + headStart(f, now) + newbieBoost(f, now)) * (f.damaged === b ? 0.5 : 1);
 export const storageMs = (f: FarmState, b: Building) => STORAGE_H[tableIdx(f.lv[b])] * H;
 /** the most of a resource the warehouse holds: WAREHOUSE_H of the landmark's full output at its level */
 export function capOf(f: FarmState, r: Res): number {
   const b = BUILDING_IDS.find((x) => RES_OF[x] === r)!;
-  const output = RATE[r] * (1 + AFFINITY_BONUS) * levelMult(f.lv[b]) * slotsOf(f, b) * WAREHOUSE_H;
+  const output = RATE[r] * (1 + AFFINITY_BONUS) * outputMult(b, f.lv[b]) * slotsOf(f, b) * WAREHOUSE_H;
   // never below 1.5× what the next level of any landmark costs in this resource (farm-sim: a cap under the cost is a wall)
   const need = Math.max(...BUILDING_IDS.map((x) => upgradeCost(f.lv[x])[r] ?? 0)) * 1.5;
   return Math.max(10, Math.ceil(Math.max(output, need)));
@@ -352,6 +359,9 @@ export function collect(f: FarmState, b: Building, now: number, scale = 1, rng?:
     else j.since += p.rate > 0 ? ((take / p.rate) * H) / p.speed : 0; // keep the part-unit already made
     if (j.fast) delete j.fast;
   }
+  // v5.1: a worker past the slots (the pass slot is gone) is paid for its hours above and then goes home (Codex review)
+  const slots = slotsOf(f, b);
+  if (f.jobs[b].length > slots) f.jobs[b] = f.jobs[b].slice(0, slots);
   f.updatedAt = now;
   return got;
 }
@@ -559,7 +569,7 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
     }
     case 'upgrade': {
       if (!isB(o.b)) return 'bad op';
-      if (f.lv[o.b] >= 999) return 'max level';
+      if (f.lv[o.b] >= maxLvOf(o.b)) return 'max level';
       const cost = upgradeCost(f.lv[o.b]);
       if (!canPay(f, c.stardust, cost)) return 'not enough resources';
       collect(f, o.b, c.now, c.scale, c.rng); // jobs keep what they made at the old rate

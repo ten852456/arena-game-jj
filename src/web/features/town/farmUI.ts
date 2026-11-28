@@ -134,9 +134,12 @@ export function landmarkHTML(b: FarmBuilding, heroArt: (id: string) => string): 
       : '';
   // levels never end (incremental layer): Lv2–5 add slots and storage, Lv6+ add +15% output, ×2 every 10th level
   const cost = F.upgradeCost(lv);
-  const multNow = F.levelMult(lv);
-  const multNext = F.levelMult(lv + 1);
-  const next = lv < F.TABLE_LV
+  const multNow = F.outputMult(b, lv);
+  const multNext = F.outputMult(b, lv + 1);
+  const maxed = lv >= F.maxLvOf(b);
+  const next = maxed
+    ? L('เลเวลสูงสุดแล้ว', 'Max level')
+    : lv < F.TABLE_LV
     ? L(`Lv${lv + 1}: ${F.SLOTS[lv]} ช่อง · เก็บได้ ${F.STORAGE_H[lv]} ชม.`, `Lv${lv + 1}: ${F.SLOTS[lv]} slots · holds ${F.STORAGE_H[lv]} h`)
     : L(`Lv${lv + 1}: ผลผลิต ×${multNext.toFixed(2)} (ตอนนี้ ×${multNow.toFixed(2)})${(lv + 1 - F.TABLE_LV) % 10 === 0 ? ' · เลเวลสำคัญ: ×2!' : ''}`, `Lv${lv + 1}: output ×${multNext.toFixed(2)} (now ×${multNow.toFixed(2)})${(lv + 1 - F.TABLE_LV) % 10 === 0 ? ' · milestone: ×2!' : ''}`);
   const dmg = f.damaged === b
@@ -147,7 +150,7 @@ export function landmarkHTML(b: FarmBuilding, heroArt: (id: string) => string): 
     ${dmg}${rows}${send}
     <div class="actions">
       <button class="primary" data-a="farmCollect" data-i="${b}" ${ready ? '' : 'disabled'}>${L('เก็บ', 'Collect')} ${resIcon(res)} ${ready}</button>
-      <button data-a="farmUpgrade" data-i="${b}" title="${next}">${L('อัปเกรด', 'Upgrade')} ${costHTML(cost, have(f))}</button>
+      <button data-a="farmUpgrade" data-i="${b}" title="${next}" ${maxed ? 'disabled' : ''}>${maxed ? L('เลเวลสูงสุด', 'Max level') : `${L('อัปเกรด', 'Upgrade')} ${costHTML(cost, have(f))}`}</button>
     </div>
     <p class="muted small">${next}</p>
   </div>`;
