@@ -216,9 +216,15 @@ function capFarms() {
   for (const k of keys.slice(0, keys.length - PLAYER_CAP)) delete db.farms[k];
 }
 
-/** vaults over the cap: the emptiest go first, oldest first (items and Moonstone are real investment) */
+/**
+ * Vaults over the cap: the least played go first, oldest first. Line rank counts point for point (it is the slowest
+ * progress to rebuild), then Saves, items, Moonstone and play money moved, so a flood of fresh ids with one Save
+ * each evicts each other long before a store with real progress (Codex review).
+ */
 const vaultValue = (v: Vault) =>
-  (v.seals?.length ?? 0) + (v.kit?.length ?? 0) + Object.keys(v.saves ?? {}).length + (v.moonstone ? v.moonstone.bound + v.moonstone.tradable : 0) * 3;
+  Object.values(v.lineRank ?? {}).reduce((a, x) => a + (Number(x) || 0), 0) + Object.keys(v.saves ?? {}).length * 5 +
+  ((v.seals?.length ?? 0) + (v.kit?.length ?? 0)) * 3 + (v.moonstone ? v.moonstone.bound + v.moonstone.tradable : 0) * 5 +
+  (v.testBalance !== undefined && v.testBalance !== 1000 ? 5 : 0);
 function capVaults() {
   const keys = Object.keys(db.vaults);
   if (keys.length <= PLAYER_CAP) return;

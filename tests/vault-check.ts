@@ -10,7 +10,7 @@ const check = (name: string, ok: boolean, info = '') => {
 const H = 3_600_000;
 const T0 = Date.parse('2026-12-01T08:00:00+07:00'); // a Tuesday
 const build = (hero: string): Build => ({ hero, skills: [] });
-const run = (hero: string, line: V.RunEnd['line'], wins: number, id = hero + wins): V.RunEnd => ({ runId: id, hero, line, build: build(hero), wins, losses: 3, mode: 'casual' });
+const run = (hero: string, line: V.RunEnd['line'], wins: number, id = hero + wins, mode: V.RunEnd['mode'] = 'casual'): V.RunEnd => ({ runId: id, hero, line, build: build(hero), wins, losses: 3, mode });
 
 // clock
 check('the test clock: scale 2 makes a 3.5-day week', V.weekOf(V.CLOCK_EPOCH + 3.5 * 24 * H, 2) === 1 && V.weekOf(V.CLOCK_EPOCH + 3.4 * 24 * H, 2) === 0);
@@ -80,8 +80,8 @@ check('a real week starts on a Bangkok Monday', V.weekOf(Date.parse('2026-12-07T
   const r2 = V.onRunEnd(v, run('knight', 'shield', 4), true, T0);
   check('a later run waits as pending', !r2.saved && v.saves.knight.wins === 10 && v.pending.knight?.wins === 4);
   check('keep it: the Save is replaced', V.applyVaultOp(v, { op: 'keepSave', hero: 'knight' }, ['knight'], T0) === null && v.saves.knight.wins === 4 && !v.pending.knight);
-  V.onRunEnd(v, run('sage', 'time', 6), false, T0);
-  check('a Ranked run with a hero not owned stays pending', !v.saves.sage && v.pending.sage?.wins === 6);
+  V.onRunEnd(v, run('sage', 'time', 6, 'sage-ranked', 'ranked'), false, T0);
+  check('a Ranked run with a hero not owned stays pending', !v.saves.sage && v.pending.sage?.wins === 6 && v.pending.sage.mode === 'ranked');
   check('…and cannot be kept until the hero is adopted', V.applyVaultOp(v, { op: 'keepSave', hero: 'sage' }, ['knight'], T0) === 'hero not owned' && V.applyVaultOp(v, { op: 'keepSave', hero: 'sage' }, ['knight', 'sage'], T0) === null);
   for (let i = 0; i < 5; i++) V.onRunEnd(v, run('pyro', 'burn', 0, 'p' + i), true, T0);
   check('only the first 5 runs of a day count for line rank', v.lineRank.burn === 2, `burn ${v.lineRank.burn}`);
