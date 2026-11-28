@@ -60,7 +60,7 @@ export const offerChoices = (s: RunState, o: Offer): Variant[] => {
   return owned ? nextVariants(owned.v) : [];
 };
 
-/** Heroes offered when a run starts (5 later with the pass). */
+/** Heroes offered when a run starts. */
 export const HERO_CHOICES = 3;
 
 /**
