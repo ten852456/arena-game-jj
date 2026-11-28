@@ -199,6 +199,8 @@ export const api = {
   /** one visit: ops applied in order, all-or-nothing */
   farmOps: (playerId: string, ops: FarmOpReq[]) => req<FarmView>('/api/farm', { method: 'POST', body: JSON.stringify({ playerId, ops }) }),
   feed: () => req<{ rows: FeedRow[] }>('/api/feed'),
+  /** v5.1: the server's Ranked offer for this player (the same one until a Ranked run starts with it) */
+  rankedOffer: (playerId: string) => req<{ seed: number; heroes: string[] }>('/api/ranked/offer', { method: 'POST', body: JSON.stringify({ playerId }) }),
   hatch: (playerId: string) => req<{ got: string; farm: FarmView }>('/api/farm/hatch', { method: 'POST', body: JSON.stringify({ playerId }) }),
   leaderboard: (period: 'season' | 'day' = 'season', playerId?: string) =>
     req<LeaderboardResponse>('/api/leaderboard?' + qs({ period, playerId })),

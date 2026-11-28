@@ -6,8 +6,9 @@
 import { randomInt } from 'node:crypto';
 import * as F from '../../sim/farm';
 import { HEROES_BY_ID } from '../../sim/heroes';
-import { cleanId, cleanName, rankedOfferCheck } from '../game/validate';
+import { cleanId, cleanName } from '../game/validate';
 import { FEED_CAP, SEASON, db, save, type MonumentRec } from '../store';
+import { rankedStartCheck, takeRankedOffer } from './ranked';
 import { allow } from './site';
 import { bad, type Res } from '../http/http';
 import { ledgerAdd } from '../game/ledger';
@@ -211,8 +212,8 @@ export interface RunStart { mode: F.Mode; shiny: boolean; casualNth?: number }
 
 /**
  * Day 1 of a new run (the server first sees it then). Casual is free; Ranked costs a ticket (the day's free one
- * first). Casual: the hero must be one this player may use today. Ranked (v5.1): any hero the run's seed offers from
- * all heroes, owned or not. A hero at work is called back (it keeps what it made).
+ * first). Casual: the hero must be one this player may use today. Ranked (v5.1): any hero offered by the seed the
+ * server issued this player (POST /api/ranked/offer), owned or not; the offer is used up once the run starts. A hero at work is called back (it keeps what it made).
  * The run rolls once for a moonlit (shiny) hero. The tutorial run is free. Returns an error response or the start.
  */
 export function startRunGate(playerId: string, hero: string, tutorial: boolean, ip: string, asked: F.Mode, seed?: unknown): Res | RunStart {
@@ -220,11 +221,17 @@ export function startRunGate(playerId: string, hero: string, tutorial: boolean, 
   // the free tutorial run is always casual: the recorded mode is the one actually paid for (security review)
   const mode: F.Mode = tutorial ? 'casual' : asked;
   if (mode === 'ranked') {
-    const err = rankedOfferCheck(hero, seed);
+    const err = rankedStartCheck(playerId, hero, seed);
     if (err) return { status: 400, json: { error: err, code: 'not_offered' } };
   }
   // gate off: nothing to count (and no town to cap shiny rolls on), so no town record and no shiny roll
-  if (!RUN_LIMIT) return { mode, shiny: false };
+  if (!RUN_LIMIT) {
+    if (mode === 'ranked') {
+      takeRankedOffer(playerId);
+      save();
+    }
+    return { mode, shiny: false };
+  }
   const now = Date.now();
   // same per-IP limit as POST /api/farm before a new town record is made (security review: sibling-path parity)
   if (!Object.hasOwn(db.farms, playerId) && !newTownAllowed(ip)) return bad('too many new players from here, try again later', 429);
@@ -254,6 +261,7 @@ export function startRunGate(playerId: string, hero: string, tutorial: boolean, 
     if (!(f.shinies ??= []).includes(hero)) f.shinies.push(hero);
     feedPush(playerId, 'shiny', hero);
   }
+  if (mode === 'ranked') takeRankedOffer(playerId);
   save();
   return { mode, shiny, ...(casualNth ? { casualNth } : {}) };
 }

@@ -142,6 +142,8 @@ export interface Db {
   farms: Record<string, FarmState>;
   /** playerId → account store for idle items: Seals, Saves, Kit, supplies, Moonstone, line rank (src/shared/vault.ts) */
   vaults: Record<string, Vault>;
+  /** playerId → the Ranked offer seed the server issued, kept until a Ranked run starts with it (routes/ranked.ts) */
+  rankedOffers: Record<string, { seed: number; t: number }>;
   /** season → monument totals */
   monuments: Record<string, MonumentRec>;
   /** town feed: rare finds and moonlit heroes, newest last (capped) */
@@ -184,6 +186,7 @@ function loadDb(): Db {
     tutorials: Object.assign(Object.create(null), isObj(d.tutorials) ? d.tutorials : {}),
     farms: Object.assign(Object.create(null), isObj(d.farms) ? d.farms : {}),
     vaults: Object.assign(Object.create(null), isObj(d.vaults) ? d.vaults : {}),
+    rankedOffers: Object.assign(Object.create(null), isObj(d.rankedOffers) ? d.rankedOffers : {}),
     monuments: Object.assign(Object.create(null), isObj(d.monuments) ? d.monuments : {}),
     feed: Array.isArray(d.feed) ? d.feed.slice(-FEED_CAP) : [],
     ledger: Object.assign(Object.create(null), isObj(d.ledger) ? d.ledger : {}),
@@ -240,6 +243,7 @@ export function enforceCaps() {
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
   capFarms();
   capVaults();
+  capRecord(db.rankedOffers, PLAYER_CAP, (x) => x.t);
   if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
 }
 

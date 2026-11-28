@@ -243,8 +243,8 @@ export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, da
 
 /**
  * v5.1: a Ranked run must start with a hero its seed offers from all heroes (`offerFor('ranked', seed)`); owning the
- * hero does not matter. The seed is still drawn by the client, so this binds the pick to the seed it sent; it becomes
- * a real offer check once the server draws Ranked seeds (prize safety, after the playtest).
+ * hero does not matter. The seed itself is drawn by the server and kept per player (routes/ranked.ts), so a player
+ * cannot search for a seed that offers the hero they want.
  */
 export function rankedOfferCheck(hero: string, seed: unknown): string | null {
   if (typeof seed !== 'number' || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return 'bad seed';

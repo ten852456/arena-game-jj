@@ -91,6 +91,9 @@ let run: R.RunState | null = null;
 let view: View = 'title';
 /** seed of the next run: it also decides which heroes are offered. Kept until a run starts, so leaving the screen does not re-roll. */
 let nextSeed: number | null = null;
+/** v5.1: the Ranked offer's seed comes from the server (prize safety): the same one until a Ranked run starts with it */
+let rankedSeed: number | null = null;
+let rankedAsk: 'idle' | 'loading' | 'error' = 'idle';
 /** on-chain mode (opt-in: ?chain=1): connection state; the hero choices of a run being started (from the chain's VRF) */
 let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
 let chainChoices: string[] | null = null;
@@ -187,9 +190,6 @@ function loadRun(): R.RunState | null {
   try {
     const r = JSON.parse(fetchStore(RUN_KEY) ?? 'null') as R.RunState | null;
     if (!r || r.v !== R.RUN_VERSION) return null;
-    // v5.1: a Ranked run picked before the update came from the owned heroes; if the all-heroes offer of its seed
-    // lacks its hero and it has not fought yet (no ticket spent), it plays as Casual instead of failing day 1
-    if (r.mode === 'ranked' && !r.log.length && !R.offerFor('ranked', r.seed).includes(r.hero)) r.mode = 'casual';
     return r;
   } catch {
     return null;
@@ -718,9 +718,25 @@ function renderTown() {
   ${detail}`;
 }
 
-/** the heroes offered for the next run: from the seed offline, from the chain's randomness on chain (null = not yet) */
+/**
+ * The seed of the coming run, which decides the heroes offered. Casual: rolled here. Ranked: the one the server issued
+ * this player (asked for once; null until it arrives or when the server cannot be reached).
+ */
+function offerSeed(): number | null {
+  if (pickMode !== 'ranked') return (nextSeed ??= randSeed());
+  if (rankedSeed === null && rankedAsk === 'idle') {
+    rankedAsk = 'loading';
+    void api.rankedOffer(M.playerId()).then(
+      (o) => { rankedSeed = o.seed; rankedAsk = 'idle'; if (view === 'title' || view === 'over') render(); },
+      () => { rankedAsk = 'error'; if (view === 'title' || view === 'over') render(); },
+    );
+  }
+  return rankedSeed;
+}
+/** the heroes offered for the next run: from its seed off chain (none while the Ranked offer is on its way), from the chain's randomness on chain */
+const offerOf = (seed: number | null) => (seed === null ? [] : R.offerFor(pickMode, seed, FU.usablePool() ?? undefined));
 function heroOffer(): string[] {
-  if (!C.chainOn()) return R.offerFor(pickMode, (nextSeed ??= randSeed()), FU.usablePool() ?? undefined);
+  if (!C.chainOn()) return offerOf(offerSeed());
   if (!chainChoices && chainConn === 'ready' && !chainStarting && !runActive()) {
     chainStarting = true;
     void C.chainBeginRun().then(
@@ -736,7 +752,8 @@ function heroOffer(): string[] {
  */
 function day1Shop(id: string): (R.Offer | null)[] {
   if (C.chainOn()) return chainPreview?.[id] ?? [];
-  return R.newRun(id, (nextSeed ??= randSeed()), 'preview').shop;
+  const seed = offerSeed();
+  return seed === null ? [] : R.newRun(id, seed, 'preview').shop;
 }
 function day1HTML(id: string) {
   const shop = day1Shop(id).filter((o): o is R.Offer => !!o);
@@ -747,7 +764,11 @@ function day1HTML(id: string) {
   return `<span class="hero-day1"><small class="muted">${L('ร้านวันแรก (โบนัสต่อสาย)', 'Day-1 shop (connect bonuses)')}</small>${shop.map(row).join('')}</span>`;
 }
 /** cosmetic look of an offered hero = the look its run will have (on chain: from the run's published cosmetic seed) */
-const offerLook = (id: string) => (C.chainOn() ? (chainLook ? R.lookFor(chainLook, id) : 0) : R.lookFor(nextSeed!, id));
+const offerLook = (id: string) => {
+  if (C.chainOn()) return chainLook ? R.lookFor(chainLook, id) : 0;
+  const seed = offerSeed();
+  return seed === null ? 0 : R.lookFor(seed, id);
+};
 
 function renderTitle() {
   const offered = runActive() ? [] : heroOffer().map((id) => HEROES_BY_ID[id]);
@@ -760,14 +781,14 @@ function renderTitle() {
       <button role="tab" class="mode casual${pickMode === 'casual' ? ' on' : ''}" aria-selected="${pickMode === 'casual'}" data-a="pickMode" data-i="casual"><b>${L('ทั่วไป', 'Casual')}</b><small>${L('ฟรี เล่นได้ไม่จำกัด · ผงดาวครึ่งเดียว', 'Free, unlimited · half stardust')}</small></button>
       <button role="tab" class="mode ranked${pickMode === 'ranked' ? ' on' : ''}" aria-selected="${pickMode === 'ranked'}" data-a="pickMode" data-i="ranked"><b>${L('แรงค์', 'Ranked')} ${FU.resIcon('ticket')}×${tickets}</b><small>${L('ใช้ตั๋ว 1 ใบ · ชนะ 7+ ได้ตั๋วคืน · ขึ้นกระดานผู้นำ', '1 ticket · 7+ wins refunds it · leaderboard and prizes')}</small></button>
     </div>`;
-  const look = (id: string) => (C.chainOn() || nextSeed != null ? offerLook(id) : 0);
+  const look = (id: string) => (C.chainOn() || (pickMode === 'ranked' ? rankedSeed : nextSeed) != null ? offerLook(id) : 0);
   // the arena fills the screen; 3 cards are dealt over it. Tap one → it flips to its details and slides aside while
   // that hero steps onto a platform in the arena, the radar slides in on the left and Start waits under the hero.
   // Focus / back are DOM class swaps (pickFocusDom), so the motion is never cut by a re-render; pickFocus only
   // restores the state if something else re-renders the page (a language switch, the info-mode toggle).
   if (pickFocus && !offered.some((h) => h.id === pickFocus)) pickFocus = null;
   const deal = !pickDealt && !!offered.length;
-  pickDealt = true;
+  if (offered.length) pickDealt = true; // a Ranked offer still on its way deals its cards when it arrives
   if (scene) scene.idle(runActive() ? run!.hero : pickFocus, runActive() ? R.lookOf(run!) : pickFocus ? look(pickFocus) : 0);
   const resume = runActive()
     ? `<button class="primary" data-a="resume">${L(
@@ -816,12 +837,18 @@ function renderTitle() {
   </div>
   ${resume ? `<div class="pk-resume">${resume}</div>` : ''}
   ${modeTabs ? `<div class="pk-modes">${modeTabs}${noRuns ? `<p class="toast">${L('ไม่มีตั๋วแรงค์ · เล่นแบบทั่วไปได้ฟรี หรือทำตั๋วจากไม้และแร่ที่สนามประลอง (ได้ฟรีวันละ 1 ใบ)', 'No ranked tickets · play Casual for free, or craft one from wood and ore at the arena (1 free every day)')} <button data-a="town">${L('ไปเมือง', 'Go to town')}</button></p>` : ''}</div>` : ''}
-  <div class="pk-cards">${cards}</div>
+  <div class="pk-cards">${cards}${!runActive() && !C.chainOn() && pickMode === 'ranked' && !offered.length ? rankedWaitHTML() : ''}</div>
   ${offered.length ? `<aside class="pk-stats glass"${fh ? ` style="--pa:var(--p-${fh.line})"` : ''}>${fh ? statsHTML(fh.id) : ''}</aside>
   <button class="primary pk-start" data-a="start" data-i="${pickFocus ?? ''}">${L('เริ่ม!', 'Start!')} ▶</button>
   <button class="ghost pk-return" data-a="heroBack">← ${L('ดูตัวอื่น', 'Other heroes')}</button>` : ''}
   </div>`;
 }
+
+/** Hero select, Ranked: the server's offer is on its way, or could not be fetched (Ranked needs the server anyway) */
+const rankedWaitHTML = () =>
+  rankedAsk === 'error'
+    ? `<p class="toast">${L('ติดต่อเซิร์ฟเวอร์ไม่ได้ · แรงค์ต้องออนไลน์ (เล่นแบบทั่วไปได้)', 'Cannot reach the server · Ranked needs it (Casual still works)')} <button data-a="rankedRetry">${L('ลองใหม่', 'Try again')}</button></p>`
+    : `<p class="muted">${L('กำลังสุ่มฮีโร่แรงค์จากเซิร์ฟเวอร์…', 'Drawing the Ranked heroes on the server…')}</p>`;
 
 /** Hero select: the left panel, a radar of the hero's strengths. */
 const statsHTML = (id: string) => `<h3 class="pk-sh">${L('จุดเด่น', 'Strengths')}</h3>${radarHTML(id)}`;
@@ -856,18 +883,21 @@ function pickFocusDom(id: string | null) {
 
 /** Hero select: the chosen card bursts into the arena, then the run starts (same start as before: seed, track, voice). */
 function startHero(id: string) {
-  const seed = nextSeed ?? randSeed();
-  if (!R.offerFor(pickMode, seed, FU.usablePool() ?? undefined).includes(id)) return; // only an offered hero can start a run
+  const seed = offerSeed();
+  if (seed === null || !offerOf(seed).includes(id)) return; // only an offered hero can start a run
   if (pickMode === 'ranked' && FU.outOfRuns()) {
     toast = L('ไม่มีตั๋วแรงค์: เล่นแบบทั่วไปได้ฟรี', 'No ranked tickets: play Casual for free');
     return render();
   }
+  const mode = pickMode;
   const go = () => {
-    nextSeed = null;
+    // the next run gets a fresh offer (Ranked: the server issues a new one once this run's day 1 is fought)
+    if (mode === 'ranked') rankedSeed = null;
+    else nextSeed = null;
     pickFocus = null;
     pickDealt = false;
     run = R.newRun(id, seed, uid());
-    run.mode = pickMode; // arena mode (farm): the server records it on day 1
+    run.mode = mode; // arena mode (farm): the server records it on day 1
     track('run_start', { hero: id });
     heroVoice(id, 'pick', true); // the hero greets you in its own voice (sim v21)
     view = 'shop';
@@ -1850,7 +1880,7 @@ function renderOver() {
     ? { day: lastLog.day, close: !!lastNote?.close, why: (en ? lastNote?.whyEn : undefined) ?? lastNote?.why, tip: (en ? lastNote?.tipEn : undefined) ?? lastNote?.tip }
     : null;
   // the next run's heroes (the same offer the hero-pick screen shows): one tap starts it
-  const offered = C.chainOn() ? chainChoices ?? [] : R.offerFor(pickMode, (nextSeed ??= randSeed()), FU.usablePool() ?? undefined);
+  const offered = C.chainOn() ? chainChoices ?? [] : offerOf(offerSeed());
   const quick: P.QuickHero[] = offered
     .map((id) => ({ id, name: HEROES_BY_ID[id].name, art: heroArt(id, 'tiny', offerLook(id)), tag: (id === r.hero ? 'again' : recap.cur.heroes.includes(id) ? '' : 'new') as P.QuickHero['tag'] }))
     .sort((a, b) => Number(b.tag === 'again') - Number(a.tag === 'again'));
@@ -2205,7 +2235,26 @@ async function doFight() {
     const m = /^(4\d\d) (.*)$/s.exec(err instanceof Error ? err.message : '');
     if (m) {
       let why = m[2];
-      try { why = (JSON.parse(m[2]) as { error?: string }).error ?? why; } catch { /* plain text */ }
+      let code = '';
+      try {
+        const j = JSON.parse(m[2]) as { error?: string; code?: string };
+        why = j.error ?? why;
+        code = j.code ?? '';
+      } catch { /* plain text */ }
+      if (code === 'not_offered' && r.mode === 'ranked' && !r.log.length) {
+        // v5.1: a Ranked run must use the offer the server issued (a run picked before the update, or an offer that
+        // was replaced): nothing was spent, so back to the pick with the server's offer
+        console.warn('[arena] ranked offer not issued', why);
+        run = null;
+        saveRun();
+        rankedSeed = null;
+        rankedAsk = 'idle';
+        toast = L('ฮีโร่แรงค์ชุดนี้ใช้ไม่ได้แล้ว (ไม่เสียตั๋ว) · เลือกใหม่จากชุดที่เซิร์ฟเวอร์สุ่มให้', 'This Ranked offer is no longer valid (no ticket spent) · pick again from the server’s offer');
+        busy = false;
+        view = 'title';
+        render();
+        return;
+      }
       console.warn('[arena] the server refused this build', m[1], why);
       toast = L(`เซิร์ฟเวอร์ไม่รับ build นี้ (${why}) · ลองปรับ build แล้วสู้ใหม่ หรือเริ่มรอบใหม่`, `The server refused this build (${why}) · change the build and fight again, or start a new run`);
       busy = false;
@@ -2406,6 +2455,9 @@ function onClick(ev: Event) {
     case 'pickMode':
       pickMode = arg === 'ranked' ? 'ranked' : 'casual';
       store('mochi.mode', pickMode);
+      break;
+    case 'rankedRetry':
+      if (rankedAsk === 'error') rankedAsk = 'idle';
       break;
     case 'resume':
       view = phaseView(run!);

@@ -9,6 +9,7 @@ import { handleFight, handleScout, type Res } from './routes/fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './routes/meta';
 import { ROOT, db, saveNow } from './store';
 import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './routes/farm';
+import { handleRankedOffer } from './routes/ranked';
 import { adminVaultGrant, handleVaultGet, handleVaultOps } from './routes/vault';
 import { adminEconomy } from './game/ledger';
 import { WIN_TARGET } from '../sim/run';
@@ -93,6 +94,7 @@ const routes: Record<string, Route> = {
   'GET /api/feed': () => handleFeed(),
   'GET /api/vault': (_req, q) => handleVaultGet(q),
   'POST /api/vault': async (req) => handleVaultOps(await readBody(req)),
+  'POST /api/ranked/offer': async (req) => handleRankedOffer(await readBody(req), ipOf(req)),
   'GET /api/version': () => ({ status: 200, json: { version: VERSION } }),
   'GET /api/stats': () => ({
     status: 200,
