@@ -94,6 +94,10 @@ let nextSeed: number | null = null;
 /** v5.1: the Ranked offer's seed comes from the server (prize safety): the same one until a Ranked run starts with it */
 let rankedSeed: number | null = null;
 let rankedAsk: 'idle' | 'loading' | 'error' = 'idle';
+/** bumped whenever the Ranked offer is used up or replaced: an answer to an older request is dropped (Codex review) */
+let rankedGen = 0;
+/** the hero-pick launch animation is playing (a re-render must not allow a second start) */
+let launching = false;
 /** on-chain mode (opt-in: ?chain=1): connection state; the hero choices of a run being started (from the chain's VRF) */
 let chainConn: 'off' | 'connecting' | 'ready' | 'error' = C.chainOn() ? 'connecting' : 'off';
 let chainChoices: string[] | null = null;
@@ -724,14 +728,34 @@ function renderTown() {
  */
 function offerSeed(): number | null {
   if (pickMode !== 'ranked') return (nextSeed ??= randSeed());
-  if (rankedSeed === null && rankedAsk === 'idle') {
-    rankedAsk = 'loading';
-    void api.rankedOffer(M.playerId()).then(
-      (o) => { rankedSeed = o.seed; rankedAsk = 'idle'; if (view === 'title' || view === 'over') render(); },
-      () => { rankedAsk = 'error'; if (view === 'title' || view === 'over') render(); },
-    );
-  }
+  if (rankedSeed === null && rankedAsk === 'idle') askRankedOffer();
   return rankedSeed;
+}
+/** ask the server for this player's Ranked offer (also to refresh one shown earlier: another tab may have used it) */
+function askRankedOffer() {
+  const gen = ++rankedGen;
+  rankedAsk = 'loading';
+  const show = () => (view === 'title' || view === 'over') && !launching && render();
+  void api.rankedOffer(M.playerId()).then(
+    (o) => {
+      if (gen !== rankedGen) return;
+      const changed = o.seed !== rankedSeed;
+      rankedSeed = o.seed;
+      rankedAsk = 'idle';
+      if (changed) show();
+    },
+    () => {
+      if (gen !== rankedGen) return;
+      rankedAsk = 'error';
+      if (rankedSeed === null) show();
+    },
+  );
+}
+/** the Ranked offer was used up or refused: forget it and drop any answer still on its way */
+function dropRankedOffer() {
+  rankedSeed = null;
+  rankedAsk = 'idle';
+  rankedGen++;
 }
 /** the heroes offered for the next run: from its seed off chain (none while the Ranked offer is on its way), from the chain's randomness on chain */
 const offerOf = (seed: number | null) => (seed === null ? [] : R.offerFor(pickMode, seed, FU.usablePool() ?? undefined));
@@ -883,6 +907,7 @@ function pickFocusDom(id: string | null) {
 
 /** Hero select: the chosen card bursts into the arena, then the run starts (same start as before: seed, track, voice). */
 function startHero(id: string) {
+  if (launching) return;
   const seed = offerSeed();
   if (seed === null || !offerOf(seed).includes(id)) return; // only an offered hero can start a run
   if (pickMode === 'ranked' && FU.outOfRuns()) {
@@ -892,7 +917,8 @@ function startHero(id: string) {
   const mode = pickMode;
   const go = () => {
     // the next run gets a fresh offer (Ranked: the server issues a new one once this run's day 1 is fought)
-    if (mode === 'ranked') rankedSeed = null;
+    launching = false;
+    if (mode === 'ranked') dropRankedOffer();
     else nextSeed = null;
     pickFocus = null;
     pickDealt = false;
@@ -908,6 +934,7 @@ function startHero(id: string) {
   if (!root || reducedMotion()) return go();
   if (root.classList.contains('launch')) return;
   root.classList.add('launch');
+  launching = true;
   sfx('fight_start', { force: true });
   scene.react('buy');
   setTimeout(go, 650);
@@ -2247,8 +2274,7 @@ async function doFight() {
         console.warn('[arena] ranked offer not issued', why);
         run = null;
         saveRun();
-        rankedSeed = null;
-        rankedAsk = 'idle';
+        dropRankedOffer();
         toast = L('ฮีโร่แรงค์ชุดนี้ใช้ไม่ได้แล้ว (ไม่เสียตั๋ว) · เลือกใหม่จากชุดที่เซิร์ฟเวอร์สุ่มให้', 'This Ranked offer is no longer valid (no ticket spent) · pick again from the server’s offer');
         busy = false;
         view = 'title';
@@ -2453,8 +2479,11 @@ function onClick(ev: Event) {
       pickFocusDom(null);
       return;
     case 'pickMode':
+      if (launching) return;
       pickMode = arg === 'ranked' ? 'ranked' : 'casual';
       store('mochi.mode', pickMode);
+      // a Ranked offer shown earlier may have been used in another tab: check it again (same offer = no re-render)
+      if (pickMode === 'ranked' && rankedSeed !== null && rankedAsk !== 'loading') askRankedOffer();
       break;
     case 'rankedRetry':
       if (rankedAsk === 'error') rankedAsk = 'idle';

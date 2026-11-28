@@ -235,6 +235,19 @@ function capVaults() {
   for (const k of keys.slice(0, keys.length - PLAYER_CAP)) delete db.vaults[k];
 }
 
+/**
+ * Ranked offers over the cap (2 per player cap): only offers of ids with no town go, oldest first. An offer must not
+ * be re-rolled by a flood of new ids pushing it out (Codex review); an id with no town gets a fresh offer anyway by
+ * being a new id. A town's offer goes only with its town.
+ */
+const OFFER_CAP = PLAYER_CAP * 2;
+function capRankedOffers() {
+  const keys = Object.keys(db.rankedOffers);
+  if (keys.length <= OFFER_CAP) return;
+  const loose = keys.filter((k) => !Object.hasOwn(db.farms, k)).sort((a, b) => db.rankedOffers[a].t - db.rankedOffers[b].t);
+  for (const k of loose.slice(0, keys.length - OFFER_CAP)) delete db.rankedOffers[k];
+}
+
 export function enforceCaps() {
   if (db.fights.length > FIGHT_CAP) db.fights.splice(0, db.fights.length - FIGHT_CAP);
   if (db.runs.length > RUN_CAP) db.runs.splice(0, db.runs.length - RUN_CAP);
@@ -243,7 +256,7 @@ export function enforceCaps() {
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
   capFarms();
   capVaults();
-  capRecord(db.rankedOffers, PLAYER_CAP, (x) => x.t);
+  capRankedOffers(); // after capFarms: an evicted town's offer is loose
   if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
 }
 
