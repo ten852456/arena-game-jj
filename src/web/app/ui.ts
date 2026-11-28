@@ -716,7 +716,7 @@ function renderTown() {
 
 /** the heroes offered for the next run: from the seed offline, from the chain's randomness on chain (null = not yet) */
 function heroOffer(): string[] {
-  if (!C.chainOn()) return R.heroChoices((nextSeed ??= randSeed()), R.HERO_CHOICES, FU.usablePool() ?? undefined);
+  if (!C.chainOn()) return R.offerFor(pickMode, (nextSeed ??= randSeed()), FU.usablePool() ?? undefined);
   if (!chainChoices && chainConn === 'ready' && !chainStarting && !runActive()) {
     chainStarting = true;
     void C.chainBeginRun().then(
@@ -853,7 +853,7 @@ function pickFocusDom(id: string | null) {
 /** Hero select: the chosen card bursts into the arena, then the run starts (same start as before: seed, track, voice). */
 function startHero(id: string) {
   const seed = nextSeed ?? randSeed();
-  if (!R.heroChoices(seed, R.HERO_CHOICES, FU.usablePool() ?? undefined).includes(id)) return; // only an offered hero can start a run
+  if (!R.offerFor(pickMode, seed, FU.usablePool() ?? undefined).includes(id)) return; // only an offered hero can start a run
   if (pickMode === 'ranked' && FU.outOfRuns()) {
     toast = L('ไม่มีตั๋วแรงค์: เล่นแบบทั่วไปได้ฟรี', 'No ranked tickets: play Casual for free');
     return render();
@@ -1846,7 +1846,7 @@ function renderOver() {
     ? { day: lastLog.day, close: !!lastNote?.close, why: (en ? lastNote?.whyEn : undefined) ?? lastNote?.why, tip: (en ? lastNote?.tipEn : undefined) ?? lastNote?.tip }
     : null;
   // the next run's heroes (the same offer the hero-pick screen shows): one tap starts it
-  const offered = C.chainOn() ? chainChoices ?? [] : R.heroChoices((nextSeed ??= randSeed()));
+  const offered = C.chainOn() ? chainChoices ?? [] : R.offerFor(pickMode, (nextSeed ??= randSeed()), FU.usablePool() ?? undefined);
   const quick: P.QuickHero[] = offered
     .map((id) => ({ id, name: HEROES_BY_ID[id].name, art: heroArt(id, 'tiny', offerLook(id)), tag: (id === r.hero ? 'again' : recap.cur.heroes.includes(id) ? '' : 'new') as P.QuickHero['tag'] }))
     .sort((a, b) => Number(b.tag === 'again') - Number(a.tag === 'again'));
@@ -2183,7 +2183,7 @@ async function doFight() {
   }
   try {
     // playerId lets the server keep a profile for this browser (extra field; older servers ignore it)
-    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}), ...(r.day === 1 ? { mode: r.mode ?? 'casual' } : {}) };
+    const body = { runId: r.id, name: playerName(), day: r.day, rating: r.rating, build, playerId: M.playerId(), ...(tutorialFight && r.day === 1 ? { tutorial: true } : {}), ...(r.day === 1 ? { mode: r.mode ?? 'casual', seed: r.seed } : {}) };
     tutorialFight = false;
     res = await api.fight(body as Parameters<typeof api.fight>[0]);
     M.rememberFromFight(res);
