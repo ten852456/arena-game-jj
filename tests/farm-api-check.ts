@@ -171,6 +171,17 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
     check('vault: a batch with a bad op changes nothing (sage not owned)', sb === 409 && g3.seals[0].on === 'knight');
     const [gb] = await adm({ playerId: W, grants: [{ kind: 'balance', cents: -5000 }] });
     check('vault admin: play money never goes below 0', gb === 409);
+    // v5.1 task 4: the Seal tray (offers granted as if runs earned them)
+    const [go, jo] = await adm({ playerId: W, grants: [{ kind: 'offer', hero: 'knight', grade: 'D', roll: 4, timing: 'early' }, { kind: 'offer', hero: 'witch', grade: 'C', roll: 8, timing: 'late' }] });
+    const tray = jo.vault?.tray ?? [];
+    check('tray: two offers wait, D free (first 5), C 150 stardust + 1 crystal', go === 200 && tray.length === 2 && tray[0].cost.stardust === 0 && tray[1].cost.stardust === 150 && tray[1].cost.crystal === 1 && jo.vault.claim.left, JSON.stringify(jo.error ?? tray.map((o: { cost: unknown }) => o.cost)));
+    const [sc, jc] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });
+    check('tray: a C claim without the stardust → 409, nothing taken', sc === 409 && jc.error === 'not enough stardust', JSON.stringify(jc));
+    const [sd, jd] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[0]?.id }] });
+    check('tray: claim the free D Seal → in the stash, out of the tray', sd === 200 && jd.seals.some((s: { line: string; grade: string; roll: number }) => s.line === 'shield' && s.grade === 'D' && s.roll === 4) && jd.tray.length === 1 && !jd.claim.left, JSON.stringify(jd.error));
+    const [s2] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });
+    check('tray: 1 claim a day', s2 === 409);
+    check('tray: a bad offer grant is refused', (await adm({ playerId: W, grants: [{ kind: 'offer', hero: 'nobody', grade: 'D', roll: 4, timing: 'early' }] }))[0] === 409);
   } else console.log('  (vault admin checks skipped: start the server and this check with the same ADMIN_TOKEN)');
 }
 

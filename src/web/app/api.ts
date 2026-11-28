@@ -175,6 +175,31 @@ export type FarmOpReq =
   | { op: 'pour'; res: 'wood' | 'ore' | 'crystal'; n: number }
   | { op: 'repair' }
   | { op: 'pourFind'; id: string };
+/** v5.1 account store (src/shared/vault.ts, GET/POST /api/vault): what the Hero Hall and the run-end receipt show */
+export type SealGrade = 'D' | 'C';
+export interface SealOfferView { id: string; line: Line; grade: SealGrade; roll: number; timing: 'early' | 'late'; hero: string; runId: string; wins: number; at: number; exp: number; cost: { stardust: number; crystal: number } }
+export interface SealView { id: string; line: Line; grade: SealGrade; roll: number; timing: 'early' | 'late'; uses: number; bound: boolean; tradable: boolean; on?: string }
+export interface SaveView { hero: string; runId: string; build: Build; wins: number; losses: number; mode: 'casual' | 'ranked'; at: number }
+export interface VaultView {
+  stored: boolean;
+  seals: SealView[];
+  saves: Record<string, SaveView>;
+  pending: Record<string, SaveView>;
+  lineRank: Record<Line, number>;
+  cLines: Line[];
+  tray: SealOfferView[];
+  claim: { left: boolean; freeD: number; next: number };
+  crystal: number;
+  /** after POST: the player's stardust */
+  stardust?: number;
+}
+export type VaultOpReq =
+  | { op: 'claim'; id: string }
+  | { op: 'keepSave'; hero: string }
+  | { op: 'dropPending'; hero: string }
+  | { op: 'equip'; id: string; hero: string }
+  | { op: 'unequip'; id: string };
+
 export interface FeedRow { t: number; name: string; kind: 'find' | 'shiny'; id: string; first?: true }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -199,6 +224,9 @@ export const api = {
   /** one visit: ops applied in order, all-or-nothing */
   farmOps: (playerId: string, ops: FarmOpReq[]) => req<FarmView>('/api/farm', { method: 'POST', body: JSON.stringify({ playerId, ops }) }),
   feed: () => req<{ rows: FeedRow[] }>('/api/feed'),
+  vault: (playerId: string) => req<VaultView>('/api/vault?' + qs({ playerId })),
+  /** v5.1 account store ops, all-or-nothing (a claim pays stardust and crystal) */
+  vaultOps: (playerId: string, ops: VaultOpReq[]) => req<VaultView>('/api/vault', { method: 'POST', body: JSON.stringify({ playerId, ops }) }),
   /** v5.1: the server's Ranked offer for this player (the same one until a Ranked run starts with it) */
   rankedOffer: (playerId: string) => req<{ seed: number; heroes: string[] }>('/api/ranked/offer', { method: 'POST', body: JSON.stringify({ playerId }) }),
   hatch: (playerId: string) => req<{ got: string; farm: FarmView }>('/api/farm/hatch', { method: 'POST', body: JSON.stringify({ playerId }) }),

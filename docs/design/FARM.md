@@ -65,6 +65,8 @@ Why a player opens the game: collect twice a day (morning / night), spend, then 
   not own (try before unlock), at least one fits today's rule (owner 2026-11-26).
 - The hero pick at run start offers 3 from *owned ∪ today's rotation*; working heroes are included (picking one recalls it).
 - Unlock a hero for good: **300 ผงดาว + 3 crystal** (≈ 8–10 runs and 3 mine shifts). This gives ผงดาว its first use.
+  v5.1 (2026-11-28): the stardust rises with each hero adopted beyond the starters, **300 / 700 / 1,400 / 2,400 /
+  3,600 / 5,000** (`adoptCost`), always 3 crystal.
 - Same hero = same strength for everyone. Owning more = more choice and more workers, never stronger fights.
 
 ### 4. Town upgrades
@@ -425,6 +427,22 @@ Build plan task 3. Items that live outside a run, never in `RunState` or a Ranke
   - `POST /api/vault` runs player ops (keepSave, dropPending, equip, unequip), all or nothing.
   - `POST /api/admin/vault/grant` gives items to testers and bots until the Seal tray, crafting and the Tower make them.
 - **Test clock:** `TEST_CLOCK_SCALE` (2 = a 3.5-day week) sets the store's day and week.
+
+## Run-end receipt and Seal tray (v5.1, 2026-11-28)
+
+Build plan task 4. Rules in `src/shared/vault.ts`, screens in `src/web/features/town/vaultUI.ts`.
+- **Seal offer:** a finished run with 3+ wins offers its hero's line Seal: D, or C at 5+ wins once the line has
+  rank 30 (this run's rank counts). Any mode; a guided-tutorial win does not count. The server rolls 1-10 and early
+  or late.
+- **Tray:** up to 3 offers, each for 24 h (scaled by `TEST_CLOCK_SCALE`); a full tray drops its oldest.
+- **Claim:** 1 a day (Bangkok day). D costs 50 stardust (the first 5 free), C 150 stardust + 1 crystal. Stardust
+  comes off the profile, crystal off the town, all-or-nothing with the other ops (`POST /api/vault {op:'claim'}`);
+  the ledger records both burns. The claimed Seal adds 2 line rank (as before).
+- **Receipt** (run-end page): line rank gained, the Seal offer with a Claim button, and "Replace <hero>'s Save?"
+  (Replace / Keep the old one), or "adopt <hero> to keep it" for a hero the player does not own.
+- **Hero Hall:** the tray, the Seal stash (equip on an owned hero, 1 each, binds; take off) and the Hero Book.
+- **Admin:** `POST /api/admin/vault/grant` also takes `{kind:'offer', hero, grade, roll, timing}` for testers.
+- Not yet: merge and dissolve, the first Seal after run 2 (onboarding), Overtime, telemetry events.
 
 ## Open questions
 

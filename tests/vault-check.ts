@@ -92,6 +92,38 @@ check('a real week starts on a Bangkok Monday', V.weekOf(Date.parse('2026-12-07T
   check('the view lists the C lines and weekly Moonstone left', V.vaultView(v, T0).cLines.includes('ice') && V.vaultView(v, T0).moonstone.weekLeft === 2);
 }
 
+// Seal tray (task 4)
+{
+  const v = V.newVault(T0);
+  const rnd: [number, number] = [0.65, 0.9]; // roll 7, late
+  const r2 = V.onRunEnd(v, run('knight', 'shield', 2), true, T0, 1, rnd);
+  check('2 wins: no Seal offer', !r2.offer && v.tray.length === 0);
+  const r3 = V.onRunEnd(v, run('knight', 'shield', 3, 'k3'), true, T0, 1, rnd);
+  check('3 wins: a D offer of the hero line (roll 7, late, 24 h)', r3.offer?.grade === 'D' && r3.offer.line === 'shield' && r3.offer.roll === 7 && r3.offer.timing === 'late' && r3.offer.exp === T0 + 24 * H);
+  const r5 = V.onRunEnd(v, run('pyro', 'burn', 6, 'p6'), true, T0, 1, [0, 0.1]);
+  check('5+ wins before line rank 30: still D (roll 1, early)', r5.offer?.grade === 'D' && r5.offer.roll === 1 && r5.offer.timing === 'early');
+  v.lineRank.ice = V.LINE_RANK_C - 1;
+  const rc = V.onRunEnd(v, run('witch', 'ice', 5, 'w5'), true, T0, 1, [0.999, 0.5]);
+  check('5 wins once this run brings the line to rank 30: C (roll 10)', rc.offer?.grade === 'C' && rc.offer.roll === 10);
+  check('a tutorial win does not count for the Seal', !V.onRunEnd(v, run('duelist', 'dodge', 3, 'tut'), true, T0, 1, rnd, 2).offer);
+  const r4 = V.onRunEnd(v, run('duelist', 'dodge', 4, 'd4'), true, T0, 1, rnd);
+  check('a full tray (3) drops its oldest offer', v.tray.length === 3 && !v.tray.some((o) => o.id === r3.offer!.id) && v.tray.at(-1)!.id === r4.offer!.id);
+  check('the view shows the tray with prices and 5 free D Seals', V.vaultView(v, T0).tray.length === 3 && V.vaultView(v, T0).claim.left && V.vaultView(v, T0).claim.freeD === 5);
+  const c = V.claimSeal(v, rc.offer!.id, { stardust: 149, crystal: 1 }, T0);
+  check('a C claim costs 150 stardust + 1 crystal', c === 'not enough stardust' && V.claimSeal(v, rc.offer!.id, { stardust: 150, crystal: 0 }, T0) === 'not enough crystal');
+  const ok = V.claimSeal(v, rc.offer!.id, { stardust: 150, crystal: 1 }, T0);
+  check('…claimed: the Seal is in the stash, the offer left the tray', typeof ok !== 'string' && ok.cost.stardust === 150 && ok.seal.grade === 'C' && ok.seal.roll === 10 && !v.tray.some((o) => o.id === rc.offer!.id));
+  check('1 claim a day', V.claimSeal(v, r4.offer!.id, { stardust: 999, crystal: 9 }, T0) === 'claimed today' && !V.vaultView(v, T0).claim.left);
+  const d = V.claimSeal(v, r4.offer!.id, { stardust: 0, crystal: 0 }, T0 + 20 * H); // past midnight, inside the offer's 24 h
+  check('the next day (00:00 Bangkok): the first D Seals are free', typeof d !== 'string' && d.cost.stardust === 0 && v.freeD === 1);
+  check('an offer past 24 h is gone', V.claimSeal(v, r5.offer!.id, { stardust: 999, crystal: 9 }, T0 + 48 * H + 1) === 'no such offer' && V.vaultView(v, T0 + 48 * H + 1).tray.length === 0);
+  const w = V.newVault(T0);
+  w.freeD = V.FREE_D_SEALS;
+  const o = V.onRunEnd(w, run('knight', 'shield', 3, 'x'), true, T0, 2, rnd).offer!;
+  check('test clock: the tray lasts 12 h at scale 2; D costs 50 after the free ones', o.exp === T0 + 12 * H && V.vaultView(w, T0, 2).tray[0].cost.stardust === 50);
+  check('no rnd (old callers): no offer', !V.onRunEnd(V.newVault(T0), run('knight', 'shield', 9), true, T0).offer);
+}
+
 // test balance and old saves
 {
   const v = V.newVault(T0);

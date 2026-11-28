@@ -104,7 +104,8 @@ export function handleFinish(body: any): Res {
   ledgerAdd('stardust', 'mint', reward.stardust);
   const { eggs, ticket } = onRunFinished(playerId, countedWins, mode);
   // v5.1 account store: line rank and the Hero Book Save (outside the run, never in a Ranked build)
-  const { rank, saved } = onVaultRunEnd(playerId, { runId, hero, build, wins: countedWins, losses: countedLosses, mode });
+  // the Seal tray offer counts the same wins as the stardust (a guided-tutorial win does not count)
+  const { rank, saved, offer } = onVaultRunEnd(playerId, { runId, hero, build, wins: countedWins, losses: countedLosses, mode }, countedWins - tutorialWin);
   player.runs++;
   player.wins += countedWins;
   player.losses += countedLosses;
@@ -113,7 +114,7 @@ export function handleFinish(body: any): Res {
     player.best = { runId, hero, wins: run.wins, losses: run.losses, day, finishedAt: run.finishedAt };
   }
   save();
-  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}), ...(rank ? { lineRank: rank } : {}), ...(saved ? { saved } : {}) }, run: runRow(run), player: publicPlayer(player) } };
+  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}), ...(rank ? { lineRank: rank } : {}), ...(saved ? { saved } : {}), ...(offer ? { seal: offer } : {}) }, run: runRow(run), player: publicPlayer(player) } };
 }
 
 export function handleProfile(q: URLSearchParams): Res {

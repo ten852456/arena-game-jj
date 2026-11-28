@@ -6,6 +6,7 @@
  */
 import { L, getLang } from '../../../shared/i18n';
 import type { Build } from '../../../sim/types';
+import type { SealOfferView } from '../../app/api';
 
 // ---------- small local store (per-browser convenience; may be unavailable) ----------
 function get(key: string): string | null {
@@ -108,6 +109,10 @@ export interface FinishRunResult {
   total?: number;
   runs?: number;
   bestWins?: number;
+  /** v5.1 run-end receipt: line rank gained, the Save kept at once, the Seal offer put in the tray */
+  lineRank?: number;
+  saved?: boolean;
+  seal?: SealOfferView;
 }
 export async function finishRun(body: FinishRunBody): Promise<FinishRunResult | null> {
   const j = await call('/api/run/finish', { method: 'POST', body: JSON.stringify(body) });
@@ -119,6 +124,9 @@ export async function finishRun(body: FinishRunBody): Promise<FinishRunResult | 
     total: num(j.player?.stardust, j.total, j.totals?.stardust, j.stardustTotal, j.balance, j.profile?.stardust),
     runs: num(j.player?.runs, j.totals?.runs, j.runs, j.profile?.runs),
     bestWins: num(j.player?.best?.wins, j.totals?.bestWins, j.bestWins, j.profile?.bestWins),
+    ...(typeof j.reward?.lineRank === 'number' ? { lineRank: j.reward.lineRank } : {}),
+    ...(j.reward?.saved === true ? { saved: true } : {}),
+    ...(j.reward?.seal && typeof j.reward.seal === 'object' ? { seal: j.reward.seal as SealOfferView } : {}),
   };
 }
 
