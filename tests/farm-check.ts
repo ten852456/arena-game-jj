@@ -124,6 +124,11 @@ const veteran = () => {
   f.pass = true;
   check('v5.1: the pass adds no work slot', F.slotsOf(f, 'lumber') === 2);
   check('v5.1: the pass does not hatch eggs faster', F.EGG_PASS_SPEED === 1);
+  const extra = veteran();
+  extra.lv.lumber = 2;
+  for (const hero of ['knight', 'assassin', 'pyro']) extra.jobs.lumber.push({ hero, since: T0 }); // a 3rd worker from the old pass slot
+  const got = F.collect(extra, 'lumber', T0 + 2 * H);
+  check('v5.1: an old pass-slot worker is paid, then goes home', got > 0 && extra.jobs.lumber.length === 2 && !extra.jobs.lumber.some((j) => j.hero === 'pyro'), `jobs ${extra.jobs.lumber.length}`);
 }
 
 // incremental layer: endless levels past Lv5, worker mastery

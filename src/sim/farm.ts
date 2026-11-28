@@ -359,6 +359,9 @@ export function collect(f: FarmState, b: Building, now: number, scale = 1, rng?:
     else j.since += p.rate > 0 ? ((take / p.rate) * H) / p.speed : 0; // keep the part-unit already made
     if (j.fast) delete j.fast;
   }
+  // v5.1: a worker past the slots (the pass slot is gone) is paid for its hours above and then goes home (Codex review)
+  const slots = slotsOf(f, b);
+  if (f.jobs[b].length > slots) f.jobs[b] = f.jobs[b].slice(0, slots);
   f.updatedAt = now;
   return got;
 }
