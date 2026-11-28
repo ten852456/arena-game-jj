@@ -35,8 +35,10 @@ export function vaultOf(playerId: string, now: number, create = true): V.Vault |
 const ownedOf = (playerId: string): string[] => (Object.hasOwn(db.farms, playerId) ? db.farms[playerId].owned : F.STARTERS);
 
 function view(v: V.Vault | null, playerId: string, now: number) {
+  // the wallet a Seal claim pays from: the profile's stardust and the town's crystal
   const crystal = Object.hasOwn(db.farms, playerId) ? db.farms[playerId].res.crystal : 0;
-  return { stored: !!v, ...V.vaultView(v ?? V.newVault(now, TEST_CLOCK_SCALE), now, TEST_CLOCK_SCALE), crystal, marketOpen: MARKET_OPEN };
+  const stardust = Object.hasOwn(db.players, playerId) ? db.players[playerId].stardust : 0;
+  return { stored: !!v, ...V.vaultView(v ?? V.newVault(now, TEST_CLOCK_SCALE), now, TEST_CLOCK_SCALE), crystal, stardust, marketOpen: MARKET_OPEN };
 }
 
 export function handleVaultGet(q: URLSearchParams): Res {
@@ -86,7 +88,7 @@ export function handleVaultOps(raw: unknown): Res {
     ledgerAdd('crystal', 'burn', spent.crystal);
   }
   save();
-  return { status: 200, json: { ...view(copy, playerId, now), stardust: player?.stardust ?? 0 } };
+  return { status: 200, json: view(copy, playerId, now) };
 }
 
 const rnd = () => randomInt(0, 2 ** 31) / 2 ** 31;

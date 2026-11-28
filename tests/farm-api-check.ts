@@ -177,6 +177,9 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
     check('tray: two offers wait, D free (first 5), C 150 stardust + 1 crystal', go === 200 && tray.length === 2 && tray[0].cost.stardust === 0 && tray[1].cost.stardust === 150 && tray[1].cost.crystal === 1 && jo.vault.claim.left, JSON.stringify(jo.error ?? tray.map((o: { cost: unknown }) => o.cost)));
     const [sc, jc] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });
     check('tray: a C claim without the stardust → 409, nothing taken', sc === 409 && jc.error === 'not enough stardust', JSON.stringify(jc));
+    const [sr] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[0]?.id }, { op: 'keepSave', hero: 'nobody' }] });
+    const [, gr] = await get('/api/vault?playerId=' + W);
+    check('tray: a claim in a batch with a bad op is rolled back (offer kept, claim still left)', sr === 409 && gr.tray.length === 2 && gr.claim.left && typeof gr.stardust === 'number' && typeof gr.crystal === 'number');
     const [sd, jd] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[0]?.id }] });
     check('tray: claim the free D Seal → in the stash, out of the tray', sd === 200 && jd.seals.some((s: { line: string; grade: string; roll: number }) => s.line === 'shield' && s.grade === 'D' && s.roll === 4) && jd.tray.length === 1 && !jd.claim.left, JSON.stringify(jd.error));
     const [s2] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });

@@ -7,7 +7,7 @@ import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
 import type { LastChoice } from './game/validate';
 import type { FarmState } from '../sim/farm';
-import type { Vault } from '../shared/vault';
+import type { SealOffer, Vault } from '../shared/vault';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 export const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -117,6 +117,8 @@ export interface FinishedRun {
   mode?: 'casual' | 'ranked';
   season: string;
   finishedAt: number;
+  /** v5.1 run-end receipt, kept so a retried /finish shows it again: line rank gained, Save kept, the Seal offer */
+  receipt?: { lineRank?: number; saved?: true; seal?: SealOffer };
 }
 export interface Player {
   id: string;

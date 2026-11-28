@@ -16,14 +16,19 @@ export let vault: VaultView | null = null;
 let loading: Promise<void> | null = null;
 
 const name = (h: string) => HEROES_BY_ID[h]?.name ?? h;
-const have = () => ({ stardust: vault?.stardust ?? farm?.stardust ?? 0, crystal: vault?.crystal ?? farm?.res.crystal ?? 0 });
+/** the wallet the server sent with the store (the farm screens keep it in step: syncWallet) */
+const have = () => ({ stardust: vault?.stardust ?? 0, crystal: vault?.crystal ?? 0 });
+/** a farm answer is newer than the store's wallet (an unlock, an upgrade, a pour): take its stardust and crystal */
+export function syncWallet(f: { stardust: number; res: { crystal: number } } | null) {
+  if (vault && f) vault = { ...vault, stardust: f.stardust, crystal: f.res.crystal };
+}
 
 /** Fetch the store (the Hero Hall and the run-end receipt call this). */
 export function loadVault(onDone?: () => void): Promise<void> {
   loading ??= api
     .vault(M.playerId())
     .then((v) => {
-      vault = { ...v, stardust: farm?.stardust ?? v.stardust };
+      vault = v;
     })
     .catch(() => {
       /* server down: the hall still shows the heroes */
@@ -179,7 +184,7 @@ export async function vaultAction(a: string, el: HTMLElement): Promise<string> {
   try {
     const before = vault;
     vault = await api.vaultOps(M.playerId(), [op]);
-    if (farm && vault.stardust !== undefined) {
+    if (farm) {
       farm.stardust = vault.stardust;
       farm.res.crystal = vault.crystal;
     }

@@ -2453,6 +2453,7 @@ function onClick(ev: Event) {
   if (a.startsWith('farm')) {
     (el as HTMLButtonElement).disabled = true;
     void FU.farmAction(a, el).then((msg) => {
+      VU.syncWallet(FU.farm); // the Seal tray's prices read the same stardust and crystal
       if (msg) toast = msg;
       if (a === 'farmCollect') sfx('reroll');
       render();

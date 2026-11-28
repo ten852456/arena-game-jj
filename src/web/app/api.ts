@@ -189,9 +189,9 @@ export interface VaultView {
   cLines: Line[];
   tray: SealOfferView[];
   claim: { left: boolean; freeD: number; next: number };
+  /** the wallet a claim pays from: the town's crystal and the profile's stardust */
   crystal: number;
-  /** after POST: the player's stardust */
-  stardust?: number;
+  stardust: number;
 }
 export type VaultOpReq =
   | { op: 'claim'; id: string }
