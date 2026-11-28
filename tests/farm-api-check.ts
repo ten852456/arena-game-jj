@@ -1,5 +1,6 @@
 // Farm API abuse and flow checks, against a live server started with a fast clock and the gate on:
 //   FARM_TIME_SCALE=3600 DATA_DIR=<fresh dir> npm start   then   npm run farm-api   (BASE=http://host:port)
+//   (ADMIN_TOKEN set on both: also checks the v5.1 vault admin grant)
 // (3600: one game hour per real second, so a 12 h storage fills in 12 s.)
 import { aiBuild } from '../src/sim/bot';
 
@@ -88,6 +89,47 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
   check('monument shows a goal and the ruler\'s 20% gift', g.monument.goal > 0 && g.monument.points >= Math.round(0.2 * g.monument.goal), JSON.stringify(g.monument));
   const [sp, jp] = await post('/api/farm', { playerId: P, ops: [{ op: 'pour', res: 'wood', n: 10 }] });
   check('pour 10 wood (below the personal minimum: not counted as a player, so fake ids cannot raise the goal)', sp === 200 && jp.monument.mine === 10 && jp.monument.players === 0);
+}
+
+// v5.1 account store (src/shared/vault.ts): created by a finished run, player ops only touch what the server made
+{
+  const W = P + '-vault';
+  const [, g0] = await get('/api/vault?playerId=' + W);
+  check('vault: an unknown player sees an empty store, nothing stored', g0.stored === false && g0.testBalance === 1000 && g0.seals.length === 0, JSON.stringify({ stored: g0.stored }));
+  check('vault: ops before any run → 409', (await post('/api/vault', { playerId: W, ops: [{ op: 'keepSave', hero: 'knight' }] }))[0] === 409);
+  const finishRun = async (runId: string) => {
+    const [, jf] = await fight(W, runId, 'knight');
+    return post('/api/run/finish', { runId, playerId: W, name: '', hero: 'knight', wins: jf.won ? 1 : 0, losses: jf.won ? 0 : 1, day: 1, build: aiBuild('knight', 1, [], 7) });
+  };
+  const [f1s, f1] = await finishRun(W + '-r1');
+  check('vault: a finished run gives line rank and the first Save', f1s === 200 && f1.reward.lineRank >= 1 && f1.reward.saved === true, JSON.stringify(f1.reward ?? f1));
+  const [, g1] = await get('/api/vault?playerId=' + W);
+  check('vault: the Save is the run build, the shield line moved', g1.stored && g1.saves.knight?.runId === W + '-r1' && g1.lineRank.shield >= 1);
+  await finishRun(W + '-r2');
+  const [, g2] = await get('/api/vault?playerId=' + W);
+  check('vault: the next run waits as pending', g2.pending.knight?.runId === W + '-r2' && g2.saves.knight.runId === W + '-r1');
+  const [sk, jk] = await post('/api/vault', { playerId: W, ops: [{ op: 'keepSave', hero: 'knight' }] });
+  check('vault: keep it → the Save is replaced', sk === 200 && jk.saves.knight.runId === W + '-r2' && !jk.pending.knight);
+  check('vault: a client cannot grant itself items', (await post('/api/vault', { playerId: W, ops: [{ op: 'addSeal', line: 'burn' }] }))[0] === 409);
+  check('vault: equipping an item that does not exist → 409', (await post('/api/vault', { playerId: W, ops: [{ op: 'equip', id: 's1', hero: 'knight' }] }))[0] === 409);
+  check('vault: the admin grant needs the token', (await post('/api/admin/vault/grant', { playerId: W, grants: [{ kind: 'balance', cents: 100 }] }))[0] !== 200);
+  const TOKEN = process.env.ADMIN_TOKEN;
+  if (TOKEN) {
+    const adm = async (b: unknown) => {
+      const r = await fetch(BASE + '/api/admin/vault/grant', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN }, body: JSON.stringify(b) });
+      return [r.status, await r.json()] as const;
+    };
+    const [ga, ja] = await adm({ playerId: W, grants: [{ kind: 'seal', line: 'burn', grade: 'C', roll: 7, timing: 'late' }, { kind: 'kit', tier: 2 }, { kind: 'supply', id: 'ration', n: 2 }, { kind: 'moonstone', n: 3, source: 'weekly' }] });
+    const seal = ja.vault?.seals?.[0];
+    check('vault admin: grant a C7 Seal, T2 Kit, 2 Rations; weekly Moonstone stops at 2 (bound before the market)', ga === 200 && seal?.tradable === true && ja.vault.kit[0]?.tradable === true && ja.vault.supplies.ration === 2 && ja.vault.moonstone.bound === 2 && ja.vault.moonstone.weekLeft === 0, JSON.stringify(ja.error ?? ja.vault?.moonstone));
+    const [se, je] = await post('/api/vault', { playerId: W, ops: [{ op: 'equip', id: seal?.id, hero: 'knight' }, { op: 'equip', id: ja.vault?.kit?.[0]?.id, hero: 'knight' }] });
+    check('vault: equip the Seal and Kit on Knight; the Seal binds', se === 200 && je.seals[0].on === 'knight' && je.seals[0].tradable === false && je.kit[0].tradable === false, JSON.stringify(je.error));
+    const [sb] = await post('/api/vault', { playerId: W, ops: [{ op: 'unequip', id: seal?.id }, { op: 'equip', id: seal?.id, hero: 'sage' }] });
+    const [, g3] = await get('/api/vault?playerId=' + W);
+    check('vault: a batch with a bad op changes nothing (sage not owned)', sb === 409 && g3.seals[0].on === 'knight');
+    const [gb] = await adm({ playerId: W, grants: [{ kind: 'balance', cents: -5000 }] });
+    check('vault admin: play money never goes below 0', gb === 409);
+  } else console.log('  (vault admin checks skipped: start the server and this check with the same ADMIN_TOKEN)');
 }
 
 // creating towns: limited per IP (the last check: it uses up this IP's allowance for an hour)

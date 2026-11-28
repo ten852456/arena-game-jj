@@ -384,6 +384,29 @@ Plan + formulas + growth chart: claude.ai doc "Mochi Moon idle town: summary and
 - Not done (need things that don't exist yet): daily line rotation, pass-perk fences (no pass yet), sybil gate
   (no prizes yet), Tower research, Moon Festival, louder scout / top-3 contributors.
 
+## Account store (v5.1, 2026-11-28)
+
+Build plan task 3. Items that live outside a run, never in `RunState` or a Ranked `Build`: rules in
+`src/shared/vault.ts`, API in `src/server/routes/vault.ts`, checks in `tests/vault-check.ts` and `npm run farm-api`.
+- **Seals:** D/C, 10 lines, roll 1-10, Early/Late, uses D 30 / C 45, stash 30. D is bound, and a C Seal trades at roll
+  7+ (or when mutated or Cracked). A Seal binds when equipped. Each claim adds +2 line rank.
+- **Kit:** T1 is bound, T2/T3 trade while nobody wears it. 20 uses. Slots: 1 Seal and 1 Kit per hero (until the
+  Tower engine sets them).
+- **Supplies:** Ration and Spare Heart, up to 20 each.
+- **Moonstone (Moon Dust):** weekly F20/F25 clears give at most 2 a week, tradable once `MOON_MARKET=on` (bound
+  before that). First clears are bound and outside the weekly cap. Spending uses bound pieces first.
+- **Line rank:** +1 per run of that line's hero, +1 at 5 wins, +1 at 10 wins, and only the first 5 runs of a day
+  count. The C grade opens at 30.
+- **Hero Book:** an owned hero's first finished run becomes its Save. Each later run waits as `pending` until the
+  player keeps it. A Ranked run with a hero you do not own stays pending until you adopt the hero.
+- **Play money:** $10 (1,000 cents) each, for the prototype market.
+- **Crystal:** stays in the town (`res.crystal`). The vault view only shows it.
+- **API:**
+  - `GET /api/vault` creates nothing.
+  - `POST /api/vault` runs player ops (keepSave, dropPending, equip, unequip), all or nothing.
+  - `POST /api/admin/vault/grant` gives items to testers and bots until the Seal tray, crafting and the Tower make them.
+- **Test clock:** `TEST_CLOCK_SCALE` (2 = a 3.5-day week) sets the store's day and week.
+
 ## Open questions
 
 1. Bot quota (vision: resources also pay for bot runs) — later, when bots ship.

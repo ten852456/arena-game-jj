@@ -9,6 +9,7 @@ import { recordOf } from './fight';
 import { bad, type Res } from '../http/http';
 import { allow } from './site';
 import { onRunFinished } from './farm';
+import { onVaultRunEnd } from './vault';
 import { ledgerAdd } from '../game/ledger';
 import { bkDay, stardustMult } from '../../sim/farm';
 
@@ -102,6 +103,8 @@ export function handleFinish(body: any): Res {
   player.stardust += reward.stardust;
   ledgerAdd('stardust', 'mint', reward.stardust);
   const { eggs, ticket } = onRunFinished(playerId, countedWins, mode);
+  // v5.1 account store: line rank and the Hero Book Save (outside the run, never in a Ranked build)
+  const { rank, saved } = onVaultRunEnd(playerId, { runId, hero, build, wins: countedWins, losses: countedLosses, mode });
   player.runs++;
   player.wins += countedWins;
   player.losses += countedLosses;
@@ -110,7 +113,7 @@ export function handleFinish(body: any): Res {
     player.best = { runId, hero, wins: run.wins, losses: run.losses, day, finishedAt: run.finishedAt };
   }
   save();
-  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}) }, run: runRow(run), player: publicPlayer(player) } };
+  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}), ...(rank ? { lineRank: rank } : {}), ...(saved ? { saved } : {}) }, run: runRow(run), player: publicPlayer(player) } };
 }
 
 export function handleProfile(q: URLSearchParams): Res {
