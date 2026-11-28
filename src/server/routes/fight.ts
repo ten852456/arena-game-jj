@@ -153,12 +153,12 @@ export function handleFight(body: any, ip = '?'): Res {
   // Guided tutorial: the very first fight of a brand-new run, once per player, is against a training AI
   // (an easy bot with one skill, a fight the player wins). The server decides everything; the client only asks.
   const tutorial = body?.tutorial === true && day === 1 && !prev && !Object.hasOwn(db.tutorials, playerId);
-  // Farm (docs/design/FARM.md): day 1 of a new run uses a free run or a ticket, and the hero must be owned or in today's
-  // rotation. The tutorial run is free. Nothing is spent when the gate says no.
+  // Farm (docs/design/FARM.md): day 1 of a new run uses a free run or a ticket. Casual: the hero must be owned or in
+  // today's rotation; Ranked (v5.1): the hero must be in the seed's offer from all heroes (body.seed). The tutorial run is free. Nothing is spent when the gate says no.
   // Arena modes: Casual is free, Ranked costs a ticket (body.mode === 'ranked'; anything else is casual).
   let start: RunStart | null = null;
   if (!prev && day === 1) {
-    const gate = startRunGate(playerId, build.hero, tutorial, ip, body?.mode === 'ranked' ? 'ranked' : 'casual');
+    const gate = startRunGate(playerId, build.hero, tutorial, ip, body?.mode === 'ranked' ? 'ranked' : 'casual', body?.seed);
     if ('status' in gate) return gate;
     start = gate;
   }

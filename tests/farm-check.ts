@@ -122,7 +122,13 @@ const veteran = () => {
   f.res.ore = 40;
   check('upgrade lumber to Lv2', typeof op(f, { op: 'upgrade', b: 'lumber' }, T0) !== 'string' && f.lv.lumber === 2 && F.slotsOf(f, 'lumber') === 2);
   f.pass = true;
-  check('the pass adds a work slot', F.slotsOf(f, 'lumber') === 3);
+  check('v5.1: the pass adds no work slot', F.slotsOf(f, 'lumber') === 2);
+  check('v5.1: the pass does not hatch eggs faster', F.EGG_PASS_SPEED === 1);
+  const extra = veteran();
+  extra.lv.lumber = 2;
+  for (const hero of ['knight', 'assassin', 'pyro']) extra.jobs.lumber.push({ hero, since: T0 }); // a 3rd worker from the old pass slot
+  const got = F.collect(extra, 'lumber', T0 + 2 * H);
+  check('v5.1: an old pass-slot worker is paid, then goes home', got > 0 && extra.jobs.lumber.length === 2 && !extra.jobs.lumber.some((j) => j.hero === 'pyro'), `jobs ${extra.jobs.lumber.length}`);
 }
 
 // incremental layer: endless levels past Lv5, worker mastery
@@ -138,6 +144,14 @@ const veteran = () => {
   check('Lv15 = ×(1 + 0.15·10)·2 = ×5 output; Lv25 = ×4·4 = ×16', F.levelMult(15) === 5 && F.levelMult(25) === 16);
   check('slots and storage stay at the Lv5 values', F.slotsOf(f, 'lumber') === F.SLOTS[4] && F.storageMs(f, 'lumber') === F.STORAGE_H[4] * H);
   check('the warehouse grows with the level', F.capOf(f, 'wood') > 16 * 6 * 4 * 72);
+  const s5 = veteran();
+  s5.lv.shrine = 5;
+  s5.res.wood = 1e6;
+  s5.res.ore = 1e6;
+  s5.res.crystal = 100;
+  check('v5.1: the shrine stops at Lv5', op(s5, { op: 'upgrade', b: 'shrine' }, T0) === 'max level' && s5.lv.shrine === 5);
+  s5.lv.shrine = 30; // an old save past Lv5 makes crystal at the base rate
+  check('v5.1: shrine crystal has no level multiplier', F.rateOf(s5, 'shrine', 'knight', T0 + 30 * 24 * H) === F.rateOf({ ...s5, lv: { ...s5.lv, shrine: 1 } }, 'shrine', 'knight', T0 + 30 * 24 * H));
   check('mastery curve: Lv50 = 10,133 XP, Lv99 = 1,303,443 XP', F.XP_TABLE[50] === 10133 && F.XP_TABLE[99] === 1303443);
   const g = veteran();
   op(g, { op: 'send', b: 'mine', hero: 'knight' }, T0);

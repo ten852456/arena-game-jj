@@ -253,7 +253,7 @@ At season end the world is threatened; everyone pours resources into the city ha
 - Work egg: earned from 3-win and 10-win runs; sits in a town nest and hatches after N hero work-hours; contents are
   cosmetics only (hero looks, emotes, frames); odds shown before hatching; no duplicates; rare variant guaranteed
   by the 10th egg (pity); roll by VRF onchain.
-- **Never sold, never given by the pass.** The battle pass only **hatches faster** (or an extra nest slot); the egg
+- **Never sold, never given by the pass.** The battle pass gives no egg perk (v5.1; it used to hatch faster); the egg
   and its odds are the same for everyone. So it is not a paid loot box and the FACTS "Never" list holds.
 - **Never tradable**: eggs and hatched cosmetics are account-bound.
 - ROADMAP Phase 7 "Monthly pass: … boxes" must not mean eggs/boxes in the pass (reworded).
@@ -263,7 +263,7 @@ At season end the world is threatened; everyone pours resources into the city ha
 - **4 resources + tickets**: stardust (arena), wood (lumber), ore (mine), crystal (**new shrine**). One landmark
   makes one resource. Never onchain tokens; account-bound.
 - Affinity map above (+25%).
-- **Battle pass: +1 town work slot.** Whales produce more, so they build the town and the monument faster (and get a
+- ~~**Battle pass: +1 town work slot.**~~ Dropped in v5.1 (2026-11-28): the pass sells no production. Whales produce more, so they build the town and the monument faster (and get a
   bigger, still √-scaled, next-season head start). Supplies and tickets stay capped, so this is not combat power.
 
 ### Heroes (owner, 2026-11-26)
@@ -272,7 +272,8 @@ At season end the world is threatened; everyone pours resources into the city ha
 - **No rarity**: every hero costs the same to unlock; new heroes get a "New" tag.
 - **Tier list from real runs** (clear %, pick %, sample size), shown once a hero has 200+ runs, refreshed weekly,
   labelled as data, not power.
-- Whale gap: the pass gives 5 hero choices instead of 3 (ROADMAP Phase 7).
+- ~~Whale gap: the pass gives 5 hero choices instead of 3 (ROADMAP Phase 7).~~ Dropped in v5.1: Ranked offers 3 of all
+  10 heroes to everyone.
 
 ### Seasons (owner, 2026-11-26)
 
@@ -307,7 +308,7 @@ itself (`pass` flag exists), VRF (server randomness for now).
 - Free runs: 3 a day, **unused ones bank up to 6** (a missed day is not lost; owner had chosen "reset at midnight",
   banking is the softer version of it).
 - Upgrades Lv2 60w+40o (paid by the 5-minute first shift) · Lv3 250/150/2c · Lv4 1200/800/6c · Lv5 3000/2000/15c.
-- Work egg: 48 work-hours (3 wins), 120 (10 wins); nest holds 4, one incubates; the pass hatches 1.5× faster.
+- Work egg: 48 work-hours (3 wins), 120 (10 wins); nest holds 4, one incubates; the pass hatches at the normal speed (1.5× until v5.1).
 - Stamp card: 7 days by total days played (never consecutive), starts with 2 stamps; full card = 2 crystal + 24 egg hours.
 - New players: output ×2 on day 0 fading to ×1 over 7 days.
 - Monument: goal = 2,500 points × players who poured at least 300; starts 20% filled (the ruler's gift);
@@ -383,6 +384,14 @@ Plan + formulas + growth chart: claude.ai doc "Mochi Moon idle town: summary and
   a window; taps through a window no longer reach the map.
 - Not done (need things that don't exist yet): daily line rotation, pass-perk fences (no pass yet), sybil gate
   (no prizes yet), Tower research, Moon Festival, louder scout / top-3 contributors.
+
+## v5.1 quick fixes (2026-11-28)
+
+From the v5.1 core loop (claude.ai doc "v5.1 Core loop" and "v5.1 Build plan", task 1):
+- The pass gives no work slot (`PASS_SLOTS = 0`) and no faster hatching (`EGG_PASS_SPEED = 1`).
+- Crystal is the scarce key: the shrine has no endless-level multiplier and stops at Lv5 (`maxLvOf`, `outputMult`).
+  v5 sims reached 540-620 crystal a season through the multiplier; the target is 60-100. A save already past Lv5
+  makes crystal at the base rate. Lumber and mine keep the endless layer.
 
 ## Account store (v5.1, 2026-11-28)
 

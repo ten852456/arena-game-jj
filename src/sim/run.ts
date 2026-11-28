@@ -60,7 +60,7 @@ export const offerChoices = (s: RunState, o: Offer): Variant[] => {
   return owned ? nextVariants(owned.v) : [];
 };
 
-/** Heroes offered when a run starts (5 later with the pass). */
+/** Heroes offered when a run starts. */
 export const HERO_CHOICES = 3;
 
 /**
@@ -75,6 +75,14 @@ export function heroChoices(seed: number, n = HERO_CHOICES, from?: string[]): st
   while (out.length < n && pool.length) out.push(pool.splice(rng.int(pool.length), 1)[0]);
   return out;
 }
+
+/**
+ * v5.1 (2026-11-28): the hero offer by arena mode. Ranked offers HERO_CHOICES of all heroes to everyone, so owning
+ * a hero never helps a Ranked run (Arena equality); Casual offers from the heroes the player may use (owned or in
+ * today's rotation). Same seed and mode → same Ranked offer on every account.
+ */
+export const offerFor = (mode: 'casual' | 'ranked', seed: number, usable?: string[]): string[] =>
+  heroChoices(seed, HERO_CHOICES, mode === 'ranked' ? undefined : usable);
 
 export type LastChanceOption = 'awaken' | 'mark' | 'supply';
 export const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];

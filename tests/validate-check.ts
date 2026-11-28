@@ -2,10 +2,10 @@
 // Real runs here = bot runs of every tier and hero on days 1–15 (they shop with the same rules and prices as players).
 import { aiBuild, botDay, botRules, randomAiBuild } from '../src/sim/bot';
 import { simulate } from '../src/sim/combat';
-import { applyMark, chooseLastChance, markKindFor, newRun, recordResult, toBuild } from '../src/sim/run';
+import { HERO_CHOICES, applyMark, chooseLastChance, markKindFor, newRun, offerFor, recordResult, toBuild } from '../src/sim/run';
 import { HEROES } from '../src/sim/heroes';
 import { hashSeed } from '../src/sim/rng';
-import { allowances, buildCost, couldBeFull, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/game/validate';
+import { allowances, buildCost, couldBeFull, rankedOfferCheck, runMax, spendCheck, validateBuild, type RunRecord } from '../src/server/game/validate';
 import { SUPPLY_GOLD_FULL } from '../src/sim/run';
 import type { Build } from '../src/sim/types';
 
@@ -136,8 +136,32 @@ let markChi = 0;
   if (keys.length !== 16 || chi > 37.7) bad.push(`mark kinds: wish pairs not uniform (${keys.length}/16 pairs, chi² ${chi.toFixed(1)})`);
   else markChi = chi;
 }
+// v5.1 Ranked offer: 3 of all heroes, the same on every account for one seed; the server takes only an offered hero
+let offerSeeds = 0;
+{
+  const starters = ['knight', 'assassin', 'pyro', 'duelist'];
+  const veteran = HEROES.map((h) => h.id);
+  const seen = new Set<string>();
+  for (let s = 0; s < 400; s++) {
+    const seed = hashSeed(5, s);
+    const a = offerFor('ranked', seed, starters);
+    const b = offerFor('ranked', seed, veteran);
+    const c = offerFor('ranked', seed);
+    if (a.join() !== b.join() || a.join() !== c.join()) bad.push(`ranked offer differs by account for seed ${seed}: ${a} / ${b} / ${c}`);
+    if (a.length !== HERO_CHOICES || new Set(a).size !== HERO_CHOICES) bad.push(`ranked offer for seed ${seed} is not ${HERO_CHOICES} different heroes: ${a}`);
+    a.forEach((h) => seen.add(h));
+    if (offerFor('casual', seed, starters).some((h) => !starters.includes(h))) bad.push(`casual offer outside the owned heroes for seed ${seed}`);
+    for (const h of veteran) {
+      const err = rankedOfferCheck(h, seed);
+      if (a.includes(h) ? err !== null : err !== 'hero not offered') bad.push(`rankedOfferCheck(${h}, ${seed}) = ${err}`);
+    }
+    offerSeeds++;
+  }
+  if (seen.size !== HEROES.length) bad.push(`ranked offers over 400 seeds reached only ${seen.size}/${HEROES.length} heroes`);
+  for (const s of [undefined, -1, 1.5, 2 ** 32, '7'] as unknown[]) if (rankedOfferCheck('knight', s) !== 'bad seed') bad.push(`rankedOfferCheck accepted seed ${String(s)}`);
+}
 if (bad.length) {
   console.error(`validate check: ${bad.length} problem(s)\n  ${bad.slice(0, 30).join('\n  ')}`);
   process.exit(1);
 }
-console.log(`validate check: mark-kind pairs uniform (chi² ${markChi.toFixed(1)}, 15 df) · ${n} bot builds (all tiers, days 1–15) and ${runsDays} days of honest bot runs (real records, last chances) pass, ${forged.length} forged builds rejected`);
+console.log(`validate check: mark-kind pairs uniform (chi² ${markChi.toFixed(1)}, 15 df) · ${n} bot builds (all tiers, days 1–15) and ${runsDays} days of honest bot runs (real records, last chances) pass, ${forged.length} forged builds rejected · Ranked offer same on every account over ${offerSeeds} seeds`);

@@ -3,6 +3,7 @@
 //   (ADMIN_TOKEN set on both: also checks the v5.1 vault admin grant)
 // (3600: one game hour per real second, so a 12 h storage fills in 12 s.)
 import { aiBuild } from '../src/sim/bot';
+import { offerFor } from '../src/sim/run';
 
 const BASE = process.env.BASE ?? 'http://localhost:8787';
 const post = async (u: string, b: unknown) => {
@@ -20,7 +21,12 @@ const check = (name: string, ok: boolean, info = '') => {
 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const P = 'farm-' + Date.now();
-const fight = (pid: string, runId: string, hero: string, mode?: 'ranked') => post('/api/fight', { runId, playerId: pid, day: 1, rating: 1000, build: aiBuild(hero, 1, [], 7), ...(mode ? { mode } : {}) });
+/** v5.1: a seed whose Ranked offer (3 of all heroes) has this hero, or (`not`) does not */
+const seedFor = (hero: string, not = false) => {
+  for (let s = 1; ; s++) if (offerFor('ranked', s).includes(hero) !== not) return s;
+};
+const fight = (pid: string, runId: string, hero: string, mode?: 'ranked', seed = mode ? seedFor(hero) : 1) =>
+  post('/api/fight', { runId, playerId: pid, day: 1, rating: 1000, build: aiBuild(hero, 1, [], 7), seed, ...(mode ? { mode } : {}) });
 
 const [, g0] = await get('/api/farm?playerId=' + P);
 check('GET an unknown player: a fresh farm, nothing stored', g0.stored === false && g0.owned.length === 4 && g0.runsLeft === 1, JSON.stringify({ owned: g0.owned, runsLeft: g0.runsLeft }));
@@ -58,7 +64,11 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
 
 // arena gate
 {
-  check('a locked hero cannot start a run', (await fight(P, P + '-locked', 'sage'))[1]?.code === 'hero_locked');
+  check('a locked hero cannot start a casual run', (await fight(P, P + '-locked', 'sage'))[1]?.code === 'hero_locked');
+  const [sn, jn] = await fight(P, P + '-notoffered', 'knight', 'ranked', seedFor('knight', true));
+  check('v5.1: ranked rejects a hero its seed did not offer', sn === 400 && jn.code === 'not_offered', JSON.stringify(jn));
+  const [snull, jnull] = await post('/api/fight', { runId: P + '-noseed', playerId: P, day: 1, rating: 1000, build: aiBuild('knight', 1, [], 7), mode: 'ranked' });
+  check('v5.1: ranked without a seed → 400', snull === 400 && jnull.code === 'not_offered', JSON.stringify(jnull));
   const [s1] = await fight(P, P + '-r1', 'knight');
   const [, g] = await get('/api/farm?playerId=' + P);
   check('starting a run calls the working hero back', s1 === 200 && g.jobs.mine.length === 0 && g.inRun.includes('knight'));
@@ -80,6 +90,14 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
   check('day 2 of a ranked run costs nothing more', j7?.code !== 'no_tickets');
   const [, feed] = await get('/api/feed');
   check('the town feed answers', Array.isArray(feed.rows));
+}
+
+// v5.1: Ranked offers 3 of all 10 heroes, owned or not
+{
+  const Q = P + '-q';
+  const [sq, jq] = await fight(Q, Q + '-r1', 'sage', 'ranked');
+  const [, gq] = await get('/api/farm?playerId=' + Q);
+  check('v5.1: a ranked run can start with an offered hero the player does not own', sq === 200 && jq.mode === 'ranked' && !gq.owned.includes('sage'), JSON.stringify(jq.error ?? jq.mode));
 }
 
 // eggs and the monument
