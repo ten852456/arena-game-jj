@@ -145,6 +145,7 @@ fallback if TEE costs do not fit.
 
 ## Change log
 
+- 2026-11-28: v5.1 Ranked offer from the server (on main, not deployed yet): the server draws the seed of each player's Ranked offer (`POST /api/ranked/offer`) and keeps it until a Ranked run starts with it, so asking again or reloading cannot re-roll the heroes; a day-1 Ranked fight with any other seed is refused and the player picks again from the server's offer (no ticket spent).
 - 2026-11-28: v5.1 account store (on main, not deployed yet; prototype): Seals, Hero Book Saves, Kit, supplies, Moonstone (bound / tradable, 2 a week), line rank and play money live outside runs (`src/shared/vault.ts`, `/api/vault`); a finished run gives line rank and the Save; items come only from the server (admin grant until the Seal tray, crafting and the Tower exist).
 - 2026-11-28: v5.1 Ranked hero offer (on main, not deployed yet): Ranked offers 3 of all 10 heroes to every player (owned or not); Casual still offers 3 of the heroes you own or have in rotation; the server rejects a Ranked hero its seed did not offer.
 - 2026-11-28: v5.1 quick fixes (on main, not deployed yet): the pass adds no town work slot and no faster egg hatching; the shrine makes crystal without the endless-level multiplier and stops at Lv5.

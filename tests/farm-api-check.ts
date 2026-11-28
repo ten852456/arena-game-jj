@@ -21,12 +21,20 @@ const check = (name: string, ok: boolean, info = '') => {
 };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const P = 'farm-' + Date.now();
-/** v5.1: a seed whose Ranked offer (3 of all heroes) has this hero, or (`not`) does not */
+/** v5.1: the Ranked offer the server issued this player (3 of all heroes) */
+const offer = async (pid: string) => (await post('/api/ranked/offer', { playerId: pid }))[1] as { seed: number; heroes: string[] };
+/** a seed whose Ranked offer has, or (`not`) does not have, this hero: one a client could pick for itself */
 const seedFor = (hero: string, not = false) => {
   for (let s = 1; ; s++) if (offerFor('ranked', s).includes(hero) !== not) return s;
 };
-const fight = (pid: string, runId: string, hero: string, mode?: 'ranked', seed = mode ? seedFor(hero) : 1) =>
+const fight = (pid: string, runId: string, hero: string, mode?: 'ranked', seed = 1) =>
   post('/api/fight', { runId, playerId: pid, day: 1, rating: 1000, build: aiBuild(hero, 1, [], 7), seed, ...(mode ? { mode } : {}) });
+/** day 1 of a Ranked run with the server's offer: its first hero unless one is named */
+const rankedFight = async (pid: string, runId: string, pick?: (heroes: string[]) => string | undefined) => {
+  const o = await offer(pid);
+  const hero = pick?.(o.heroes) ?? o.heroes[0];
+  return [...(await fight(pid, runId, hero, 'ranked', o.seed)), hero, o] as const;
+};
 
 const [, g0] = await get('/api/farm?playerId=' + P);
 check('GET an unknown player: a fresh farm, nothing stored', g0.stored === false && g0.owned.length === 4 && g0.runsLeft === 1, JSON.stringify({ owned: g0.owned, runsLeft: g0.runsLeft }));
@@ -65,10 +73,17 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
 // arena gate
 {
   check('a locked hero cannot start a casual run', (await fight(P, P + '-locked', 'sage'))[1]?.code === 'hero_locked');
-  const [sn, jn] = await fight(P, P + '-notoffered', 'knight', 'ranked', seedFor('knight', true));
-  check('v5.1: ranked rejects a hero its seed did not offer', sn === 400 && jn.code === 'not_offered', JSON.stringify(jn));
+  const o1 = await offer(P);
+  const o2 = await offer(P);
+  check('v5.1: the server issues one Ranked offer per player (asking again cannot re-roll)', o1.seed === o2.seed && o1.heroes.length === 3 && JSON.stringify(o1.heroes) === JSON.stringify(offerFor('ranked', o1.seed)));
+  const out = ['knight', 'pyro', 'duelist', 'assassin'].find((h) => !o1.heroes.includes(h))!;
+  const [sn, jn] = await fight(P, P + '-notoffered', out, 'ranked', o1.seed);
+  check('v5.1: ranked rejects a hero the issued offer does not have', sn === 400 && jn.code === 'not_offered', JSON.stringify(jn));
+  const [sc0, jc0] = await fight(P, P + '-ownseed', 'knight', 'ranked', seedFor('knight'));
+  check('v5.1: ranked rejects a seed the client picked for itself', sc0 === 400 && jc0.code === 'not_offered', JSON.stringify(jc0));
   const [snull, jnull] = await post('/api/fight', { runId: P + '-noseed', playerId: P, day: 1, rating: 1000, build: aiBuild('knight', 1, [], 7), mode: 'ranked' });
   check('v5.1: ranked without a seed → 400', snull === 400 && jnull.code === 'not_offered', JSON.stringify(jnull));
+  check('…and a refused start keeps the offer', (await offer(P)).seed === o1.seed);
   const [s1] = await fight(P, P + '-r1', 'knight');
   const [, g] = await get('/api/farm?playerId=' + P);
   check('starting a run calls the working hero back', s1 === 200 && g.jobs.mine.length === 0 && g.inRun.includes('knight'));
@@ -76,17 +91,20 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
   const [s2, j2] = await fight(P, P + '-r2', 'pyro');
   const [s3] = await fight(P, P + '-r3', 'assassin');
   check('casual runs are free (no ticket needed)', s2 === 200 && s3 === 200 && j2.mode === 'casual');
-  const [s4, j4] = await fight(P, P + '-k1', 'duelist', 'ranked');
-  check('ranked uses the free daily ticket', s4 === 200 && j4.mode === 'ranked');
-  const [s5, j5] = await fight(P, P + '-k2', 'duelist', 'ranked');
+  const [s4, j4, h1, ok1] = await rankedFight(P, P + '-k1');
+  check('ranked uses the free daily ticket', s4 === 200 && j4.mode === 'ranked', JSON.stringify(j4.error ?? j4.mode));
+  const ok2 = await offer(P);
+  check('v5.1: a started Ranked run uses up its offer (the next run gets a new one)', ok2.seed !== ok1.seed);
+  const [s5, j5] = await rankedFight(P, P + '-k2');
   check('…then ranked needs a ticket', s5 === 409 && j5.code === 'no_tickets', JSON.stringify(j5));
+  check('…and the refused start keeps the offer', (await offer(P)).seed === ok2.seed);
   const [sc, jc] = await post('/api/farm', { playerId: P, ops: [{ op: 'collect' }, { op: 'craft', n: 1 }] });
   check('craft a ticket (30 wood + 20 ore)', sc === 200 && jc.tickets === 1, JSON.stringify(jc.error ?? jc.res));
-  const [s6] = await fight(P, P + '-k2', 'duelist', 'ranked');
+  const [s6] = await rankedFight(P, P + '-k2');
   check('the ticket starts a ranked run', s6 === 200);
   const [, g6] = await get('/api/farm?playerId=' + P);
   check('the ticket was spent', g6.tickets === 0 && g6.runsLeft === 0);
-  const [, j7] = await post('/api/fight', { runId: P + '-k1', playerId: P, day: 2, rating: 1000, build: aiBuild('duelist', 2, [], 7), mode: 'ranked' });
+  const [, j7] = await post('/api/fight', { runId: P + '-k1', playerId: P, day: 2, rating: 1000, build: aiBuild(h1, 2, [], 7), mode: 'ranked' });
   check('day 2 of a ranked run costs nothing more', j7?.code !== 'no_tickets');
   const [, feed] = await get('/api/feed');
   check('the town feed answers', Array.isArray(feed.rows));
@@ -95,9 +113,15 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
 // v5.1: Ranked offers 3 of all 10 heroes, owned or not
 {
   const Q = P + '-q';
-  const [sq, jq] = await fight(Q, Q + '-r1', 'sage', 'ranked');
-  const [, gq] = await get('/api/farm?playerId=' + Q);
-  check('v5.1: a ranked run can start with an offered hero the player does not own', sq === 200 && jq.mode === 'ranked' && !gq.owned.includes('sage'), JSON.stringify(jq.error ?? jq.mode));
+  const [, g0q] = await get('/api/farm?playerId=' + Q);
+  const o = await offer(Q);
+  const unowned = o.heroes.find((h) => !g0q.owned.includes(h));
+  if (!unowned) console.log('(skipped: this offer has only owned heroes)');
+  else {
+    const [sq, jq] = await fight(Q, Q + '-r1', unowned, 'ranked', o.seed);
+    const [, gq] = await get('/api/farm?playerId=' + Q);
+    check('v5.1: a ranked run can start with an offered hero the player does not own', sq === 200 && jq.mode === 'ranked' && !gq.owned.includes(unowned), JSON.stringify(jq.error ?? jq.mode));
+  }
 }
 
 // eggs and the monument

@@ -393,6 +393,16 @@ From the v5.1 core loop (claude.ai doc "v5.1 Core loop" and "v5.1 Build plan", t
   v5 sims reached 540-620 crystal a season through the multiplier; the target is 60-100. A save already past Lv5
   makes crystal at the base rate. Lumber and mine keep the endless layer.
 
+## Ranked offer from the server (v5.1, 2026-11-28)
+
+Prize safety (Codex review of build plan task 2): the seed that decides the 3 Ranked heroes is drawn by the server,
+not the browser (`src/server/routes/ranked.ts`). `POST /api/ranked/offer {playerId}` returns `{ seed, heroes }`; the
+same offer comes back until a Ranked run starts with it (day 1 at `/api/fight`), so reloading or asking again never
+re-rolls. A start the gate refuses (no ticket) keeps the offer. Day 1 with any other seed gets `400 not_offered`; the
+client then drops the unfought run and shows the server's offer again. Casual still rolls its seed in the browser.
+The seed is also the run's public seed (day-1 shop preview, shop rolls), as before. Players with no town yet get at
+most 30 new offers per IP per hour. Not covered: a player with many accounts still sees many offers.
+
 ## Account store (v5.1, 2026-11-28)
 
 Build plan task 3. Items that live outside a run, never in `RunState` or a Ranked `Build`: rules in
