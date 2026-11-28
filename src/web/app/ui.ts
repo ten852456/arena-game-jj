@@ -186,7 +186,11 @@ const saveRun = () => store(RUN_KEY, run ? JSON.stringify(run) : null);
 function loadRun(): R.RunState | null {
   try {
     const r = JSON.parse(fetchStore(RUN_KEY) ?? 'null') as R.RunState | null;
-    return r && r.v === R.RUN_VERSION ? r : null;
+    if (!r || r.v !== R.RUN_VERSION) return null;
+    // v5.1: a Ranked run picked before the update came from the owned heroes; if the all-heroes offer of its seed
+    // lacks its hero and it has not fought yet (no ticket spent), it plays as Casual instead of failing day 1
+    if (r.mode === 'ranked' && !r.log.length && !R.offerFor('ranked', r.seed).includes(r.hero)) r.mode = 'casual';
+    return r;
   } catch {
     return null;
   }
