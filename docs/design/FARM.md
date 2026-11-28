@@ -434,7 +434,10 @@ Build plan task 4. Rules in `src/shared/vault.ts`, screens in `src/web/features/
 - **Seal offer:** a finished run with 3+ wins offers its hero's line Seal: D, or C at 5+ wins once the line has
   rank 30 (this run's rank counts). Any mode; a guided-tutorial win does not count. The server rolls 1-10 and early
   or late.
-- **Tray:** up to 3 offers, each for 24 h (scaled by `TEST_CLOCK_SCALE`); a full tray drops its oldest.
+- **Tray:** up to 3 offers, each for 24 h (scaled by `TEST_CLOCK_SCALE`).
+- **Mailbox** (owner 2026-11-28): an offer that comes while the tray is full goes to the mailbox: seen, not
+  claimable. The player deletes offers (tray or mailbox, for good) and takes a mail into a free tray spot (`discard`,
+  `takeMail` ops). Mail keeps its own 24 h; the mailbox holds 10 and drops its oldest.
 - **Claim:** 1 a day (Bangkok day). D costs 50 stardust (the first 5 free), C 150 stardust + 1 crystal. Stardust
   comes off the profile, crystal off the town, all-or-nothing with the other ops (`POST /api/vault {op:'claim'}`);
   the ledger records both burns. The claimed Seal adds 2 line rank (as before).

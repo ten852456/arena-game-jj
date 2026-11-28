@@ -119,3 +119,6 @@ body[data-view='town'] .town-slot { order: 1; flex: 1 1 0; margin: 0; min-height
 .vask { margin: 4px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .re-vault { text-align: left; }
 .re-vault p { margin: 4px 0; }
+.vbtns { display: inline-flex; gap: 4px; align-items: center; }
+.vmail { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--moon-line); }
+.voffer.mail { opacity: 0.85; }

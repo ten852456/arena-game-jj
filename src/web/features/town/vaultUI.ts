@@ -4,7 +4,7 @@
 // Nothing here ever enters a run or a Ranked build (Arena equality).
 import { api, type SealOfferView, type SealView, type VaultOpReq, type VaultView } from '../../app/api';
 import { L } from '../../../shared/i18n';
-import { LINE_RANK_C, SEAL_D_WINS, SEAL_C_WINS, TRAY_HOURS } from '../../../shared/vault';
+import { LINE_RANK_C, MAIL_MAX, SEAL_D_WINS, SEAL_C_WINS, TRAY_HOURS, TRAY_MAX } from '../../../shared/vault';
 import { HEROES_BY_ID } from '../../../sim/heroes';
 import { lineLabel } from '../../../sim/skills';
 import type { Line } from '../../../sim/types';
@@ -65,20 +65,28 @@ export function trayHTML(): string {
     `1 a day · offers last ${TRAY_HOURS} h · ${v.claim.freeD} free D Seals left`,
   )}</small></h4>`;
   const wait = v.claim.left ? '' : `<p class="muted small">${L(`รับวันนี้แล้ว · รับใบต่อไปได้ในอีก ${hoursLeft(v.claim.next)}`, `Claimed today · the next claim opens in ${hoursLeft(v.claim.next)}`)}</p>`;
+  const from = (o: SealOfferView) =>
+    `<small class="muted">${L(`จาก ${esc(name(o.hero))} ชนะ ${o.wins} · หมดใน ${hoursLeft(o.exp)}`, `from ${esc(name(o.hero))}, ${o.wins} wins · expires in ${hoursLeft(o.exp)}`)}</small>`;
+  const del = (o: SealOfferView) => `<button class="small ghost" data-a="vaultDiscard" data-i="${esc(o.id)}" title="${esc(L('ทิ้งข้อเสนอนี้ (กู้คืนไม่ได้)', 'Delete this offer (cannot be undone)'))}">${L('ทิ้ง', 'Delete')}</button>`;
   const rows = v.tray.length
-    ? v.tray
-        .map(
-          (o) => `<div class="voffer line-${o.line}"><span>${sealLine(o)}<br><small class="muted">${L(
-            `จาก ${esc(name(o.hero))} ชนะ ${o.wins} · หมดใน ${hoursLeft(o.exp)}`,
-            `from ${esc(name(o.hero))}, ${o.wins} wins · expires in ${hoursLeft(o.exp)}`,
-          )}</small></span>${claimBtn(o, v)}</div>`,
-        )
-        .join('')
+    ? v.tray.map((o) => `<div class="voffer line-${o.line}"><span>${sealLine(o)}<br>${from(o)}</span><span class="vbtns">${claimBtn(o, v)}${del(o)}</span></div>`).join('')
     : `<p class="muted small">${L(
         `ชนะ ${SEAL_D_WINS}+ ในรอบเดียว ได้ตรา D ของสายฮีโร่ตัวนั้น · ชนะ ${SEAL_C_WINS}+ และสายนั้นแรงค์ ${LINE_RANK_C} ได้ตรา C`,
         `Win ${SEAL_D_WINS}+ fights in a run for a D Seal of that hero's line · ${SEAL_C_WINS}+ wins with line rank ${LINE_RANK_C} for a C`,
       )}</p>`;
-  return `<div class="fvault vtray">${head}${wait}${rows}</div>`;
+  return `<div class="fvault vtray">${head}${wait}${rows}${mailHTML(v, from, del)}</div>`;
+}
+/** Mailbox: offers that came while the tray was full. Seen, not claimable; take one in once the tray has room. */
+function mailHTML(v: VaultView, from: (o: SealOfferView) => string, del: (o: SealOfferView) => string) {
+  if (!v.mail.length) return '';
+  const room = v.tray.length < TRAY_MAX;
+  const take = (o: SealOfferView) =>
+    `<button class="small${room ? ' primary' : ''}" data-a="vaultTakeMail" data-i="${esc(o.id)}" ${room ? '' : 'disabled'}>${L('ใส่ถาด', 'To tray')}</button>`;
+  return `<div class="vmail"><h4>✉ ${L('จดหมายตรา', 'Seal mailbox')} <small class="muted">${v.mail.length}/${MAIL_MAX} · ${
+    room
+      ? L('ถาดมีที่ว่าง: เลือกใส่ถาดได้ 1 ฉบับต่อช่อง', 'the tray has room: move one in per free spot')
+      : L(`ถาดเต็ม (${TRAY_MAX}) · ทิ้งข้อเสนอในถาดก่อน จึงจะรับจากจดหมายได้`, `the tray is full (${TRAY_MAX}) · delete an offer there to take one from here`)
+  }</small></h4>${v.mail.map((o) => `<div class="voffer mail line-${o.line}"><span>${sealLine(o)}<br>${from(o)}</span><span class="vbtns">${take(o)}${del(o)}</span></div>`).join('')}</div>`;
 }
 
 function stashRow(s: SealView, owned: string[], seals: SealView[]) {
@@ -140,16 +148,22 @@ export function receiptHTML(hero: string, runId: string, r: M.FinishRunResult | 
   }
   if (r.seal) {
     const o = v?.tray.find((x) => x.id === r.seal!.id);
+    const mailed = v?.mail.find((x) => x.id === r.seal!.id);
     const act = !v
       ? ''
-      : o
+      : mailed
+        ? `<small class="muted">${L('ถาดเต็ม: อยู่ในจดหมายตราที่หอฮีโร่ · ทิ้งข้อเสนอในถาดก่อนจึงจะรับได้', 'Tray full: it is in your Seal mailbox in the Hero Hall · delete an offer in the tray to take it')}</small>`
+        : o
         ? v.claim.left
           ? claimBtn(o, v)
           : `<small class="muted">${L(`รับวันนี้แล้ว · ตราใบนี้รออยู่ในถาด ${hoursLeft(o.exp)}`, `Claimed today · it waits in the tray for ${hoursLeft(o.exp)}`)}</small>`
         : v.seals.some((s) => s.line === r.seal!.line && s.roll === r.seal!.roll && s.grade === r.seal!.grade)
           ? `<small>✓ ${L('รับแล้ว', 'claimed')}</small>`
           : '';
-    parts.push(`<div class="voffer line-${r.seal.line}"><span>${sealLine(r.seal)}<br><small class="muted">${L('ไปอยู่ในถาดตราที่หอฮีโร่แล้ว', 'added to your Seal tray in the Hero Hall')}</small></span>${act}</div>`);
+    const where = mailed || (!v && r.seal.mailed)
+      ? L('ไปอยู่ในจดหมายตรา (ถาดเต็ม)', 'sent to your Seal mailbox (the tray is full)')
+      : L('ไปอยู่ในถาดตราที่หอฮีโร่แล้ว', 'added to your Seal tray in the Hero Hall');
+    parts.push(`<div class="voffer line-${r.seal.line}"><span>${sealLine(r.seal)}<br><small class="muted">${where}</small></span>${act}</div>`);
   }
   if (r.saved) parts.push(`<p>✓ ${L(`เก็บ build นี้ลงสมุดฮีโร่ของ ${esc(name(hero))} แล้ว`, `Saved to ${esc(name(hero))}'s Hero Book page`)}</p>`);
   else if (v?.pending[hero]?.runId === runId) parts.push(replaceAsk(hero, v.saves[hero], v.pending[hero], (farm?.owned ?? []).includes(hero)));
@@ -158,7 +172,7 @@ export function receiptHTML(hero: string, runId: string, r: M.FinishRunResult | 
 
 // ---------- actions ----------
 const ERR_TH: Record<string, string> = {
-  'claimed today': 'วันนี้รับตราไปแล้ว', 'not enough stardust': 'ผงดาวไม่พอ', 'not enough crystal': 'คริสตัลไม่พอ',
+  'claimed today': 'วันนี้รับตราไปแล้ว', 'tray full': 'ถาดตราเต็ม: ทิ้งข้อเสนอในถาดก่อน', 'not enough stardust': 'ผงดาวไม่พอ', 'not enough crystal': 'คริสตัลไม่พอ',
   'stash full': 'ช่องเก็บตราเต็ม', 'no such offer': 'ข้อเสนอนี้หมดเวลาแล้ว', 'slot taken': 'ฮีโร่ตัวนี้มีตราแล้ว',
   'hero not owned': 'ยังไม่มีฮีโร่ตัวนี้', 'nothing stored yet: finish a run first': 'ยังไม่มีของ: เล่นให้จบสักรอบก่อน',
 };
@@ -175,6 +189,8 @@ export async function vaultAction(a: string, el: HTMLElement): Promise<string> {
   let op: VaultOpReq;
   switch (a) {
     case 'vaultClaim': op = { op: 'claim', id: i }; break;
+    case 'vaultDiscard': op = { op: 'discard', id: i }; break;
+    case 'vaultTakeMail': op = { op: 'takeMail', id: i }; break;
     case 'vaultEquip': op = { op: 'equip', id: i, hero: el.dataset.h ?? '' }; break;
     case 'vaultUnequip': op = { op: 'unequip', id: i }; break;
     case 'vaultKeep': op = { op: 'keepSave', hero: i }; break;
@@ -192,6 +208,7 @@ export async function vaultAction(a: string, el: HTMLElement): Promise<string> {
       const got = vault.seals.find((s) => !before?.seals.some((x) => x.id === s.id));
       return got ? L(`ได้ตรา ${got.grade} ${lineLabel(got.line)} แล้ว!`, `${lineLabel(got.line)} ${got.grade} Seal claimed!`) : '';
     }
+    if (a === 'vaultTakeMail') return L('ย้ายจดหมายเข้าถาดแล้ว', 'Moved into the tray');
     if (a === 'vaultKeep') return L(`เก็บลงสมุดฮีโร่ของ ${name(i)} แล้ว`, `Saved to ${name(i)}'s Hero Book page`);
     return '';
   } catch (e) {

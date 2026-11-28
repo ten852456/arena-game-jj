@@ -188,6 +188,8 @@ export interface VaultView {
   lineRank: Record<Line, number>;
   cLines: Line[];
   tray: SealOfferView[];
+  /** offers that came while the tray was full: seen, not claimable; take one in once the tray has room */
+  mail: SealOfferView[];
   claim: { left: boolean; freeD: number; next: number };
   /** the wallet a claim pays from: the town's crystal and the profile's stardust */
   crystal: number;
@@ -195,6 +197,8 @@ export interface VaultView {
 }
 export type VaultOpReq =
   | { op: 'claim'; id: string }
+  | { op: 'discard'; id: string }
+  | { op: 'takeMail'; id: string }
   | { op: 'keepSave'; hero: string }
   | { op: 'dropPending'; hero: string }
   | { op: 'equip'; id: string; hero: string }

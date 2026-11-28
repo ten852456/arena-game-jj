@@ -112,7 +112,8 @@ export interface FinishRunResult {
   /** v5.1 run-end receipt: line rank gained, the Save kept at once, the Seal offer put in the tray */
   lineRank?: number;
   saved?: boolean;
-  seal?: SealOfferView;
+  /** `mailed`: the tray was full, so it went to the mailbox */
+  seal?: SealOfferView & { mailed?: true };
 }
 export async function finishRun(body: FinishRunBody): Promise<FinishRunResult | null> {
   const j = await call('/api/run/finish', { method: 'POST', body: JSON.stringify(body) });
@@ -126,7 +127,7 @@ export async function finishRun(body: FinishRunBody): Promise<FinishRunResult | 
     bestWins: num(j.player?.best?.wins, j.totals?.bestWins, j.bestWins, j.profile?.bestWins),
     ...(typeof j.reward?.lineRank === 'number' ? { lineRank: j.reward.lineRank } : {}),
     ...(j.reward?.saved === true ? { saved: true } : {}),
-    ...(j.reward?.seal && typeof j.reward.seal === 'object' ? { seal: j.reward.seal as SealOfferView } : {}),
+    ...(j.reward?.seal && typeof j.reward.seal === 'object' ? { seal: j.reward.seal as SealOfferView & { mailed?: true } } : {}),
   };
 }
 
