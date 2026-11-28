@@ -6,7 +6,7 @@
 import type { Build, Line } from '../sim/types';
 import { LINES } from '../sim/types';
 
-export const VAULT_V = 1;
+export const VAULT_V = 3;
 
 /** Seals (v5.1): one line Seal per line; D at 3+ wins, C at 5+ wins and line rank 30. */
 export type SealGrade = 'D' | 'C';
@@ -30,6 +30,23 @@ export const MOONSTONE_WEEK_CAP = 2;
 /** Line rank: +1 per run of that line's hero, +1 at 5 wins, +1 at 10 wins, +2 per Seal; first 5 runs a day count */
 export const LINE_RANK_C = 30;
 export const LINE_RANK_RUNS_PER_DAY = 5;
+/**
+ * Seal tray (v5.1 task 4): a finished run with SEAL_D_WINS+ wins offers its hero's line Seal (C at SEAL_C_WINS+ wins
+ * once the line has rank LINE_RANK_C). Up to TRAY_MAX offers wait TRAY_HOURS each; 1 claim a day, paid in stardust.
+ */
+export const SEAL_D_WINS = 3;
+export const SEAL_C_WINS = 5;
+export const TRAY_MAX = 3;
+export const TRAY_HOURS = 24;
+/**
+ * Mailbox (owner 2026-11-28): offers that arrive while the tray is full wait here, seen but not claimable. The player
+ * deletes an offer from the tray (or the mailbox), then takes a mail into the tray. Mail keeps its own 24 h; a full
+ * mailbox drops its oldest mail.
+ */
+export const MAIL_MAX = 10;
+/** what a claim costs: D 50 stardust (the first FREE_D_SEALS free), C 150 stardust + 1 crystal */
+export const SEAL_COST: Record<SealGrade, { stardust: number; crystal: number }> = { D: { stardust: 50, crystal: 0 }, C: { stardust: 150, crystal: 1 } };
+export const FREE_D_SEALS = 5;
 /** Prototype fake market: every tester starts with the same play money, in cents ($10) */
 export const TEST_BALANCE = 1000;
 
@@ -60,6 +77,20 @@ export interface Kit {
   on?: string;
   madeAt: number;
 }
+/** A Seal waiting in the tray: claim it (1 a day) before `exp` or it is gone */
+export interface SealOffer {
+  id: string;
+  line: Line;
+  grade: SealGrade;
+  roll: number;
+  timing: 'early' | 'late';
+  /** the run that earned it */
+  hero: string;
+  runId: string;
+  wins: number;
+  at: number;
+  exp: number;
+}
 /** A Hero Book Save: the build of a finished hand-played run, the hero's Tower roster entry */
 export interface Save {
   hero: string;
@@ -83,6 +114,12 @@ export interface Vault {
   lineRank: Record<Line, number>;
   rankDay: { day: number; runs: number };
   testBalance: number;
+  /** Seal tray (oldest first), the game day of the last claim (-1 = never), free D claims used */
+  tray: SealOffer[];
+  /** offers that came while the tray was full (oldest first): take one into the tray once it has room */
+  mail: SealOffer[];
+  claimDay: number;
+  freeD: number;
   nextId: number;
   createdAt: number;
   updatedAt: number;
@@ -113,6 +150,10 @@ export function newVault(now: number, scale = 1): Vault {
     lineRank: Object.fromEntries(LINES.map((l) => [l, 0])) as Record<Line, number>,
     rankDay: { day: dayOf(now, scale), runs: 0 },
     testBalance: TEST_BALANCE,
+    tray: [],
+    mail: [],
+    claimDay: -1,
+    freeD: 0,
     nextId: 1,
     createdAt: now,
     updatedAt: now,
@@ -229,6 +270,61 @@ export function moveTestBalance(v: Vault, cents: number, now: number): string | 
   return null;
 }
 
+// ---------- Seal tray ----------
+
+/** offers past their 24 h are gone (tray and mailbox) */
+function pruneTray(v: Vault, now: number) {
+  v.tray = v.tray.filter((o) => o.exp > now);
+  v.mail = v.mail.filter((o) => o.exp > now);
+}
+/** the grade a run earns for its line (null = no Seal): read after this run's line rank is counted */
+export const sealGradeFor = (v: Vault, line: Line, wins: number): SealGrade | null =>
+  wins >= SEAL_C_WINS && cUnlocked(v, line) ? 'C' : wins >= SEAL_D_WINS ? 'D' : null;
+/** what claiming this offer costs now (the first FREE_D_SEALS D Seals are free) */
+export const claimCost = (v: Vault, grade: SealGrade) => (grade === 'D' && v.freeD < FREE_D_SEALS ? { stardust: 0, crystal: 0 } : SEAL_COST[grade]);
+
+/**
+ * Put a Seal offer in the tray. `rnd`: two numbers in [0, 1) from the server's random source (roll 1-10, early or
+ * late). A full tray sends it to the mailbox instead (`mailed`); a full mailbox drops its oldest mail.
+ */
+export function offerSeal(v: Vault, r: { line: Line; grade: SealGrade; hero: string; runId: string; wins: number }, rnd: [number, number], now: number, scale = 1): SealOffer & { mailed?: true } {
+  pruneTray(v, now);
+  const roll = 1 + Math.min(9, Math.floor(rnd[0] * 10));
+  const offer: SealOffer = {
+    id: newId(v, 'o'), line: r.line, grade: r.grade, roll, timing: rnd[1] < 0.5 ? 'early' : 'late',
+    hero: r.hero, runId: r.runId, wins: r.wins, at: now, exp: now + (TRAY_HOURS * H) / scale,
+  };
+  touch(v, now);
+  if (v.tray.length < TRAY_MAX) {
+    v.tray.push(offer);
+    return offer;
+  }
+  while (v.mail.length >= MAIL_MAX) v.mail.shift();
+  v.mail.push(offer);
+  return { ...offer, mailed: true };
+}
+
+/**
+ * Claim a tray offer: 1 a day, paid from `wallet` (the caller takes `cost` off the player's stardust and crystal).
+ * Returns the new Seal and its cost, or an error (nothing changed).
+ */
+export function claimSeal(v: Vault, id: string, wallet: { stardust: number; crystal: number }, now: number, scale = 1): { seal: Seal; cost: { stardust: number; crystal: number } } | string {
+  pruneTray(v, now);
+  const o = v.tray.find((x) => x.id === id);
+  if (!o) return 'no such offer';
+  const day = dayOf(now, scale);
+  if (v.claimDay === day) return 'claimed today';
+  const cost = claimCost(v, o.grade);
+  if (wallet.stardust < cost.stardust) return 'not enough stardust';
+  if (wallet.crystal < cost.crystal) return 'not enough crystal';
+  const seal = addSeal(v, o, now);
+  if (typeof seal === 'string') return seal;
+  if (o.grade === 'D' && cost.stardust === 0) v.freeD++;
+  v.tray = v.tray.filter((x) => x.id !== id);
+  v.claimDay = day;
+  return { seal, cost };
+}
+
 // ---------- run end: line rank and the Hero Book ----------
 
 export interface RunEnd {
@@ -244,8 +340,12 @@ export interface RunEnd {
  * A finished hand-played run (any mode). Line rank: the first LINE_RANK_RUNS_PER_DAY runs of a day count.
  * Hero Book: an owned hero's first Save is kept at once; after that the run waits as `pending` until the player
  * keeps it (keepSave). A hero that is not owned (a Ranked offer) keeps the run pending until it is adopted.
+ * Seal tray: with `rnd` (the server's two random numbers) a run with SEAL_D_WINS+ wins offers its line's Seal.
+ * `sealWins` (default `r.wins`) is what the Seal grade counts, e.g. without a guided-tutorial win.
  */
-export function onRunEnd(v: Vault, r: RunEnd, owned: boolean, now: number, scale = 1): { rank: number; saved: boolean } {
+export function onRunEnd(
+  v: Vault, r: RunEnd, owned: boolean, now: number, scale = 1, rnd?: [number, number], sealWins = r.wins,
+): { rank: number; saved: boolean; offer?: SealOffer & { mailed?: true } } {
   const day = dayOf(now, scale);
   if (v.rankDay.day !== day) v.rankDay = { day, runs: 0 };
   let rank = 0;
@@ -261,13 +361,17 @@ export function onRunEnd(v: Vault, r: RunEnd, owned: boolean, now: number, scale
     delete v.pending[r.hero];
     saved = true;
   } else v.pending[r.hero] = save;
+  const grade = rnd && LINES.includes(r.line) ? sealGradeFor(v, r.line, sealWins) : null;
+  const offer = grade ? offerSeal(v, { line: r.line, grade, hero: r.hero, runId: r.runId, wins: sealWins }, rnd!, now, scale) : undefined;
   touch(v, now);
-  return { rank, saved };
+  return { rank, saved, ...(offer ? { offer } : {}) };
 }
 
 // ---------- player ops (POST /api/vault) ----------
 
 export type VaultOp =
+  | { op: 'discard'; id: string }
+  | { op: 'takeMail'; id: string }
   | { op: 'keepSave'; hero: string }
   | { op: 'dropPending'; hero: string }
   | { op: 'equip'; id: string; hero: string }
@@ -277,6 +381,24 @@ export type VaultOp =
 export function applyVaultOp(v: Vault, o: VaultOp, owned: string[], now: number): string | null {
   if (!o || typeof o !== 'object') return 'bad op';
   switch (o.op) {
+    case 'discard': {
+      // delete a Seal offer from the tray or the mailbox (it is gone for good)
+      pruneTray(v, now);
+      if (typeof o.id !== 'string' || ![...v.tray, ...v.mail].some((x) => x.id === o.id)) return 'no such offer';
+      v.tray = v.tray.filter((x) => x.id !== o.id);
+      v.mail = v.mail.filter((x) => x.id !== o.id);
+      break;
+    }
+    case 'takeMail': {
+      // move a mail into the tray (it keeps its own 24 h); only with a free tray spot
+      pruneTray(v, now);
+      const m = typeof o.id === 'string' ? v.mail.find((x) => x.id === o.id) : undefined;
+      if (!m) return 'no such offer';
+      if (v.tray.length >= TRAY_MAX) return 'tray full';
+      v.mail = v.mail.filter((x) => x.id !== m.id);
+      v.tray.push(m);
+      break;
+    }
     case 'keepSave': {
       if (typeof o.hero !== 'string' || !Object.hasOwn(v.pending, o.hero)) return 'nothing to keep';
       if (!owned.includes(o.hero)) return 'hero not owned';
@@ -320,6 +442,7 @@ export function applyVaultOp(v: Vault, o: VaultOp, owned: string[], now: number)
 /** what the client sees: the stored items plus what is tradable, and how much weekly Moonstone is left */
 export function vaultView(v: Vault, now: number, scale = 1) {
   const week = weekOf(now, scale);
+  const day = dayOf(now, scale);
   const earned = v.moonstone.week === week ? v.moonstone.weekEarned : 0;
   return {
     v: v.v,
@@ -332,7 +455,11 @@ export function vaultView(v: Vault, now: number, scale = 1) {
     lineRank: v.lineRank,
     cLines: LINES.filter((l) => cUnlocked(v, l)),
     testBalance: v.testBalance,
-    clock: { day: dayOf(now, scale), week, scale },
+    tray: v.tray.filter((o) => o.exp > now).map((o) => ({ ...o, cost: claimCost(v, o.grade) })),
+    mail: v.mail.filter((o) => o.exp > now).map((o) => ({ ...o, cost: claimCost(v, o.grade) })),
+    /** a claim is left today; free D Seals left; when the next game day starts (a claim is possible again) */
+    claim: { left: v.claimDay !== day, freeD: Math.max(0, FREE_D_SEALS - v.freeD), next: CLOCK_EPOCH + ((day + 1) * DAY_MS) / scale },
+    clock: { day, week, scale },
   };
 }
 
@@ -350,6 +477,10 @@ export function loadVault(x: unknown, now: number, scale = 1): Vault {
     lineRank: { ...base.lineRank, ...(v.lineRank ?? {}) },
     seals: Array.isArray(v.seals) ? v.seals : [],
     kit: Array.isArray(v.kit) ? v.kit : [],
+    tray: Array.isArray(v.tray) ? v.tray : [],
+    mail: Array.isArray(v.mail) ? v.mail : [],
+    claimDay: typeof v.claimDay === 'number' ? v.claimDay : -1,
+    freeD: typeof v.freeD === 'number' ? v.freeD : 0,
     saves: Object.assign(Object.create(null), v.saves ?? {}),
     pending: Object.assign(Object.create(null), v.pending ?? {}),
   };

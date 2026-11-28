@@ -171,6 +171,29 @@ check('pour a negative amount → 409', (await post('/api/farm', { playerId: P, 
     check('vault: a batch with a bad op changes nothing (sage not owned)', sb === 409 && g3.seals[0].on === 'knight');
     const [gb] = await adm({ playerId: W, grants: [{ kind: 'balance', cents: -5000 }] });
     check('vault admin: play money never goes below 0', gb === 409);
+    // v5.1 task 4: the Seal tray (offers granted as if runs earned them)
+    const [go, jo] = await adm({ playerId: W, grants: [{ kind: 'offer', hero: 'knight', grade: 'D', roll: 4, timing: 'early' }, { kind: 'offer', hero: 'witch', grade: 'C', roll: 8, timing: 'late' }] });
+    const tray = jo.vault?.tray ?? [];
+    check('tray: two offers wait, D free (first 5), C 150 stardust + 1 crystal', go === 200 && tray.length === 2 && tray[0].cost.stardust === 0 && tray[1].cost.stardust === 150 && tray[1].cost.crystal === 1 && jo.vault.claim.left, JSON.stringify(jo.error ?? tray.map((o: { cost: unknown }) => o.cost)));
+    const [sc, jc] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });
+    check('tray: a C claim without the stardust → 409, nothing taken', sc === 409 && jc.error === 'not enough stardust', JSON.stringify(jc));
+    const [sr] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[0]?.id }, { op: 'keepSave', hero: 'nobody' }] });
+    const [, gr] = await get('/api/vault?playerId=' + W);
+    check('tray: a claim in a batch with a bad op is rolled back (offer kept, claim still left)', sr === 409 && gr.tray.length === 2 && gr.claim.left && typeof gr.stardust === 'number' && typeof gr.crystal === 'number');
+    const [sd, jd] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[0]?.id }] });
+    check('tray: claim the free D Seal → in the stash, out of the tray', sd === 200 && jd.seals.some((s: { line: string; grade: string; roll: number }) => s.line === 'shield' && s.grade === 'D' && s.roll === 4) && jd.tray.length === 1 && !jd.claim.left, JSON.stringify(jd.error));
+    const [s2] = await post('/api/vault', { playerId: W, ops: [{ op: 'claim', id: tray[1]?.id }] });
+    check('tray: 1 claim a day', s2 === 409);
+    // mailbox (owner 2026-11-28): the tray has 1 offer left; 3 more → 2 fill the tray, 1 goes to the mailbox
+    const offerG = (hero: string) => ({ kind: 'offer', hero, grade: 'D', roll: 5, timing: 'early' });
+    const [, jm] = await adm({ playerId: W, grants: [offerG('pyro'), offerG('duelist'), offerG('assassin')] });
+    const mv = jm.vault;
+    check('mailbox: a full tray sends the next offer to the mailbox', mv?.tray.length === 3 && mv?.mail.length === 1, JSON.stringify({ tray: mv?.tray.length, mail: mv?.mail.length }));
+    const [st] = await post('/api/vault', { playerId: W, ops: [{ op: 'takeMail', id: mv?.mail[0]?.id }] });
+    check('mailbox: no taking mail while the tray is full', st === 409);
+    const [sx, jx] = await post('/api/vault', { playerId: W, ops: [{ op: 'discard', id: mv?.tray[0]?.id }, { op: 'takeMail', id: mv?.mail[0]?.id }] });
+    check('mailbox: delete a tray offer, then take the mail in', sx === 200 && jx.tray.length === 3 && jx.mail.length === 0 && jx.tray.some((o: { id: string }) => o.id === mv?.mail[0]?.id), JSON.stringify(jx.error));
+    check('tray: a bad offer grant is refused', (await adm({ playerId: W, grants: [{ kind: 'offer', hero: 'nobody', grade: 'D', roll: 4, timing: 'early' }] }))[0] === 409);
   } else console.log('  (vault admin checks skipped: start the server and this check with the same ADMIN_TOKEN)');
 }
 

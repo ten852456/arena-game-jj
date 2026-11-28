@@ -118,6 +118,12 @@ const veteran = () => {
   const r = op(f, { op: 'unlock', hero: 'sage' }, T0, 300);
   check('unlock sage: 300 stardust + 3 crystal', typeof r !== 'string' && r.stardust === 300 && f.res.crystal === 0 && f.owned.includes('sage'));
   check('unlock twice → error', op(f, { op: 'unlock', hero: 'sage' }, T0, 999) === 'already owned');
+  f.res.crystal = 30;
+  check('v5.1: the next adoption costs 700', F.adoptCost(f).stardust === 700 && op(f, { op: 'unlock', hero: 'witch' }, T0, 699) === 'not enough resources');
+  const r2 = op(f, { op: 'unlock', hero: 'witch' }, T0, 700);
+  check('…and the one after 1,400 (rising 300 → 5,000)', typeof r2 !== 'string' && r2.stardust === 700 && F.adoptCost(f).stardust === 1400 && F.ADOPT_STARDUST.at(-1) === 5000);
+  check('the 6th adoption and beyond cost 5,000', F.adoptCost({ owned: [...F.STARTERS, 'a', 'b', 'c', 'd', 'e', 'f'] }).stardust === 5000);
+  f.res.crystal = 0;
   f.res.wood = 60;
   f.res.ore = 40;
   check('upgrade lumber to Lv2', typeof op(f, { op: 'upgrade', b: 'lumber' }, T0) !== 'string' && f.lv.lumber === 2 && F.slotsOf(f, 'lumber') === 2);

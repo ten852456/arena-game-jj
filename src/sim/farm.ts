@@ -141,7 +141,16 @@ export const TICKET_HOLD = 8;
 /** Heroes */
 export const STARTERS = ['knight', 'assassin', 'pyro', 'duelist'];
 export const ROTATION = 2;
-export const UNLOCK_COST = { stardust: 300, crystal: 3 };
+/**
+ * Hero adoption (v5.1): stardust rises with each hero adopted beyond the starters (300 → 5,000), always 3 crystal.
+ * The order does not matter: the n-th adoption costs the same whichever hero it is.
+ */
+export const ADOPT_STARDUST = [300, 700, 1400, 2400, 3600, 5000];
+export const ADOPT_CRYSTAL = 3;
+export const adoptCost = (f: Pick<FarmState, 'owned'>) => {
+  const n = f.owned.filter((h) => !STARTERS.includes(h)).length;
+  return { stardust: ADOPT_STARDUST[Math.min(n, ADOPT_STARDUST.length - 1)], crystal: ADOPT_CRYSTAL };
+};
 
 /** Day-1 hook: the very first job ever finishes its storage in this long (instead of 8 h). */
 export const FIRST_SHIFT_MS = 5 * 60_000;
@@ -580,10 +589,11 @@ export function applyOp(f: FarmState, o: FarmOp, c: OpCtx): string | { stardust:
     case 'unlock': {
       if (typeof o.hero !== 'string' || !HEROES_BY_ID[o.hero]) return 'bad op';
       if (f.owned.includes(o.hero)) return 'already owned';
-      if (!canPay(f, c.stardust, UNLOCK_COST)) return 'not enough resources';
-      pay(f, UNLOCK_COST);
+      const cost = adoptCost(f);
+      if (!canPay(f, c.stardust, cost)) return 'not enough resources';
+      pay(f, cost);
       f.owned.push(o.hero);
-      return { stardust: UNLOCK_COST.stardust };
+      return { stardust: cost.stardust };
     }
     case 'pour': {
       const n = Math.floor(Number(o.n));

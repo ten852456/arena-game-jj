@@ -83,6 +83,8 @@ export interface OverData {
   ended: { day: number; why?: string; tip?: string; close: boolean } | null;
   /** heroes offered for the next run: one tap starts it */
   quick: QuickHero[];
+  /** v5.1 receipt lines (line rank, the Seal offer, "Replace the Save?"), ready HTML (vaultUI.ts) */
+  receiptHTML?: string;
   plan: RevealPlan;
   /** reveal clock: ms elapsed, staged animation on, when the reward shows */
   el: number;
@@ -229,6 +231,7 @@ export function runOverPage(d: OverData) {
   <div class="over-detail">
   <div class="re-recap">
     ${rewardBlock(d)}
+    ${d.receiptHTML ? `<div class="re-in" ${at(d.plan.records)}>${d.receiptHTML}</div>` : ''}
     ${recordChips(d)}
     <p class="re-goal re-in" ${at(p.records + 100)}>${icon('target')} <span>${esc(d.goal)}</span></p>
   </div>

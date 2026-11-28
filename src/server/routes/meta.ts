@@ -58,7 +58,7 @@ export function handleFinish(body: any): Res {
   if (done) {
     if (done.playerId !== playerId) return bad('run belongs to another player', 403);
     const p = db.players[playerId] ?? newPlayer(playerId, done.name);
-    return { status: 200, json: { already: true, reward: { stardust: done.stardust, wins: done.wins, capped: !!done.capped }, run: runRow(done), player: publicPlayer(p) } };
+    return { status: 200, json: { already: true, reward: { stardust: done.stardust, wins: done.wins, capped: !!done.capped, ...(done.receipt ?? {}) }, run: runRow(done), player: publicPlayer(p) } };
   }
   const track = Object.hasOwn(db.tracks, runId) ? db.tracks[runId] : undefined;
   if (!track) return bad('unknown run', 404);
@@ -104,7 +104,10 @@ export function handleFinish(body: any): Res {
   ledgerAdd('stardust', 'mint', reward.stardust);
   const { eggs, ticket } = onRunFinished(playerId, countedWins, mode);
   // v5.1 account store: line rank and the Hero Book Save (outside the run, never in a Ranked build)
-  const { rank, saved } = onVaultRunEnd(playerId, { runId, hero, build, wins: countedWins, losses: countedLosses, mode });
+  // the Seal tray offer counts the same wins as the stardust (a guided-tutorial win does not count)
+  const { rank, saved, offer } = onVaultRunEnd(playerId, { runId, hero, build, wins: countedWins, losses: countedLosses, mode }, countedWins - tutorialWin);
+  const receipt = { ...(rank ? { lineRank: rank } : {}), ...(saved ? { saved: true as const } : {}), ...(offer ? { seal: offer } : {}) };
+  if (Object.keys(receipt).length) run.receipt = receipt; // a retried /finish (lost answer) shows the same receipt
   player.runs++;
   player.wins += countedWins;
   player.losses += countedLosses;
@@ -113,7 +116,7 @@ export function handleFinish(body: any): Res {
     player.best = { runId, hero, wins: run.wins, losses: run.losses, day, finishedAt: run.finishedAt };
   }
   save();
-  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}), ...(rank ? { lineRank: rank } : {}), ...(saved ? { saved } : {}) }, run: runRow(run), player: publicPlayer(player) } };
+  return { status: 200, json: { already: false, reward: { ...reward, wins: countedWins, capped, mode, ...(eggs ? { eggs } : {}), ...(ticket ? { ticket } : {}), ...receipt }, run: runRow(run), player: publicPlayer(player) } };
 }
 
 export function handleProfile(q: URLSearchParams): Res {

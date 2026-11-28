@@ -48,6 +48,7 @@ import { radarHTML } from '../ui/heroStats';
 import { coachDone, coachHTML as coachLine, type CoachKey } from '../features/shop/coach';
 import { saveBuildCard, type BuildCardImage } from '../features/run-end/shareCard';
 import * as FU from '../features/town/farmUI';
+import * as VU from '../features/town/vaultUI';
 import { esc } from '../ui/html';
 
 export interface Stage {
@@ -649,6 +650,15 @@ function render() {
 
 /** the farm is fetched once per town visit (a failed fetch is not retried in a loop) */
 let farmAsked = false;
+/** v5.1 account store asked for (the Hero Hall and the run-end receipt show it) */
+let vaultAsked = false;
+const askVault = (when: View[]) => {
+  if (vaultAsked) return;
+  vaultAsked = true;
+  void VU.loadVault(() => {
+    if (when.includes(view)) render();
+  });
+};
 /** arena mode picked on the hero-pick screen (remembered): casual is free, ranked costs a ticket */
 let pickMode: 'casual' | 'ranked' = fetchStore('mochi.mode') === 'ranked' ? 'ranked' : 'casual';
 /** the town's one-tap row: collect everything, send every idle hero to work, and the big Battle button */
@@ -697,7 +707,8 @@ function renderTown() {
       body += `<div class="actions"><button class="primary" data-a="leaderboard">${L('🏆 กระดานผู้นำ', '🏆 Leaderboard')}</button><button data-a="profile">${L('โปรไฟล์และประวัติ', 'Profile and history')}</button></div>`;
     } else if (b.id === 'hall') {
       body += `<div class="actions"><button class="primary" data-a="profile">${L('โปรไฟล์และประวัติของฉัน', 'My profile and history')}</button><button data-a="leaderboard">${icon('trophy')} ${L('กระดานผู้นำ', 'Leaderboard')}</button></div>`;
-      body += FU.eggHTML() + FU.findsHTML() + FU.hallFarmHTML();
+      askVault(['town']);
+      body += VU.hallVaultHTML() + FU.eggHTML() + FU.findsHTML() + FU.hallFarmHTML();
       body += `<p class="muted">${L(
         `ฮีโร่ทั้งหมด ${HEROES.length} ตัว · แต่ละรอบสุ่มให้เลือก ${R.HERO_CHOICES} ตัวจากคนละสาย`,
         `${HEROES.length} heroes · each run offers ${R.HERO_CHOICES} at random, from different styles`,
@@ -1683,6 +1694,7 @@ function claimReward(r: R.RunState) {
   }).then((res) => {
     pendingClaim.delete(r.id);
     farmAsked = false; // eggs from this run, stardust for unlocks
+    vaultAsked = false; // the Seal offer and the Save of this run (the receipt asks again)
     if (res) {
       // the stardust sound plays when the reveal shows the reward (runEndFx)
       M.rememberClaim(r.id, res);
@@ -1896,6 +1908,8 @@ function renderOver() {
   claimReward(r);
   const c = M.claimed(r.id);
   const reward = pendingClaim.has(r.id) ? undefined : c && 'stardust' in c ? c : null;
+  // v5.1 receipt (Seal offer, line rank, Save): needs the store once the reward is in
+  if (reward) askVault(['over']);
   const plan = RC.revealPlan(won, r.wins);
   const clock = RF.clock(r.id, plan, r.wins);
   const rewardAt = RF.rewardAt(r.id, reward !== undefined, !!reward && reward.stardust > 0);
@@ -1916,6 +1930,7 @@ function renderOver() {
     winTarget: R.WIN_TARGET, days: r.log.length, rating: r.rating, streak: stats.streak, buildHTML: buildCardBlock(r),
     historyHTML: P.historyList(r.log, notes), best: M.bestNote(r.id), reward, total, recap,
     fresh: RC.freshRecords(stats, recap, reward?.bestWins), goal: RC.nextGoal(stats, recap, R.WIN_TARGET), ended, quick,
+    receiptHTML: VU.receiptHTML(r.hero, r.id, reward),
     plan, el: clock.el, on: clock.on, rewardAt,
   });
 }
@@ -2425,9 +2440,20 @@ function onClick(ev: Event) {
   if (!el || (el as HTMLButtonElement).disabled) return;
   const a = el.dataset.a!;
   // farm buttons talk to the server, then redraw with the answer
+  // account store buttons (Seal tray, stash, Hero Book): same as the farm ones
+  if (a.startsWith('vault')) {
+    (el as HTMLButtonElement).disabled = true;
+    void VU.vaultAction(a, el).then((msg) => {
+      if (msg) toast = msg;
+      if (a === 'vaultClaim') sfx('pickup');
+      render();
+    });
+    return;
+  }
   if (a.startsWith('farm')) {
     (el as HTMLButtonElement).disabled = true;
     void FU.farmAction(a, el).then((msg) => {
+      VU.syncWallet(FU.farm); // the Seal tray's prices read the same stardust and crystal
       if (msg) toast = msg;
       if (a === 'farmCollect') sfx('reroll');
       render();
@@ -2509,6 +2535,7 @@ function onClick(ev: Event) {
       selected = null;
       break;
     case 'goto':
+      if (arg === 'hall' && selected !== 'hall') vaultAsked = false; // fresh Seal tray each visit (offers expire)
       selected = arg;
       stage.town.focus(arg);
       break;
@@ -3072,6 +3099,7 @@ export function startUI(st: Stage) {
     });
   };
   st.town.onSelect = (id) => {
+    if (id === 'hall' && selected !== 'hall') vaultAsked = false; // fresh Seal tray each visit (offers expire)
     selected = id;
     if (view === 'town') render();
   };

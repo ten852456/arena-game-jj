@@ -105,3 +105,20 @@ body[data-view='town'] .town-slot { order: 1; flex: 1 1 0; margin: 0; min-height
   .pickv .pk-modes .mode small { display: none; }
   .pickv .pk-modes .mode { min-height: 40px; padding: 4px 10px; }
 }
+
+/* v5.1 account store (vaultUI.ts): Seal tray, stash, Hero Book, run-end receipt */
+.fvault { margin: 8px 0; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px dashed var(--moon-line); }
+.fvault h4 { margin: 4px 0; }
+.fvault h4 small { font-weight: 400; }
+.voffer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+.voffer > span { flex: 1; min-width: 12em; }
+.vequip { display: inline-flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.vgrade { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 4px; background: rgba(255, 255, 255, 0.12); }
+.vgrade.g-C { background: var(--m-moon, #ffd86b); color: #2b1d47; }
+.vsave { margin: 4px 0; }
+.vask { margin: 4px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.re-vault { text-align: left; }
+.re-vault p { margin: 4px 0; }
+.vbtns { display: inline-flex; gap: 4px; align-items: center; }
+.vmail { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--moon-line); }
+.voffer.mail { opacity: 0.85; }

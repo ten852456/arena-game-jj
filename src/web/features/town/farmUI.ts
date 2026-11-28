@@ -58,7 +58,7 @@ const RES_NAME: Record<string, [string, string]> = {
   wood: ['ไม้', 'wood'], ore: ['แร่', 'ore'], crystal: ['คริสตัล', 'crystal'], stardust: ['ผงดาว', 'stardust'], ticket: ['ตั๋ว', 'tickets'],
 };
 const resName = (k: string) => L(...(RES_NAME[k] ?? [k, k]));
-const costHTML = (c: Partial<Record<string, number>>, have?: Record<string, number>) =>
+export const costHTML = (c: Partial<Record<string, number>>, have?: Record<string, number>) =>
   Object.entries(c)
     .filter(([, v]) => v)
     .map(([k, v]) => `<span class="fcost${have && (have[k] ?? 0) < (v ?? 0) ? ' short' : ''}">${resIcon(k)}${v}</span>`)
@@ -175,10 +175,10 @@ export function hallFarmHTML(): string {
   const locked = HEROES.filter((h) => !f.owned.includes(h.id));
   if (!locked.length) return `<p class="muted">${L('คุณมีฮีโร่ครบทุกตัวแล้ว', 'You own every hero')}</p>`;
   return `<div class="funlock"><h4>${L('ปลดล็อกฮีโร่', 'Unlock heroes')}</h4>
-    <p class="muted">${L(`ฟรีวันนี้: ${f.rotation.map(name).join(', ')} · ฮีโร่ทุกตัวราคาเท่ากัน แรงเท่ากันทุกคน`, `Free today: ${f.rotation.map(name).join(', ')} · every hero costs the same and is equally strong for everyone`)}</p>
+    <p class="muted">${L(`ฟรีวันนี้: ${f.rotation.map(name).join(', ')} · ฮีโร่ทุกตัวแรงเท่ากันทุกคน ตัวถัดไปราคาสูงขึ้นทุกครั้ง`, `Free today: ${f.rotation.map(name).join(', ')} · every hero is equally strong for everyone; each adoption costs more than the last`)}</p>
     ${locked
       .map((h) => `<div class="funl"><b>${h.name}</b>${f.rotation.includes(h.id) ? ` <span class="ffit">${L('ฟรีวันนี้', 'free today')}</span>` : ''}
-        <button class="small" data-a="farmUnlock" data-i="${h.id}">${L('ปลดล็อก', 'Unlock')} ${costHTML(F.UNLOCK_COST, have(f))}</button></div>`)
+        <button class="small" data-a="farmUnlock" data-i="${h.id}">${L('ปลดล็อก', 'Unlock')} ${costHTML(F.adoptCost(f), have(f))}</button></div>`)
       .join('')}</div>`;
 }
 
@@ -333,4 +333,4 @@ export function feedHTML(): string {
 
 /** a locked hero can be unlocked right now (the Hero Hall badge on the map) */
 export const canUnlockAny = () =>
-  !!farm && farm.owned.length < HEROES.length && farm.stardust >= F.UNLOCK_COST.stardust && farm.res.crystal >= F.UNLOCK_COST.crystal;
+  !!farm && farm.owned.length < HEROES.length && farm.stardust >= F.adoptCost(farm).stardust && farm.res.crystal >= F.adoptCost(farm).crystal;
