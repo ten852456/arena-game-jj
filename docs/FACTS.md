@@ -145,6 +145,7 @@ fallback if TEE costs do not fit.
 
 ## Change log
 
+- 2026-11-28: v5.1 account store (on main, not deployed yet; prototype): Seals, Hero Book Saves, Kit, supplies, Moonstone (bound / tradable, 2 a week), line rank and play money live outside runs (`src/shared/vault.ts`, `/api/vault`); a finished run gives line rank and the Save; items come only from the server (admin grant until the Seal tray, crafting and the Tower exist).
 - 2026-11-28: v5.1 Ranked hero offer (on main, not deployed yet): Ranked offers 3 of all 10 heroes to every player (owned or not); Casual still offers 3 of the heroes you own or have in rotation; the server rejects a Ranked hero its seed did not offer.
 - 2026-11-28: v5.1 quick fixes (on main, not deployed yet): the pass adds no town work slot and no faster egg hatching; the shrine makes crystal without the endless-level multiplier and stops at Lv5.
 - 2026-11-27: JJ's onchain branch merged into the game (`onchain/`, chain mode opt-in with `?chain=1`); Rust engine parity gap noted; grid version removed (Railway service deleted, branches kept as `archive/*` tags); branch plan replaced by trunk-based `main` / `release`.

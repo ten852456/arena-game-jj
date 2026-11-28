@@ -9,6 +9,7 @@ import { handleFight, handleScout, type Res } from './routes/fight';
 import { handleFinish, handleLeaderboard, handleProfile, handleRename } from './routes/meta';
 import { ROOT, db, saveNow } from './store';
 import { handleFarmGet, handleFarmOps, handleFeed, handleHatch } from './routes/farm';
+import { adminVaultGrant, handleVaultGet, handleVaultOps } from './routes/vault';
 import { adminEconomy } from './game/ledger';
 import { WIN_TARGET } from '../sim/run';
 import { cleanName, isDefaultName } from './game/validate';
@@ -90,6 +91,8 @@ const routes: Record<string, Route> = {
   'POST /api/farm': async (req) => handleFarmOps(await readBody(req), ipOf(req)),
   'POST /api/farm/hatch': async (req) => handleHatch(await readBody(req)),
   'GET /api/feed': () => handleFeed(),
+  'GET /api/vault': (_req, q) => handleVaultGet(q),
+  'POST /api/vault': async (req) => handleVaultOps(await readBody(req)),
   'GET /api/version': () => ({ status: 200, json: { version: VERSION } }),
   'GET /api/stats': () => ({
     status: 200,
@@ -106,6 +109,7 @@ const adminRoutes: Record<string, Route> = {
   'GET /api/admin/runs': () => adminRuns(),
   'GET /api/admin/economy': (_req, q) => adminEconomy(q),
   'POST /api/admin/announce': async (req) => adminAnnounce(await readBody(req)),
+  'POST /api/admin/vault/grant': async (req) => adminVaultGrant(await readBody(req)),
 };
 
 createServer(async (req, res) => {

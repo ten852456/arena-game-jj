@@ -7,6 +7,7 @@ import { SIM_VERSION } from '../sim/combat';
 import type { Build, Line } from '../sim/types';
 import type { LastChoice } from './game/validate';
 import type { FarmState } from '../sim/farm';
+import type { Vault } from '../shared/vault';
 
 export const ROOT = resolve(import.meta.dirname, '../..');
 export const DATA_DIR = process.env.DATA_DIR ?? join(ROOT, 'data');
@@ -139,6 +140,8 @@ export interface Db {
   tutorials: Record<string, number>;
   /** playerId → idle town (src/sim/farm.ts, docs/design/FARM.md) */
   farms: Record<string, FarmState>;
+  /** playerId → account store for idle items: Seals, Saves, Kit, supplies, Moonstone, line rank (src/shared/vault.ts) */
+  vaults: Record<string, Vault>;
   /** season → monument totals */
   monuments: Record<string, MonumentRec>;
   /** town feed: rare finds and moonlit heroes, newest last (capped) */
@@ -180,6 +183,7 @@ function loadDb(): Db {
     players: Object.assign(Object.create(null), isObj(d.players) ? d.players : {}),
     tutorials: Object.assign(Object.create(null), isObj(d.tutorials) ? d.tutorials : {}),
     farms: Object.assign(Object.create(null), isObj(d.farms) ? d.farms : {}),
+    vaults: Object.assign(Object.create(null), isObj(d.vaults) ? d.vaults : {}),
     monuments: Object.assign(Object.create(null), isObj(d.monuments) ? d.monuments : {}),
     feed: Array.isArray(d.feed) ? d.feed.slice(-FEED_CAP) : [],
     ledger: Object.assign(Object.create(null), isObj(d.ledger) ? d.ledger : {}),
@@ -212,6 +216,22 @@ function capFarms() {
   for (const k of keys.slice(0, keys.length - PLAYER_CAP)) delete db.farms[k];
 }
 
+/**
+ * Vaults over the cap: the least played go first, oldest first. Line rank counts point for point (it is the slowest
+ * progress to rebuild), then Saves, items, Moonstone and play money moved, so a flood of fresh ids with one Save
+ * each evicts each other long before a store with real progress (Codex review).
+ */
+const vaultValue = (v: Vault) =>
+  Object.values(v.lineRank ?? {}).reduce((a, x) => a + (Number(x) || 0), 0) + Object.keys(v.saves ?? {}).length * 5 +
+  ((v.seals?.length ?? 0) + (v.kit?.length ?? 0)) * 3 + (v.moonstone ? v.moonstone.bound + v.moonstone.tradable : 0) * 5 +
+  (v.testBalance !== undefined && v.testBalance !== 1000 ? 5 : 0);
+function capVaults() {
+  const keys = Object.keys(db.vaults);
+  if (keys.length <= PLAYER_CAP) return;
+  keys.sort((a, b) => vaultValue(db.vaults[a]) - vaultValue(db.vaults[b]) || db.vaults[a].updatedAt - db.vaults[b].updatedAt);
+  for (const k of keys.slice(0, keys.length - PLAYER_CAP)) delete db.vaults[k];
+}
+
 export function enforceCaps() {
   if (db.fights.length > FIGHT_CAP) db.fights.splice(0, db.fights.length - FIGHT_CAP);
   if (db.runs.length > RUN_CAP) db.runs.splice(0, db.runs.length - RUN_CAP);
@@ -219,6 +239,7 @@ export function enforceCaps() {
   capRecord(db.players, PLAYER_CAP, (x) => x.updatedAt);
   capRecord(db.tutorials, PLAYER_CAP, (x) => (typeof x === 'number' ? x : 0));
   capFarms();
+  capVaults();
   if (db.feed.length > FEED_CAP) db.feed.splice(0, db.feed.length - FEED_CAP);
 }
 

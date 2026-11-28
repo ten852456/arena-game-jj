@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome lint",
     "balance": "tsx tools/balance.ts",
-    "test": "tsx tests/determinism.ts && tsx tests/i18n-check.ts && tsx tests/skilltext-check.ts && tsx tests/upgrade-check.ts && tsx tests/validate-check.ts && tsx tests/fight-check.ts && tsx tests/farm-check.ts && tsx tests/damage-kind.ts",
+    "test": "tsx tests/determinism.ts && tsx tests/i18n-check.ts && tsx tests/skilltext-check.ts && tsx tests/upgrade-check.ts && tsx tests/validate-check.ts && tsx tests/fight-check.ts && tsx tests/farm-check.ts && tsx tests/vault-check.ts && tsx tests/damage-kind.ts",
     "smoke": "tsx tests/smoke.ts",
     "security": "tsx tests/security-check.ts",
     "farm-api": "tsx tests/farm-api-check.ts",
