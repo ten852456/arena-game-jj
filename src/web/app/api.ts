@@ -187,7 +187,7 @@ const qs = (o: Record<string, string | number | undefined>) =>
   new URLSearchParams(Object.entries(o).filter((e): e is [string, string | number] => e[1] !== undefined && e[1] !== '').map(([k, v]) => [k, String(v)])).toString();
 
 export const api = {
-  fight: (body: { runId: string; name: string; day: number; rating: number; build: Build; playerId?: string; tutorial?: boolean; mode?: 'casual' | 'ranked' }) =>
+  fight: (body: { runId: string; name: string; day: number; rating: number; build: Build; playerId?: string; tutorial?: boolean; mode?: 'casual' | 'ranked'; seed?: number }) =>
     req<FightResponse>('/api/fight', { method: 'POST', body: JSON.stringify(body) }),
   replay: (id: string) => req<ReplayRecord>('/api/replay/' + encodeURIComponent(id)),
   /** line mix of the player builds the next fight could meet */

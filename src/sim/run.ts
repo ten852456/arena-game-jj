@@ -76,6 +76,14 @@ export function heroChoices(seed: number, n = HERO_CHOICES, from?: string[]): st
   return out;
 }
 
+/**
+ * v5.1 (2026-11-28): the hero offer by arena mode. Ranked offers HERO_CHOICES of all heroes to everyone, so owning
+ * a hero never helps a Ranked run (Arena equality); Casual offers from the heroes the player may use (owned or in
+ * today's rotation). Same seed and mode → same Ranked offer on every account.
+ */
+export const offerFor = (mode: 'casual' | 'ranked', seed: number, usable?: string[]): string[] =>
+  heroChoices(seed, HERO_CHOICES, mode === 'ranked' ? undefined : usable);
+
 export type LastChanceOption = 'awaken' | 'mark' | 'supply';
 export const MARKS: Mark[] = ['burn', 'echo', 'quick', 'steadfast'];
 export const MARK_INFO: Record<Mark, { name: string; desc: string }> = {

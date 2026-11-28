@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { HEROES_BY_ID } from '../../sim/heroes';
 import { BONUS_KINDS, MAX_BONUS, validTarget } from '../../sim/links';
-import { LV3_DAY, MAX_SLOTS, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markKindFor, markWishCost, slotsFor } from '../../sim/run';
+import { LV3_DAY, MAX_SLOTS, offerFor, PRICES, STAR_DAY, STAR_MAX, STAR_PRICES, START_HP, SUPPLY_GOLD_FULL, WISH_MARKS_MAX, damageFor, incomeFor, markKindFor, markWishCost, slotsFor } from '../../sim/run';
 import { RELIC_DAYS, isRelic, relicOffersAll, relicsAllowed } from '../../sim/relics';
 import { SKILLS, isVariant, lvOf } from '../../sim/skills';
 import type { Build, Mark } from '../../sim/types';
@@ -240,6 +240,16 @@ export const BAD_RELIC = 'bad relic';
 /** the relics the server offers this run on `day` (empty when it is no relic day) */
 export const serverRelicOffer = (track: { relicSeed?: number }, hero: string, day: number, owned: string[] = [], skills: { id: string; v: string; mark?: string }[] = []): string[][] =>
   RELIC_DAYS.includes(day) && track.relicSeed !== undefined ? relicOffersAll(track.relicSeed, hero, day, owned, skills) : [];
+
+/**
+ * v5.1: a Ranked run must start with a hero its seed offers from all heroes (`offerFor('ranked', seed)`); owning the
+ * hero does not matter. The seed is still drawn by the client, so this binds the pick to the seed it sent; it becomes
+ * a real offer check once the server draws Ranked seeds (prize safety, after the playtest).
+ */
+export function rankedOfferCheck(hero: string, seed: unknown): string | null {
+  if (typeof seed !== 'number' || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return 'bad seed';
+  return offerFor('ranked', seed).includes(hero) ? null : 'hero not offered';
+}
 
 export function validateBuild(x: unknown, day: number, rec?: RunRecord, choice?: LastChoice): Build | string {
   const b = x as Build;
