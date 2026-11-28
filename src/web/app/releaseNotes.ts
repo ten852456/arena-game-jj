@@ -17,6 +17,30 @@ export interface Note {
 /** Newest first. Player-facing words only: what changed for them, not how. */
 export const NOTES: Note[] = [
   {
+    v: '0.0.2',
+    date: '2026-11-28',
+    th: [
+      'แรงค์: สุ่มฮีโร่ 3 ตัวจากทั้ง 10 ตัวให้ทุกคน จะมีฮีโร่ตัวนั้นหรือไม่ก็เล่นได้ · เซิร์ฟเวอร์เป็นคนสุ่ม รีโหลดก็ได้ชุดเดิม',
+      'ตรา: ชนะ 3+ ในรอบเดียว ได้ตราของสายฮีโร่ตัวนั้นเข้าถาดตรา (ชนะ 5+ และสายแรงค์ 30 ได้ตรา C) · รับได้วันละ 1 ใบด้วยผงดาว ตรา D 5 ใบแรกฟรี',
+      'ถาดเต็ม ตราใหม่ไปรอในจดหมายตรา · ทิ้งข้อเสนอในถาดแล้วค่อยย้ายจดหมายเข้าถาด',
+      'สมุดฮีโร่: เก็บ build ที่ดีที่สุดของฮีโร่แต่ละตัวไว้ใช้ในหอเวท · จบรอบแล้วเลือกได้ว่าจะแทนของเดิมไหม',
+      'หน้าสรุปหลังจบรอบ: ผงดาว แรงค์สาย ตราที่ได้ และกดรับตราได้ทันที',
+      'หอฮีโร่: ดูถาดตรา ตราที่มี ใส่ตราให้ฮีโร่ และสมุดฮีโร่ในที่เดียว',
+      'รับฮีโร่ใหม่: ราคาผงดาวขึ้นทีละตัว 300 → 5,000 (+ คริสตัล 3)',
+      'ศาลเจ้า: ทำคริสตัลได้ถึงเลเวล 5 · คริสตัลเป็นของหายากของเมือง',
+    ],
+    en: [
+      'Ranked: 3 heroes drawn from all 10 for everyone, owned or not · the server draws them, so a reload shows the same 3',
+      'Seals: 3+ wins in a run puts a Seal of that hero line in your Seal tray (C at 5+ wins and line rank 30) · claim 1 a day with stardust, the first 5 D Seals free',
+      'A full tray sends new Seals to the Seal mailbox · delete an offer in the tray, then move a mail in',
+      'Hero Book: keep your best build of each hero for the Tower · after a run, choose whether it replaces the old one',
+      'Run-end receipt: stardust, line rank, the Seal you earned, and claim it right there',
+      'Hero Hall: the Seal tray, your Seals, equipping them, and the Hero Book in one place',
+      'Adopting heroes: the stardust price rises with each one, 300 → 5,000 (+ 3 crystal)',
+      'Shrine: crystal up to level 5 · crystal is the scarce key of the town',
+    ],
+  },
+  {
     v: '0.0.1',
     date: '2026-11-26',
     th: [
